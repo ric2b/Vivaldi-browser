@@ -16,6 +16,7 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/browser/web_ui_message_handler.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
+#include "ui/resources/grit/webui_generated_resources.h"
 
 content::WebUIDataSource* CreateInvalidationsHTMLSource() {
   // This is done once per opening of the page
@@ -24,12 +25,11 @@ content::WebUIDataSource* CreateInvalidationsHTMLSource() {
       content::WebUIDataSource::Create(chrome::kChromeUIInvalidationsHost);
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ScriptSrc,
-      "script-src chrome://resources 'self' 'unsafe-eval';");
-  source->OverrideContentSecurityPolicy(
-      network::mojom::CSPDirectiveName::TrustedTypes,
-      "trusted-types jstemplate;");
-  webui::AddResourcePathsBulk(
-      source,
+      "script-src chrome://resources chrome://test 'self' 'unsafe-eval';");
+  source->AddResourcePath("test_loader_util.js",
+                          IDR_WEBUI_JS_TEST_LOADER_UTIL_JS);
+  source->DisableTrustedTypesCSP();
+  source->AddResourcePaths(
       base::make_span(kInvalidationsResources, kInvalidationsResourcesSize));
   source->SetDefaultResource(IDR_INVALIDATIONS_ABOUT_INVALIDATIONS_HTML);
   return source;

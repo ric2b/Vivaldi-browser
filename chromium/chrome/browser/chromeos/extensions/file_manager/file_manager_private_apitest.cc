@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/ash_features.h"
 #include "base/base64.h"
 #include "base/bind.h"
@@ -30,7 +31,6 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/api/file_system_provider_capabilities/file_system_provider_capabilities_handler.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/concierge/concierge_service.pb.h"
 #include "chromeos/dbus/cros_disks_client.h"
 #include "chromeos/disks/disk.h"
@@ -161,7 +161,7 @@ void AddLocalFileSystem(Profile* profile, base::FilePath root) {
 
   ASSERT_TRUE(
       content::BrowserContext::GetMountPoints(profile)->RegisterFileSystem(
-          kLocalMountPointName, storage::kFileSystemTypeNativeLocal,
+          kLocalMountPointName, storage::kFileSystemTypeLocal,
           storage::FileSystemMountOption(), root));
   file_manager::VolumeManager::Get(profile)->AddVolumeForTesting(
       root, file_manager::VOLUME_TYPE_TESTING, chromeos::DEVICE_TYPE_UNKNOWN,
@@ -446,8 +446,8 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, FormatVolume) {
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, Permissions) {
-  EXPECT_TRUE(
-      RunExtensionTestIgnoreManifestWarnings("file_browser/permissions"));
+  EXPECT_TRUE(RunExtensionTest({.name = "file_browser/permissions"},
+                               {.ignore_manifest_warnings = true}));
   const extensions::Extension* extension = GetSingleLoadedExtension();
   ASSERT_TRUE(extension);
   ASSERT_EQ(1u, extension->install_warnings().size());
@@ -634,4 +634,10 @@ IN_PROC_BROWSER_TEST_P(FileManagerPrivateHoldingSpaceApiTest, HoldingSpace) {
     EXPECT_TRUE(
         RunComponentExtensionTest("file_browser/holding_space_disabled"));
   }
+}
+
+IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, GetVolumeRoot) {
+  AddLocalFileSystem(browser()->profile(), temp_dir_.GetPath());
+
+  ASSERT_TRUE(RunComponentExtensionTest("file_browser/get_volume_root"));
 }

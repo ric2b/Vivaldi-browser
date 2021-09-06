@@ -258,6 +258,16 @@ class MetaBuildWrapper(object):
                            'newline.')
     subp.add_argument('--json-output',
                       help='Write errors to json.output')
+    # For more info about RTS, please see
+    # //docs/testing/regression-test-selection.md
+    subp.add_argument('--use-rts',
+                      action='store_true',
+                      default=False,
+                      help='whether or not to use regression test selection')
+    subp.add_argument('--rts-target-change-recall',
+                      type=float,
+                      help='how much safety is needed when selecting tests. '
+                      '0.0 is the lowest and 1.0 is the highest')
     subp.add_argument('path',
                       help='path to generate build into')
     subp.set_defaults(func=self.CmdGen)
@@ -445,7 +455,31 @@ class MetaBuildWrapper(object):
       self.WriteFile(expectation_file, json_s)
     return 0
 
+  def RtsSelect(self):
+    exe = self.PathJoin(self.chromium_src_dir, 'testing', 'rts', 'rts-chromium')
+    if self.platform == 'win32':
+      exe += '.exe'
+
+    args = [
+       exe, 'select',
+      '-model-dir', self.PathJoin(self.chromium_src_dir, 'testing', 'rts'), \
+      '-out', self.PathJoin(self.args.path, 'gen', 'rts'),
+      '-checkout', self.chromium_src_dir,
+    ]
+    if self.args.rts_target_change_recall:
+      if (self.args.rts_target_change_recall < 0
+          or self.args.rts_target_change_recall > 1):
+        self.WriteFailureAndRaise(
+            'rts-target-change-recall must be between (0 and 1]', None)
+      args += ['-target-change-recall', str(self.args.rts_target_change_recall)]
+
+    _, _, err = self.Run(args, force_verbose=False)
+    if err:
+      self.WriteFailureAndRaise(err, None)
+
   def CmdGen(self):
+    if self.args.use_rts:
+      self.RtsSelect()
     vals = self.Lookup()
     return self.RunGNGen(vals)
 
@@ -486,9 +520,7 @@ class MetaBuildWrapper(object):
     else:
       cmd = self.GNCmd('gen', '_path_')
       self.Print('\nWriting """\\\n%s""" to _path_/args.gn.\n' % gn_args)
-      env = None
-
-      self.PrintCmd(cmd, env)
+      self.PrintCmd(cmd)
     return 0
 
   def CmdTry(self):
@@ -637,7 +669,7 @@ class MetaBuildWrapper(object):
     # Talking to the isolateserver may fail because we're not logged in.
     # We trap the command explicitly and rewrite the error output so that
     # the error message is actually correct for a Chromium check out.
-    self.PrintCmd(cmd, env=None)
+    self.PrintCmd(cmd)
     ret, out, err = self.Run(cmd, force_verbose=False)
     if ret:
       self.Print('  -> returned %d' % ret)
@@ -694,18 +726,26 @@ class MetaBuildWrapper(object):
         return ret
       task_json = self.ReadFile(json_file)
       task_id = json.loads(task_json)["tasks"][0]['task_id']
+      collect_output = self.PathJoin(json_dir, 'collect_output.json')
+      cmd = [
+          self.PathJoin('tools', 'luci-go', 'swarming'),
+          'collect',
+          '-server',
+          swarming_server,
+          '-task-output-stdout=console',
+          '-task-summary-json',
+          collect_output,
+          task_id,
+      ]
+      ret, _, _ = self.Run(cmd, force_verbose=True, buffer_output=False)
+      if ret != 0:
+        return ret
+      collect_json = json.loads(self.ReadFile(collect_output))
+      # The exit_code field is not included if the task was successful.
+      ret = collect_json.get(task_id, {}).get('results', {}).get('exit_code', 0)
     finally:
       if json_dir:
         self.RemoveDirectory(json_dir)
-    cmd = [
-        self.PathJoin('tools', 'luci-go', 'swarming'),
-        'collect',
-        '-server',
-        swarming_server,
-        '-task-output-stdout=console',
-        task_id,
-    ]
-    ret, _, _ = self.Run(cmd, force_verbose=True, buffer_output=False)
     return ret
 
   def _RunLocallyIsolated(self, build_dir, target):
@@ -1624,10 +1664,21 @@ class MetaBuildWrapper(object):
             '--logs-dir=${ISOLATED_OUTDIR}',
             '--',
         ]
-      cmdline += [
-          '../../testing/test_env.py',
-          '../../' + self.ToSrcRelPath(isolate_map[target]['script'])
-      ]
+      if is_android:
+        extra_files.append('../../build/android/test_wrapper/logdog_wrapper.py')
+        cmdline += [
+            '../../testing/test_env.py',
+            '../../build/android/test_wrapper/logdog_wrapper.py',
+            '--script',
+            '../../' + self.ToSrcRelPath(isolate_map[target]['script']),
+            '--logdog-bin-cmd',
+            '../../.task_template_packages/logdog_butler',
+        ]
+      else:
+        cmdline += [
+            '../../testing/test_env.py',
+            '../../' + self.ToSrcRelPath(isolate_map[target]['script'])
+        ]
     elif test_type == 'additional_compile_target':
       cmdline = [
           './' + str(target) + executable_suffix,
@@ -1825,21 +1876,11 @@ class MetaBuildWrapper(object):
                  (e, path))
 
 
-  def PrintCmd(self, cmd, env):
+  def PrintCmd(self, cmd):
     if self.platform == 'win32':
-      env_prefix = 'set '
-      env_quoter = QuoteForSet
       shell_quoter = QuoteForCmd
     else:
-      env_prefix = ''
-      env_quoter = pipes.quote
       shell_quoter = pipes.quote
-
-    def print_env(var):
-      if env and var in env:
-        self.Print('%s%s=%s' % (env_prefix, var, env_quoter(env[var])))
-
-    print_env('LLVM_FORCE_HEAD_REVISION')
 
     if cmd[0] == self.executable:
       cmd = ['python'] + cmd[1:]
@@ -1864,7 +1905,7 @@ class MetaBuildWrapper(object):
   def Run(self, cmd, env=None, force_verbose=True, buffer_output=True):
     # This function largely exists so it can be overridden for testing.
     if self.args.dryrun or self.args.verbose or force_verbose:
-      self.PrintCmd(cmd, env)
+      self.PrintCmd(cmd)
     if self.args.dryrun:
       return 0, '', ''
 

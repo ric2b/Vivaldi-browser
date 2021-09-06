@@ -89,8 +89,7 @@
         </network-icon>
         <div id="networkState" class="title settings-box-text"
             connected$="[[isConnectedState_(managedProperties_)]]"
-            error$="[[isConnectionErrorState_(
-                managedProperties_, outOfRange_, deviceState_)]]">
+            error$="[[isOutOfRangeOrNotEnabled_(outOfRange_, deviceState_)]]">
           [[getStateText_(managedProperties_, propertiesReceived_,
               outOfRange_, deviceState_)]]
         </div>
@@ -293,7 +292,7 @@
                                  propertiesReceived_, showMeteredToggle_)]]">
         <!-- Advanced toggle. -->
         <cr-expand-button
-            alt="$i18n{networkSectionAdvancedA11yLabel}"
+            aria-label="$i18n{networkSectionAdvancedA11yLabel}"
             class="settings-box"
             expanded="{{advancedExpanded_}}">
           $i18n{networkSectionAdvanced}
@@ -346,7 +345,7 @@
           globalPolicy, managedNetworkAvailable)]]">
         <!-- Network toggle -->
         <cr-expand-button
-            alt="$i18n{networkSectionNetworkExpandA11yLabel}"
+            aria-label="$i18n{networkSectionNetworkExpandA11yLabel}"
             class="settings-box"
             expanded="{{networkExpanded_}}">
           <div class="settings-row">
@@ -403,7 +402,7 @@
           globalPolicy, managedNetworkAvailable)]]">
         <!-- Proxy toggle -->
         <cr-expand-button
-            alt="$i18n{networkSectionProxyExpandA11yLabel}"
+            aria-label="$i18n{networkSectionProxyExpandA11yLabel}"
             class="settings-box"
             expanded="{{proxyExpanded_}}">
           $i18n{networkSectionProxy}

@@ -66,24 +66,6 @@
 namespace blink {
 
 // static
-Frame* Frame::ResolveFrame(const base::UnguessableToken& frame_token) {
-  if (!frame_token)
-    return nullptr;
-
-  // The frame token could refer to either a RemoteFrame or a LocalFrame, so
-  // need to check both.
-  auto* remote = RemoteFrame::FromFrameToken(frame_token);
-  if (remote)
-    return remote;
-
-  auto* local = LocalFrame::FromFrameToken(frame_token);
-  if (local)
-    return local;
-
-  return nullptr;
-}
-
-// static
 Frame* Frame::ResolveFrame(const FrameToken& frame_token) {
   if (frame_token.Is<RemoteFrameToken>())
     return RemoteFrame::FromFrameToken(frame_token.GetAs<RemoteFrameToken>());
@@ -419,7 +401,7 @@ Frame::Frame(FrameClient* client,
              Frame* parent,
              Frame* previous_sibling,
              FrameInsertType insert_type,
-             const base::UnguessableToken& frame_token,
+             const FrameToken& frame_token,
              WindowProxyManager* window_proxy_manager,
              WindowAgentFactory* inheriting_agent_factory)
     : tree_node_(this),

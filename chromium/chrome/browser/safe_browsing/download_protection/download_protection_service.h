@@ -72,12 +72,12 @@ class DownloadProtectionService {
 
   virtual ~DownloadProtectionService();
 
-  // Parse a flag of blacklisted sha256 hashes to check at each download.
+  // Parse a flag of blocklisted sha256 hashes to check at each download.
   // This is used for testing, to hunt for safe-browsing by-pass bugs.
-  virtual void ParseManualBlacklistFlag();
+  virtual void ParseManualBlocklistFlag();
 
-  // Return true if this hash value is blacklisted via flag (for testing).
-  virtual bool IsHashManuallyBlacklisted(const std::string& sha256_hash) const;
+  // Return true if this hash value is blocklisted via flag (for testing).
+  virtual bool IsHashManuallyBlocklisted(const std::string& sha256_hash) const;
 
   // Checks whether the given client download is likely to be malicious or not.
   // The result is delivered asynchronously via the given callback.  This
@@ -169,7 +169,7 @@ class DownloadProtectionService {
   base::CallbackListSubscription RegisterPPAPIDownloadRequestCallback(
       const PPAPIDownloadRequestCallback& callback);
 
-  double whitelist_sample_rate() const { return whitelist_sample_rate_; }
+  double allowlist_sample_rate() const { return allowlist_sample_rate_; }
 
   scoped_refptr<SafeBrowsingNavigationObserverManager>
   navigation_observer_manager() {
@@ -328,12 +328,12 @@ class DownloadProtectionService {
   // PPAPIDownloadRequest has been formed.
   PPAPIDownloadRequestCallbackList ppapi_download_request_callbacks_;
 
-  // List of 8-byte hashes that are blacklisted manually by flag.
+  // List of 8-byte hashes that are blocklisted manually by flag.
   // Normally empty.
-  std::set<std::string> manual_blacklist_hashes_;
+  std::set<std::string> manual_blocklist_hashes_;
 
-  // Rate of whitelisted downloads we sample to send out download ping.
-  double whitelist_sample_rate_;
+  // Rate of allowlisted downloads we sample to send out download ping.
+  double allowlist_sample_rate_;
 
   // DownloadReporter to send real time reports for dangerous download events.
   DownloadReporter download_reporter_;

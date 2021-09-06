@@ -66,7 +66,6 @@ class CrOSComponentInstallerPolicy : public ComponentInstallerPolicy {
   base::FilePath GetRelativeInstallDir() const override;
   void GetHash(std::vector<uint8_t>* hash) const override;
   std::string GetName() const override;
-  std::vector<std::string> GetMimeTypes() const override;
 
  protected:
   CrOSComponentInstaller* const cros_component_installer_;

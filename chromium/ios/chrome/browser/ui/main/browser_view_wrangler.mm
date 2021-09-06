@@ -6,6 +6,7 @@
 
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
+#import "base/ios/ios_util.h"
 #include "base/strings/sys_string_conversions.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #include "ios/chrome/browser/application_context.h"
@@ -27,7 +28,6 @@
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/ui/main/scene_state.h"
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
-#import "ios/chrome/browser/ui/util/multi_window_support.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -105,9 +105,6 @@
   std::unique_ptr<Browser> _otrBrowser;
 }
 
-// Opaque session ID from _sceneState, nil when multi-window isn't enabled.
-@property(nonatomic, readonly) NSString* sessionID;
-
 @property(nonatomic, strong, readwrite) WrangledBrowser* mainInterface;
 @property(nonatomic, strong, readwrite) WrangledBrowser* incognitoInterface;
 
@@ -170,16 +167,6 @@
 }
 
 #pragma mark - BrowserViewInformation property implementations
-
-- (NSString*)sessionID {
-  NSString* sessionID = nil;
-  if (IsMultiwindowSupported()) {
-    if (@available(iOS 13, *)) {
-      sessionID = _sceneState.scene.session.persistentIdentifier;
-    }
-  }
-  return sessionID;
-}
 
 - (void)setCurrentInterface:(WrangledBrowser*)interface {
   DCHECK(interface);
@@ -420,7 +407,7 @@
 - (void)setSessionIDForBrowser:(Browser*)browser
                 restoreSession:(BOOL)restoreSession {
   SnapshotBrowserAgent::FromBrowser(browser)->SetSessionID(
-      base::SysNSStringToUTF8(self.sessionID));
+      base::SysNSStringToUTF8(_sceneState.sceneSessionID));
 
   SessionRestorationBrowserAgent* restorationAgent =
       SessionRestorationBrowserAgent::FromBrowser(browser);
@@ -444,16 +431,17 @@
   //
   // TODO(crbug.com/1165798): clean up this by using fixed identifier when the
   // device do no support multi-windows.
-  if (!IsMultipleScenesSupported() && restoreSession) {
+  if (!base::ios::IsMultipleScenesSupported() && restoreSession) {
     NSString* previousSessionID =
         _sceneState.appState.previousSingleWindowSessionID;
     if (previousSessionID &&
-        ![self.sessionID isEqualToString:previousSessionID]) {
+        ![_sceneState.sceneSessionID isEqualToString:previousSessionID]) {
       restorationAgent->SetSessionID(
           base::SysNSStringToUTF8(previousSessionID));
       restorationAgent->RestoreSession();
 
-      restorationAgent->SetSessionID(base::SysNSStringToUTF8(self.sessionID));
+      restorationAgent->SetSessionID(
+          base::SysNSStringToUTF8(_sceneState.sceneSessionID));
       restorationAgent->SaveSession(true);
 
       // Fallback to the normal codepath. It will set the session identifier
@@ -463,7 +451,8 @@
     }
   }
 
-  restorationAgent->SetSessionID(base::SysNSStringToUTF8(self.sessionID));
+  restorationAgent->SetSessionID(
+      base::SysNSStringToUTF8(_sceneState.sceneSessionID));
   if (restoreSession)
     restorationAgent->RestoreSession();
 }

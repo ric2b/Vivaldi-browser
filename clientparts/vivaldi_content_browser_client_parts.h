@@ -30,7 +30,7 @@ class VivaldiContentBrowserClientParts
   ~VivaldiContentBrowserClientParts() override {}
 
   void BrowserURLHandlerCreated(content::BrowserURLHandler* handler) override;
-  void OverrideWebkitPrefs(content::RenderViewHost* rvh,
+  void OverrideWebkitPrefs(content::WebContents* web_contents,
                            blink::web_pref::WebPreferences* web_prefs) override;
 };
 

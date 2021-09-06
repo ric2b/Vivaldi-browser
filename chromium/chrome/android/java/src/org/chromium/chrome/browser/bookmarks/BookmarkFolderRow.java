@@ -59,6 +59,8 @@ public class BookmarkFolderRow extends BookmarkRow {
                             : getResources().getString(R.string.reading_list_no_unread_pages));
         } else {
             int childCount = mDelegate.getModel().getTotalBookmarkCount(bookmarkId);
+            if (ChromeApplication.isVivaldi())
+                childCount = mDelegate.getModel().getChildCountWithoutSeparators(bookmarkId);
             mDescriptionView.setText((childCount > 0)
                             ? getResources().getQuantityString(
                                     R.plurals.bookmarks_count, childCount, childCount)

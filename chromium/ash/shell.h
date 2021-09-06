@@ -120,6 +120,7 @@ class DragDropController;
 class EventClientImpl;
 class EventRewriterControllerImpl;
 class EventTransformationHandler;
+class FullRestoreController;
 class FocusCycler;
 class FrameThrottlingController;
 class HighContrastController;
@@ -136,6 +137,7 @@ class LocaleUpdateControllerImpl;
 class LockStateController;
 class LogoutConfirmationController;
 class LoginScreenController;
+class LoginUnlockThroughputRecorder;
 class MagnificationController;
 class TabletModeController;
 class MediaControllerImpl;
@@ -151,6 +153,7 @@ class OverlayEventFilter;
 class OverviewController;
 class ParentAccessController;
 class PartialMagnificationController;
+class PciePeripheralNotificationController;
 class PeripheralBatteryListener;
 class PeripheralBatteryNotifier;
 class PersistentWindowController;
@@ -160,6 +163,7 @@ class PowerEventObserver;
 class PowerPrefs;
 class PrivacyScreenController;
 class ProjectingObserver;
+class ProjectorControllerImpl;
 class QuickAnswersController;
 class ResizeShadowController;
 class ResolutionNotificationController;
@@ -558,6 +562,15 @@ class ASH_EXPORT Shell : public SessionObserver,
     return frame_throttling_controller_.get();
   }
 
+  ProjectorControllerImpl* projector_controller() {
+    return projector_controller_.get();
+  }
+
+  PciePeripheralNotificationController*
+  pcie_peripheral_notification_controller() {
+    return pcie_peripheral_notification_controller_.get();
+  }
+
   // Force the shelf to query for it's current visibility state.
   // TODO(jamescook): Move to Shelf.
   void UpdateShelfVisibility();
@@ -692,6 +705,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<DisplaySpeakerController> display_speaker_controller_;
   std::unique_ptr<DragDropController> drag_drop_controller_;
   std::unique_ptr<FocusCycler> focus_cycler_;
+  std::unique_ptr<FullRestoreController> full_restore_controller_;
   std::unique_ptr<HoldingSpaceController> holding_space_controller_;
   std::unique_ptr<HomeScreenController> home_screen_controller_;
   std::unique_ptr<ImeControllerImpl> ime_controller_;
@@ -713,6 +727,8 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<NearbyShareControllerImpl> nearby_share_controller_;
   std::unique_ptr<NearbyShareDelegate> nearby_share_delegate_;
   std::unique_ptr<ParentAccessController> parent_access_controller_;
+  std::unique_ptr<PciePeripheralNotificationController>
+      pcie_peripheral_notification_controller_;
   std::unique_ptr<QuickAnswersController> quick_answers_controller_;
   std::unique_ptr<ResizeShadowController> resize_shadow_controller_;
   std::unique_ptr<SessionControllerImpl> session_controller_;
@@ -851,10 +867,15 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   std::unique_ptr<FrameThrottlingController> frame_throttling_controller_;
 
+  std::unique_ptr<ProjectorControllerImpl> projector_controller_;
+
   // For testing only: simulate that a modal window is open
   bool simulate_modal_window_open_for_test_ = false;
 
   std::unique_ptr<MessageCenterController> message_center_controller_;
+
+  std::unique_ptr<LoginUnlockThroughputRecorder>
+      login_unlock_throughput_recorder_;
 
   base::ObserverList<ShellObserver>::Unchecked shell_observers_;
 

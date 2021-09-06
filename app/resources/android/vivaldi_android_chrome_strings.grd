@@ -219,6 +219,18 @@ To adjust your search term, long press to select. To refine your search, slide t
       <message name="IDS_ACCESSIBILITY_TABSTRIP_INCOGNITO_IDENTIFIER" desc="Content description for tabs that are not selected in incognito mode">
         Private Tab
       </message>
+
+    <!-- Bookmark snackbar -->
+      <message name="IDS_BOOKMARK_PAGE_SAVED" desc="App-based message shown after user adds a new bookmark. [CHAR-LIMIT=32]">
+        Bookmark saved in <ph name="PRODUCT_NAME">%1$s<ex>Vivaldi</ex></ph>
+      </message>
+      <message name="IDS_BOOKMARK_PAGE_SAVED_DEFAULT" desc="Default message shown after user adds a new bookmark. [CHAR-LIMIT=32]">
+        Bookmark saved
+      </message>
+      <message name="IDS_BOOKMARK_PAGE_SAVED_FOLDER" desc="Message shown after user adds a new bookmark. Also specifies in which folder the bookmark was added. [CHAR-LIMIT=32]">
+        Bookmark saved in <ph name="FOLDER_NAME">%1$s<ex>Mobile bookmarks</ex></ph> folder
+      </message>
     </messages>
+
   </release>
 </grit>

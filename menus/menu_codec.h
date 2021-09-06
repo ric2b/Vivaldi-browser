@@ -3,6 +3,7 @@
 #ifndef MENUS_MENU_CODEC_H_
 #define MENUS_MENU_CODEC_H_
 
+#include <map>
 #include <set>
 #include <string>
 
@@ -23,8 +24,8 @@ namespace menus {
 // Decodes JSON values at a Menu_Model and encodes a Menu_Model into JSON.
 class MenuCodec {
  public:
-  MenuCodec() = default;
-  ~MenuCodec() = default;
+  MenuCodec();
+  ~MenuCodec();
 
   // Looks up and returns the file version.
   bool GetVersion(std::string* version, const base::Value& value);
@@ -38,8 +39,11 @@ class MenuCodec {
   base::Value Encode(Menu_Model* model);
 
  private:
+  typedef std::map<std::string, bool> StringToBoolMap;
   bool DecodeNode(Menu_Node* parent, const base::Value& value, bool is_bundle);
   base::Value EncodeNode(Menu_Node* node);
+
+  StringToBoolMap guids_;
 
   DISALLOW_COPY_AND_ASSIGN(MenuCodec);
 };

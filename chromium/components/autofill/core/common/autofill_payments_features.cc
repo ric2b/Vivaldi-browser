@@ -50,30 +50,19 @@ const base::Feature kAutofillCreditCardAuthentication{
 const base::Feature kAutofillCreditCardUploadFeedback{
     "AutofillCreditCardUploadFeedback", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// When enabled, the credit card nicknames will be manageable. They can be
-// modified locally.
-const base::Feature kAutofillEnableCardNicknameManagement{
-    "AutofillEnableCardNicknameManagement", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // When enabled, shows the Google Pay logo on CVC prompt on Android.
 const base::Feature kAutofillDownstreamCvcPromptUseGooglePayLogo{
     "AutofillDownstreamCvcPromptUseGooglePayLogo",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
-// When enabled, the credit card nicknames will be manageable. They can be
-// uploaded to Payments.
-const base::Feature kAutofillEnableCardNicknameUpstream{
-    "AutofillEnableCardNicknameUpstream", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// When enabled, autofill payments bubbles' result will be recorded as either
-// 'accepted', 'cancelled', 'closed', 'not interacted' or 'lost focus'.
-const base::Feature kAutofillEnableFixedPaymentsBubbleLogging{
-    "AutofillEnableFixedPaymentsBubbleLogging",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Controls whether we show a Google-issued card in the suggestions list.
 const base::Feature kAutofillEnableGoogleIssuedCard{
     "AutofillEnableGoogleIssuedCard", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// When enabled, a notification will be displayed on page navigation if the
+// domain has an eligible credit card linked offer or reward.
+const base::Feature kAutofillEnableOfferNotification{
+    "AutofillEnableOfferNotification", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When enabled, offers will be displayed in the Clank keyboard accessory during
 // downstream.
@@ -91,11 +80,6 @@ const base::Feature kAutofillEnableOffersInDownstream{
 const base::Feature kAutofillEnableSaveCardInfoBarAccountIndicationFooter{
     "AutofillEnableSaveCardInfoBarAccountIndicationFooter",
     base::FEATURE_DISABLED_BY_DEFAULT};
-
-// When enabled, all payments related bubbles will not be dismissed upon page
-// navigation.
-const base::Feature kAutofillEnableStickyPaymentsBubble{
-    "AutofillEnableStickyPaymentsBubble", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When enabled, Autofill data related icons will be shown in the status
 // chip in toolbar along with the avatar toolbar button.

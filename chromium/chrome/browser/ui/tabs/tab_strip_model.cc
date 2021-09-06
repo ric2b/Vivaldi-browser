@@ -1096,6 +1096,8 @@ void TabStripModel::AddToExistingGroup(const std::vector<int>& indices,
   // Ensure that the indices are sorted and unique.
   DCHECK(base::ranges::is_sorted(indices));
   DCHECK(std::adjacent_find(indices.begin(), indices.end()) == indices.end());
+  DCHECK(ContainsIndex(*(indices.begin())));
+  DCHECK(ContainsIndex(*(indices.rbegin())));
 
   AddToExistingGroupImpl(indices, group);
 }
@@ -1318,6 +1320,10 @@ bool TabStripModel::IsContextMenuCommandEnabled(
 void TabStripModel::ExecuteContextMenuCommand(int context_index,
                                               ContextMenuCommand command_id) {
   DCHECK(command_id > CommandFirst && command_id < CommandLast);
+  // The tab strip may have been modified while the context menu was open,
+  // including closing the tab originally at |context_index|.
+  if (!ContainsIndex(context_index))
+    return;
   switch (command_id) {
     case CommandNewTabToRight: {
       base::RecordAction(UserMetricsAction("TabContextMenu_NewTab"));
@@ -1499,12 +1505,17 @@ void TabStripModel::ExecuteAddToExistingGroupCommand(
     const tab_groups::TabGroupId& group) {
   base::RecordAction(UserMetricsAction("TabContextMenu_AddToExistingGroup"));
 
+  if (!ContainsIndex(context_index))
+    return;
   AddToExistingGroup(GetIndicesForCommand(context_index), group);
 }
 
 void TabStripModel::ExecuteAddToExistingWindowCommand(int context_index,
                                                       int browser_index) {
   base::RecordAction(UserMetricsAction("TabContextMenu_AddToExistingWindow"));
+
+  if (!ContainsIndex(context_index))
+    return;
   delegate()->MoveToExistingWindow(GetIndicesForCommand(context_index),
                                    browser_index);
 }

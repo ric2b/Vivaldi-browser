@@ -11,9 +11,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "components/sync/base/client_tag_hash.h"
 #include "components/sync/protocol/entity_metadata.pb.h"
 #include "components/sync/protocol/notes_model_metadata.pb.h"
 #include "components/sync/protocol/unique_position.pb.h"
@@ -28,14 +28,9 @@ class NoteNode;
 }  // namespace vivaldi
 
 namespace syncer {
+class ClientTagHash;
 struct EntityData;
 }  // namespace syncer
-
-namespace sync_bookmarks {
-// Exposed for testing.
-extern const base::Feature kInvalidateBookmarkSyncMetadataIfMismatchingGuid;
-extern const base::Feature kInvalidateBookmarkSyncMetadataIfClientTagMissing;
-}  // namespace sync_bookmarks
 
 namespace sync_notes {
 
@@ -75,40 +70,16 @@ class SyncedNoteTracker {
       note_node_ = note_node;
     }
 
-    const sync_pb::EntityMetadata* metadata() const {
-      // TODO(crbug.com/516866): The below CHECK is added to debug some crashes.
-      // Should be removed after figuring out the reason for the crash.
-      CHECK(metadata_);
-      return metadata_.get();
-    }
-    sync_pb::EntityMetadata* metadata() {
-      // TODO(crbug.com/516866): The below CHECK is added to debug some crashes.
-      // Should be removed after figuring out the reason for the crash.
-      CHECK(metadata_);
-      return metadata_.get();
-    }
+    const sync_pb::EntityMetadata* metadata() const { return metadata_.get(); }
+
+    sync_pb::EntityMetadata* metadata() { return metadata_.get(); }
 
     bool commit_may_have_started() const { return commit_may_have_started_; }
     void set_commit_may_have_started(bool value) {
       commit_may_have_started_ = value;
     }
 
-    // Returns whether the note's GUID is known to match the server-side
-    // originator client item ID (or for pre-2015 notes, the equivalent
-    // inferred GUID). This function may return false negatives since the
-    // required local metadata got populated with M81.
-    // TODO(crbug.com/1032052): Remove this code once all local sync metadata
-    // is required to populate the client tag (and be considered invalid
-    // otherwise).
-    bool has_final_guid() const;
-
-    // Returns true if the final GUID is known and it matches |guid|.
-    bool final_guid_matches(const base::GUID& guid) const;
-
-    // TODO(crbug.com/1032052): Remove this code once all local sync metadata
-    // is required to populate the client tag (and be considered invalid
-    // otherwise).
-    void set_final_guid(const base::GUID& guid);
+    syncer::ClientTagHash GetClientTagHash() const;
 
     // Returns the estimate of dynamically allocated memory in bytes.
     size_t EstimateMemoryUsage() const;
@@ -130,6 +101,9 @@ class SyncedNoteTracker {
 
     DISALLOW_COPY_AND_ASSIGN(Entity);
   };
+
+  // Returns a client tag hash given a note GUID.
+  static syncer::ClientTagHash GetClientTagHashFromGUID(const base::GUID& guid);
 
   // Creates an empty instance with no entities. Never returns null.
   static std::unique_ptr<SyncedNoteTracker> CreateEmpty(
@@ -153,11 +127,12 @@ class SyncedNoteTracker {
   const Entity* GetEntityForSyncId(const std::string& sync_id) const;
 
   // Returns null if no entity is found.
+  const Entity* GetEntityForClientTagHash(
+      const syncer::ClientTagHash& client_tag_hash) const;
+
+  // Returns null if no entity is found.
   const SyncedNoteTracker::Entity* GetEntityForNoteNode(
       const vivaldi::NoteNode* node) const;
-
-  // Returns null if no tombstone entity is found.
-  const Entity* GetTombstoneEntityForGuid(const base::GUID& guid) const;
 
   // Starts tracking local note |note_node|, which must not be tracked
   // beforehand. The rest of the arguments represent the initial metadata.
@@ -180,9 +155,6 @@ class SyncedNoteTracker {
   // Updates the server version of an existing entity. |entity| must be owned by
   // this tracker.
   void UpdateServerVersion(const Entity* entity, int64_t server_version);
-
-  // Populates a note's final GUID. |entity| must be owned by this tracker.
-  void PopulateFinalGuid(const Entity* entity, const base::GUID& guid);
 
   // Marks an existing entry that a commit request might have been sent to the
   // server. |entity| must be owned by this tracker.
@@ -285,6 +257,10 @@ class SyncedNoteTracker {
   // reuploaded.
   bool ReuploadNotesOnLoadIfNeeded();
 
+  // Returns whether note commits sent to the server (most importantly
+  // creations) should populate client tags.
+  bool note_client_tags_in_protocol_enabled() const;
+
  private:
   explicit SyncedNoteTracker(sync_pb::ModelTypeState model_type_state,
                              bool notes_full_title_reuploaded,
@@ -318,6 +294,12 @@ class SyncedNoteTracker {
   std::unordered_map<std::string, std::unique_ptr<Entity>>
       sync_id_to_entities_map_;
 
+  // Index for efficient lookups by client tag hash.
+  std::unordered_map<syncer::ClientTagHash,
+                     const Entity*,
+                     syncer::ClientTagHash::Hash>
+      client_tag_hash_to_entities_map_;
+
   // A map of note nodes to sync entities. It's keyed by the note node
   // pointers which get assigned when loading the note model. This map is
   // first initialized in the constructor.
@@ -344,6 +326,12 @@ class SyncedNoteTracker {
   // TODO(crbug.com/1032052): Remove this code once all local sync metadata is
   // required to populate the client tag (and be considered invalid otherwise).
   base::Time last_sync_time_;
+
+  // Represents whether note commits sent to the server (most importantly
+  // creations) populate client tags.
+  // TODO(crbug.com/1032052): remove this code when the logic is enabled by
+  // default and enforced to true upon startup.
+  bool note_client_tags_in_protocol_enabled_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(SyncedNoteTracker);
 };

@@ -10,7 +10,20 @@
 
 namespace bookmarks {
 
+// Vivaldi: Returns the nickname for the node.
+const base::string16 TitledUrlNode::GetTitledUrlNodeNickName() const {
+  return base::string16();
+}
+
+// Vivaldi: Returns the description for the node.
+const base::string16 TitledUrlNode::GetTitledUrlNodeDescription() const {
+  return base::string16();
+}
+
 // BookmarkNode ---------------------------------------------------------------
+
+const char BookmarkNode::kVivaldiTrashNodeGuid[] =
+    "00000000-0000-4000-a000-000000040000";
 
 const base::string16 BookmarkNode::GetTitledUrlNodeNickName() const {
   return base::UTF8ToUTF16(vivaldi_bookmark_kit::GetNickname(this));

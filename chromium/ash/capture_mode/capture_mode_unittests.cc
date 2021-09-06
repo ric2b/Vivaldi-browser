@@ -64,6 +64,7 @@
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/vector2d.h"
+#include "ui/gfx/image/image_unittest_util.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/message_center_observer.h"
 #include "ui/message_center/public/cpp/notification.h"
@@ -199,10 +200,6 @@ class CaptureModeSessionTestApi {
     return session_->capture_mode_bar_view_;
   }
 
-  views::Widget* capture_mode_bar_widget() const {
-    return session_->capture_mode_bar_widget_.get();
-  }
-
   CaptureModeSettingsView* capture_mode_settings_view() const {
     return session_->capture_mode_settings_view_;
   }
@@ -265,7 +262,7 @@ class CaptureModeTest : public AshTestBase {
   views::Widget* GetCaptureModeBarWidget() const {
     auto* session = CaptureModeController::Get()->capture_mode_session();
     DCHECK(session);
-    return CaptureModeSessionTestApi(session).capture_mode_bar_widget();
+    return session->capture_mode_bar_widget();
   }
 
   views::Widget* GetCaptureModeLabelWidget() const {
@@ -511,8 +508,7 @@ TEST_F(CaptureModeTest, StartStop) {
 
   // Closing the session should close the native window of capture mode bar
   // immediately.
-  CaptureModeSessionTestApi test_api(controller->capture_mode_session());
-  auto* bar_window = test_api.capture_mode_bar_widget()->GetNativeWindow();
+  auto* bar_window = GetCaptureModeBarWidget()->GetNativeWindow();
   aura::WindowTracker tracker({bar_window});
   controller->Stop();
   EXPECT_TRUE(tracker.windows().empty());
@@ -1614,6 +1610,36 @@ TEST_F(CaptureModeTest, CaptureModeEntryPointHistograms) {
   controller->Start(CaptureModeEntryType::kAccelTakePartialScreenshot);
   histogram_tester.ExpectBucketCount(
       kTabletHistogram, CaptureModeEntryType::kAccelTakePartialScreenshot, 2);
+}
+
+// Verifies that the video notification will show the same thumbnail image as
+// sent by recording service.
+TEST_F(CaptureModeTest, VideoNotificationThumbnail) {
+  auto* controller = StartCaptureSession(CaptureModeSource::kFullscreen,
+                                         CaptureModeType::kVideo);
+  controller->StartVideoRecordingImmediatelyForTesting();
+  EXPECT_TRUE(controller->is_recording_in_progress());
+
+  auto* test_delegate =
+      static_cast<TestCaptureModeDelegate*>(controller->delegate_for_testing());
+
+  // Use a random bitmap as the fake thumbnail.
+  SkBitmap thumbnail;
+  thumbnail.allocN32Pixels(400, 300);
+  EXPECT_FALSE(thumbnail.drawsNothing());
+  test_delegate->SetVideoThumbnail(
+      gfx::ImageSkia::CreateFrom1xBitmap(thumbnail));
+
+  CaptureNotificationWaiter waiter;
+  controller->EndVideoRecording(EndRecordingReason::kStopRecordingButton);
+  EXPECT_FALSE(controller->is_recording_in_progress());
+  waiter.Wait();
+
+  const message_center::Notification* notification = GetPreviewNotification();
+  EXPECT_TRUE(notification);
+  EXPECT_FALSE(notification->image().IsEmpty());
+  const SkBitmap actual_thumbnail = notification->image().AsBitmap();
+  EXPECT_TRUE(gfx::test::AreBitmapsEqual(actual_thumbnail, thumbnail));
 }
 
 TEST_F(CaptureModeTest, WindowRecordingCaptureId) {

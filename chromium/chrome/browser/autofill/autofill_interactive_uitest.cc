@@ -255,9 +255,8 @@ content::RenderFrameHost* RenderFrameHostForName(
 
 // AutofillInteractiveTestBase ------------------------------------------------
 
-// Test fixtures derive from this class and indicate via constructor parameter
-// if feature kAutofillExpandedPopupViews is enabled. This class hierarchy
-// allows test fixtures to have distinct list of test parameters.
+// Test fixtures derive from this class. This class hierarchy allows test
+// fixtures to have distinct list of test parameters.
 //
 // TODO(crbug.com/832707): Parametrize this class to ensure that all tests in
 //                         this run with all possible valid combinations of
@@ -1148,9 +1147,7 @@ class AutofillCompanyInteractiveTest
   AutofillCompanyInteractiveTest() = default;
   ~AutofillCompanyInteractiveTest() override = default;
 
-  void SetUp() override {
-    AutofillInteractiveTestBase::SetUp();
-  }
+  void SetUp() override { AutofillInteractiveTestBase::SetUp(); }
 };
 
 // Makes sure that the first click does or does not activate the autofill popup
@@ -2720,7 +2717,14 @@ class AutofillInteractiveIsolationTest : public AutofillInteractiveTestBase {
   }
 };
 
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveIsolationTest, SimpleCrossSiteFill) {
+// Flaky on ChromeOS http://crbug.com/1175735
+#if defined(OS_CHROMEOS)
+#define MAYBE_SimpleCrossSiteFill DISABLED_SimpleCrossSiteFill
+#else
+#define MAYBE_SimpleCrossSiteFill SimpleCrossSiteFill
+#endif
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveIsolationTest,
+                       MAYBE_SimpleCrossSiteFill) {
   CreateTestProfile();
 
   // Main frame is on a.com, iframe is on b.com.
@@ -2762,13 +2766,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveIsolationTest, SimpleCrossSiteFill) {
 
 // This test verifies that credit card (payment card list) popup works when the
 // form is inside an OOPIF.
-// Flaky on Windows http://crbug.com/728488
-#if defined(OS_WIN)
-#define MAYBE_CrossSitePaymentForms DISABLED_CrossSitePaymentForms
-#else
-#define MAYBE_CrossSitePaymentForms CrossSitePaymentForms
-#endif
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_CrossSitePaymentForms) {
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, CrossSitePaymentForms) {
   CreateTestCreditCart();
   // Main frame is on a.com, iframe is on b.com.
   GURL url = embedded_test_server()->GetURL(
@@ -2796,13 +2794,24 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, MAYBE_CrossSitePaymentForms) {
       "document.getElementById('CREDIT_CARD_NUMBER').focus();");
   ASSERT_TRUE(content::ExecuteScript(cross_frame, script_focus));
 
+  // Wait to make sure iframe is fully rendered. Without the wait, Chrome
+  // sometimes got the signal to render a dropdown at a time and coordinate
+  // where the trigger element was outside the view port of the website.
+  DoNothingAndWait(2);
+
   // Send an arrow dow keypress in order to trigger the autofill popup.
   SendKeyToPageAndWait(ui::DomKey::ARROW_DOWN,
                        {ObservedUiEvents::kSuggestionShown});
 }
 
+// Flaky on ChromeOS http://crbug.com/1175735
+#if defined(OS_CHROMEOS)
+#define MAYBE_DeletingFrameUnderSuggestion DISABLED_DeletingFrameUnderSuggestion
+#else
+#define MAYBE_DeletingFrameUnderSuggestion DeletingFrameUnderSuggestion
+#endif
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveIsolationTest,
-                       DeletingFrameUnderSuggestion) {
+                       MAYBE_DeletingFrameUnderSuggestion) {
   CreateTestProfile();
 
   // Main frame is on a.com, iframe is on b.com.

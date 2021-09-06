@@ -22,6 +22,7 @@ import tempfile
 import dateutil.parser  # pylint: disable=import-error
 import jsonlines  # pylint: disable=import-error
 import psutil  # pylint: disable=import-error
+import six
 
 CHROMIUM_SRC_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -33,7 +34,10 @@ from pylib.base import base_test_result  # pylint: disable=import-error
 from pylib.base import result_sink  # pylint: disable=import-error
 from pylib.results import json_results  # pylint: disable=import-error
 
-import subprocess32 as subprocess  # pylint: disable=import-error
+if six.PY2:
+  import subprocess32 as subprocess  # pylint: disable=import-error
+else:
+  import subprocess  # pylint: disable=import-error,wrong-import-order
 
 DEFAULT_CROS_CACHE = os.path.abspath(
     os.path.join(CHROMIUM_SRC_PATH, 'build', 'cros_cache'))
@@ -48,10 +52,6 @@ LAB_DUT_HOSTNAME = 'variable_chromeos_device_hostname'
 
 SYSTEM_LOG_LOCATIONS = [
     '/var/log/chrome/',
-    # Note that journal/ will contain journald's serialized logs, which aren't
-    # human-readable. To inspect them, download the logs locally and run
-    # `journalctl -D ...`.
-    '/var/log/journal/',
     '/var/log/messages',
     '/var/log/ui/',
 ]
@@ -161,7 +161,7 @@ class RemoteTest(object):
     logging.info('Running the following command on the device:')
     logging.info('\n' + '\n'.join(script_contents))
     fd, tmp_path = tempfile.mkstemp(suffix='.sh', dir=self._path_to_outdir)
-    os.fchmod(fd, 0755)
+    os.fchmod(fd, 0o755)
     with os.fdopen(fd, 'wb') as f:
       f.write('\n'.join(script_contents) + '\n')
     return tmp_path
@@ -186,7 +186,7 @@ class RemoteTest(object):
 
     signal.signal(signal.SIGTERM, _kill_child_procs)
 
-    for i in xrange(self._retries + 1):
+    for i in range(self._retries + 1):
       logging.info('########################################')
       logging.info('Test attempt #%d', i)
       logging.info('########################################')
@@ -197,13 +197,13 @@ class RemoteTest(object):
           env=self._test_env)
       try:
         test_proc.wait(timeout=self._timeout)
-      except subprocess.TimeoutExpired:
+      except subprocess.TimeoutExpired:  # pylint: disable=no-member
         logging.error('Test timed out. Sending SIGTERM.')
         # SIGTERM the proc and wait 10s for it to close.
         test_proc.terminate()
         try:
           test_proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired:  # pylint: disable=no-member
           # If it hasn't closed in 10s, SIGKILL it.
           logging.error('Test did not exit in time. Sending SIGKILL.')
           test_proc.kill()
@@ -262,6 +262,9 @@ class TastTest(RemoteTest):
     self._suite_name = args.suite_name
     self._tast_vars = args.tast_vars
     self._tests = args.tests
+    # The CQ passes in '--gtest_filter' when specifying tests to skip. Store it
+    # here and parse it later to integrate it into Tast executions.
+    self._gtest_style_filter = args.gtest_filter
     self._conditional = args.conditional
     self._should_strip = args.strip_chrome
     self._deploy_lacros = args.deploy_lacros
@@ -279,23 +282,30 @@ class TastTest(RemoteTest):
           'When using the host-side Tast bin, "--logs-dir" must be passed in '
           'order to parse its results.')
 
+    # If the first test filter is negative, it should be safe to assume all of
+    # them are, so just test the first filter.
+    if self._gtest_style_filter and self._gtest_style_filter[0] == '-':
+      raise TestFormatError('Negative test filters not supported for Tast.')
+
   @property
   def suite_name(self):
     return self._suite_name
 
   def build_test_command(self):
-    if '--gtest_filter=%s' % self.suite_name in self._additional_args:
-      logging.info('GTest filtering not supported for tast tests. The '
-                   '--gtest_filter arg will be ignored.')
-      self._additional_args.remove('--gtest_filter=%s' % self.suite_name)
-    if any(arg.startswith('--gtest_repeat') for arg in self._additional_args):
-      logging.info(
-          '--gtest_repeat not supported for tast tests. The arg will be '
-          'ignored.')
-      self._additional_args = [
-          arg for arg in self._additional_args
-          if not arg.startswith('--gtest_repeat')
-      ]
+    unsupported_args = [
+        '--test-launcher-retry-limit',
+        '--test-launcher-batch-limit',
+        '--gtest_repeat',
+    ]
+    for unsupported_arg in unsupported_args:
+      if any(arg.startswith(unsupported_arg) for arg in self._additional_args):
+        logging.info(
+            '%s not supported for Tast tests. The arg will be ignored.',
+            unsupported_arg)
+        self._additional_args = [
+            arg for arg in self._additional_args
+            if not arg.startswith(unsupported_arg)
+        ]
 
     # Lacros deployment mounts itself by default.
     self._test_cmd.extend(
@@ -347,6 +357,19 @@ class TastTest(RemoteTest):
           '--tast-total-shards=%d' % self._test_launcher_total_shards,
           '--tast-shard-index=%d' % self._test_launcher_shard_index,
       ]
+      # If we're using a test filter, replace the contents of the Tast
+      # conditional with a long list of "name:test" expressions, one for each
+      # test in the filter.
+      if self._gtest_style_filter:
+        if self._conditional or self._tests:
+          logging.warning(
+              'Presence of --gtest_filter will cause the specified Tast '
+              'conditional or test list to be ignored.')
+        names = []
+        for test in self._gtest_style_filter.split(':'):
+          names.append('"name:%s"' % test)
+        self._conditional = '(' + ' || '.join(names) + ')'
+
       if self._conditional:
         # Don't use pipes.quote() here. Something funky happens with the arg
         # as it gets passed down from cros_run_test to tast. (Tast picks up the
@@ -558,12 +581,21 @@ class GTestTest(RemoteTest):
       device_test_script_contents += ['export %s=%s' % (var_name, var_val)]
 
     if self._vpython_dir:
+      vpython_path = os.path.join(self._path_to_outdir, self._vpython_dir,
+                                  'vpython')
+      cpython_path = os.path.join(self._path_to_outdir, self._vpython_dir,
+                                  'bin', 'python')
+      if not os.path.exists(vpython_path) or not os.path.exists(cpython_path):
+        raise TestFormatError(
+            '--vpython-dir must point to a dir with both infra/python/cpython '
+            'and infra/tools/luci/vpython installed.')
       vpython_spec_path = os.path.relpath(
           os.path.join(CHROMIUM_SRC_PATH, '.vpython'), self._path_to_outdir)
       # Initialize the vpython cache. This can take 10-20s, and some tests
       # can't afford to wait that long on the first invocation.
       device_test_script_contents.extend([
-          'export PATH=$PATH:$PWD/%s' % (self._vpython_dir),
+          'export PATH=$PWD/%s:$PWD/%s/bin/:$PATH' %
+          (self._vpython_dir, self._vpython_dir),
           'vpython -vpython-spec %s -vpython-tool install' %
           (vpython_spec_path),
       ])
@@ -713,11 +745,11 @@ def host_cmd(args, cmd_args):
 
   test_env = setup_env()
   if args.deploy_chrome:
+    # Mounting ash-chrome gives it enough disk space to not need stripping.
+    cros_run_test_cmd.extend(['--deploy-lacros'] if args.deploy_lacros else
+                             ['--deploy', '--mount', '--nostrip'])
+
     cros_run_test_cmd += [
-        '--deploy',
-        # Mounting ash-chrome gives it enough disk space to not need stripping.
-        '--mount',
-        '--nostrip',
         '--build-dir',
         os.path.abspath(args.path_to_outdir),
     ]
@@ -834,6 +866,10 @@ def main():
       action='store_true',
       help='Will deploy a locally built ash-chrome binary to the device before '
       'running the host-cmd.')
+  host_cmd_parser.add_argument(
+      '--deploy-lacros',
+      action='store_true',
+      help='Deploy a lacros-chrome instead of ash-chrome.')
 
   # GTest args.
   # TODO(bpastene): Rename 'vm-test' arg to 'gtest'.
@@ -918,6 +954,12 @@ def main():
       action='append',
       dest='tests',
       help='A Tast test to run in the device (eg: "ui.ChromeLogin").')
+  tast_test_parser.add_argument(
+      '--gtest_filter',
+      type=str,
+      help="Similar to GTest's arg of the same name, this will filter out the "
+      "specified tests from the Tast run. However, due to the nature of Tast's "
+      'cmd-line API, this will overwrite the value(s) of "--test" above.')
 
   add_common_args(gtest_parser, tast_test_parser, host_cmd_parser)
 

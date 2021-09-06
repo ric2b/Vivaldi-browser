@@ -31,8 +31,7 @@ std::unique_ptr<Renderer> CourierRendererFactory::CreateRenderer(
     AudioRendererSink* audio_renderer_sink,
     VideoRendererSink* video_renderer_sink,
     RequestOverlayInfoCB request_overlay_info_cb,
-    const gfx::ColorSpace& target_color_space,
-    bool use_platform_media_pipeline) {
+    const gfx::ColorSpace& target_color_space) {
   DCHECK(IsRemotingActive());
 #if BUILDFLAG(ENABLE_MEDIA_REMOTING_RPC)
   return std::make_unique<CourierRenderer>(

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/settings/chromeos/about_section.h"
 
+#include "ash/constants/ash_features.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/i18n/message_formatter.h"
@@ -24,7 +25,6 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/constants/dbus_switches.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_chromium_strings.h"
@@ -107,7 +107,10 @@ const std::vector<SearchConcept>& GetDiagnosticsAppSearchConcepts() {
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kDiagnostics},
-       {IDS_OS_SETTINGS_TAG_ABOUT_DIAGNOSTICS_ALT1, SearchConcept::kAltTagEnd}},
+       {IDS_OS_SETTINGS_TAG_ABOUT_DIAGNOSTICS_ALT1,
+        IDS_OS_SETTINGS_TAG_ABOUT_DIAGNOSTICS_ALT2,
+        IDS_OS_SETTINGS_TAG_ABOUT_DIAGNOSTICS_ALT3,
+        IDS_OS_SETTINGS_TAG_ABOUT_DIAGNOSTICS_ALT4, SearchConcept::kAltTagEnd}},
   });
   return *tags;
 }
@@ -279,7 +282,7 @@ void AboutSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
     {"aboutReleaseNotesOffline", IDS_SETTINGS_ABOUT_PAGE_RELEASE_NOTES},
     {"aboutShowReleaseNotes", IDS_SETTINGS_ABOUT_PAGE_SHOW_RELEASE_NOTES},
   };
-  AddLocalizedStringsBulk(html_source, kLocalizedStrings);
+  html_source->AddLocalizedStrings(kLocalizedStrings);
 
   html_source->AddString("aboutTPMFirmwareUpdateLearnMoreURL",
                          chrome::kTPMFirmwareUpdateLearnMoreURL);

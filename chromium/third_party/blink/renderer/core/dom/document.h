@@ -122,7 +122,6 @@ class DocumentInit;
 class DocumentLoader;
 class DocumentMarkerController;
 class DocumentNameCollection;
-class DocumentOutliveTimeReporter;
 class DocumentParser;
 class DocumentResourceCoordinator;
 class DocumentState;
@@ -153,6 +152,7 @@ class HTMLHeadElement;
 class HTMLImportLoader;
 class HTMLImportsController;
 class HTMLLinkElement;
+class HTMLPopupElement;
 class HTMLScriptElementOrSVGScriptElement;
 class HitTestRequest;
 class HttpRefreshScheduler;
@@ -321,6 +321,8 @@ class CORE_EXPORT Document : public ContainerNode,
   // other Documents in a different process. document.open() also causes the
   // document to cease to be the initial empty document.
   void OverrideIsInitialEmptyDocument() { is_initial_empty_document_ = false; }
+
+  bool IsPrerendering() const { return is_prerendering_; }
 
   // Gets the associated LocalDOMWindow even if this Document is associated with
   // an HTMLImportsController.
@@ -577,8 +579,20 @@ class CORE_EXPORT Document : public ContainerNode,
       bool ignore_adjacent_style = false) const;
 
   // Update ComputedStyles and attach LayoutObjects if necessary, but don't
-  // lay out.
+  // lay out. This recursively invokes itself for all ancestor LocalFrames,
+  // because style in an ancestor frame can affect style in a child frame.
+  // This method is appropriate for cases where we need to ensure that the
+  // style for a single Document is up-to-date.
   void UpdateStyleAndLayoutTree();
+
+  // Same as UpdateStyleAndLayoutTree, but does not recursively update style in
+  // ancestor frames. This method is intended to be used in cases where we can
+  // guarantee that ancestor frames already have clean style (e.g., from
+  // LocalFrameView::UpdateLifecyclePhases, which is a top-down iteration over
+  // the entire LocalFrame tree; or from Document::UpdateStyleAndLayout, which
+  // does its own ancestor tree walk).
+  void UpdateStyleAndLayoutTreeForThisDocument();
+
   void UpdateStyleAndLayoutTreeForNode(const Node*);
   void UpdateStyleAndLayoutTreeForSubtree(const Node*);
 
@@ -694,6 +708,7 @@ class CORE_EXPORT Document : public ContainerNode,
                                  bool& did_allow_navigation);
 
   struct UnloadEventTiming {
+    bool can_request;
     base::TimeTicks unload_event_start;
     base::TimeTicks unload_event_end;
   };
@@ -1361,11 +1376,21 @@ class CORE_EXPORT Document : public ContainerNode,
   const HeapVector<Member<Element>>& TopLayerElements() const {
     return top_layer_elements_;
   }
+
   HTMLDialogElement* ActiveModalDialog() const;
+
+  HeapVector<Member<HTMLPopupElement>>& PopupElementStack() {
+    return popup_element_stack_;
+  }
+  bool PopupShowing() const;
+  void HideTopmostPopupElement() const;
+  // This hides all visible popups up to, but not including,
+  // |endpoint|. If |endpoint| is nullptr, all popups are hidden.
+  void HideAllPopupsUntil(const HTMLPopupElement* endpoint);
 
   // A non-null template_document_host_ implies that |this| was created by
   // EnsureTemplateDocument().
-  bool IsTemplateDocument() const { return !!template_document_host_; }
+  bool IsTemplateDocument() const { return template_document_host_; }
   Document& EnsureTemplateDocument();
   Document* TemplateDocumentHost() { return template_document_host_; }
 
@@ -1474,8 +1499,6 @@ class CORE_EXPORT Document : public ContainerNode,
   FontMatchingMetrics* GetFontMatchingMetrics();
 
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner(TaskType);
-
-  void RecordUkmOutliveTimeAfterShutdown(int outlive_time_count);
 
   bool CurrentFrameHadRAF() const;
   bool NextFrameHasPendingRAF() const;
@@ -1663,6 +1686,9 @@ class CORE_EXPORT Document : public ContainerNode,
     Document& document_;
   };
 
+  bool IsDirAttributeDirty() { return dir_attribute_dirty_; }
+  void SetDirAttributeDirty() { dir_attribute_dirty_ = true; }
+
  protected:
   void ClearXMLVersion() { xml_version_ = String(); }
 
@@ -1814,6 +1840,11 @@ class CORE_EXPORT Document : public ContainerNode,
 
   bool is_initial_empty_document_;
 
+  // Track the prerendering state.
+  // TODO(crbug.com/1169032): Update the flag on the prerendering activation.
+  // Also, we will merge the state into the lifecycle state eventually.
+  const bool is_prerendering_;
+
   bool evaluate_media_queries_on_style_recalc_;
 
   // If we do ignore the pending stylesheet count, then we need to add a boolean
@@ -1886,7 +1917,7 @@ class CORE_EXPORT Document : public ContainerNode,
   bool autofocus_processed_flag_ = false;
   mojom::blink::FocusType last_focus_type_;
   bool had_keyboard_event_;
-  TaskRunnerTimer<Document> clear_focused_element_timer_;
+  HeapTaskRunnerTimer<Document> clear_focused_element_timer_;
   // https://html.spec.whatwg.org/C/#autofocus-candidates
   // We implement this as a Vector because its maximum size is typically 1.
   HeapVector<Member<Element>> autofocus_candidates_;
@@ -2019,9 +2050,13 @@ class CORE_EXPORT Document : public ContainerNode,
   // stack and is thus the one that will be visually on top.
   HeapVector<Member<Element>> top_layer_elements_;
 
+  // The stack of currently-displayed popup elements. Elements in the stack
+  // go from earliest (bottom-most) to latest (top-most).
+  HeapVector<Member<HTMLPopupElement>> popup_element_stack_;
+
   int load_event_delay_count_;
-  TaskRunnerTimer<Document> load_event_delay_timer_;
-  TaskRunnerTimer<Document> plugin_loading_timer_;
+  HeapTaskRunnerTimer<Document> load_event_delay_timer_;
+  HeapTaskRunnerTimer<Document> plugin_loading_timer_;
 
   DocumentTiming document_timing_;
   Member<MediaQueryMatcher> media_query_matcher_;
@@ -2033,7 +2068,7 @@ class CORE_EXPORT Document : public ContainerNode,
   Member<TextAutosizer> text_autosizer_;
 
   void ElementDataCacheClearTimerFired(TimerBase*);
-  TaskRunnerTimer<Document> element_data_cache_clear_timer_;
+  HeapTaskRunnerTimer<Document> element_data_cache_clear_timer_;
 
   Member<ElementDataCache> element_data_cache_;
 
@@ -2049,7 +2084,7 @@ class CORE_EXPORT Document : public ContainerNode,
   Member<Document> template_document_;
   Member<Document> template_document_host_;
 
-  TaskRunnerTimer<Document> did_associate_form_controls_timer_;
+  HeapTaskRunnerTimer<Document> did_associate_form_controls_timer_;
 
   HeapHashSet<Member<SVGUseElement>> use_elements_needing_update_;
 
@@ -2073,13 +2108,10 @@ class CORE_EXPORT Document : public ContainerNode,
 
   Member<NetworkStateObserver> network_state_observer_;
 
-  std::unique_ptr<DocumentOutliveTimeReporter> document_outlive_time_reporter_;
-
   // |ukm_recorder_| and |source_id_| will allow objects that are part of
   // the document to record UKM.
   std::unique_ptr<ukm::UkmRecorder> ukm_recorder_;
   const int64_t ukm_source_id_;
-  bool needs_to_record_ukm_outlive_time_;
 
   // Tracks and reports metrics of attempted font match attempts (both
   // successful and not successful) by the page.
@@ -2179,6 +2211,8 @@ class CORE_EXPORT Document : public ContainerNode,
   bool had_find_in_page_request_ = false;
   bool had_find_in_page_render_subtree_active_match_ = false;
   bool had_find_in_page_beforematch_expanded_hidden_matchable_ = false;
+
+  bool dir_attribute_dirty_ = false;
 
   // To reduce the API noisiness an explicit deny decision will set a
   // flag that auto rejects the promise without the need for an IPC

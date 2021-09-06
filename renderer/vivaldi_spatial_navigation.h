@@ -11,18 +11,22 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 
+namespace gfx {
+class Rect;
+}
+
 namespace vivaldi {
 
-bool IsCovered(blink::Document* document, blink::WebRect& rect);
+bool IsCovered(blink::Document* document, gfx::Rect& rect);
 bool IsInViewport(blink::Document* document,
-                  blink::WebRect& rect,
+                  gfx::Rect& rect,
                   int window_height);
-bool IsTooSmall(blink::WebRect& rect);
+bool IsTooSmall(gfx::Rect& rect);
 bool IsVisible(blink::WebElement element);
 bool HasNavigableTag(blink::WebElement& element);
 bool HasNavigableListeners(blink::WebElement& element);
 bool IsNavigableElement(blink::WebElement& element);
-blink::WebRect RevertDeviceScaling(blink::WebRect rect, float scale);
+gfx::Rect RevertDeviceScaling(gfx::Rect rect, float scale);
 blink::IntRect FindImageElementRect(blink::WebElement element);
 std::string ElementPath(blink::WebElement& element);
 

@@ -146,8 +146,11 @@ enum LaunchType {
 };
 
 // The origin of injected CSS.
-enum CSSOrigin { CSS_ORIGIN_AUTHOR, CSS_ORIGIN_USER };
-static const CSSOrigin CSS_ORIGIN_LAST = CSS_ORIGIN_USER;
+enum class CSSOrigin {
+  kAuthor = 0,
+  kUser = 1,
+  kLast = kUser,
+};
 
 }  // namespace extensions
 
@@ -261,11 +264,15 @@ extern const char kScreensaverNocturneAppId[];
 // The extension id of the atlas Demo Mode screensaver app.
 extern const char kScreensaverAtlasAppId[];
 
-// The extension id of the kukui Demo Mode screensaver app.
-extern const char kScreensaverKukuiAppId[];
+// The extension id of the krane Demo Mode screensaver app. That app is only
+// run on KRANE-ZDKS devices.
+extern const char kScreensaverKraneZdksAppId[];
 
 // The id of the testing extension allowed in the signin profile.
 extern const char kSigninProfileTestExtensionId[];
+
+// The id of the testing extension allowed in guest mode.
+extern const char kGuestModeTestExtensionId[];
 
 // Returns true if this app is part of the "system UI". Generally this is UI
 // that that on other operating systems would be considered part of the OS,

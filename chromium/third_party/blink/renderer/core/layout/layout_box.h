@@ -68,6 +68,11 @@ enum ShouldComputePreferred { kComputeActual, kComputePreferred };
 
 enum ShouldClampToContentBox { kDoNotClampToContentBox, kClampToContentBox };
 
+enum ShouldIncludeScrollbarGutter {
+  kExcludeScrollbarGutter,
+  kIncludeScrollbarGutter
+};
+
 using SnapAreaSet = HashSet<LayoutBox*>;
 
 struct LayoutBoxRareData final : public GarbageCollected<LayoutBoxRareData> {
@@ -1178,8 +1183,11 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   // Store one layout result (with its physical fragment) at the specified
   // index, and delete all entries following it.
   void AddLayoutResult(scoped_refptr<const NGLayoutResult>, wtf_size_t index);
+  void AddLayoutResult(scoped_refptr<const NGLayoutResult>);
   void ReplaceLayoutResult(scoped_refptr<const NGLayoutResult>,
                            wtf_size_t index);
+  void ReplaceLayoutResult(scoped_refptr<const NGLayoutResult>,
+                           const NGPhysicalBoxFragment& old_fragment);
 
   void ShrinkLayoutResults(wtf_size_t results_to_keep);
   void ClearLayoutResults();
@@ -1216,6 +1224,9 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     bool IsEmpty() const { return layout_results_.IsEmpty(); }
 
     bool HasFragmentItems() const;
+
+    wtf_size_t IndexOf(const NGPhysicalBoxFragment& fragment) const;
+    bool Contains(const NGPhysicalBoxFragment& fragment) const;
 
     class CORE_EXPORT Iterator : public std::iterator<std::forward_iterator_tag,
                                                       NGPhysicalBoxFragment> {
@@ -1606,12 +1617,11 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
                                               LogicalExtentComputedValues&);
 
   PositionWithAffinity PositionForPoint(const PhysicalOffset&) const override;
+  PositionWithAffinity PositionForPointInFragments(const PhysicalOffset&) const;
 
   void RemoveFloatingOrPositionedChildFromBlockLists();
 
   PaintLayer* EnclosingFloatPaintingLayer() const;
-
-  const LayoutBlock& EnclosingScrollportBox() const;
 
   virtual LayoutUnit FirstLineBoxBaseline() const {
     NOT_DESTROYED();
@@ -1672,14 +1682,13 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     return !IsInline() && !IsOutOfFlowPositioned() && Parent();
   }
 
-  bool IsGridItemIncludingNG() const {
-    NOT_DESTROYED();
-    return IsGridItem() || (Parent() && Parent()->IsLayoutNGGrid());
-  }
-
   bool IsGridItem() const {
     NOT_DESTROYED();
     return Parent() && Parent()->IsLayoutGrid();
+  }
+  bool IsGridItemIncludingNG() const {
+    NOT_DESTROYED();
+    return Parent() && Parent()->IsLayoutGridIncludingNG();
   }
 
   bool IsMathItem() const {
@@ -2114,10 +2123,12 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   bool ColumnFlexItemHasStretchAlignment() const;
   bool IsStretchingColumnFlexItem() const;
   bool HasStretchedLogicalWidth() const;
+  bool HasStretchedLogicalHeight() const;
 
   void ExcludeScrollbars(
       PhysicalRect&,
-      OverlayScrollbarClipBehavior = kIgnoreOverlayScrollbarSize) const;
+      OverlayScrollbarClipBehavior = kIgnoreOverlayScrollbarSize,
+      ShouldIncludeScrollbarGutter = kIncludeScrollbarGutter) const;
 
   LayoutUnit ContainingBlockLogicalWidthForPositioned(
       const LayoutBoxModelObject* containing_block,
@@ -2273,7 +2284,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   bool HasScrollbarGutters(ScrollbarOrientation orientation) const;
   NGPhysicalBoxStrut ComputeScrollbarsInternal(
       ShouldClampToContentBox = kDoNotClampToContentBox,
-      OverlayScrollbarClipBehavior = kIgnoreOverlayScrollbarSize) const;
+      OverlayScrollbarClipBehavior = kIgnoreOverlayScrollbarSize,
+      ShouldIncludeScrollbarGutter = kIncludeScrollbarGutter) const;
 
   LayoutUnit FlipForWritingModeInternal(
       LayoutUnit position,
@@ -2444,7 +2456,6 @@ inline void LayoutBox::SetInlineBoxWrapper(InlineBox* box_wrapper) {
 inline wtf_size_t LayoutBox::FirstInlineFragmentItemIndex() const {
   if (!IsInLayoutNGInlineFormattingContext())
     return 0u;
-  DCHECK(RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled());
   return first_fragment_item_index_;
 }
 

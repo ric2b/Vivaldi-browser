@@ -21,14 +21,16 @@
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
-#include "chrome/browser/chromeos/app_mode/kiosk_app_types.h"
-#include "chrome/browser/chromeos/login/saml/password_sync_token_checkers_collection.h"
-#include "chrome/browser/chromeos/login/screens/encryption_migration_mode.h"
+#include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
+// TODO(https://crbug.com/1164001): move KioskAppId to forward declaration
+// when moved to chrome/browser/ash/.
+#include "chrome/browser/ash/app_mode/kiosk_app_types.h"
+#include "chrome/browser/ash/login/saml/password_sync_token_checkers_collection.h"
+#include "chrome/browser/ash/login/screens/encryption_migration_mode.h"
+#include "chrome/browser/ash/settings/cros_settings.h"
+#include "chrome/browser/ash/settings/device_settings_service.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/login/ui/login_display.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "chromeos/login/auth/login_performer.h"
 #include "chromeos/login/auth/user_context.h"
 #include "components/account_id/account_id.h"
@@ -51,7 +53,6 @@ namespace chromeos {
 class CrosSettings;
 class LoginDisplay;
 class OAuth2TokenInitializer;
-class KioskAppId;
 
 namespace login {
 class NetworkStateHelper;
@@ -281,7 +282,7 @@ class ExistingUserController : public LoginDisplay::Delegate,
                                             bool service_is_available);
 
   // Invokes `continuation` after verifying that the device is not disabled.
-  void ContinueLoginIfDeviceNotDisabled(const base::Closure& continuation);
+  void ContinueLoginIfDeviceNotDisabled(base::OnceClosure continuation);
 
   // Signs in as a new user. This is a continuation of CompleteLogin() that gets
   // invoked after it has been verified that the device is not disabled.
@@ -408,5 +409,10 @@ class ExistingUserController : public LoginDisplay::Delegate,
 };
 
 }  // namespace chromeos
+
+// TODO(https://crbug.com/1164001): remove when moved to ash.
+namespace ash {
+using ::chromeos::ExistingUserController;
+}
 
 #endif  // CHROME_BROWSER_CHROMEOS_LOGIN_EXISTING_USER_CONTROLLER_H_

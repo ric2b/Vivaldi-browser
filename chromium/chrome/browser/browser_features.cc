@@ -44,19 +44,8 @@ const base::Feature kCopyLinkToText{"CopyLinkToText",
 
 // Enables notification muting during screen share sessions.
 const base::Feature kMuteNotificationsDuringScreenShare{
-    "MuteNotificationsDuringScreenShare", base::FEATURE_DISABLED_BY_DEFAULT};
+    "MuteNotificationsDuringScreenShare", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// When enabled, keepalive requests can block browser shutdown for a short
-// period of time.
-const base::Feature kShutdownSupportForKeepalive{
-    "ShutdownSupportForKeepalive", base::FEATURE_DISABLED_BY_DEFAULT};
-
-#endif
-
-#if defined(OS_MAC)
-// Enables the usage of Apple's new Notification API on macOS 10.14+
-const base::Feature kNewMacNotificationAPI{"NewMacNotificationAPI",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
 #if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)

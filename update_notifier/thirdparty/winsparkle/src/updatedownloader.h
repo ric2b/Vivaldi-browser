@@ -29,6 +29,7 @@
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/process/process.h"
 
 #include <inttypes.h>
 #include <ctime>
@@ -96,8 +97,8 @@ std::unique_ptr<InstallerLaunchData> DownloadUpdate(
     DownloadUpdateDelegate& delegate,
     Error& error);
 
-void RunInstaller(std::unique_ptr<InstallerLaunchData> launch_data,
-                  Error& error);
+base::Process RunInstaller(std::unique_ptr<InstallerLaunchData> launch_data,
+                           Error& error);
 
 // Perform any necessary cleanup after previous updates.
 //
@@ -106,7 +107,7 @@ void RunInstaller(std::unique_ptr<InstallerLaunchData> launch_data,
 // DownloadUpdate().
 void CleanDownloadLeftovers();
 
-std::wstring GetPathHash(const base::FilePath& path);
+std::wstring GetPathHash(const base::FilePath& path, bool base64);
 
 }  // namespace winsparkle
 

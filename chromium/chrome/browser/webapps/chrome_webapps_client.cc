@@ -11,13 +11,17 @@
 #include "content/public/browser/web_contents.h"
 
 #if defined(OS_ANDROID)
+#include "chrome/browser/android/shortcut_helper.h"
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/android/tab_web_contents_delegate_android.h"
 #include "chrome/browser/android/webapk/webapk_install_service.h"
+#include "chrome/browser/banners/android/chrome_app_banner_manager_android.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "components/feature_engagement/public/event_constants.h"
 #include "components/feature_engagement/public/tracker.h"
 #include "components/webapps/browser/android/add_to_homescreen_params.h"
+#else
+#include "chrome/browser/banners/app_banner_manager_desktop.h"
 #endif
 
 namespace webapps {
@@ -74,6 +78,15 @@ WebappInstallSource ChromeWebappsClient::GetInstallSource(
   return WebappInstallSource::COUNT;
 }
 
+AppBannerManager* ChromeWebappsClient::GetAppBannerManager(
+    content::WebContents* web_contents) {
+#if defined(OS_ANDROID)
+  return ChromeAppBannerManagerAndroid::FromWebContents(web_contents);
+#else
+  return AppBannerManagerDesktop::FromWebContents(web_contents);
+#endif
+}
+
 #if defined(OS_ANDROID)
 bool ChromeWebappsClient::IsInstallationInProgress(
     content::WebContents* web_contents,
@@ -104,6 +117,13 @@ void ChromeWebappsClient::InstallWebApk(content::WebContents* web_contents,
   WebApkInstallService::Get(web_contents->GetBrowserContext())
       ->InstallAsync(web_contents, *(params.shortcut_info), params.primary_icon,
                      params.has_maskable_primary_icon, params.install_source);
+}
+
+void ChromeWebappsClient::InstallShortcut(content::WebContents* web_contents,
+                                          const AddToHomescreenParams& params) {
+  ShortcutHelper::AddToLauncherWithSkBitmap(
+      web_contents, *(params.shortcut_info), params.primary_icon,
+      params.has_maskable_primary_icon);
 }
 #endif
 

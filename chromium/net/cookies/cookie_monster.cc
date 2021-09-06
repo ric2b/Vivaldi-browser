@@ -45,15 +45,18 @@
 #include "net/cookies/cookie_monster.h"
 
 #include <functional>
+#include <numeric>
 #include <set>
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
 #include "base/single_thread_task_runner.h"
@@ -63,6 +66,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/process_memory_dump.h"
+#include "net/base/features.h"
 #include "net/base/isolation_info.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/url_util.h"
@@ -762,12 +766,16 @@ void CookieMonster::StoreLoadedCookies(
   // removed, and sync'd.
   CookieItVector cookies_with_control_chars;
 
+  bool dispatch_change = !base::FeatureList::IsEnabled(
+      features::kNoCookieChangeNotificationOnLoad);
+
   for (auto& cookie : cookies) {
     CanonicalCookie* cookie_ptr = cookie.get();
     CookieAccessResult access_result;
     access_result.access_semantics = CookieAccessSemantics::UNKNOWN;
     auto inserted = InternalInsertCookie(
-        GetKey(cookie_ptr->Domain()), std::move(cookie), false, access_result);
+        GetKey(cookie_ptr->Domain()), std::move(cookie),
+        false /* sync_to_store */, access_result, dispatch_change);
     const Time cookie_access_time(cookie_ptr->LastAccessDate());
     if (earliest_access_time_.is_null() ||
         cookie_access_time < earliest_access_time_) {
@@ -1139,7 +1147,8 @@ CookieMonster::CookieMap::iterator CookieMonster::InternalInsertCookie(
     const std::string& key,
     std::unique_ptr<CanonicalCookie> cc,
     bool sync_to_store,
-    const CookieAccessResult& access_result) {
+    const CookieAccessResult& access_result,
+    bool dispatch_change) {
   DCHECK(thread_checker_.CalledOnValidThread());
   CanonicalCookie* cc_ptr = cc.get();
 
@@ -1164,9 +1173,11 @@ CookieMonster::CookieMap::iterator CookieMonster::InternalInsertCookie(
   histogram_cookie_type_->Add(type_sample);
 
   DCHECK(access_result.status.IsInclude());
-  change_dispatcher_.DispatchChange(
-      CookieChangeInfo(*cc_ptr, access_result, CookieChangeCause::INSERTED),
-      true);
+  if (dispatch_change) {
+    change_dispatcher_.DispatchChange(
+        CookieChangeInfo(*cc_ptr, access_result, CookieChangeCause::INSERTED),
+        true);
+  }
 
   // If this is the first cookie in |cookies_| with this key, increment the
   // |num_keys_| counter.
@@ -1803,6 +1814,20 @@ bool CookieMonster::DoRecordPeriodicStats() {
   // See InitializeHistograms() for details.
   histogram_count_->Add(cookies_.size());
 
+  if (cookie_access_delegate()) {
+    for (const auto& set : cookie_access_delegate()->RetrieveFirstPartySets()) {
+      int sample = std::accumulate(
+          set.second.begin(), set.second.end(), 0,
+          [this](int acc, const net::SchemefulSite& site) -> int {
+            if (!site.has_registrable_domain_or_host())
+              return acc;
+            return acc + cookies_.count(site.registrable_domain_or_host());
+          });
+      base::UmaHistogramCustomCounts("Cookie.PerFirstPartySetCount", sample, 0,
+                                     4000, 50);
+    }
+  }
+
   // Can be up to kMaxDomainPurgedKeys.
   UMA_HISTOGRAM_COUNTS_100("Cookie.NumDomainPurgedKeys",
                            domain_purged_keys_.size());
@@ -1814,27 +1839,8 @@ bool CookieMonster::DoRecordPeriodicStats() {
 
 // Initialize all histogram counter variables used in this class.
 //
-// Normal histogram usage involves using the macros defined in
-// histogram.h, which automatically takes care of declaring these
-// variables (as statics), initializing them, and accumulating into
-// them, all from a single entry point.  Unfortunately, that solution
-// doesn't work for the CookieMonster, as it's vulnerable to races between
-// separate threads executing the same functions and hence initializing the
-// same static variables.  There isn't a race danger in the histogram
-// accumulation calls; they are written to be resilient to simultaneous
-// calls from multiple threads.
-//
-// The solution taken here is to have per-CookieMonster instance
-// variables that are constructed during CookieMonster construction.
-// Note that these variables refer to the same underlying histogram,
-// so we still race (but safely) with other CookieMonster instances
-// for accumulation.
-//
-// To do this we've expanded out the individual histogram macros calls,
-// with declarations of the variables in the class decl, initialization here
-// (done from the class constructor) and direct calls to the accumulation
-// methods where needed.  The specific histogram macro calls on which the
-// initialization is based are included in comments below.
+// TODO(https://crbug.com/1087445): remove this in favor of histogram_macros.h
+// or histogram_functions.h usage, since both are now threadsafe.
 void CookieMonster::InitializeHistograms() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -1846,8 +1852,12 @@ void CookieMonster::InitializeHistograms() {
       base::Histogram::FactoryGet("Cookie.ExpirationDurationMinutesNonSecure",
                                   1, kMinutesInTenYears, 50,
                                   base::Histogram::kUmaTargetedHistogramFlag);
-  histogram_count_ = base::Histogram::FactoryGet(
-      "Cookie.Count", 1, 4000, 50, base::Histogram::kUmaTargetedHistogramFlag);
+
+  // From UMA_HISTOGRAM_COUNTS_100000
+  // This replaces Cookie.Count which only counted up to 4000 cookies.
+  histogram_count_ =
+      base::Histogram::FactoryGet("Cookie.Count2", 1, 100000, 50,
+                                  base::Histogram::kUmaTargetedHistogramFlag);
 
   // From UMA_HISTOGRAM_ENUMERATION
   histogram_cookie_type_ = base::LinearHistogram::FactoryGet(

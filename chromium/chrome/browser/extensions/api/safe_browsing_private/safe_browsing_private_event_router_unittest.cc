@@ -29,6 +29,7 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "components/download/public/common/download_danger_type.h"
 #include "components/enterprise/browser/enterprise_switches.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
@@ -42,9 +43,9 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/profiles/profile_helper.h"
+#include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
 #include "chromeos/tpm/stub_install_attributes.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/scoped_user_manager.h"
@@ -73,38 +74,6 @@ constexpr char kConnectorsPrefValue[] = R"([
 ])";
 
 }  // namespace
-
-class FakeAuthorizedSafeBrowsingPrivateEventRouter
-    : public SafeBrowsingPrivateEventRouter {
- public:
-  explicit FakeAuthorizedSafeBrowsingPrivateEventRouter(
-      content::BrowserContext* context)
-      : SafeBrowsingPrivateEventRouter(context) {}
-
- private:
-  void ReportRealtimeEvent(const std::string& name,
-                           enterprise_connectors::ReportingSettings settings,
-                           EventBuilder event_builder) override {
-    ReportRealtimeEventCallback(name, std::move(settings),
-                                std::move(event_builder), true);
-  }
-};
-
-class FakeUnauthorizedSafeBrowsingPrivateEventRouter
-    : public SafeBrowsingPrivateEventRouter {
- public:
-  explicit FakeUnauthorizedSafeBrowsingPrivateEventRouter(
-      content::BrowserContext* context)
-      : SafeBrowsingPrivateEventRouter(context) {}
-
- private:
-  void ReportRealtimeEvent(const std::string& name,
-                           enterprise_connectors::ReportingSettings settings,
-                           EventBuilder event_builder) override {
-    ReportRealtimeEventCallback(name, std::move(settings),
-                                std::move(event_builder), false);
-  }
-};
 
 class SafeBrowsingEventObserver : public TestEventRouter::EventObserver {
  public:
@@ -135,14 +104,9 @@ class SafeBrowsingEventObserver : public TestEventRouter::EventObserver {
 };
 
 std::unique_ptr<KeyedService> BuildSafeBrowsingPrivateEventRouter(
-    bool authorized,
     content::BrowserContext* context) {
-  if (authorized)
-    return std::unique_ptr<KeyedService>(
-        new FakeAuthorizedSafeBrowsingPrivateEventRouter(context));
-  else
-    return std::unique_ptr<KeyedService>(
-        new FakeUnauthorizedSafeBrowsingPrivateEventRouter(context));
+  return std::unique_ptr<KeyedService>(
+      new SafeBrowsingPrivateEventRouter(context));
 }
 
 class SafeBrowsingPrivateEventRouterTest : public testing::Test {
@@ -171,9 +135,11 @@ class SafeBrowsingPrivateEventRouterTest : public testing::Test {
 
   void TriggerOnDangerousDownloadOpenedEvent() {
     SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile_)
-        ->OnDangerousDownloadOpened(GURL("https://evil.com/malware.exe"),
-                                    "/path/to/malware.exe",
-                                    "sha256_of_malware_exe", "exe", 1234);
+        ->OnDangerousDownloadOpened(
+            GURL("https://evil.com/malware.exe"), "/path/to/malware.exe",
+            "sha256_of_malware_exe", "exe",
+            download::DownloadDangerType::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE,
+            1234);
   }
 
   void TriggerOnSecurityInterstitialShownEvent() {
@@ -233,6 +199,7 @@ class SafeBrowsingPrivateEventRouterTest : public testing::Test {
   }
 
   void SetReportingPolicy(bool enabled,
+                          bool authorized = true,
                           const std::set<std::string>& enabled_event_names =
                               std::set<std::string>()) {
     safe_browsing::SetOnSecurityEventReporting(profile_->GetPrefs(), enabled,
@@ -240,14 +207,22 @@ class SafeBrowsingPrivateEventRouterTest : public testing::Test {
 
     // If we are not enabling reporting, or if the client has already been
     // set for testing, just return.
-    if (!enabled || client_)
+    if (!enabled)
       return;
 
-    // Set a mock cloud policy client in the router.
-    client_ = std::make_unique<policy::MockCloudPolicyClient>();
-    client_->SetDMToken("fake-token");
-    SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile_)
-        ->SetBrowserCloudPolicyClientForTesting(client_.get());
+    if (client_ == nullptr) {
+      // Set a mock cloud policy client in the router.
+      client_ = std::make_unique<policy::MockCloudPolicyClient>();
+      client_->SetDMToken("fake-token");
+      SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile_)
+          ->SetBrowserCloudPolicyClientForTesting(client_.get());
+    }
+
+    if (!authorized) {
+      // This causes the DM Token to be rejected, and unauthorized for 24 hours.
+      client_->SetStatus(policy::DM_STATUS_SERVICE_MANAGEMENT_NOT_SUPPORTED);
+      client_->NotifyClientError();
+    }
   }
 
   void SetUpRouters(bool authorized = true,
@@ -256,10 +231,10 @@ class SafeBrowsingPrivateEventRouterTest : public testing::Test {
                         std::set<std::string>()) {
     event_router_ = extensions::CreateAndUseTestEventRouter(profile_);
     SafeBrowsingPrivateEventRouterFactory::GetInstance()->SetTestingFactory(
-        profile_,
-        base::BindRepeating(&BuildSafeBrowsingPrivateEventRouter, authorized));
+        profile_, base::BindRepeating(&BuildSafeBrowsingPrivateEventRouter));
 
-    SetReportingPolicy(realtime_reporting_enable, enabled_event_names);
+    SetReportingPolicy(realtime_reporting_enable, authorized,
+                       enabled_event_names);
   }
 
  protected:

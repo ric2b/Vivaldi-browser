@@ -953,6 +953,21 @@ TEST(GURLTest, DebugAlias) {
   EXPECT_STREQ("https://foo.com/bar", url_debug_alias);
 }
 
+TEST(GURLTest, InvalidHost) {
+  // This contains an invalid percent escape (%T%) and also a valid
+  // percent escape that's not 7-bit ascii (%ae), so that the unescaped
+  // host contains both an invalid percent escape and invalid UTF-8.
+  GURL url("http://%T%Ae");
+
+  EXPECT_FALSE(url.is_valid());
+  EXPECT_TRUE(url.SchemeIs(url::kHttpScheme));
+
+  // The invalid percent escape becomes an escaped percent sign (%25), and the
+  // invalid UTF-8 character becomes REPLACEMENT CHARACTER' (U+FFFD) encoded as
+  // UTF-8.
+  EXPECT_EQ(url.host_piece(), "%25t%EF%BF%BD");
+}
+
 TEST(GURLTest, PortZero) {
   GURL port_zero_url("http://127.0.0.1:0/blah");
 
@@ -992,15 +1007,16 @@ TEST(GURLTest, PortZero) {
   EXPECT_FALSE(default_port_origin.IsSameOriginWith(resolved_origin));
 }
 
-class GURLTestTraits final : public UrlTraitsBase<GURL> {
+class GURLTestTraits {
  public:
-  UrlType CreateUrlFromString(base::StringPiece s) override { return GURL(s); }
+  using UrlType = GURL;
 
-  bool IsAboutBlank(const UrlType& url) override { return url.IsAboutBlank(); }
+  static UrlType CreateUrlFromString(base::StringPiece s) { return GURL(s); }
+  static bool IsAboutBlank(const UrlType& url) { return url.IsAboutBlank(); }
+  static bool IsAboutSrcdoc(const UrlType& url) { return url.IsAboutSrcdoc(); }
 
-  bool IsAboutSrcdoc(const UrlType& url) override {
-    return url.IsAboutSrcdoc();
-  }
+  // Only static members.
+  GURLTestTraits() = delete;
 };
 
 INSTANTIATE_TYPED_TEST_SUITE_P(GURL, AbstractUrlTest, GURLTestTraits);

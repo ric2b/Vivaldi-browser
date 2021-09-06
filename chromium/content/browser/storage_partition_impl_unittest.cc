@@ -354,9 +354,9 @@ class RemoveCodeCacheTester {
 
   bool ContainsEntry(Cache cache, GURL url, GURL origin_lock) {
     entry_exists_ = false;
-    GeneratedCodeCache::ReadDataCallback callback = base::BindRepeating(
+    GeneratedCodeCache::ReadDataCallback callback = base::BindOnce(
         &RemoveCodeCacheTester::FetchEntryCallback, base::Unretained(this));
-    GetCache(cache)->FetchEntry(url, origin_lock, callback);
+    GetCache(cache)->FetchEntry(url, origin_lock, std::move(callback));
     await_completion_.BlockUntilNotified();
     return entry_exists_;
   }
@@ -778,9 +778,13 @@ class StoragePartitionImplTest : public testing::Test {
           browser_context_->IsOffTheRecord(), browser_context_->GetPath(),
           GetIOThreadTaskRunner({}).get(),
           browser_context_->GetSpecialStoragePolicy());
-      auto quota_client = base::MakeRefCounted<storage::MockQuotaClient>(
-          quota_manager_->proxy(), base::span<const storage::MockOriginData>(),
-          storage::QuotaClientType::kFileSystem);
+      mojo::PendingRemote<storage::mojom::QuotaClient> quota_client;
+      mojo::MakeSelfOwnedReceiver(
+          std::make_unique<storage::MockQuotaClient>(
+              quota_manager_->proxy(),
+              base::span<const storage::MockOriginData>(),
+              storage::QuotaClientType::kFileSystem),
+          quota_client.InitWithNewPipeAndPassReceiver());
       quota_manager_->proxy()->RegisterClient(
           std::move(quota_client), storage::QuotaClientType::kFileSystem,
           {blink::mojom::StorageType::kTemporary,

@@ -65,6 +65,7 @@ import java.util.List;
 @Batch(ProfileDataCacheRenderTest.PROFILE_DATA_BATCH_NAME)
 public class ProfileDataCacheRenderTest extends DummyUiActivityTestCase {
     public static final String PROFILE_DATA_BATCH_NAME = "profile_data";
+    public static final String ACCOUNT_EMAIL = "test@gmail.com";
 
     @ClassParameter
     private static final List<ParameterSet> sClassParams =
@@ -100,6 +101,10 @@ public class ProfileDataCacheRenderTest extends DummyUiActivityTestCase {
     private final IdentityManager mIdentityManager =
             new IdentityManager(0 /* nativeIdentityManager */, null /* OAuth2TokenService */);
 
+    private final AccountInfo mAccountInfoWithAvatar =
+            new AccountInfo(new CoreAccountId("gaia-id-test"), ACCOUNT_EMAIL, "gaia-id-test",
+                    "full name", "given name", createAvatar());
+
     private FrameLayout mContentView;
     private ImageView mImageView;
 
@@ -121,7 +126,8 @@ public class ProfileDataCacheRenderTest extends DummyUiActivityTestCase {
             mContentView.addView(mImageView, LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
             activity.setContentView(mContentView);
 
-            mProfileDataCache = new ProfileDataCache(getActivity(), mImageSize, null);
+            mProfileDataCache = new ProfileDataCache(getActivity(), mImageSize,
+                    /*badgeConfig=*/null);
             // ProfileDataCache only populates the cache when an observer is added.
             mProfileDataCache.addObserver(accountId -> {});
         });
@@ -136,20 +142,49 @@ public class ProfileDataCacheRenderTest extends DummyUiActivityTestCase {
     @Test
     @MediumTest
     @Feature("RenderTest")
-    public void testProfileDataUpdatedFromIdentityManager() throws IOException {
-        String accountEmail = "test@example.com";
+    public void testProfileDataWithAvatarFromIdentityManager() throws IOException {
         when(mIdentityManagerNativeMock
                         .findExtendedAccountInfoForAccountWithRefreshTokenByEmailAddress(
-                                anyLong(), eq(accountEmail)))
-                .thenReturn(new AccountInfo(new CoreAccountId("gaia-id-test"), accountEmail,
-                        "gaia-id-test", "full name", "given name", null));
-
+                                anyLong(), eq(ACCOUNT_EMAIL)))
+                .thenReturn(mAccountInfoWithAvatar);
         mAccountManagerTestRule.addAccount(
-                new ProfileDataSource.ProfileData(accountEmail, null, "Full Name", "Given Name"));
-        mIdentityManager.onExtendedAccountInfoUpdated(
-                new AccountInfo(new CoreAccountId("gaia-id-test"), accountEmail, "gaia-id-test",
-                        "full name", "given name", createAvatar()));
-        TestThreadUtils.runOnUiThreadBlocking(() -> { checkImageIsScaled(accountEmail); });
+                new ProfileDataSource.ProfileData(ACCOUNT_EMAIL, null, "Full Name", "Given Name"));
+        TestThreadUtils.runOnUiThreadBlocking(() -> { checkImageIsScaled(ACCOUNT_EMAIL); });
+        mRenderTestRule.render(mImageView, "profile_data_cache_avatar" + mImageSize);
+    }
+
+    @Test
+    @MediumTest
+    @Feature("RenderTest")
+    public void testProfileDataUpdatedFromIdentityManagerObserver() throws IOException {
+        mAccountManagerTestRule.addAccount(
+                new ProfileDataSource.ProfileData(ACCOUNT_EMAIL, null, "Full Name", "Given Name"));
+        mIdentityManager.onExtendedAccountInfoUpdated(mAccountInfoWithAvatar);
+        TestThreadUtils.runOnUiThreadBlocking(() -> { checkImageIsScaled(ACCOUNT_EMAIL); });
+        mRenderTestRule.render(mImageView, "profile_data_cache_avatar" + mImageSize);
+    }
+
+    @Test
+    @MediumTest
+    @Feature("RenderTest")
+    public void testProfileDataPopulatedFromIdentityManagerObserver() throws IOException {
+        mIdentityManager.onExtendedAccountInfoUpdated(mAccountInfoWithAvatar);
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { checkImageIsScaled(mAccountInfoWithAvatar.getEmail()); });
+        mRenderTestRule.render(mImageView, "profile_data_cache_avatar" + mImageSize);
+    }
+
+    @Test
+    @MediumTest
+    @Feature("RenderTest")
+    public void testNoProfileDataRemovedWithEmptyAccountInfo() throws IOException {
+        mIdentityManager.onExtendedAccountInfoUpdated(mAccountInfoWithAvatar);
+        final AccountInfo emptyAccountInfo =
+                new AccountInfo(mAccountInfoWithAvatar.getId(), mAccountInfoWithAvatar.getEmail(),
+                        mAccountInfoWithAvatar.getGaiaId(), null, null, null);
+        mIdentityManager.onExtendedAccountInfoUpdated(emptyAccountInfo);
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { checkImageIsScaled(mAccountInfoWithAvatar.getEmail()); });
         mRenderTestRule.render(mImageView, "profile_data_cache_avatar" + mImageSize);
     }
 
@@ -159,7 +194,6 @@ public class ProfileDataCacheRenderTest extends DummyUiActivityTestCase {
     public void testPlaceholderIsScaled() throws IOException {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> { checkImageIsScaled("no.data.for.this.account@example.com"); });
-
         mRenderTestRule.render(mImageView, "profile_data_cache_placeholder" + mImageSize);
     }
 
@@ -167,13 +201,10 @@ public class ProfileDataCacheRenderTest extends DummyUiActivityTestCase {
     @MediumTest
     @Feature("RenderTest")
     public void testAvatarIsScaled() throws IOException {
-        String accountName = "test@example.com";
         ProfileDataSource.ProfileData profileData = new ProfileDataSource.ProfileData(
-                accountName, createAvatar(), "Full Name", "Given Name");
+                ACCOUNT_EMAIL, createAvatar(), "Full Name", "Given Name");
         mAccountManagerTestRule.addAccount(profileData);
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            checkImageIsScaled(accountName);
-        });
+        TestThreadUtils.runOnUiThreadBlocking(() -> { checkImageIsScaled(ACCOUNT_EMAIL); });
         mRenderTestRule.render(mImageView, "profile_data_cache_avatar" + mImageSize);
     }
 

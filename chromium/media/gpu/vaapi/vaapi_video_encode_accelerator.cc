@@ -291,7 +291,7 @@ bool VaapiVideoEncodeAccelerator::Initialize(const Config& config,
   }
 
   if (config.storage_type.value_or(Config::StorageType::kShmem) ==
-      Config::StorageType::kDmabuf) {
+      Config::StorageType::kGpuMemoryBuffer) {
 #if !defined(USE_OZONE)
     VLOGF(1) << "Native mode is only available on OZONE platform.";
     return false;
@@ -829,12 +829,11 @@ void VaapiVideoEncodeAccelerator::EncodePendingInputs() {
 
     input_queue_.pop();
 
-    if (job) {
-      if (!encoder_->PrepareEncodeJob(job.get())) {
-        NOTIFY_ERROR(kPlatformFailureError, "Failed preparing an encode job.");
-        return;
-      }
+    if (job && !encoder_->PrepareEncodeJob(job.get())) {
+      NOTIFY_ERROR(kPlatformFailureError, "Failed preparing an encode job.");
+      return;
     }
+
     TRACE_EVENT0("media,gpu", "VAVEA::FromExecuteToReturn");
     if (job) {
       TRACE_EVENT0("media,gpu", "VAVEA::Execute");

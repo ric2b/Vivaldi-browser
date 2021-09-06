@@ -10,10 +10,22 @@
 namespace chromeos {
 namespace assistant {
 
+// A macro which ensures we are running on the mojom thread.
+#define ENSURE_MOJOM_THREAD(method, ...)                                    \
+  if (!mojom_task_runner_->RunsTasksInCurrentSequence()) {                  \
+    mojom_task_runner_->PostTask(                                           \
+        FROM_HERE,                                                          \
+        base::BindOnce(method, weak_factory_.GetWeakPtr(), ##__VA_ARGS__)); \
+    return;                                                                 \
+  }
+
 FakeServiceController::FakeServiceController() : receiver_(this) {}
 FakeServiceController::~FakeServiceController() = default;
 
 void FakeServiceController::SetState(State new_state) {
+  // SetState() is called from our unittests, but the observers are registered
+  // on the mojom thread so we must switch threads.
+  ENSURE_MOJOM_THREAD(&FakeServiceController::SetState, new_state);
   DCHECK_NE(state_, new_state);
 
   state_ = new_state;
@@ -64,7 +76,9 @@ std::string FakeServiceController::gaia_id() {
 }
 
 void FakeServiceController::Initialize(
-    libassistant::mojom::BootupConfigPtr config) {
+    libassistant::mojom::BootupConfigPtr config,
+    mojo::PendingRemote<network::mojom::URLLoaderFactory> url_loader_factory) {
+  mojom_task_runner_ = base::SequencedTaskRunnerHandle::Get();
   libassistant_config_ = std::move(*config);
 }
 
@@ -83,6 +97,11 @@ void FakeServiceController::Start() {
 
 void FakeServiceController::Stop() {
   SetState(State::kStopped);
+}
+
+void FakeServiceController::ResetAllDataAndStop() {
+  SetState(State::kStopped);
+  has_data_been_reset_ = true;
 }
 
 void FakeServiceController::AddAndFireStateObserver(

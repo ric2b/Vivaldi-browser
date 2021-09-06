@@ -111,6 +111,14 @@ enum class ConnectionStateAfterDNS {
   kMaxValue = kCryptoFinishedDnsNoMatch,
 };
 
+enum class JobProtocolErrorLocation {
+  kSessionStartReadingFailed = 0,
+  kCreateSessionFailed = 1,
+  kCryptoConnectFailedSync = 2,
+  kCryptoConnectFailedAsync = 3,
+  kMaxValue = kCryptoConnectFailedAsync,
+};
+
 base::Value NetLogQuicStreamFactoryJobParams(
     const QuicStreamFactory::QuicSessionAliasKey* key) {
   base::Value dict(base::Value::Type::DICTIONARY);
@@ -146,6 +154,11 @@ std::string QuicPlatformNotificationToString(
 void HistogramCreateSessionFailure(enum CreateSessionFailure error) {
   UMA_HISTOGRAM_ENUMERATION("Net.QuicSession.CreationError", error,
                             CREATION_ERROR_MAX);
+}
+
+void HistogramProtocolErrorLocation(enum JobProtocolErrorLocation location) {
+  UMA_HISTOGRAM_ENUMERATION("Net.QuicStreamFactory.DoConnectFailureLocation",
+                            location);
 }
 
 void LogConnectionIpPooling(bool pooled) {
@@ -648,6 +661,11 @@ void QuicStreamFactory::Job::OnConnectComplete(int rv) {
     return;
   }
 
+  if (rv == ERR_QUIC_PROTOCOL_ERROR) {
+    HistogramProtocolErrorLocation(
+        JobProtocolErrorLocation::kCryptoConnectFailedAsync);
+  }
+
   rv = DoLoop(rv);
   if (rv != ERR_IO_PENDING && !callback_.is_null())
     std::move(callback_).Run(rv);
@@ -780,6 +798,10 @@ int QuicStreamFactory::Job::DoConnect() {
   if (rv != OK) {
     DCHECK(rv != ERR_IO_PENDING);
     DCHECK(!session_);
+    if (rv == ERR_QUIC_PROTOCOL_ERROR) {
+      HistogramProtocolErrorLocation(
+          JobProtocolErrorLocation::kCreateSessionFailed);
+    }
     return rv;
   }
 
@@ -787,8 +809,11 @@ int QuicStreamFactory::Job::DoConnect() {
     return ERR_CONNECTION_CLOSED;
 
   session_->StartReading();
-  if (!session_->connection()->connected())
+  if (!session_->connection()->connected()) {
+    HistogramProtocolErrorLocation(
+        JobProtocolErrorLocation::kSessionStartReadingFailed);
     return ERR_QUIC_PROTOCOL_ERROR;
+  }
 
   rv = session_->CryptoConnect(
       base::BindOnce(&QuicStreamFactory::Job::OnConnectComplete, GetWeakPtr()));
@@ -798,6 +823,10 @@ int QuicStreamFactory::Job::DoConnect() {
     return ERR_QUIC_HANDSHAKE_FAILED;
   }
 
+  if (rv == ERR_QUIC_PROTOCOL_ERROR) {
+    HistogramProtocolErrorLocation(
+        JobProtocolErrorLocation::kCryptoConnectFailedSync);
+  }
   return rv;
 }
 
@@ -1145,11 +1174,6 @@ QuicStreamFactory::~QuicStreamFactory() {
 
 bool QuicStreamFactory::CanUseExistingSession(const QuicSessionKey& session_key,
                                               const HostPortPair& destination) {
-  // TODO(zhongyi): delete active_sessions_.empty() checks once the
-  // android crash issue(crbug.com/498823) is resolved.
-  if (active_sessions_.empty())
-    return false;
-
   if (base::Contains(active_sessions_, session_key))
     return true;
 
@@ -1193,27 +1217,24 @@ int QuicStreamFactory::Create(const QuicSessionKey& session_key,
   }
 
   // Use active session for |session_key| if such exists.
-  // TODO(rtenneti): crbug.com/498823 - delete active_sessions_.empty() checks.
-  if (!active_sessions_.empty()) {
-    auto it = active_sessions_.find(session_key);
-    if (it != active_sessions_.end()) {
-      QuicChromiumClientSession* session = it->second;
-      request->SetSession(session->CreateHandle(destination));
-      return OK;
-    }
+  auto active_session = active_sessions_.find(session_key);
+  if (active_session != active_sessions_.end()) {
+    QuicChromiumClientSession* session = active_session->second;
+    request->SetSession(session->CreateHandle(destination));
+    return OK;
   }
 
   // Associate with active job to |session_key| if such exists.
-  auto it = active_jobs_.find(session_key);
-  if (it != active_jobs_.end()) {
-    const NetLogWithSource& job_net_log = it->second->net_log();
+  auto active_job = active_jobs_.find(session_key);
+  if (active_job != active_jobs_.end()) {
+    const NetLogWithSource& job_net_log = active_job->second->net_log();
     job_net_log.AddEventReferencingSource(
         NetLogEventType::QUIC_STREAM_FACTORY_JOB_BOUND_TO_HTTP_STREAM_JOB,
         net_log.source());
     net_log.AddEventReferencingSource(
         NetLogEventType::HTTP_STREAM_JOB_BOUND_TO_QUIC_STREAM_FACTORY_JOB,
         job_net_log.source());
-    it->second->AddRequest(request);
+    active_job->second->AddRequest(request);
     return ERR_IO_PENDING;
   }
 
@@ -1253,10 +1274,6 @@ int QuicStreamFactory::Create(const QuicSessionKey& session_key,
     return rv;
   }
   if (rv == OK) {
-    // TODO(rtenneti): crbug.com/498823 - revert active_sessions_.empty()
-    // related changes.
-    if (active_sessions_.empty())
-      return ERR_QUIC_PROTOCOL_ERROR;
     auto it = active_sessions_.find(session_key);
     DCHECK(it != active_sessions_.end());
     if (it == active_sessions_.end())
@@ -1703,9 +1720,6 @@ void QuicStreamFactory::OnJobComplete(Job* job, int rv) {
 
 bool QuicStreamFactory::HasActiveSession(
     const QuicSessionKey& session_key) const {
-  // TODO(rtenneti): crbug.com/498823 - delete active_sessions_.empty() check.
-  if (active_sessions_.empty())
-    return false;
   return base::Contains(active_sessions_, session_key);
 }
 
@@ -1752,12 +1766,13 @@ int QuicStreamFactory::CreateSession(
   }
 
   if (!helper_.get()) {
-    helper_.reset(new QuicChromiumConnectionHelper(clock_, random_generator_));
+    helper_ = std::make_unique<QuicChromiumConnectionHelper>(clock_,
+                                                             random_generator_);
   }
 
   if (!alarm_factory_.get()) {
-    alarm_factory_.reset(new QuicChromiumAlarmFactory(
-        base::ThreadTaskRunnerHandle::Get().get(), clock_));
+    alarm_factory_ = std::make_unique<QuicChromiumAlarmFactory>(
+        base::ThreadTaskRunnerHandle::Get().get(), clock_);
   }
 
   quic::QuicConnectionId connection_id =

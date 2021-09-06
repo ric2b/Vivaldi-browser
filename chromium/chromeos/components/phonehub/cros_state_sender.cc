@@ -16,7 +16,8 @@ namespace {
 // The minimum time to wait before checking whether the phone has responded to
 // status messages sent by CrosStateSender, and re-sending the status messages
 // if there was no response (no phone status model exists).
-constexpr base::TimeDelta kMinimumRetryDelay = base::TimeDelta::FromSeconds(2u);
+constexpr base::TimeDelta kMinimumRetryDelay =
+    base::TimeDelta::FromSeconds(15u);
 
 // The amount the previous delay is multiplied by to determine the new amount
 // of time to wait before determining whether CrosStateSender should resend the
@@ -30,7 +31,7 @@ using multidevice_setup::mojom::FeatureState;
 
 CrosStateSender::CrosStateSender(
     MessageSender* message_sender,
-    ConnectionManager* connection_manager,
+    secure_channel::ConnectionManager* connection_manager,
     multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client,
     PhoneModel* phone_model)
     : CrosStateSender(message_sender,
@@ -41,7 +42,7 @@ CrosStateSender::CrosStateSender(
 
 CrosStateSender::CrosStateSender(
     MessageSender* message_sender,
-    ConnectionManager* connection_manager,
+    secure_channel::ConnectionManager* connection_manager,
     multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client,
     PhoneModel* phone_model,
     std::unique_ptr<base::OneShotTimer> timer)
@@ -74,7 +75,7 @@ void CrosStateSender::AttemptUpdateCrosState() {
 
   // Wait for connection to be established.
   if (connection_manager_->GetStatus() !=
-      ConnectionManager::Status::kConnected) {
+      secure_channel::ConnectionManager::Status::kConnected) {
     PA_LOG(VERBOSE) << "Could not start AttemptUpdateCrosState() because "
                     << "connection manager status is: "
                     << connection_manager_->GetStatus();
@@ -105,7 +106,7 @@ void CrosStateSender::OnRetryTimerFired() {
   // retry sending the cros state.
   if (phone_model_->phone_status_model().has_value() ||
       connection_manager_->GetStatus() !=
-          ConnectionManager::Status::kConnected) {
+          secure_channel::ConnectionManager::Status::kConnected) {
     return;
   }
 

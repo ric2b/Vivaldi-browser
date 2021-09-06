@@ -14,7 +14,7 @@
 #include "base/command_line.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_functions.h"
-#include "chrome/browser/chromeos/accessibility/magnification_manager.h"
+#include "chrome/browser/ash/accessibility/magnification_manager.h"
 #include "chrome/browser/chromeos/arc/accessibility/arc_accessibility_util.h"
 #include "chrome/browser/chromeos/arc/accessibility/geometry_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -22,7 +22,6 @@
 #include "chrome/common/extensions/api/accessibility_private.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/pref_names_util.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/arc_util.h"
@@ -45,10 +44,14 @@
 #include "ui/views/controls/native/native_view_host.h"
 #include "ui/views/widget/widget.h"
 
-using ash::ArcNotificationSurface;
-using ash::ArcNotificationSurfaceManager;
-
+namespace arc {
 namespace {
+
+using ::ash::AccessibilityManager;
+using ::ash::AccessibilityNotificationType;
+using ::ash::ArcNotificationSurface;
+using ::ash::ArcNotificationSurfaceManager;
+using ::ash::MagnificationManager;
 
 // ClassName for toast from ARC++ R onwards.
 constexpr char kToastEventSourceArcR[] = "android.widget.Toast";
@@ -84,8 +87,7 @@ float DeviceScaleFactorFromWindow(aura::Window* window) {
 
 void DispatchFocusChange(arc::mojom::AccessibilityNodeInfoData* node_data,
                          Profile* profile) {
-  chromeos::AccessibilityManager* accessibility_manager =
-      chromeos::AccessibilityManager::Get();
+  AccessibilityManager* accessibility_manager = AccessibilityManager::Get();
   if (!node_data || !accessibility_manager ||
       accessibility_manager->profile() != profile)
     return;
@@ -120,12 +122,6 @@ void SetChildAxTreeIDForWindow(aura::Window* window,
   static_cast<exo::ShellSurfaceBase*>(widget->widget_delegate())
       ->SetChildAxTreeId(treeID);
 }
-
-}  // namespace
-
-namespace arc {
-
-namespace {
 
 // Singleton factory for ArcAccessibilityHelperBridge.
 class ArcAccessibilityHelperBridgeFactory
@@ -391,8 +387,7 @@ void ArcAccessibilityHelperBridge::OnConnectionReady() {
   UpdateCaptionSettings();
   UpdateWindowProperties(GetFocusedArcWindow());
 
-  chromeos::AccessibilityManager* accessibility_manager =
-      chromeos::AccessibilityManager::Get();
+  AccessibilityManager* accessibility_manager = AccessibilityManager::Get();
   if (accessibility_manager) {
     accessibility_status_subscription_ =
         accessibility_manager->RegisterCallback(base::BindRepeating(
@@ -611,10 +606,9 @@ extensions::EventRouter* ArcAccessibilityHelperBridge::GetEventRouter() const {
 
 arc::mojom::AccessibilityFilterType
 ArcAccessibilityHelperBridge::GetFilterTypeForProfile(Profile* profile) {
-  chromeos::AccessibilityManager* accessibility_manager =
-      chromeos::AccessibilityManager::Get();
-  const chromeos::MagnificationManager* magnification_manager =
-      chromeos::MagnificationManager::Get();
+  AccessibilityManager* accessibility_manager = AccessibilityManager::Get();
+  const MagnificationManager* magnification_manager =
+      MagnificationManager::Get();
 
   if (!accessibility_manager || !magnification_manager)
     return arc::mojom::AccessibilityFilterType::OFF;
@@ -696,19 +690,19 @@ ArcAccessibilityHelperBridge::OnGetTextLocationDataResultInternal(
 }
 
 void ArcAccessibilityHelperBridge::OnAccessibilityStatusChanged(
-    const chromeos::AccessibilityStatusEventDetails& event_details) {
+    const ash::AccessibilityStatusEventDetails& event_details) {
   if (event_details.notification_type !=
-          chromeos::ACCESSIBILITY_TOGGLE_FOCUS_HIGHLIGHT &&
+          AccessibilityNotificationType::kToggleFocusHighlight &&
       event_details.notification_type !=
-          chromeos::ACCESSIBILITY_TOGGLE_SELECT_TO_SPEAK &&
+          AccessibilityNotificationType::kToggleSelectToSpeak &&
       event_details.notification_type !=
-          chromeos::ACCESSIBILITY_TOGGLE_SPOKEN_FEEDBACK &&
+          AccessibilityNotificationType::kToggleSpokenFeedback &&
       event_details.notification_type !=
-          chromeos::ACCESSIBILITY_TOGGLE_SWITCH_ACCESS &&
+          AccessibilityNotificationType::kToggleSwitchAccess &&
       event_details.notification_type !=
-          chromeos::ACCESSIBILITY_TOGGLE_DOCKED_MAGNIFIER &&
+          AccessibilityNotificationType::kToggleDockedMagnifier &&
       event_details.notification_type !=
-          chromeos::ACCESSIBILITY_TOGGLE_SCREEN_MAGNIFIER) {
+          AccessibilityNotificationType::kToggleScreenMagnifier) {
     return;
   }
 
@@ -716,7 +710,7 @@ void ArcAccessibilityHelperBridge::OnAccessibilityStatusChanged(
   UpdateWindowProperties(GetFocusedArcWindow());
 
   if (event_details.notification_type ==
-      chromeos::ACCESSIBILITY_TOGGLE_SPOKEN_FEEDBACK) {
+      AccessibilityNotificationType::kToggleSpokenFeedback) {
     SetExploreByTouchEnabled(event_details.enabled);
   }
 }
@@ -737,10 +731,10 @@ void ArcAccessibilityHelperBridge::UpdateEnabledFeature() {
   if (instance)
     instance->SetFilter(filter_type_);
 
-  const chromeos::AccessibilityManager* accessibility_manager =
-      chromeos::AccessibilityManager::Get();
-  const chromeos::MagnificationManager* magnification_manager =
-      chromeos::MagnificationManager::Get();
+  const AccessibilityManager* accessibility_manager =
+      AccessibilityManager::Get();
+  const MagnificationManager* magnification_manager =
+      MagnificationManager::Get();
 
   if (!accessibility_manager || !magnification_manager)
     return;
@@ -909,8 +903,8 @@ void ArcAccessibilityHelperBridge::HandleFilterTypeAllEvent(
     if (!tree_source) {
       tree_source = CreateFromKey(key);
       SetChildAxTreeIDForWindow(focused_window, tree_source->ax_tree_id());
-      if (chromeos::AccessibilityManager::Get() &&
-          chromeos::AccessibilityManager::Get()->IsSpokenFeedbackEnabled()) {
+      if (AccessibilityManager::Get() &&
+          AccessibilityManager::Get()->IsSpokenFeedbackEnabled()) {
         // Record metrics only when SpokenFeedback is enabled in order to
         // compare this with TalkBack usage.
         base::UmaHistogramBoolean("Arc.AccessibilityWithTalkBack", false);

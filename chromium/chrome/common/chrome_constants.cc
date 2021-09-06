@@ -12,7 +12,6 @@
 #define FPL FILE_PATH_LITERAL
 
 #if defined(OS_MAC)
-#define CHROMIUM_PRODUCT_STRING "Vivaldi"
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #define PRODUCT_STRING "Google Chrome"
 #elif BUILDFLAG(CHROMIUM_BRANDING) || defined(VIVALDI_BUILD)
@@ -44,74 +43,42 @@ const char kChromeVersion[] = CHROME_VERSION_STRING;
 // do so.
 
 #if defined(OS_WIN)
-const base::FilePath::CharType kBrowserProcessExecutableNameChromium[] =
-    FPL("vivaldi.exe");
 const base::FilePath::CharType kBrowserProcessExecutableName[] =
-    FPL("vivaldi.exe");
-const base::FilePath::CharType kHelperProcessExecutableNameChromium[] =
     FPL("vivaldi.exe");
 const base::FilePath::CharType kHelperProcessExecutableName[] =
     FPL("vivaldi.exe");
 #elif defined(OS_MAC)
-const base::FilePath::CharType kBrowserProcessExecutableNameChromium[] =
-    FPL(CHROMIUM_PRODUCT_STRING);
 const base::FilePath::CharType kBrowserProcessExecutableName[] =
     FPL(PRODUCT_STRING);
-const base::FilePath::CharType kHelperProcessExecutableNameChromium[] =
-    FPL(CHROMIUM_PRODUCT_STRING " Helper");
 const base::FilePath::CharType kHelperProcessExecutableName[] =
     FPL(PRODUCT_STRING " Helper");
 #elif defined(OS_ANDROID)
 // NOTE: Keep it synced with the process names defined in AndroidManifest.xml.
 const base::FilePath::CharType kBrowserProcessExecutableName[] = FPL("vivaldi");
-const base::FilePath::CharType kBrowserProcessExecutableNameChromium[] =
-    FPL("");
 const base::FilePath::CharType kHelperProcessExecutableName[] =
     FPL("sandboxed_process");
-const base::FilePath::CharType kHelperProcessExecutableNameChromium[] = FPL("");
 #elif defined(OS_POSIX)
-const base::FilePath::CharType kBrowserProcessExecutableNameChromium[] =
-    FPL("vivaldi");
 const base::FilePath::CharType kBrowserProcessExecutableName[] = FPL("vivaldi");
 // Helper processes end up with a name of "exe" due to execing via
 // /proc/self/exe.  See bug 22703.
-const base::FilePath::CharType kHelperProcessExecutableNameChromium[] =
-    FPL("exe");
 const base::FilePath::CharType kHelperProcessExecutableName[] = FPL("exe");
 #endif  // OS_*
 
 #if defined(OS_WIN)
-const base::FilePath::CharType kBrowserProcessExecutablePathChromium[] =
-    FPL("vivaldi.exe");
 const base::FilePath::CharType kBrowserProcessExecutablePath[] =
-    FPL("vivaldi.exe");
-const base::FilePath::CharType kHelperProcessExecutablePathChromium[] =
     FPL("vivaldi.exe");
 const base::FilePath::CharType kHelperProcessExecutablePath[] =
     FPL("vivaldi.exe");
 #elif defined(OS_MAC)
-const base::FilePath::CharType kBrowserProcessExecutablePathChromium[] =
-    FPL(CHROMIUM_PRODUCT_STRING ".app/Contents/MacOS/" CHROMIUM_PRODUCT_STRING);
 const base::FilePath::CharType kBrowserProcessExecutablePath[] =
     FPL(PRODUCT_STRING ".app/Contents/MacOS/" PRODUCT_STRING);
-const base::FilePath::CharType kHelperProcessExecutablePathChromium[] =
-    FPL(CHROMIUM_PRODUCT_STRING
-        " Helper.app/Contents/MacOS/" CHROMIUM_PRODUCT_STRING " Helper");
 const base::FilePath::CharType kHelperProcessExecutablePath[] =
     FPL(PRODUCT_STRING " Helper.app/Contents/MacOS/" PRODUCT_STRING " Helper");
 #elif defined(OS_ANDROID)
 const base::FilePath::CharType kBrowserProcessExecutablePath[] = FPL("vivaldi");
 const base::FilePath::CharType kHelperProcessExecutablePath[] = FPL("vivaldi");
-const base::FilePath::CharType kBrowserProcessExecutablePathChromium[] =
-    FPL("vivaldi");
-const base::FilePath::CharType kHelperProcessExecutablePathChromium[] =
-    FPL("vivaldi");
 #elif defined(OS_POSIX)
-const base::FilePath::CharType kBrowserProcessExecutablePathChromium[] =
-    FPL("vivaldi");
 const base::FilePath::CharType kBrowserProcessExecutablePath[] = FPL("vivaldi");
-const base::FilePath::CharType kHelperProcessExecutablePathChromium[] =
-    FPL("vivaldi");
 const base::FilePath::CharType kHelperProcessExecutablePath[] = FPL("vivaldi");
 #endif  // OS_*
 
@@ -216,8 +183,6 @@ const char kLockScreenProfile[] = "LockScreenProfile";
 // {2676A9A2-D919-4FEE-9187-152100393AB2}
 const char kApplicationClientIDStringForAVScanning[] =
     "2676A9A2-D919-4FEE-9187-152100393AB2";
-
-const size_t kMaxMetaTagAttributeLength = 2000;
 
 }  // namespace chrome
 

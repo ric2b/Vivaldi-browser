@@ -90,7 +90,6 @@ class RenderViewHost;
 class RenderWidgetHostView;
 class WebContentsDelegate;
 class WebUI;
-struct CustomContextMenuContext;
 struct DropData;
 struct MHTMLGenerationParams;
 
@@ -177,6 +176,13 @@ class WebContents : public PageNavigator,
     // RenderFrame, have already been created on the renderer side, and
     // WebContents construction should take this into account.
     bool renderer_initiated_creation;
+
+    // True if WebContents is created for Prerendering.
+    // Please note that Prerender2 is an experimental feature to load and run
+    // pages in background.
+    // TODO(https://crbug.com/1177664): After migration of Prerender2 to MPArch,
+    // remove this plumbing.
+    bool is_prerendering = false;
 
     // Used to specify how far WebContents::Create can initialize a renderer
     // process.
@@ -599,10 +605,10 @@ class WebContents : public PageNavigator,
   // Indicates whether a video is in Picture-in-Picture for |this|.
   virtual bool HasPictureInPictureVideo() = 0;
 
-  // Indicates whether this tab should be considered crashed. The setter will
-  // also notify the delegate when the flag is changed.
+  // Indicates whether this tab should be considered crashed. This becomes false
+  // again when the renderer process is recreated after a crash in order to
+  // recreate the main frame.
   virtual bool IsCrashed() = 0;
-  virtual void SetIsCrashed(base::TerminationStatus status, int error_code) = 0;
 
   virtual base::TerminationStatus GetCrashedStatus() = 0;
   virtual int GetCrashedErrorCode() = 0;
@@ -763,12 +769,11 @@ class WebContents : public PageNavigator,
   virtual void ReplaceMisspelling(const base::string16& word) = 0;
 
   // Let the renderer know that the menu has been closed.
-  virtual void NotifyContextMenuClosed(
-      const CustomContextMenuContext& context) = 0;
+  virtual void NotifyContextMenuClosed(const GURL& link_followed) = 0;
 
   // Executes custom context menu action that was provided from Blink.
-  virtual void ExecuteCustomContextMenuCommand(
-      int action, const CustomContextMenuContext& context) = 0;
+  virtual void ExecuteCustomContextMenuCommand(int action,
+                                               const GURL& link_followed) = 0;
 
   // Views and focus -----------------------------------------------------------
 
@@ -835,19 +840,24 @@ class WebContents : public PageNavigator,
                         const base::FilePath& dir_path,
                         SavePageType save_type) = 0;
 
-  // Saves the given frame's URL to the local filesystem.
+  // Saves the given frame's URL to the local filesystem. If `rfh` is provided,
+  // the saving is performed in its context. For example, the associated
+  // navigation isolation info will be used for making the network request.
   virtual void SaveFrame(const GURL& url,
-                         const Referrer& referrer) = 0;
+                         const Referrer& referrer,
+                         RenderFrameHost* rfh) = 0;
 
   // Saves the given frame's URL to the local filesystem. The headers, if
   // provided, is used to make a request to the URL rather than using cache.
   // Format of |headers| is a new line separated list of key value pairs:
-  // "<key1>: <value1>\r\n<key2>: <value2>".
-  virtual void SaveFrameWithHeaders(
-      const GURL& url,
-      const Referrer& referrer,
-      const std::string& headers,
-      const base::string16& suggested_filename) = 0;
+  // "<key1>: <value1>\r\n<key2>: <value2>". If `rfh` is provided, the saving is
+  // performed in its context. For example, the associated navigation isolation
+  // info will be used for making the network request.
+  virtual void SaveFrameWithHeaders(const GURL& url,
+                                    const Referrer& referrer,
+                                    const std::string& headers,
+                                    const base::string16& suggested_filename,
+                                    RenderFrameHost* rfh) = 0;
 
   // Generate an MHTML representation of the current page conforming to the
   // settings provided by |params| and returning final status information via
@@ -1178,6 +1188,18 @@ class WebContents : public PageNavigator,
   // Consider using FaviconDriver in components/favicon if possible for more
   // reliable favicon-related state.
   virtual const std::vector<blink::mojom::FaviconURLPtr>& GetFaviconURLs() = 0;
+
+  // Intended for desktop pwas with manifest entry of window-controls-overlay,
+  // This sends the available title bar area bounds and the insets to the
+  // renderer process.
+  virtual void UpdateWindowControlsOverlay(const gfx::Rect& bounding_rect,
+                                           const gfx::Insets& insets) = 0;
+
+  // Whether the WebContents has an active player that is effectively
+  // fullscreen. That means that the video is either fullscreen or it is the
+  // content of a fullscreen page (in other words, a fullscreen video with
+  // custom controls).
+  virtual bool HasActiveEffectivelyFullscreenVideo() = 0;
 
  private:
   // This interface should only be implemented inside content.

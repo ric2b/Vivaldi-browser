@@ -21,6 +21,12 @@ by a child template that "extends" this file.
     tools:ignore="MissingVersion">
     <!-- android:versionCode and android:versionName is set through gyp. See build/common.gypi -->
 
+    <!-- Vivaldi/Polestar -->
+    {% if is_oem_automotive_build == 'true' %}
+    <uses-feature android:name="android.hardware.type.automotive" android:required="true" />
+    <uses-feature android:name="com.polestar" android:required="true" />
+    {% endif %}
+
     <uses-feature android:glEsVersion="0x00020000" />
 
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
@@ -195,7 +201,12 @@ by a child template that "extends" this file.
         android:appComponentFactory="org.chromium.chrome.browser.base.SplitCompatAppComponentFactory"
         {% endif %}
         {% block extra_application_attributes %}{% endblock %}>
-
+        <!-- Vivaldi/Polestar -->
+        {% if is_oem_automotive_build == 'true' %}
+        <meta-data
+          android:name="com.android.automotive"
+          android:resource="@xml/automotive_app_desc" />
+        {% endif %}
       {% macro application_definitions() %}
         <!-- Note: All activities directly or indirectly derived from ChromeActivity
              must specify android:hardwareAccelerated="false".
@@ -545,7 +556,7 @@ by a child template that "extends" this file.
             {{ self.first_run_activity_common() }}>
         </activity>
         <activity android:name="org.chromium.chrome.browser.firstrun.FirstRunActivity"
-            android:theme="@style/Theme.Chromium.DialogWhenLarge"
+            android:theme="@style/VivaldiWelcomePageActivityTheme"
             {% block first_run_activity_common %}
             android:label="@string/fre_activity_label"
             android:launchMode="singleInstance"
@@ -970,7 +981,16 @@ by a child template that "extends" this file.
             android:theme="@style/Theme.Chromium.Activity.Fullscreen"
             android:label="@string/cablev2_activity_title"
             android:permission="com.google.android.gms.auth.cryptauth.permission.CABLEV2_SERVER_LINK"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTop">
+            <!-- This activity can be started by GMSCore, and is thus exported
+            with a permission set, or can be started by the Android system in
+            the case that a USB device is attached. -->
+            <intent-filter>
+                 <action android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED" />
+            </intent-filter>
+            <meta-data android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED"
+                android:resource="@xml/phone_as_a_security_key_accessory_filter" />
         </activity>
 
         <receiver
@@ -1058,16 +1078,6 @@ by a child template that "extends" this file.
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:hardwareAccelerated="false" />
 
-        <!-- Receiver for GCM messages. -->
-        <receiver android:name="com.google.android.gms.gcm.GcmReceiver"
-            android:exported="true"
-            android:permission="com.google.android.c2dm.permission.SEND">
-            <intent-filter>
-                <action android:name="com.google.android.c2dm.intent.RECEIVE" />
-                <action android:name="com.google.android.c2dm.intent.REGISTRATION" />
-               <category android:name="{{ manifest_package }}"/>
-            </intent-filter>
-        </receiver>
         <!-- GcmTaskService for registration for Invalidations. Not actually implemented anymore. -->
         <service android:name="com.google.ipc.invalidation.ticl.android2.channel.GcmRegistrationTaskService"
             android:exported="true"
@@ -1080,7 +1090,7 @@ by a child template that "extends" this file.
         <service android:name="org.chromium.chrome.browser.services.gcm.ChromeGcmListenerService"
             android:exported="false" >
             <intent-filter>
-              <action android:name="com.google.android.c2dm.intent.RECEIVE" />
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
         <service android:name="org.chromium.chrome.browser.services.gcm.GCMBackgroundService"

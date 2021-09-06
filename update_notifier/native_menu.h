@@ -8,34 +8,30 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
-#include "base/strings/string16.h"
-
 namespace vivaldi_update_notifier {
 
 class NativeMenu {
  public:
   NativeMenu();
   ~NativeMenu();
+  NativeMenu(const NativeMenu&) = delete;
+  NativeMenu& operator=(const NativeMenu&) = delete;
 
-  void Reset();
-
-  bool AppendStringMenuItem(const base::string16& string,
+  void AppendStringMenuItem(const std::wstring& string,
                             UINT state,
                             UINT item_id);
-  bool AppendSeparator();
+  void AppendSeparator();
 
   void ShowMenu(int x, int y, HWND hwnd);
 
   bool displayed() const { return displayed_; }
 
  private:
-  HMENU menu_;
+  HMENU menu_ = nullptr;
 
-  bool displayed_;
+  bool displayed_ = false;
 
-  std::vector<base::string16> menu_item_strings_;
-  DISALLOW_COPY_AND_ASSIGN(NativeMenu);
+  std::vector<std::wstring> menu_item_strings_;
 };
 }  // namespace vivaldi_update_notifier
 

@@ -118,8 +118,9 @@ chrome::MessageBoxResult MessageBoxDialog::Show(
       !base::RunLoop::IsRunningOnCurrentThread() ||
       !ui::ResourceBundle::HasSharedInstance()) {
     LOG_IF(ERROR, !checkbox_text.empty()) << "Dialog checkbox won't be shown";
-    int result = ui::MessageBox(views::HWNDForNativeWindow(parent), message,
-                                title, GetMessageBoxFlagsFromType(type));
+    int result = ui::MessageBox(
+        views::HWNDForNativeWindow(parent), base::AsWString(message),
+        base::AsWString(title), GetMessageBoxFlagsFromType(type));
     std::move(callback).Run((result == IDYES || result == IDOK)
                                 ? chrome::MESSAGE_BOX_RESULT_YES
                                 : chrome::MESSAGE_BOX_RESULT_NO);
@@ -312,7 +313,7 @@ void ShowWarningMessageBoxWithCheckbox(
                                std::move(callback).Run(message_box_result ==
                                                        MESSAGE_BOX_RESULT_YES);
                              },
-                             base::Passed(std::move(callback))));
+                             std::move(callback)));
 }
 
 MessageBoxResult ShowQuestionMessageBoxSync(gfx::NativeWindow parent,

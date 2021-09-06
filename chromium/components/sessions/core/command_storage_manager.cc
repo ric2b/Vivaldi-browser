@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread.h"
@@ -25,9 +24,10 @@ namespace {
 // backend.
 constexpr base::TimeDelta kSaveDelay = base::TimeDelta::FromMilliseconds(2500);
 
-scoped_refptr<base::SequencedTaskRunner> CreateDefaultBackendTaskRunner() {
-  return base::ThreadPool::CreateSequencedTaskRunner(
-      {base::MayBlock(), base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
+void AdaptGetLastSessionCommands(
+    CommandStorageManager::GetCommandsCallback callback,
+    CommandStorageBackend::ReadCommandsResult result) {
+  std::move(callback).Run(std::move(result.commands), result.error_reading);
 }
 
 }  // namespace
@@ -38,18 +38,28 @@ CommandStorageManager::CommandStorageManager(
     CommandStorageManagerDelegate* delegate,
     bool use_marker,
     bool enable_crypto,
-    const std::vector<uint8_t>& decryption_key)
+    const std::vector<uint8_t>& decryption_key,
+    scoped_refptr<base::SequencedTaskRunner> backend_task_runner)
     : backend_(base::MakeRefCounted<CommandStorageBackend>(
-          CreateDefaultBackendTaskRunner(),
+          backend_task_runner ? backend_task_runner
+                              : CreateDefaultBackendTaskRunner(),
           path,
           type,
           use_marker,
           decryption_key)),
       use_crypto_(enable_crypto),
+      pending_reset_(use_marker),
       delegate_(delegate),
       backend_task_runner_(backend_->owning_task_runner()) {}
 
 CommandStorageManager::~CommandStorageManager() = default;
+
+// static
+scoped_refptr<base::SequencedTaskRunner>
+CommandStorageManager::CreateDefaultBackendTaskRunner() {
+  return base::ThreadPool::CreateSequencedTaskRunner(
+      {base::MayBlock(), base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
+}
 
 // static
 std::vector<uint8_t> CommandStorageManager::CreateCryptoKey() {
@@ -119,6 +129,8 @@ void CommandStorageManager::StartSaveTimer() {
 }
 
 void CommandStorageManager::Save() {
+  weak_factory_for_timer_.InvalidateWeakPtrs();
+
   // Inform the delegate that we will save the commands now, giving it the
   // opportunity to append more commands.
   delegate_->OnWillSaveCommands();
@@ -168,7 +180,7 @@ void CommandStorageManager::GetLastSessionCommands(
       FROM_HERE,
       base::BindOnce(&CommandStorageBackend::ReadLastSessionCommands,
                      backend()),
-      std::move(callback));
+      base::BindOnce(&AdaptGetLastSessionCommands, std::move(callback)));
 }
 
 void CommandStorageManager::OnErrorWritingToFile() {

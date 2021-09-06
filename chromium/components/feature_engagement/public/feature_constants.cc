@@ -24,6 +24,8 @@ const base::Feature kIPHLiveCaptionFeature{"IPH_LiveCaption",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHPasswordsAccountStorageFeature{
     "IPH_PasswordsAccountStorage", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHReadingListDiscoveryFeature{
+    "IPH_ReadingListDiscovery", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHReopenTabFeature{"IPH_ReopenTab",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHWebUITabStripFeature{"IPH_WebUITabStrip",
@@ -103,6 +105,8 @@ const base::Feature kIPHKeyboardAccessoryPaymentOfferFeature{
     "IPH_KeyboardAccessoryPaymentOffer", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHNewTabPageHomeButtonFeature{
     "IPH_NewTabPageHomeButton", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHPageInfoFeature{"IPH_PageInfo",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHPreviewsOmniboxUIFeature{
     "IPH_PreviewsOmniboxUI", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kIPHTabGroupsQuicklyComparePagesFeature{
@@ -129,8 +133,8 @@ const base::Feature kIPHVideoTutorialNTPSummaryFeature{
     "IPH_VideoTutorial_NTP_Summary", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHExploreSitesTileFeature{
     "IPH_ExploreSitesTile", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kIPHFeedHeaderMenuFeature{
-    "IPH_FeedHeaderMenu", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHFeedHeaderMenuFeature{"IPH_FeedHeaderMenu",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kIPHChromeReengagementNotification1Feature{
     "IPH_ChromeReengagementNotification1", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHChromeReengagementNotification2Feature{

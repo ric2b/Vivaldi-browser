@@ -42,8 +42,7 @@ class MutatorHost {
  public:
   virtual ~MutatorHost() = default;
 
-  virtual std::unique_ptr<MutatorHost> CreateImplInstance(
-      bool supports_impl_scrolling) const = 0;
+  virtual std::unique_ptr<MutatorHost> CreateImplInstance() const = 0;
 
   virtual void ClearMutators() = 0;
 
@@ -62,7 +61,6 @@ class MutatorHost {
 
   virtual void PushPropertiesTo(MutatorHost* host_impl) = 0;
 
-  virtual void SetSupportsScrollAnimations(bool supports_scroll_animations) = 0;
   virtual void SetScrollAnimationDurationForTesting(
       base::TimeDelta duration) = 0;
   virtual bool NeedsTickAnimations() const = 0;
@@ -161,6 +159,11 @@ class MutatorHost {
   virtual bool NextFrameHasPendingRAF() const = 0;
   virtual bool HasCanvasInvalidation() const = 0;
   virtual bool HasJSAnimation() const = 0;
+
+  // Iterates through all animations and returns the minimum tick interval.
+  // Returns 0 if there is a continuous animation which should be ticked
+  // as fast as possible.
+  virtual base::TimeDelta MinimumTickInterval() const = 0;
 
   using TrackedAnimationSequenceId = size_t;
   struct PendingThroughputTrackerInfo {

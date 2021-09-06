@@ -179,6 +179,7 @@ class VivaldiContextMenu : public VivaldiMenu {
   virtual void SetIcon(const gfx::Image& icon, int id) {}
   virtual void UpdateMenu(ui::SimpleMenuModel* menu_model, int id) {}
   virtual RenderViewContextMenuBase::ToolkitDelegate* GetToolkitDelegate();
+  virtual void SetParentView(gfx::NativeView parent_view) {}
 };
 
 class VivaldiBookmarkMenu : public VivaldiMenu {

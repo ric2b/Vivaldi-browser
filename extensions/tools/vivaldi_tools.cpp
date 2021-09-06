@@ -16,6 +16,8 @@
 #include "components/zoom/zoom_controller.h"
 #include "extensions/api/bookmarks/bookmarks_private_api.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_function.h"
+#include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/common/manifest_constants.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
@@ -495,3 +497,17 @@ void SetImagePathForProfilePath(const std::string& preferences_path,
 }
 
 }  // namespace vivaldi
+
+namespace extensions {
+
+Profile* GetFunctionCallerProfile(ExtensionFunction& fun) {
+  ExtensionFunctionDispatcher* dispatcher = fun.dispatcher();
+  if (!dispatcher)
+    return nullptr;
+  content::BrowserContext* browser_context = dispatcher->browser_context();
+  if (!browser_context)
+    return nullptr;
+  return Profile::FromBrowserContext(browser_context);
+}
+
+}  // namespace extensions

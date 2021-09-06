@@ -26,10 +26,6 @@ var EVENTS_PRIVATE = {
     evt: CreateEvent('webViewPrivate.onPasteAndGo'),
     fields: ['clipBoardText', 'pasteTarget', 'modifiers']
   },
-  'simpleAction': {
-    evt: CreateEvent('webViewPrivate.onSimpleAction'),
-    fields: ['command', 'text', 'url', 'modifiers']
-  },
   'contentallowed': {
     evt: CreateEvent('webViewPrivate.onContentAllowed'),
     fields: ['allowedType']

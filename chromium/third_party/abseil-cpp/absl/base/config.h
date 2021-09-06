@@ -121,10 +121,16 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #if ABSL_OPTION_USE_INLINE_NAMESPACE == 0
 #define ABSL_NAMESPACE_BEGIN
 #define ABSL_NAMESPACE_END
+#define ABSL_INTERNAL_C_SYMBOL(x) x
 #elif ABSL_OPTION_USE_INLINE_NAMESPACE == 1
 #define ABSL_NAMESPACE_BEGIN \
   inline namespace ABSL_OPTION_INLINE_NAMESPACE_NAME {
 #define ABSL_NAMESPACE_END }
+#define ABSL_INTERNAL_C_SYMBOL_HELPER_2(x, v) x##_##v
+#define ABSL_INTERNAL_C_SYMBOL_HELPER_1(x, v) \
+  ABSL_INTERNAL_C_SYMBOL_HELPER_2(x, v)
+#define ABSL_INTERNAL_C_SYMBOL(x) \
+  ABSL_INTERNAL_C_SYMBOL_HELPER_1(x, ABSL_OPTION_INLINE_NAMESPACE_NAME)
 #else
 #error options.h is misconfigured.
 #endif
@@ -215,6 +221,8 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #ifndef ABSL_HAVE_SOURCE_LOCATION_CURRENT
 #if ABSL_INTERNAL_HAS_KEYWORD(__builtin_LINE) && \
     ABSL_INTERNAL_HAS_KEYWORD(__builtin_FILE)
+#define ABSL_HAVE_SOURCE_LOCATION_CURRENT 1
+#elif defined(__GNUC__) && __GNUC__ >= 5
 #define ABSL_HAVE_SOURCE_LOCATION_CURRENT 1
 #endif
 #endif
@@ -720,6 +728,15 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #define ABSL_HAVE_ADDRESS_SANITIZER 1
 #elif ABSL_HAVE_FEATURE(address_sanitizer)
 #define ABSL_HAVE_ADDRESS_SANITIZER 1
+#endif
+
+// ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION
+//
+// Class template argument deduction is a language feature added in C++17.
+#ifdef ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION
+#error "ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION cannot be directly set."
+#elif defined(__cpp_deduction_guides)
+#define ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION 1
 #endif
 
 #endif  // ABSL_BASE_CONFIG_H_

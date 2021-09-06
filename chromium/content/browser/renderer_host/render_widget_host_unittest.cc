@@ -29,8 +29,8 @@
 #include "components/viz/test/begin_frame_args_test.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/renderer_host/agent_scheduling_group_host.h"
+#include "content/browser/renderer_host/data_transfer_util.h"
 #include "content/browser/renderer_host/display_feature.h"
-#include "content/browser/renderer_host/drop_data_util.h"
 #include "content/browser/renderer_host/frame_token_message_queue.h"
 #include "content/browser/renderer_host/input/mock_input_router.h"
 #include "content/browser/renderer_host/input/touch_emulator.h"
@@ -40,7 +40,6 @@
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/common/content_constants_internal.h"
-#include "content/common/input_messages.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -544,8 +543,9 @@ class RenderWidgetHostTest : public testing::Test {
     display::Screen::SetScreenInstance(screen_.get());
 #endif
     host_ = MockRenderWidgetHost::Create(
-        delegate_.get(), *agent_scheduling_group_host_,
-        process_->GetNextRoutingID(), widget_.GetNewRemote());
+        /* frame_tree= */ nullptr, delegate_.get(),
+        *agent_scheduling_group_host_, process_->GetNextRoutingID(),
+        widget_.GetNewRemote());
     // Set up the RenderWidgetHost as being for a main frame.
     host_->set_owner_delegate(&mock_owner_delegate_);
     // Act like there is no RenderWidget present in the renderer yet.
@@ -989,8 +989,8 @@ TEST_F(RenderWidgetHostTest, SynchronizeVisualProperties) {
 TEST_F(RenderWidgetHostTest, ResizeScreenInfo) {
   blink::ScreenInfo screen_info;
   screen_info.device_scale_factor = 1.f;
-  screen_info.rect = blink::WebRect(0, 0, 800, 600);
-  screen_info.available_rect = blink::WebRect(0, 0, 800, 600);
+  screen_info.rect = gfx::Rect(0, 0, 800, 600);
+  screen_info.available_rect = gfx::Rect(0, 0, 800, 600);
   screen_info.orientation_angle = 0;
   screen_info.orientation_type =
       blink::mojom::ScreenOrientation::kPortraitPrimary;
@@ -1192,7 +1192,7 @@ TEST_F(RenderWidgetHostTest, RootWindowSegments) {
 
 TEST_F(RenderWidgetHostTest, ReceiveFrameTokenFromCrashedRenderer) {
   // The Renderer sends a monotonically increasing frame token.
-  host_->DidProcessFrame(2);
+  host_->DidProcessFrame(2, base::TimeTicks::Now());
 
   // Simulate a renderer crash.
   host_->SetView(nullptr);
@@ -1200,7 +1200,7 @@ TEST_F(RenderWidgetHostTest, ReceiveFrameTokenFromCrashedRenderer) {
 
   // Receive an in-flight frame token (it needs to monotonically increase)
   // while the RenderWidget is gone.
-  host_->DidProcessFrame(3);
+  host_->DidProcessFrame(3, base::TimeTicks::Now());
 
   // The renderer is recreated.
   host_->SetView(view_.get());
@@ -1213,12 +1213,12 @@ TEST_F(RenderWidgetHostTest, ReceiveFrameTokenFromCrashedRenderer) {
   // The new RenderWidget sends a frame token, which is lower than what the
   // previous RenderWidget sent. This should be okay, as the expected token has
   // been reset.
-  host_->DidProcessFrame(1);
+  host_->DidProcessFrame(1, base::TimeTicks::Now());
 }
 
 TEST_F(RenderWidgetHostTest, ReceiveFrameTokenFromDeletedRenderWidget) {
   // The RenderWidget sends a monotonically increasing frame token.
-  host_->DidProcessFrame(2);
+  host_->DidProcessFrame(2, base::TimeTicks::Now());
 
   // The RenderWidget is destroyed in the renderer process as the main frame
   // is removed from this RenderWidgetHost's RenderWidgetView, but the
@@ -1228,7 +1228,7 @@ TEST_F(RenderWidgetHostTest, ReceiveFrameTokenFromDeletedRenderWidget) {
 
   // Receive an in-flight frame token (it needs to monotonically increase)
   // while the RenderWidget is gone.
-  host_->DidProcessFrame(3);
+  host_->DidProcessFrame(3, base::TimeTicks::Now());
 
   // Make a new RenderWidget when the renderer is recreated and inform that a
   // RenderWidget is being created.
@@ -1240,7 +1240,7 @@ TEST_F(RenderWidgetHostTest, ReceiveFrameTokenFromDeletedRenderWidget) {
   // The new RenderWidget sends a frame token, which is lower than what the
   // previous RenderWidget sent. This should be okay, as the expected token has
   // been reset.
-  host_->DidProcessFrame(1);
+  host_->DidProcessFrame(1, base::TimeTicks::Now());
 }
 
 // Unable to include render_widget_host_view_mac.h and compile.
@@ -2017,9 +2017,9 @@ TEST_F(RenderWidgetHostTest, RendererExitedNoDrag) {
   DropData drop_data;
   drop_data.url = http_url;
   drop_data.html_base_url = http_url;
-  NativeFileSystemManagerImpl* file_system_manager =
+  FileSystemAccessManagerImpl* file_system_manager =
       static_cast<StoragePartitionImpl*>(process_->GetStoragePartition())
-          ->GetNativeFileSystemManager();
+          ->GetFileSystemAccessManager();
   blink::DragOperationsMask drag_operation = blink::kDragOperationEvery;
   host_->StartDragging(
       DropDataToDragData(drop_data, file_system_manager, process_->GetID()),
@@ -2251,7 +2251,8 @@ TEST_F(RenderWidgetHostTest, OnVerticalScrollDirectionChanged) {
   const auto NotifyVerticalScrollDirectionChanged =
       [this](viz::VerticalScrollDirection scroll_direction) {
         static uint32_t frame_token = 1u;
-        host_->frame_token_message_queue_->DidProcessFrame(frame_token);
+        host_->frame_token_message_queue_->DidProcessFrame(
+            frame_token, base::TimeTicks::Now());
 
         cc::RenderFrameMetadata metadata;
         metadata.new_vertical_scroll_direction = scroll_direction;

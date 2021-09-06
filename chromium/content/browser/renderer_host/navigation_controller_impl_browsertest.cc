@@ -334,6 +334,19 @@ void NavigationControllerBrowserTest::RunLoadDataWithBaseURL(
   // data: URL loads always have HTTP status code 200.
   EXPECT_EQ(200, contents()->GetMainFrame()->last_http_status_code());
 
+  // The redirect chain contains the base URL instead of the commit URL or
+  // the history URL, because it's the URL used by the DocumentLoader (unless
+  // the base URL is empty).
+  // TODO(https://crbug.com/1171237): Should we use the commit/history URL
+  // instead?
+  EXPECT_EQ(entry->GetRedirectChain().size(), 1u);
+  GURL url_in_redirect_chain = base_url_empty ? commit_url : base_url;
+  EXPECT_EQ(entry->GetRedirectChain()[0], url_in_redirect_chain);
+
+  // The original request URL for loadDataWithBaseURL navigations will be the
+  // URL used for commit (the data URL/header).
+  EXPECT_EQ(entry->GetOriginalRequestURL(), commit_url);
+
   // 3) Now reload and make sure the renderer isn't killed.
   ReloadBlockUntilNavigationsComplete(shell(), 1);
   EXPECT_TRUE(shell()->web_contents()->GetMainFrame()->IsRenderFrameLive());
@@ -346,6 +359,13 @@ void NavigationControllerBrowserTest::RunLoadDataWithBaseURL(
   EXPECT_EQ(virtual_url, reload_entry->GetVirtualURL());
   EXPECT_EQ(history_url_for_data_url, reload_entry->GetHistoryURLForDataURL());
   EXPECT_EQ(commit_url, reload_entry->GetOriginalRequestURL());
+
+  EXPECT_EQ(reload_entry->GetRedirectChain().size(), 1u);
+  EXPECT_EQ(reload_entry->GetRedirectChain()[0], url_in_redirect_chain);
+
+  // The original request URL for loadDataWithBaseURL navigations will be the
+  // URL used for commit (the data URL/header).
+  EXPECT_EQ(entry->GetOriginalRequestURL(), commit_url);
 }
 
 IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest, LoadDataWithBaseURL) {
@@ -1082,6 +1102,10 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
                        DontIgnoreBackAfterNavEntryLimit) {
   NavigationController& controller = shell()->web_contents()->GetController();
 
+  // The default (50) makes this test too slow and leads to flakes
+  // (https://crbug.com/1167300).
+  NavigationControllerImpl::set_max_entry_count_for_testing(10);
+
   const int kMaxEntryCount =
       static_cast<int>(NavigationControllerImpl::max_entry_count());
 
@@ -1244,102 +1268,6 @@ class NoNavigationsObserver : public WebContentsObserver {
       return;
     FAIL() << "No navigations should occur";
   }
-};
-
-class FrameNavigateParamsCapturer : public WebContentsObserver {
- public:
-  // Observes navigation for the specified |node|.
-  explicit FrameNavigateParamsCapturer(FrameTreeNode* node)
-      : WebContentsObserver(
-            node->current_frame_host()->delegate()->GetAsWebContents()),
-        frame_tree_node_id_(node->frame_tree_node_id()),
-        navigations_remaining_(1),
-        wait_for_load_(true),
-        message_loop_runner_(new MessageLoopRunner) {}
-
-  void set_navigations_remaining(int count) { navigations_remaining_ = count; }
-  void set_wait_for_load(bool ignore) { wait_for_load_ = ignore; }
-  void Wait() { message_loop_runner_->Run(); }
-
-  ui::PageTransition transition() {
-    EXPECT_EQ(1U, transitions_.size());
-    return transitions_[0];
-  }
-
-  NavigationType navigation_type() {
-    EXPECT_EQ(1U, navigation_types_.size());
-    return navigation_types_[0];
-  }
-
-  bool is_same_document() {
-    EXPECT_EQ(1U, is_same_documents_.size());
-    return is_same_documents_[0];
-  }
-
-  bool is_renderer_initiated() {
-    EXPECT_EQ(1U, is_renderer_initiateds_.size());
-    return is_renderer_initiateds_[0];
-  }
-
-  bool did_replace_entry() {
-    EXPECT_EQ(1U, did_replace_entries_.size());
-    return did_replace_entries_[0];
-  }
-
-  const std::vector<ui::PageTransition>& transitions() { return transitions_; }
-  const std::vector<GURL>& urls() { return urls_; }
-  const std::vector<NavigationType>& navigation_types() {
-    return navigation_types_;
-  }
-  const std::vector<bool>& is_same_documents() { return is_same_documents_; }
-  const std::vector<bool>& did_replace_entries() {
-    return did_replace_entries_;
-  }
-
- private:
-  void DidFinishNavigation(NavigationHandle* navigation_handle) override {
-    if (!navigation_handle->HasCommitted() ||
-        navigation_handle->GetFrameTreeNodeId() != frame_tree_node_id_ ||
-        navigations_remaining_ == 0) {
-      return;
-    }
-
-    --navigations_remaining_;
-    transitions_.push_back(navigation_handle->GetPageTransition());
-    urls_.push_back(navigation_handle->GetURL());
-    navigation_types_.push_back(
-        NavigationRequest::From(navigation_handle)->navigation_type());
-    is_same_documents_.push_back(navigation_handle->IsSameDocument());
-    did_replace_entries_.push_back(navigation_handle->DidReplaceEntry());
-    is_renderer_initiateds_.push_back(navigation_handle->IsRendererInitiated());
-    if (!navigations_remaining_ &&
-        (!web_contents()->IsLoading() || !wait_for_load_))
-      message_loop_runner_->Quit();
-  }
-
-  void DidStopLoading() override {
-    if (!navigations_remaining_)
-      message_loop_runner_->Quit();
-  }
-
-  // The id of the FrameTreeNode whose navigations to observe.
-  int frame_tree_node_id_;
-
-  // How many navigations remain to capture.
-  int navigations_remaining_;
-
-  // Whether to also wait for the load to complete.
-  bool wait_for_load_;
-
-  std::vector<ui::PageTransition> transitions_;
-  std::vector<GURL> urls_;
-  std::vector<NavigationType> navigation_types_;
-  std::vector<bool> is_same_documents_;
-  std::vector<bool> did_replace_entries_;
-  std::vector<bool> is_renderer_initiateds_;
-
-  // The MessageLoopRunner used to spin the message loop.
-  scoped_refptr<MessageLoopRunner> message_loop_runner_;
 };
 
 // Test that going back in a subframe on a loadDataWithBaseURL page doesn't
@@ -1570,6 +1498,9 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   EXPECT_EQ(blank_url, new_root->current_url());
 
   // Make a new iframe in it using document.write from the opener.
+  // Call document.open() outside LoadCommittedCapturer as it implicitly does a
+  // same-document navigation.
+  EXPECT_TRUE(ExecJs(root->current_frame_host(), "w.document.open()"));
   {
     LoadCommittedCapturer capturer(new_shell->web_contents());
     std::string html = "<iframe src='" + url1.spec() + "'></iframe>";
@@ -1581,7 +1512,9 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
     capturer.Wait();
   }
   ASSERT_EQ(1U, new_root->child_count());
-  EXPECT_EQ(blank_url, new_root->current_url());
+  // Since we did a document.open(), the new root's URL is the same as the
+  // outer URL.
+  EXPECT_EQ(url1, new_root->current_url());
   EXPECT_EQ(url1, new_root->child_at(0)->current_url());
 
   // Navigate the subframe.
@@ -1593,7 +1526,7 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
     EXPECT_TRUE(ExecJs(new_root->child_at(0), script));
     capturer.Wait();
   }
-  EXPECT_EQ(blank_url, new_root->current_url());
+  EXPECT_EQ(url1, new_root->current_url());
   EXPECT_EQ(url2, new_root->child_at(0)->current_url());
   EXPECT_EQ(2, new_shell->web_contents()->GetController().GetEntryCount());
 
@@ -1626,6 +1559,96 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
     observer.Wait();
   }
   EXPECT_TRUE(new_root->current_frame_host()->IsRenderFrameLive());
+}
+
+// Test that a frame's url is correctly updated after a document.open() from
+// an about:blank frame.
+IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
+                       DocumentOpenFromAboutBlank) {
+  GURL url1 = embedded_test_server()->GetURL(
+      "/navigation_controller/page_with_iframe_simple.html");
+  EXPECT_TRUE(NavigateToURL(shell(), url1));
+  FrameTreeNode* root = contents()->GetFrameTree()->root();
+
+  // Make a new iframe that will document.open() its sibling.
+  {
+    LoadCommittedCapturer capturer(contents());
+    EXPECT_EQ("done", EvalJs(root->current_frame_host(), R"(
+      new Promise(async resolve => {
+        const blank_iframe = document.createElement('iframe');
+        await new Promise(resolve => {
+          blank_iframe.onload = resolve;
+          document.body.appendChild(blank_iframe);
+        });
+
+        let script = document.createElement('script');
+        script.text = `
+          const sibling = parent.document.getElementById("frame")
+          sibling.contentDocument.open();
+        `;
+        blank_iframe.contentDocument.body.appendChild(script);
+        resolve("done");
+      })
+    )"));
+    capturer.Wait();
+  }
+  ASSERT_EQ(2U, root->child_count());
+  EXPECT_EQ(GURL(url::kAboutBlankURL), root->child_at(0)->current_url());
+  EXPECT_EQ(GURL(url::kAboutBlankURL), root->child_at(1)->current_url());
+}
+
+// Test that a frame's url is correctly updated after a document.open() from
+// an about:srcdoc frame.
+IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
+                       DocumentOpenFromSrcdoc) {
+  GURL url1 = embedded_test_server()->GetURL(
+      "/navigation_controller/page_with_iframe_simple.html");
+  EXPECT_TRUE(NavigateToURL(shell(), url1));
+  FrameTreeNode* root = contents()->GetFrameTree()->root();
+
+  // Make a new iframe that will document.open() its sibling.
+  {
+    LoadCommittedCapturer capturer(contents());
+    std::string html = "<iframe src='" + url1.spec() + "'></iframe>";
+    std::string script =
+        "let origin = document.createElement('iframe');"
+        "origin.srcdoc = '<script>parent.document.getElementById(\"frame\")"
+        ".contentDocument.open();</s' + 'cript>';"
+        "document.body.appendChild(origin);";
+    EXPECT_TRUE(ExecJs(root->current_frame_host(), script));
+    capturer.Wait();
+  }
+  ASSERT_EQ(2U, root->child_count());
+  EXPECT_EQ("about:srcdoc", root->child_at(0)->current_url());
+  EXPECT_EQ("about:srcdoc", root->child_at(1)->current_url());
+}
+
+// Test that a frame's url is correctly updated after a document.open() from
+// a blob: url
+IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
+                       DocumentOpenFromBloblIframe) {
+  GURL url1 = embedded_test_server()->GetURL(
+      "/navigation_controller/page_with_iframe_simple.html");
+  EXPECT_TRUE(NavigateToURL(shell(), url1));
+  FrameTreeNode* root = contents()->GetFrameTree()->root();
+
+  // Make a new iframe that will document.open() its sibling.
+  {
+    LoadCommittedCapturer capturer(contents());
+    std::string html = "<iframe src='" + url1.spec() + "'></iframe>";
+    std::string script =
+        "let origin = document.createElement('iframe');"
+        "let blob = new Blob(['<script>"
+        "parent.document.getElementById(\"frame\").contentDocument.open();"
+        "</s' + 'cript>'], { type: 'text/html' });"
+        "origin.src = URL.createObjectURL(blob);"
+        "document.body.appendChild(origin);";
+    EXPECT_TRUE(ExecJs(root->current_frame_host(), script));
+    capturer.Wait();
+  }
+  ASSERT_EQ(2U, root->child_count());
+  EXPECT_TRUE(root->child_at(0)->current_url().SchemeIsBlob());
+  EXPECT_TRUE(root->child_at(1)->current_url().SchemeIsBlob());
 }
 
 IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest, ErrorPageReplacement) {
@@ -2045,10 +2068,10 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   }
 }
 
-// Verify that navigations for NAVIGATION_TYPE_SAME_ENTRY are correctly
-// classified.
+// Verify that navigations to the same URL are correctly classified as
+// EXISTING_ENTRY.
 IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
-                       NavigationTypeClassification_SameEntry) {
+                       NavigationTypeClassification_ExistingEntrySameURL) {
   GURL url1(embedded_test_server()->GetURL(
       "/navigation_controller/simple_page_1.html"));
   EXPECT_TRUE(NavigateToURL(shell(), url1));
@@ -2058,15 +2081,16 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
                             ->root();
 
   {
-    // Simple load.
+    // Simple load of the same URL.
     FrameNavigateParamsCapturer capturer(root);
-    GURL frame_url(embedded_test_server()->GetURL(
-        "/navigation_controller/simple_page_1.html"));
-    NavigateFrameToURL(root, frame_url);
+    NavigateFrameToURL(root, url1);
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transition(), ui::PAGE_TRANSITION_LINK));
-    EXPECT_EQ(NAVIGATION_TYPE_SAME_ENTRY, capturer.navigation_type());
+    EXPECT_EQ(NAVIGATION_TYPE_EXISTING_ENTRY, capturer.navigation_type());
+
+    // Ensure the pending entry was cleared after commit.
+    EXPECT_FALSE(shell()->web_contents()->GetController().GetPendingEntry());
   }
 }
 
@@ -2150,7 +2174,7 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   EXPECT_FLOAT_EQ(expected_window_scroll_y, window_scroll_y);
 }
 
-// Verify that empty GURL navigations are not classified as SAME_ENTRY.
+// Verify that empty GURL navigations are not classified as EXISTING_ENTRY.
 // See https://crbug.com/534980.
 IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
                        NavigationTypeClassification_EmptyGURL) {
@@ -2164,7 +2188,7 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
 
   {
     // Load an (invalid) empty GURL.  Blink will treat this as an inert commit,
-    // but we don't want it to show up as SAME_ENTRY.
+    // but we don't want it to show up as EXISTING_ENTRY.
     FrameNavigateParamsCapturer capturer(root);
     NavigateFrameToURL(root, GURL());
     capturer.Wait();
@@ -2329,8 +2353,11 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
 // classified.
 IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
                        NavigationTypeClassification_ClientSideRedirect) {
+  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
+      shell()->web_contents()->GetController());
   EXPECT_TRUE(NavigateToURL(shell(), GURL(url::kAboutBlankURL)));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+  EXPECT_EQ(1, controller.GetEntryCount());
 
   FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
                             ->GetFrameTree()
@@ -2338,6 +2365,8 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
 
   {
     // Load the redirecting page.
+    // Two navigations will happen: The original navigation to the
+    // client-redirector URL, then to the URL we got redirected to.
     FrameNavigateParamsCapturer capturer(root);
     capturer.set_navigations_remaining(2);
     GURL frame_url(embedded_test_server()->GetURL(
@@ -2350,12 +2379,77 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transitions()[0], ui::PAGE_TRANSITION_LINK));
     EXPECT_EQ(NAVIGATION_TYPE_NEW_ENTRY, capturer.navigation_types()[0]);
+    EXPECT_FALSE(capturer.did_replace_entries()[0]);
+    // The transition used for the second navigation indicates that it is a
+    // client-side redirect.
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.transitions()[1],
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK |
                                   ui::PAGE_TRANSITION_CLIENT_REDIRECT)));
     EXPECT_EQ(NAVIGATION_TYPE_NEW_ENTRY, capturer.navigation_types()[1]);
+    // The client-side redirect results in the replacement of the previous
+    // entry.
     EXPECT_TRUE(capturer.did_replace_entries()[1]);
+    EXPECT_EQ(2, controller.GetEntryCount());
+  }
+
+  {
+    GURL fragment_url(embedded_test_server()->GetURL(
+        "/navigation_controller/simple_page_1.html#foo"));
+    FrameNavigateParamsCapturer capturer(root);
+    // Renderer-initiated fragment navigation.
+    EXPECT_TRUE(ExecJs(contents(), "location.href = '#foo'"));
+    capturer.Wait();
+    EXPECT_EQ(fragment_url, contents()->GetLastCommittedURL());
+    ASSERT_EQ(1U, capturer.transitions().size());
+    // The transition used for the renderer-initiated fragment navigation
+    // indicates that it is a client-side redirect, but doesn't actually result
+    // in entry replacement.
+    EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+        capturer.transitions()[0],
+        ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK |
+                                  ui::PAGE_TRANSITION_CLIENT_REDIRECT)));
+    EXPECT_FALSE(capturer.did_replace_entries()[0]);
+    EXPECT_EQ(3, controller.GetEntryCount());
+  }
+
+  {
+    // History API same-document navigation through history.pushState.
+    GURL push_state_url(embedded_test_server()->GetURL(
+        "/navigation_controller/simple_page_1.html#bar"));
+    FrameNavigateParamsCapturer capturer(root);
+    EXPECT_TRUE(ExecuteScript(
+        shell(), "history.pushState({}, '', 'simple_page_1.html#bar')"));
+    capturer.Wait();
+    EXPECT_EQ(push_state_url, contents()->GetLastCommittedURL());
+    ASSERT_EQ(1U, capturer.transitions().size());
+    // The transition used for the History API same-document navigation
+    // indicates that it is a client-side redirect, but doesn't actually result
+    // in entry replacement.
+    EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+        capturer.transitions()[0],
+        ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK |
+                                  ui::PAGE_TRANSITION_CLIENT_REDIRECT)));
+    EXPECT_FALSE(capturer.did_replace_entries()[0]);
+    EXPECT_EQ(4, controller.GetEntryCount());
+  }
+
+  {
+    GURL fragment_url_2(embedded_test_server()->GetURL(
+        "/navigation_controller/simple_page_1.html#baz"));
+    // Browser-initiated fragment navigation.
+    FrameNavigateParamsCapturer capturer(root);
+    EXPECT_TRUE(NavigateToURL(shell(), fragment_url_2));
+    capturer.Wait();
+    ASSERT_EQ(1U, capturer.transitions().size());
+    // The transition used for the browser-initiated fragment navigation does
+    // not indicate a client-side redirect.
+    EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+        capturer.transitions()[0],
+        ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
+                                  ui::PAGE_TRANSITION_FROM_ADDRESS_BAR)));
+    EXPECT_FALSE(capturer.did_replace_entries()[0]);
+    EXPECT_EQ(5, controller.GetEntryCount());
   }
 }
 
@@ -4050,7 +4144,7 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   ASSERT_EQ(1U, root->child_at(0)->child_count());
   ASSERT_EQ(0U, root->child_at(0)->child_at(0)->child_count());
   EXPECT_EQ(main_url, root->current_url());
-  EXPECT_EQ(blank_url, root->child_at(0)->current_url());
+  EXPECT_EQ(main_url, root->child_at(0)->current_url());
   EXPECT_EQ(inner_url, root->child_at(0)->child_at(0)->current_url());
 
   EXPECT_EQ(1, controller.GetEntryCount());
@@ -4059,7 +4153,7 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
 
   // The entry should have FrameNavigationEntries for the subframes.
   ASSERT_EQ(1U, entry->root_node()->children.size());
-  EXPECT_EQ(blank_url, entry->root_node()->children[0]->frame_entry->url());
+  EXPECT_EQ(main_url, entry->root_node()->children[0]->frame_entry->url());
   EXPECT_EQ(inner_url,
             entry->root_node()->children[0]->children[0]->frame_entry->url());
 
@@ -4085,7 +4179,7 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   }
   ASSERT_EQ(1U, root->child_count());
   EXPECT_EQ(main_url, root->current_url());
-  EXPECT_EQ(blank_url, root->child_at(0)->current_url());
+  EXPECT_EQ(main_url, root->child_at(0)->current_url());
 
   // Verify that the inner iframe went to the correct URL.
   EXPECT_EQ(inner_url, root->child_at(0)->child_at(0)->current_url());
@@ -4101,7 +4195,7 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   ASSERT_EQ(1U, entry->root_node()->children.size());
 
   // The entry should have FrameNavigationEntries for the subframes.
-  EXPECT_EQ(blank_url, entry->root_node()->children[0]->frame_entry->url());
+  EXPECT_EQ(main_url, entry->root_node()->children[0]->frame_entry->url());
   EXPECT_EQ(inner_url,
             entry->root_node()->children[0]->children[0]->frame_entry->url());
 
@@ -5593,12 +5687,20 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
                                              PAGE_TYPE_NORMAL));
   EXPECT_TRUE(shell()->web_contents()->GetLastCommittedURL() == final_url);
 
-  // Check last committed NavigationEntry's redirects.
+  // The last committed NavigationEntry's redirect chain will contain the
+  // server-side redirecting URL, then the final URL.
   EXPECT_EQ(1, controller.GetEntryCount());
   content::NavigationEntry* entry = controller.GetLastCommittedEntry();
   EXPECT_EQ(entry->GetRedirectChain().size(), 2u);
   EXPECT_EQ(entry->GetRedirectChain()[0], redirecting_url);
   EXPECT_EQ(entry->GetRedirectChain()[1], final_url);
+
+  // No replaced entry because it's not a client-side redirect.
+  EXPECT_FALSE(entry->GetReplacedEntryData().has_value());
+
+  // The original request URL will be the first entry of redirect chain, which
+  // is the URL that initiated the server redirect.
+  EXPECT_EQ(entry->GetOriginalRequestURL(), redirecting_url);
 }
 
 // Verifies that FrameNavigationEntry's redirect chain is created and stored on
@@ -5667,6 +5769,928 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   EXPECT_EQ(frame_entry->redirect_chain().size(), 2u);
   EXPECT_EQ(frame_entry->redirect_chain()[0], frame_redirect_url);
   EXPECT_EQ(frame_entry->redirect_chain()[1], frame_final_url);
+}
+
+// Checks the contents of the redirect chain after same-document navigations.
+IN_PROC_BROWSER_TEST_P(
+    NavigationControllerBrowserTest,
+    FrameNavigationEntry_MainFrameRedirectChain_NormalThenSameDocNavigations) {
+  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
+      shell()->web_contents()->GetController());
+
+  // Navigate the main frame to a normal URL that won't cause any redirects.
+  GURL start_url(embedded_test_server()->GetURL("/title1.html"));
+
+  {
+    EXPECT_TRUE(NavigateToURL(shell(), start_url));
+
+    ASSERT_EQ(1, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    ASSERT_EQ(start_url, entry->GetURL());
+    // The redirect chain contains only the URL we navigated to.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 1u);
+    EXPECT_EQ(entry->GetRedirectChain()[0], start_url);
+
+    // No replaced entry because it's not a client-side redirect.
+    EXPECT_FALSE(entry->GetReplacedEntryData().has_value());
+
+    // The original request URL will be the first entry of redirect chain, which
+    // is also the final URL.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), start_url);
+  }
+
+  GURL fragment_url(embedded_test_server()->GetURL("/title1.html#foo"));
+  {
+    // Renderer-initiated fragment navigation.
+    TestNavigationManager navigation_manager(shell()->web_contents(),
+                                             fragment_url);
+    EXPECT_TRUE(ExecJs(contents(), "location.href = '#foo'"));
+    navigation_manager.WaitForNavigationFinished();
+
+    EXPECT_EQ(2, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    EXPECT_EQ(fragment_url, entry->GetURL());
+
+    EXPECT_EQ(entry->GetRedirectChain().size(), 2u);
+    // On script-initiated fragment navigations, the redirect chain contains
+    // the previous URL, then the fragment URL, because script-initiated
+    // navigations are always classified as client redirects. So, they start
+    // with the previous page's URL in the redirect chain.
+    EXPECT_EQ(entry->GetRedirectChain()[0], start_url);
+    EXPECT_EQ(entry->GetRedirectChain()[1], fragment_url);
+
+    // No replaced entry because it's not a "real" client-side redirect.
+    EXPECT_FALSE(entry->GetReplacedEntryData().has_value());
+
+    // The original request URL will be the first entry of redirect chain,
+    // which is the URL that initiated the client redirect.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), start_url);
+  }
+
+  {
+    // History API same-document navigation through history.pushState.
+    GURL push_state_url(embedded_test_server()->GetURL("/title1.html#bar"));
+    TestNavigationManager navigation_manager(shell()->web_contents(),
+                                             push_state_url);
+    EXPECT_TRUE(ExecuteScript(shell(),
+                              "history.pushState({}, '', '/title1.html#bar')"));
+    navigation_manager.WaitForNavigationFinished();
+
+    EXPECT_EQ(3, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    EXPECT_EQ(push_state_url, entry->GetURL());
+
+    EXPECT_EQ(entry->GetRedirectChain().size(), 2u);
+    // On History API navigations, the redirect chain contains the previous URL,
+    // then the fragment URL, because script-initiated navigations are always
+    // classified as client redirects. So, they start with the previous page's
+    // URL in the redirect chain.
+    EXPECT_EQ(entry->GetRedirectChain()[0], fragment_url);
+    EXPECT_EQ(entry->GetRedirectChain()[1], push_state_url);
+
+    // No replaced entry because it's not a "real" client-side redirect.
+    EXPECT_FALSE(entry->GetReplacedEntryData().has_value());
+
+    // The original request URL will be the first entry of redirect chain,
+    // which is the URL that initiated the client redirect.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), fragment_url);
+  }
+
+  {
+    // Browser-initiated fragment navigation.
+    GURL fragment_url_2(embedded_test_server()->GetURL("/title1.html#baz"));
+    EXPECT_TRUE(NavigateToURL(shell(), fragment_url_2));
+
+    EXPECT_EQ(4, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    EXPECT_EQ(fragment_url_2, entry->GetURL());
+
+    // On browser-initiated fragment navigations, the redirect chain contains
+    // only the fragment URL, because  browser-initiated navigations aren't
+    // classified as client redirects. So, they always start with an empty
+    // redirect chain.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 1u);
+    EXPECT_EQ(entry->GetRedirectChain()[0], fragment_url_2);
+
+    // No replaced entry because it's not a client-side redirect.
+    EXPECT_FALSE(entry->GetReplacedEntryData().has_value());
+
+    // The original request URL will be the first entry of redirect chain, which
+    // is also the final URL.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), fragment_url_2);
+  }
+}
+
+// Checks the contents of the redirect chain after same-site navigations.
+IN_PROC_BROWSER_TEST_P(
+    NavigationControllerBrowserTest,
+    FrameNavigationEntry_MainFrameRedirectChain_NormalThenSameSiteNavigations) {
+  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
+      shell()->web_contents()->GetController());
+
+  // Navigate the main frame to a normal URL that won't cause any redirects.
+  GURL start_url(embedded_test_server()->GetURL("/title1.html"));
+
+  {
+    EXPECT_TRUE(NavigateToURL(shell(), start_url));
+
+    ASSERT_EQ(1, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    ASSERT_EQ(start_url, entry->GetURL());
+    // The redirect chain contains only the URL we navigated to.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 1u);
+    EXPECT_EQ(entry->GetRedirectChain()[0], start_url);
+
+    // No replaced entry because it's not a client-side redirect.
+    EXPECT_FALSE(entry->GetReplacedEntryData().has_value());
+
+    // The original request URL will be the first entry of redirect chain, which
+    // is also the final URL.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), start_url);
+  }
+
+  GURL url_2(embedded_test_server()->GetURL("/title2.html"));
+  {
+    // Renderer-initiated same-site navigation.
+    EXPECT_TRUE(NavigateToURLFromRenderer(shell(), url_2));
+
+    EXPECT_EQ(2, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    EXPECT_EQ(url_2, entry->GetURL());
+
+    // On script-initiated same-site navigations with no redirects, the
+    // redirect chain contains the previous page's URL, because script-initiated
+    // navigations are always classified as client redirects. So, they start
+    // with the previous page's URL in the redirect chain.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 2u);
+    if (CanSameSiteMainFrameNavigationsChangeRenderFrameHosts()) {
+      // If we change RenderFrameHosts, the previous page's URL can't be
+      // obtained from the new renderer's DocumentLoader - we will incorrectly
+      // get an empty URL in its place, which will be rewritten by the URL
+      // filters to "about:blank#blocked".
+      // TODO(https://crbug.com/1171210): Fix this.
+      EXPECT_EQ(entry->GetRedirectChain()[0], GURL(kBlockedURL));
+    } else {
+      EXPECT_EQ(entry->GetRedirectChain()[0], start_url);
+    }
+    EXPECT_EQ(entry->GetRedirectChain()[1], url_2);
+
+    // No replaced entry because it's not a "real" client-side redirect.
+    EXPECT_FALSE(entry->GetReplacedEntryData().has_value());
+
+    // The original request URL will be the first entry of redirect chain,
+    // which is the URL that initiated the client redirect.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), entry->GetRedirectChain()[0]);
+  }
+
+  {
+    // Browser-initiated same-site navigation.
+    GURL url_3(embedded_test_server()->GetURL("/title3.html"));
+    EXPECT_TRUE(NavigateToURL(shell(), url_3));
+
+    EXPECT_EQ(3, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    EXPECT_EQ(url_3, entry->GetURL());
+
+    // On browser-initiated same-site navigations with no redirects, the
+    // redirect chain contains only the navigating URL, because
+    // browser-initiated navigations aren't classified as client redirects. So,
+    // they always start with an empty redirect chain.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 1u);
+    EXPECT_EQ(entry->GetRedirectChain()[0], url_3);
+
+    // No replaced entry because it's not a client-side redirect.
+    EXPECT_FALSE(entry->GetReplacedEntryData().has_value());
+
+    // The original request URL will be the first entry of redirect chain, which
+    // is also the final URL.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), url_3);
+  }
+}
+
+// Checks the contents of the redirect chain after cross-site navigations.
+IN_PROC_BROWSER_TEST_P(
+    NavigationControllerBrowserTest,
+    FrameNavigationEntry_MainFrameRedirectChain_NormalThenCrossSiteNavigations) {
+  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
+      shell()->web_contents()->GetController());
+
+  // Navigate the main frame to a normal URL that won't cause any redirects.
+  GURL start_url(embedded_test_server()->GetURL("/title1.html"));
+
+  {
+    EXPECT_TRUE(NavigateToURL(shell(), start_url));
+
+    ASSERT_EQ(1, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    ASSERT_EQ(start_url, entry->GetURL());
+    // The redirect chain contains only the URL we navigated to.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 1u);
+    EXPECT_EQ(entry->GetRedirectChain()[0], start_url);
+
+    // No replaced entry because it's not a client-side redirect.
+    EXPECT_FALSE(entry->GetReplacedEntryData().has_value());
+
+    // The original request URL will be the first entry of redirect chain, which
+    // is also the final URL.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), start_url);
+  }
+
+  GURL url_2(embedded_test_server()->GetURL("b.com", "/title2.html"));
+  {
+    auto* old_rfh = shell()->web_contents()->GetMainFrame();
+    // Renderer-initiated cross-site navigation.
+    EXPECT_TRUE(NavigateToURLFromRenderer(shell(), url_2));
+
+    EXPECT_EQ(2, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    EXPECT_EQ(url_2, entry->GetURL());
+
+    // On script-initiated cross-site navigations with no redirects, the
+    // redirect chain contains the previous page's URL, because script-initiated
+    // navigations are always classified as client redirects. So, they start
+    // with the previous page's URL in the redirect chain.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 2u);
+    auto* new_rfh = shell()->web_contents()->GetMainFrame();
+    if (old_rfh != new_rfh) {
+      // If we change RenderFrameHosts, the previous page's URL can't be
+      // obtained from the new renderer's DocumentLoader - we will incorrectly
+      // get an empty URL in its place, which will be rewritten by the URL
+      // filters to "about:blank#blocked".
+      // TODO(https://crbug.com/1171210): Fix this.
+      EXPECT_EQ(entry->GetRedirectChain()[0], GURL(kBlockedURL));
+    } else {
+      EXPECT_EQ(entry->GetRedirectChain()[0], start_url);
+    }
+    EXPECT_EQ(entry->GetRedirectChain()[1], url_2);
+
+    // No replaced entry because it's not a "real" client-side redirect.
+    EXPECT_FALSE(entry->GetReplacedEntryData().has_value());
+
+    // The original request URL will be the first entry of redirect chain,
+    // which is the URL that initiated the client redirect.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), start_url);
+  }
+
+  {
+    // Browser-initiated cross-site navigation.
+    GURL url_3(embedded_test_server()->GetURL("c.com", "/title3.html"));
+    EXPECT_TRUE(NavigateToURL(shell(), url_3));
+
+    EXPECT_EQ(3, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    EXPECT_EQ(url_3, entry->GetURL());
+
+    // On browser-initiated cross-site navigations with no redirects, the
+    // redirect chain contains only the navigating URL, because
+    // browser-initiated navigations aren't classified as client redirects. So,
+    // they always start with an empty redirect chain.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 1u);
+    EXPECT_EQ(entry->GetRedirectChain()[0], url_3);
+
+    // No replaced entry because it's not a client-side redirect.
+    EXPECT_FALSE(entry->GetReplacedEntryData().has_value());
+
+    // The original request URL will be the first entry of redirect chain, which
+    // is also the final URL.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), url_3);
+  }
+}
+
+// Checks the contents of the redirect chain after reloads.
+IN_PROC_BROWSER_TEST_P(
+    NavigationControllerBrowserTest,
+    FrameNavigationEntry_MainFrameRedirectChain_NormalThenReloads) {
+  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
+      shell()->web_contents()->GetController());
+
+  // Navigate the main frame to a normal URL that won't cause any redirects.
+  GURL start_url(embedded_test_server()->GetURL("/title1.html"));
+
+  {
+    EXPECT_TRUE(NavigateToURL(shell(), start_url));
+
+    ASSERT_EQ(1, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    ASSERT_EQ(start_url, entry->GetURL());
+    // The redirect chain contains only the URL we navigated to.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 1u);
+    EXPECT_EQ(entry->GetRedirectChain()[0], start_url);
+
+    // No replaced entry because it's not a client-side redirect.
+    EXPECT_FALSE(entry->GetReplacedEntryData().has_value());
+
+    // The original request URL will be the first entry of redirect chain, which
+    // is also the final URL.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), start_url);
+  }
+
+  {
+    // Renderer-initiated reload.
+    TestNavigationManager navigation_manager(shell()->web_contents(),
+                                             start_url);
+    EXPECT_TRUE(ExecJs(contents(), "location.reload();"));
+    navigation_manager.WaitForNavigationFinished();
+
+    EXPECT_EQ(1, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    EXPECT_EQ(start_url, entry->GetURL());
+
+    // On main frame script-initiated reloads with no redirects, the redirect
+    // chain contains the reloaded page's URL twice, because script-initiated
+    // navigations are always classified as client redirects. So, they start
+    // with the reloaded page's URL in the redirect chain.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 2u);
+    EXPECT_EQ(entry->GetRedirectChain()[0], start_url);
+    EXPECT_EQ(entry->GetRedirectChain()[1], start_url);
+
+    // The URL is saved as the "replaced entry" because it's a reload.
+    ASSERT_TRUE(entry->GetReplacedEntryData().has_value());
+    EXPECT_EQ(start_url, entry->GetReplacedEntryData()->first_committed_url);
+
+    // The original request URL will be the first entry of redirect chain,
+    // which is the URL that initiated the client redirect.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), start_url);
+  }
+
+  {
+    // Browser-initiated tab reload.
+    TestNavigationManager navigation_manager(shell()->web_contents(),
+                                             start_url);
+    shell()->Reload();
+    navigation_manager.WaitForNavigationFinished();
+
+    EXPECT_EQ(1, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    EXPECT_EQ(start_url, entry->GetURL());
+
+    // On browser-initiated tab reloads with no redirects, the redirect
+    // chain only contains the original URL once, because browser-initiated
+    // navigations aren't classified as client redirects. So, they always start
+    // with an empty redirect chain.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 1u);
+    EXPECT_EQ(entry->GetRedirectChain()[0], start_url);
+
+    // The URL is saved as the "replaced entry" because it's a reload.
+    ASSERT_TRUE(entry->GetReplacedEntryData().has_value());
+    EXPECT_EQ(start_url, entry->GetReplacedEntryData()->first_committed_url);
+
+    // The original request URL will be the first entry of redirect chain, which
+    // is also the final URL.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), start_url);
+  }
+
+  {
+    // Browser-initiated frame reload. Note that this is different than tab
+    // reload, as this case goes through NavigationControllerImpl::ReloadFrame()
+    // instead of NavigationControllerImpl::Reload().
+    TestNavigationManager navigation_manager(shell()->web_contents(),
+                                             start_url);
+    shell()->web_contents()->GetMainFrame()->Reload();
+    navigation_manager.WaitForNavigationFinished();
+
+    EXPECT_EQ(1, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    EXPECT_EQ(start_url, entry->GetURL());
+
+    // On main-frame browser-initiated frame reloads with no redirects, the
+    // redirect chain only contains the original URL once.
+    // This should've contained two copies of `start_url`, because the browser
+    // actually sent the previous FNE's redirect chain at commit, containing the
+    // one entry of `start_url` from before. The renderer should've added one
+    // more entry of `start_url` (as the current document URL) and sent that
+    // back to the browser, but the renderer actually thought that the redirect
+    // chain is empty (because it checked for the redirect_response array,
+    // instead of the redirects array). So we end up with a redirect chain of
+    // size 1.
+    // TODO(https://crbug.com/1171225): Fix this.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 1u);
+    EXPECT_EQ(entry->GetRedirectChain()[0], start_url);
+
+    // The URL is saved as the "replaced entry" because it's a reload.
+    ASSERT_TRUE(entry->GetReplacedEntryData().has_value());
+    EXPECT_EQ(start_url, entry->GetReplacedEntryData()->first_committed_url);
+
+    // The original request URL will be the first entry of redirect chain, which
+    // is also the final URL.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), start_url);
+  }
+}
+
+// Checks the contents of the redirect chain after reloads on a subframe.
+IN_PROC_BROWSER_TEST_P(
+    NavigationControllerBrowserTest,
+    FrameNavigationEntry_MainFrameRedirectChain_NormalThenReloads_Subframe) {
+  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
+      shell()->web_contents()->GetController());
+
+  // Navigate the main frame to a normal URL that won't cause any redirects and
+  // has an iframe.
+  GURL start_url(embedded_test_server()->GetURL("/page_with_iframe.html"));
+
+  {
+    EXPECT_TRUE(NavigateToURL(shell(), start_url));
+
+    ASSERT_EQ(1, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    ASSERT_EQ(start_url, entry->GetURL());
+    // The redirect chain contains only the URL we navigated to.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 1u);
+    EXPECT_EQ(entry->GetRedirectChain()[0], start_url);
+
+    // No replaced entry because it's not a client-side redirect.
+    EXPECT_FALSE(entry->GetReplacedEntryData().has_value());
+
+    // The original request URL will be the first entry of redirect chain, which
+    // is also the final URL.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), start_url);
+  }
+
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+  FrameTreeNode* iframe = root->child_at(0);
+  GURL iframe_url = iframe->current_url();
+
+  {
+    // Renderer-initiated reload on the iframe.
+    TestNavigationManager navigation_manager(shell()->web_contents(),
+                                             iframe_url);
+    EXPECT_TRUE(ExecJs(iframe, "location.reload();"));
+    navigation_manager.WaitForNavigationFinished();
+
+    EXPECT_EQ(1, controller.GetEntryCount());
+    FrameNavigationEntry* frame_entry =
+        controller.GetLastCommittedEntry()->GetFrameEntry(iframe);
+    EXPECT_EQ(iframe_url, frame_entry->url());
+
+    // On renderer-initiated reloads with no redirects, the redirect chain
+    // contains the reloaded page's URL twice.
+    EXPECT_EQ(frame_entry->redirect_chain().size(), 2u);
+    if (ShouldCreateNewHostForSameSiteSubframe()) {
+      // If we change RenderFrameHosts, the previous page's URL can't be
+      // obtained from the new renderer's DocumentLoader - we will incorrectly
+      // get an about:blank URL in its place.
+      // TODO(https://crbug.com/1171210): Fix this.
+      EXPECT_EQ(frame_entry->redirect_chain()[0], GURL(url::kAboutBlankURL));
+    } else {
+      EXPECT_EQ(frame_entry->redirect_chain()[0], iframe_url);
+    }
+    EXPECT_EQ(frame_entry->redirect_chain()[1], iframe_url);
+  }
+
+  {
+    // Browser-initiated reload.
+    TestNavigationManager navigation_manager(shell()->web_contents(),
+                                             iframe_url);
+    root->child_at(0)->current_frame_host()->Reload();
+    navigation_manager.WaitForNavigationFinished();
+
+    EXPECT_EQ(1, controller.GetEntryCount());
+    FrameNavigationEntry* frame_entry =
+        controller.GetLastCommittedEntry()->GetFrameEntry(iframe);
+    EXPECT_EQ(iframe_url, frame_entry->url());
+
+    // On subframe browser-initiated reloads, the redirect chain only contains
+    // the original URL once.
+    // This should've contained three copies of `iframe_url`,because the browser
+    // actually sent the previous FNE's redirect chain at commit, containing the
+    // two entries seen above. The renderer should've added one more entry of
+    // `iframe_url` (as the current document URL) and sent that back to the
+    // browser, but the renderer actually thought that the redirect chain is
+    // empty (because it checked for the redirect_response array, instead of the
+    // redirects array). So we end up with a redirect chain of size 1.
+    // TODO(https://crbug.com/1171225): Fix this.
+    EXPECT_EQ(frame_entry->redirect_chain().size(), 1u);
+    EXPECT_EQ(frame_entry->redirect_chain()[0], iframe_url);
+  }
+}
+
+// Checks the contents of the redirect chain after navigation to an error page.
+IN_PROC_BROWSER_TEST_P(
+    NavigationControllerBrowserTest,
+    FrameNavigationEntry_MainFrameRedirectChain_NormalThenErrorPage) {
+  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
+      shell()->web_contents()->GetController());
+
+  // Navigate the main frame to a normal URL that won't cause any redirects.
+  GURL start_url(embedded_test_server()->GetURL("/title1.html"));
+
+  {
+    EXPECT_TRUE(NavigateToURL(shell(), start_url));
+
+    ASSERT_EQ(1, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    ASSERT_EQ(start_url, entry->GetURL());
+    // The redirect chain contains only the URL we navigated to.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 1u);
+    EXPECT_EQ(entry->GetRedirectChain()[0], start_url);
+
+    // No replaced entry because it's not a client-side redirect.
+    EXPECT_FALSE(entry->GetReplacedEntryData().has_value());
+
+    // The original request URL will be the first entry of redirect chain, which
+    // is also the final URL.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), start_url);
+  }
+
+  GURL url_2(embedded_test_server()->GetURL("b.com", "/empty404.html"));
+  {
+    // Renderer-initiated cross-site navigation to an error page.
+    EXPECT_FALSE(NavigateToURLFromRenderer(shell(), url_2));
+
+    EXPECT_EQ(2, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    EXPECT_EQ(url_2, entry->GetURL());
+
+    // On renderer-initiated cross-site navigations with no redirects that end
+    // up in error pages, the redirect chain contains the error page URL.
+    // TODO(https://crbug.com/1171237): This should be the commit URL (url_2)
+    // instead.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 1u);
+    EXPECT_EQ(entry->GetRedirectChain()[0], GURL(kUnreachableWebDataURL));
+
+    // No replaced entry because it's not a client-side redirect.
+    EXPECT_FALSE(entry->GetReplacedEntryData().has_value());
+
+    // The original request URL on navigations that end up in an error page will
+    // be the URL of the page that failed to load.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), url_2);
+  }
+
+  {
+    // Browser-initiated cross-site navigation to an error page.
+    GURL url_3(embedded_test_server()->GetURL("c.com", "/empty404.html"));
+    EXPECT_FALSE(NavigateToURL(shell(), url_3));
+
+    EXPECT_EQ(3, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    EXPECT_EQ(url_3, entry->GetURL());
+
+    // On browser-initiated cross-site navigations with no redirects that end
+    // up in error pages, the redirect chain contains the error page URL.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 1u);
+    EXPECT_EQ(entry->GetRedirectChain()[0], GURL(kUnreachableWebDataURL));
+
+    // No replaced entry because it's not a client-side redirect.
+    EXPECT_FALSE(entry->GetReplacedEntryData().has_value());
+
+    // The original request URL on navigations that end up in an error page will
+    // be the URL of the page that failed to load.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), url_3);
+  }
+}
+
+// Checks the contents of the redirect chain after a browser-initiated
+// navigation that server-redirects to an error page.
+IN_PROC_BROWSER_TEST_P(
+    NavigationControllerBrowserTest,
+    FrameNavigationEntry_ServerRedirectToErrorPage_BrowserInitiated) {
+  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
+      shell()->web_contents()->GetController());
+
+  GURL server_redirecting_url(
+      embedded_test_server()->GetURL("/server-redirect?/empty404.html"));
+
+  // Browser-initiated cross-site navigation that server-redirects to an empty
+  // 404 page, which would result in an error page.
+  GURL fail_url(embedded_test_server()->GetURL("/empty404.html"));
+  EXPECT_FALSE(NavigateToURL(shell(), fail_url));
+
+  EXPECT_EQ(1, controller.GetEntryCount());
+  NavigationEntry* entry = controller.GetLastCommittedEntry();
+  EXPECT_EQ(fail_url, entry->GetURL());
+
+  // On navigations that end up in error pages, the redirect chain only
+  // contains the error page URL, even if the navigation went through server
+  // redirects.
+  // TODO(https://crbug.com/1171237): This should be the commit URL (fail_url)
+  // instead.
+  EXPECT_EQ(entry->GetRedirectChain().size(), 1u);
+  EXPECT_EQ(entry->GetRedirectChain()[0], GURL(kUnreachableWebDataURL));
+
+  // No replaced entry because it's not a client-side redirect.
+  EXPECT_FALSE(entry->GetReplacedEntryData().has_value());
+
+  // The original request URL on navigations that end up in an error page will
+  // be the URL of the page that failed to load even if the navigation went
+  // through server redirects.
+  EXPECT_EQ(entry->GetOriginalRequestURL(), fail_url);
+}
+
+// Checks the contents of the redirect chain after a renderer-initiated
+// navigation that server-redirects to an error page.
+IN_PROC_BROWSER_TEST_P(
+    NavigationControllerBrowserTest,
+    FrameNavigationEntry_ServerRedirectToErrorPage_RendererInitiated) {
+  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
+      shell()->web_contents()->GetController());
+
+  // Navigate the main frame to a normal URL that won't cause any redirects, so
+  // that we can do a renderer-initiated navigation after this.
+  GURL start_url(embedded_test_server()->GetURL("/title1.html"));
+
+  {
+    EXPECT_TRUE(NavigateToURL(shell(), start_url));
+
+    ASSERT_EQ(1, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    ASSERT_EQ(start_url, entry->GetURL());
+    // The redirect chain contains only the URL we navigated to.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 1u);
+    EXPECT_EQ(entry->GetRedirectChain()[0], start_url);
+
+    // No replaced entry because it's not a client-side redirect.
+    EXPECT_FALSE(entry->GetReplacedEntryData().has_value());
+
+    // The original request URL will be the first entry of redirect chain, which
+    // is also the final URL.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), start_url);
+  }
+
+  {
+    // Renderer-initiated cross-site navigation that server-redirects to an
+    // empty 404 page, which would result in an error page. Note that since this
+    // is a script-initiated navigation, it will be marked as a client redirect
+    // too.
+    GURL server_redirecting_url(
+        embedded_test_server()->GetURL("/server-redirect?/empty404.html"));
+    GURL fail_url(embedded_test_server()->GetURL("/empty404.html"));
+    EXPECT_FALSE(NavigateToURLFromRenderer(shell(), server_redirecting_url));
+
+    EXPECT_EQ(2, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    EXPECT_EQ(fail_url, entry->GetURL());
+
+    // On navigations that end up in error pages, the redirect chain only
+    // contains the error page URL, even if the navigation went through client
+    // and server redirects.
+    // TODO(https://crbug.com/1171237): This should be the commit URL (fail_url)
+    // instead.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 1u);
+    EXPECT_EQ(entry->GetRedirectChain()[0], GURL(kUnreachableWebDataURL));
+
+    // No replaced entry because it's not a client-side redirect.
+    EXPECT_FALSE(entry->GetReplacedEntryData().has_value());
+
+    // The original request URL on navigations that end up in an error page will
+    // be the URL of the page that failed to load even if the navigation went
+    // through client and server redirects.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), fail_url);
+  }
+}
+
+// Checks the contents of the redirect chain after client-side redirect to a
+// different document than the original URL.
+IN_PROC_BROWSER_TEST_P(
+    NavigationControllerBrowserTest,
+    FrameNavigationEntry_MainFrameRedirectChain_ClientRedirectThenFragment) {
+  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
+      shell()->web_contents()->GetController());
+
+  // Navigate the main frame to a redirecting URL (client-side) that will
+  // redirect to a different document than the original URL's document.
+  GURL client_redirecting_url(embedded_test_server()->GetURL(
+      "/navigation_controller/client_redirect.html"));
+  GURL final_url(embedded_test_server()->GetURL(
+      "/navigation_controller/simple_page_1.html"));
+
+  {
+    // Client-side redirects will result in a new navigation, so wait for two
+    // navigations to finish.
+    TestNavigationManager navigation_manager_1(shell()->web_contents(),
+                                               client_redirecting_url);
+    TestNavigationManager navigation_manager_2(shell()->web_contents(),
+                                               final_url);
+    shell()->LoadURL(client_redirecting_url);
+    navigation_manager_1.WaitForNavigationFinished();  // Initial navigation.
+    navigation_manager_2.WaitForNavigationFinished();  // Client-side redirect.
+
+    ASSERT_EQ(1, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetEntryAtIndex(0);
+    ASSERT_EQ(final_url, entry->GetURL());
+    EXPECT_EQ(entry->GetRedirectChain().size(), 2u);
+    // When a client-side redirect happens after a navigation, the redirect
+    // chain contains the URL that triggers the client redirect first, then the
+    // URL that we got redirected to.
+    EXPECT_EQ(entry->GetRedirectChain()[0], client_redirecting_url);
+    EXPECT_EQ(entry->GetRedirectChain()[1], final_url);
+
+    // The client-redirecting URL is saved as the "replaced entry".
+    ASSERT_TRUE(entry->GetReplacedEntryData().has_value());
+    EXPECT_EQ(client_redirecting_url,
+              entry->GetReplacedEntryData()->first_committed_url);
+
+    // The original request URL will be the first entry of redirect chain,
+    // which is the URL that initiated the client redirect.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), client_redirecting_url);
+  }
+
+  {
+    // Renderer-initiated fragment navigation.
+    GURL fragment_url(embedded_test_server()->GetURL(
+        "/navigation_controller/simple_page_1.html#foo"));
+    TestNavigationManager navigation_manager(shell()->web_contents(),
+                                             fragment_url);
+    EXPECT_TRUE(ExecJs(contents(), "location.href = '#foo'"));
+    navigation_manager.WaitForNavigationFinished();
+
+    EXPECT_EQ(2, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    EXPECT_EQ(fragment_url, entry->GetURL());
+
+    EXPECT_EQ(entry->GetRedirectChain().size(), 2u);
+    // When a renderer-initiated fragment navigation happens after a client-side
+    // redirect navigation, the redirect chain will contain the previous URL
+    // (the URL we ended up in after client redirect), then the fragment URL.
+    EXPECT_EQ(entry->GetRedirectChain()[0], final_url);
+    EXPECT_EQ(entry->GetRedirectChain()[1], fragment_url);
+
+    // The client-redirecting URL is still saved as the "replaced entry".
+    EXPECT_TRUE(entry->GetReplacedEntryData().has_value());
+    EXPECT_EQ(client_redirecting_url,
+              entry->GetReplacedEntryData()->first_committed_url);
+
+    // The original request URL will be the first entry of redirect chain,
+    // which is the URL that initiated the client redirect.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), final_url);
+  }
+}
+
+// Checks the contents of the redirect chain after client-side redirect within
+// the same document.
+IN_PROC_BROWSER_TEST_P(
+    NavigationControllerBrowserTest,
+    FrameNavigationEntry_MainFrameRedirectChain_ClientRedirectSameDocThenFragment) {
+  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
+      shell()->web_contents()->GetController());
+
+  // Navigate the main frame to a redirecting URL (client-side) that will
+  // redirect to the same document as the original URL.
+  GURL client_redirecting_url(embedded_test_server()->GetURL(
+      "/navigation_controller/client_redirect_fragment.html"));
+  GURL final_url(embedded_test_server()->GetURL(
+      "/navigation_controller/client_redirect_fragment.html#foo"));
+
+  {
+    // Client-side redirects will result in a new navigation, so wait for two
+    // navigations to finish.
+    TestNavigationManager navigation_manager_1(shell()->web_contents(),
+                                               client_redirecting_url);
+    TestNavigationManager navigation_manager_2(shell()->web_contents(),
+                                               final_url);
+    shell()->LoadURL(client_redirecting_url);
+    navigation_manager_1.WaitForNavigationFinished();  // Initial navigation.
+    navigation_manager_2.WaitForNavigationFinished();  // Client-side redirect.
+
+    ASSERT_EQ(1, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetEntryAtIndex(0);
+    ASSERT_EQ(final_url, entry->GetURL());
+
+    // When a client-side redirect happens after a navigation, the redirect
+    // chain contains the URL that triggers the client redirect first, then the
+    // URL that we got redirected to.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 2u);
+    EXPECT_EQ(entry->GetRedirectChain()[0], client_redirecting_url);
+    EXPECT_EQ(entry->GetRedirectChain()[1], final_url);
+
+    // The client-redirecting URL is saved as the "replaced entry".
+    ASSERT_TRUE(entry->GetReplacedEntryData().has_value());
+    EXPECT_EQ(client_redirecting_url,
+              entry->GetReplacedEntryData()->first_committed_url);
+
+    // The original request URL will be the first entry of redirect chain,
+    // which is the URL that initiated the client redirect.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), client_redirecting_url);
+  }
+
+  {
+    // Renderer-initiated fragment navigation.
+    GURL fragment_url(embedded_test_server()->GetURL(
+        "/navigation_controller/client_redirect_fragment.html#bar"));
+    TestNavigationManager navigation_manager(shell()->web_contents(),
+                                             fragment_url);
+    EXPECT_TRUE(ExecJs(contents(), "location.href = '#bar'"));
+    navigation_manager.WaitForNavigationFinished();
+
+    EXPECT_EQ(2, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetLastCommittedEntry();
+    EXPECT_EQ(fragment_url, entry->GetURL());
+
+    // When a renderer-initiated fragment navigation happens after a client-side
+    // redirect navigation, the redirect chain will contain the previous URL
+    // (the URL we ended up in after client redirect), then the fragment URL.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 2u);
+    EXPECT_EQ(entry->GetRedirectChain()[0], final_url);
+    EXPECT_EQ(entry->GetRedirectChain()[1], fragment_url);
+
+    EXPECT_TRUE(entry->GetReplacedEntryData().has_value());
+    EXPECT_EQ(client_redirecting_url,
+              entry->GetReplacedEntryData()->first_committed_url);
+
+    // The original request URL will be the first entry of redirect chain,
+    // which is the URL that initiated the client redirect.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), final_url);
+  }
+}
+
+// Checks the contents of the redirect chain after a client-side redirect that
+// happens after a server-side redirect.
+IN_PROC_BROWSER_TEST_P(
+    NavigationControllerBrowserTest,
+    FrameNavigationEntry_MainFrameRedirectChain_ServerThenClientRedirect) {
+  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
+      shell()->web_contents()->GetController());
+
+  // Navigate the main frame to a redirecting URL (server-side then client-side)
+  GURL server_redirecting_url(embedded_test_server()->GetURL(
+      "/server-redirect?/navigation_controller/client_redirect.html"));
+  GURL client_redirecting_url(embedded_test_server()->GetURL(
+      "/navigation_controller/client_redirect.html"));
+  GURL final_url(embedded_test_server()->GetURL(
+      "/navigation_controller/simple_page_1.html"));
+  {
+    TestNavigationManager navigation_manager_1(shell()->web_contents(),
+                                               server_redirecting_url);
+    TestNavigationManager navigation_manager_2(shell()->web_contents(),
+                                               final_url);
+
+    shell()->LoadURL(server_redirecting_url);
+
+    navigation_manager_1.WaitForNavigationFinished();  // Initial navigation.
+    navigation_manager_2.WaitForNavigationFinished();  // Client-side redirect.
+
+    ASSERT_EQ(1, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetEntryAtIndex(0);
+    ASSERT_EQ(final_url, entry->GetURL());
+
+    // The redirect chain only contains the URL that triggers the client
+    // redirect and the URL that we got redirected to. It does not contain the
+    // server-redirecting URL.
+    EXPECT_EQ(entry->GetRedirectChain().size(), 2u);
+    EXPECT_EQ(entry->GetRedirectChain()[0], client_redirecting_url);
+    EXPECT_EQ(entry->GetRedirectChain()[1], final_url);
+
+    // The client-redirecting URL is saved as the "replaced entry".
+    ASSERT_TRUE(entry->GetReplacedEntryData().has_value());
+    EXPECT_EQ(client_redirecting_url,
+              entry->GetReplacedEntryData()->first_committed_url);
+
+    // The original request URL will be the first entry of redirect chain,
+    // which is the URL that initiated the client redirect.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), client_redirecting_url);
+  }
+}
+
+// Checks the contents of the redirect chain after a server-side redirect that
+// happens after a client-side redirect.
+IN_PROC_BROWSER_TEST_P(
+    NavigationControllerBrowserTest,
+    FrameNavigationEntry_MainFrameRedirectChain_ClientThenServerRedirect) {
+  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
+      shell()->web_contents()->GetController());
+
+  // Navigate the main frame to a redirecting URL (client-side then server-side)
+  GURL client_redirecting_url(embedded_test_server()->GetURL(
+      "/navigation_controller/client_redirect_server.html"));
+  GURL server_redirecting_url(embedded_test_server()->GetURL(
+      "/server-redirect?/navigation_controller/simple_page_1.html"));
+  GURL final_url(embedded_test_server()->GetURL(
+      "/navigation_controller/simple_page_1.html"));
+  {
+    TestNavigationManager navigation_manager_1(shell()->web_contents(),
+                                               client_redirecting_url);
+    TestNavigationManager navigation_manager_2(shell()->web_contents(),
+                                               server_redirecting_url);
+
+    shell()->LoadURL(client_redirecting_url);
+
+    navigation_manager_1.WaitForNavigationFinished();  // Initial navigation +
+                                                       // client-side redirect.
+    navigation_manager_2.WaitForNavigationFinished();  // Server-side redirect.
+
+    ASSERT_EQ(1, controller.GetEntryCount());
+    NavigationEntry* entry = controller.GetEntryAtIndex(0);
+    ASSERT_EQ(final_url, entry->GetURL());
+
+    // The redirect chain will contain the URL that triggers the client
+    // redirect, then the server-redirecting URL (the target of the
+    // client-redirector URL) and finally the final URL (the target of the
+    // server-redirector URL).
+    EXPECT_EQ(entry->GetRedirectChain().size(), 3u);
+    EXPECT_EQ(entry->GetRedirectChain()[0], client_redirecting_url);
+    EXPECT_EQ(entry->GetRedirectChain()[1], server_redirecting_url);
+    EXPECT_EQ(entry->GetRedirectChain()[2], final_url);
+
+    // The client-redirecting URL is saved as the "replaced entry".
+    ASSERT_TRUE(entry->GetReplacedEntryData().has_value());
+    EXPECT_EQ(client_redirecting_url,
+              entry->GetReplacedEntryData()->first_committed_url);
+
+    // The original request URL will be the first entry of redirect chain,
+    // which is the URL that initiated the client redirect.
+    EXPECT_EQ(entry->GetOriginalRequestURL(), client_redirecting_url);
+  }
 }
 
 // Verify that restoring a NavigationEntry with cross-site subframes does not
@@ -6647,13 +7671,15 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   ASSERT_NE(nullptr, frame);
   EXPECT_EQ(blank_url, frame->current_url());
 
-  // Do a document.write in the subframe to create a link to click.
+  // Do a document.write() in the subframe to create a link to click. This sets
+  // the URL to be the same as the frame that called document.write().
   std::string document_write_script =
       "var iframe = document.getElementById('frame');"
       "iframe.contentWindow.document.write("
       "    \"<a id='fraglink' href='#frag'>fragment link</a>\");"
       "iframe.contentWindow.document.close();";
   EXPECT_TRUE(ExecJs(root->current_frame_host(), document_write_script));
+  EXPECT_EQ(links_url, frame->current_url());
 
   // Click the link to do a same document navigation.  Due to the
   // document.write, the new URL matches the parent frame's URL.
@@ -6680,7 +7706,10 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   EXPECT_TRUE(ExecJs(root->current_frame_host(), "true;"));
   EXPECT_TRUE(root->current_frame_host()->IsRenderFrameLive());
 
-  EXPECT_EQ(blank_url, frame->current_url());
+  // When we go back in history, the history entry URL should be used. However,
+  // since we did a .write which set the history entry's URL, we go back to the
+  // main page URL.
+  EXPECT_EQ(links_url, frame->current_url());
 }
 
 // Test for same document navigation kills when going back to about:blank in an
@@ -6731,12 +7760,14 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
       "iframe.contentWindow.document.close();",
       html);
   EXPECT_TRUE(ExecJs(root, document_write_script));
+  EXPECT_EQ(data_url, frame->current_url());
   EXPECT_EQ(opaque_origin, root->current_origin());
   EXPECT_EQ(opaque_origin, frame->current_origin());
 
-  // Click the link to do a same document navigation.  Due to the
+  // Click the link to do a same document navigation. Due to the
   // document.write, the new URL matches the parent frame's URL, but the
-  // opaque origin is preserved.
+  // opaque origin is preserved. Not only that, the history entry's URL is
+  // changed to match the parent frame's URL.
   GURL frame_url_2("data:text/html,Top level page#frag");
   std::string link_script = "document.getElementById('fraglink').click()";
   EXPECT_TRUE(ExecJs(frame, link_script));
@@ -6766,7 +7797,10 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   EXPECT_EQ("ping", EvalJs(root, "'ping'"));
   EXPECT_TRUE(root->current_frame_host()->IsRenderFrameLive());
 
-  EXPECT_EQ(blank_url, frame->current_url());
+  // When we go back in history, the history entry URL should be used. However,
+  // since we did a .write which set the history entry's URL, we go back to the
+  // main page URL.
+  EXPECT_EQ(data_url, frame->current_url());
   EXPECT_EQ(opaque_origin, frame->current_origin());
 }
 
@@ -7617,12 +8651,12 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   EXPECT_EQ(0U, root->child_count());
 }
 
-// Test that navigations classified as SAME_ENTRY properly update all the
-// members of FrameNavigationEntry. If not, it is possible to get a mismatch
-// between the origin and URL of a document as seen in
-// https://crbug.com/630103.
+// Test that converted reload navigations classified as EXISTING_ENTRY properly
+// update all the members of FrameNavigationEntry if they redirect. If not, it
+// is possible to get a mismatch between the origin and URL of a document as
+// seen in https://crbug.com/630103.
 IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
-                       EnsureSamePageNavigationUpdatesFrameNavigationEntry) {
+                       EnsureSameURLNavigationUpdatesFrameNavigationEntry) {
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
   FrameTreeNode* root = web_contents->GetFrameTree()->root();
@@ -7657,8 +8691,8 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
     observer.Wait();
   }
 
-  // Prior to fixing the issue, the above omnibox navigation (which is
-  // classified as SAME_ENTRY) was leaving the FrameNavigationEntry with the
+  // Prior to fixing the issue, the above omnibox navigation (which is now
+  // classified as EXISTING_ENTRY) was leaving the FrameNavigationEntry with the
   // same document sequence number as the previous entry but updates the URL.
   // Doing a back session history navigation now will cause the browser to
   // consider it as same document because of this matching document sequence
@@ -9038,11 +10072,18 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
     controller.GoForward();
     capturer.Wait();
     observer.Wait();
-    EXPECT_TRUE(capturer.is_same_document());
     EXPECT_EQ(start_url, root->current_url());
     EXPECT_EQ(x_frame_options_deny_url, root->child_at(0)->current_url());
-    EXPECT_TRUE(observer.last_navigation_succeeded());
-    EXPECT_EQ(net::OK, observer.last_net_error_code());
+    if (!SiteIsolationPolicy::IsErrorPageIsolationEnabled(
+            /*in_main_frame=*/false)) {
+      EXPECT_TRUE(capturer.is_same_document());
+      EXPECT_TRUE(observer.last_navigation_succeeded());
+      EXPECT_EQ(net::OK, observer.last_net_error_code());
+    } else {
+      EXPECT_FALSE(capturer.is_same_document());
+      EXPECT_FALSE(observer.last_navigation_succeeded());
+      EXPECT_EQ(net::ERR_BLOCKED_BY_RESPONSE, observer.last_net_error_code());
+    }
   }
 
   // Check that the renderer is still alive.
@@ -10400,14 +11441,264 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   if (AreAllSitesIsolatedForTesting()) {
     EXPECT_NE(initial_site_instance,
               root->current_frame_host()->GetSiteInstance());
-    EXPECT_EQ(SiteInstance::GetSiteForURL(
-                  shell()->web_contents()->GetBrowserContext(), url3),
-              root->current_frame_host()->GetSiteInstance()->GetSiteURL());
+    EXPECT_EQ(
+        SiteInfo::CreateForTesting(
+            IsolationContext(shell()->web_contents()->GetBrowserContext()),
+            url3),
+        root->current_frame_host()->GetSiteInstance()->GetSiteInfo());
     EXPECT_EQ(NAVIGATION_TYPE_NEW_ENTRY, capturer.navigation_type());
   } else {
     EXPECT_EQ(initial_site_instance,
               root->current_frame_host()->GetSiteInstance());
     EXPECT_EQ(NAVIGATION_TYPE_EXISTING_ENTRY, capturer.navigation_type());
+  }
+}
+
+// Tests that user activation/gesture is not "inherited" by a new document
+// on cross-site browser-initiated navigation.
+IN_PROC_BROWSER_TEST_P(
+    NavigationControllerBrowserTest,
+    NoGestureInheritanceAfterCrossSiteNavigation_BrowserInitiated) {
+  GURL url1(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  GURL url2(embedded_test_server()->GetURL("b.com", "/title2.html"));
+  GURL url3(embedded_test_server()->GetURL("c.com", "/title3.html"));
+  // Initial navigation.
+  EXPECT_TRUE(NavigateToURL(shell(), url1));
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+
+  {
+    // Renderer-initiated navigation with user gesture.
+    FrameNavigateParamsCapturer url2_capturer(root);
+    EXPECT_TRUE(NavigateToURLFromRenderer(shell(), url2));
+    url2_capturer.Wait();
+    EXPECT_TRUE(url2_capturer.has_user_gesture());
+  }
+
+  {
+    // Cross-site browser-initiated navigation without user gesture.
+    FrameNavigateParamsCapturer url3_capturer(root);
+    EXPECT_TRUE(NavigateToURL(shell(), url3));
+    url3_capturer.Wait();
+    EXPECT_FALSE(url3_capturer.has_user_gesture());
+  }
+}
+
+// Tests that user activation/gesture is not "inherited" by a new document
+// on cross-site renderer-initiated navigation.
+IN_PROC_BROWSER_TEST_P(
+    NavigationControllerBrowserTest,
+    NoGestureInheritanceAfterCrossSiteNavigation_RendererInitiated) {
+  GURL url1(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  GURL url2(embedded_test_server()->GetURL("b.com", "/title2.html"));
+  GURL url3(embedded_test_server()->GetURL("c.com", "/title3.html"));
+  // Initial navigation.
+  EXPECT_TRUE(NavigateToURL(shell(), url1));
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+
+  {
+    // Renderer-initiated navigation with user gesture.
+    FrameNavigateParamsCapturer url2_capturer(root);
+    EXPECT_TRUE(NavigateToURLFromRenderer(shell(), url2));
+    url2_capturer.Wait();
+    EXPECT_TRUE(url2_capturer.has_user_gesture());
+  }
+
+  {
+    // Cross-site renderer-initiated navigation without user gesture.
+    FrameNavigateParamsCapturer url3_capturer(root);
+    EXPECT_TRUE(NavigateToURLFromRendererWithoutUserGesture(shell(), url3));
+    url3_capturer.Wait();
+    EXPECT_FALSE(url3_capturer.has_user_gesture());
+  }
+}
+
+// Tests that user activation/gesture is not "inherited" by a new document
+// on same-site browser-initiated navigation.
+IN_PROC_BROWSER_TEST_P(
+    NavigationControllerBrowserTest,
+    NoGestureInheritanceAfterSameSiteNavigation_BrowserInitiated) {
+  GURL url1(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  GURL url2(embedded_test_server()->GetURL("a.com", "/title2.html"));
+  GURL url3(embedded_test_server()->GetURL("a.com", "/title3.html"));
+  // Initial navigation.
+  EXPECT_TRUE(NavigateToURL(shell(), url1));
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+
+  {
+    // Renderer-initiated navigation with user gesture.
+    FrameNavigateParamsCapturer url2_capturer(root);
+    EXPECT_TRUE(NavigateToURLFromRenderer(shell(), url2));
+    url2_capturer.Wait();
+    EXPECT_TRUE(url2_capturer.has_user_gesture());
+  }
+
+  {
+    // Same-site browser-initiated navigation without user gesture.
+    FrameNavigateParamsCapturer url3_capturer(root);
+    EXPECT_TRUE(NavigateToURL(shell(), url3));
+    url3_capturer.Wait();
+    EXPECT_FALSE(url3_capturer.has_user_gesture());
+  }
+}
+
+// Tests that user activation/gesture is not "inherited" by a new document
+// on same-site renderer-initiated navigation.
+IN_PROC_BROWSER_TEST_P(
+    NavigationControllerBrowserTest,
+    NoGestureInheritanceAfterSameSiteNavigation_RendererInitiated) {
+  GURL url1(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  GURL url2(embedded_test_server()->GetURL("a.com", "/title2.html"));
+  GURL url3(embedded_test_server()->GetURL("a.com", "/title3.html"));
+  // Initial navigation.
+  EXPECT_TRUE(NavigateToURL(shell(), url1));
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+
+  {
+    // Renderer-initiated navigation with user gesture.
+    FrameNavigateParamsCapturer url2_capturer(root);
+    EXPECT_TRUE(NavigateToURLFromRenderer(shell(), url2));
+    url2_capturer.Wait();
+    EXPECT_TRUE(url2_capturer.has_user_gesture());
+  }
+
+  {
+    // Same-site renderer-initiated navigation without user gesture.
+    FrameNavigateParamsCapturer url3_capturer(root);
+    EXPECT_TRUE(NavigateToURLFromRendererWithoutUserGesture(shell(), url3));
+    url3_capturer.Wait();
+    EXPECT_FALSE(url3_capturer.has_user_gesture());
+  }
+}
+
+// Tests that user activation/gesture returned by DidCommitProvisionalLoadParams
+// reflects the latest navigation's gesture on a document when the initial
+// document load was loaded with no user activation/gesture.
+IN_PROC_BROWSER_TEST_P(
+    NavigationControllerBrowserTest,
+    GestureChangesAfterSameDocumentNavOnDocumentLoadedWithoutGesture) {
+  GURL url1(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  GURL url2(embedded_test_server()->GetURL("a.com", "/title1.html#a"));
+  GURL url3(embedded_test_server()->GetURL("a.com", "/title1.html#b"));
+  GURL url4(embedded_test_server()->GetURL("a.com", "/title1.html#c"));
+  GURL url5(embedded_test_server()->GetURL("a.com", "/title1.html#d"));
+  WebContentsImpl* contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  FrameTreeNode* root = contents->GetFrameTree()->root();
+
+  {
+    // Initial navigation without user gesture.
+    FrameNavigateParamsCapturer url1_capturer(root);
+    EXPECT_TRUE(NavigateToURL(shell(), url1));
+    url1_capturer.Wait();
+    EXPECT_FALSE(url1_capturer.has_user_gesture());
+  }
+
+  {
+    // Renderer-initiated same-document navigation without user gesture.
+    FrameNavigateParamsCapturer url2_capturer(root);
+    EXPECT_TRUE(NavigateToURLFromRendererWithoutUserGesture(shell(), url2));
+    url2_capturer.Wait();
+    EXPECT_FALSE(url2_capturer.has_user_gesture());
+  }
+
+  {
+    // Renderer-initiated same-document navigation with user gesture.
+    FrameNavigateParamsCapturer url3_capturer(root);
+    EXPECT_TRUE(NavigateToURLFromRenderer(shell(), url3));
+    url3_capturer.Wait();
+    EXPECT_TRUE(url3_capturer.has_user_gesture());
+  }
+
+  {
+    // Browser-initiated same-document navigation without user gesture.
+    FrameNavigateParamsCapturer url4_capturer(root);
+    EXPECT_TRUE(NavigateToURL(shell(), url4));
+    url4_capturer.Wait();
+    EXPECT_FALSE(url4_capturer.has_user_gesture());
+  }
+
+  {
+    // Browser-initiated same-document navigation with user gesture.
+    FrameNavigateParamsCapturer url5_capturer(root);
+    TestNavigationObserver navigation_observer(contents);
+    NavigationController::LoadURLParams params(url5);
+    params.transition_type = ui::PageTransitionFromInt(
+        ui::PAGE_TRANSITION_TYPED | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
+    params.has_user_gesture = true;
+    contents->GetController().LoadURLWithParams(params);
+    navigation_observer.Wait();
+    EXPECT_TRUE(navigation_observer.last_navigation_succeeded());
+    url5_capturer.Wait();
+    EXPECT_TRUE(url5_capturer.has_user_gesture());
+  }
+}
+
+// Tests that user activation/gesture returned by DidCommitProvisionalLoadParams
+// reflects the latest navigation's gesture when the initial document load was
+// loaded with user activation/gesture.
+IN_PROC_BROWSER_TEST_P(
+    NavigationControllerBrowserTest,
+    GestureChangesAfterSameDocumentNavOnDocumentLoadedWithGesture) {
+  // Initial navigation to allow doing navigation from the renderer after this.
+  GURL url0(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), url0));
+
+  WebContentsImpl* contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+
+  GURL url1(embedded_test_server()->GetURL("a.com", "/title2.html"));
+  GURL url2(embedded_test_server()->GetURL("a.com", "/title2.html#foo"));
+  GURL url3(embedded_test_server()->GetURL("a.com", "/title2.html#bar"));
+  GURL url4(embedded_test_server()->GetURL("a.com", "/title2.html#baz"));
+
+  {
+    // Navigation with user gesture.
+    FrameNavigateParamsCapturer url1_capturer(root);
+    EXPECT_TRUE(NavigateToURLFromRenderer(shell(), url1));
+    url1_capturer.Wait();
+    EXPECT_TRUE(url1_capturer.has_user_gesture());
+  }
+
+  {
+    // Renderer-initiated same-document navigation without user gesture.
+    FrameNavigateParamsCapturer url2_capturer(root);
+    EXPECT_TRUE(NavigateToURLFromRendererWithoutUserGesture(shell(), url2));
+    url2_capturer.Wait();
+    EXPECT_FALSE(url2_capturer.has_user_gesture());
+  }
+
+  {
+    // Browser-initiated same-document navigation without user gesture.
+    FrameNavigateParamsCapturer url3_capturer(root);
+    EXPECT_TRUE(NavigateToURL(shell(), url3));
+    url3_capturer.Wait();
+    EXPECT_FALSE(url3_capturer.has_user_gesture());
+  }
+
+  {
+    // Browser-initiated same-document navigation with user gesture.
+    FrameNavigateParamsCapturer url4_capturer(root);
+    TestNavigationObserver navigation_observer(contents);
+    NavigationController::LoadURLParams params(url4);
+    params.transition_type = ui::PageTransitionFromInt(
+        ui::PAGE_TRANSITION_TYPED | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
+    params.has_user_gesture = true;
+    contents->GetController().LoadURLWithParams(params);
+    navigation_observer.Wait();
+    EXPECT_TRUE(navigation_observer.last_navigation_succeeded());
+    url4_capturer.Wait();
+    EXPECT_TRUE(url4_capturer.has_user_gesture());
   }
 }
 
@@ -10516,18 +11807,18 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
                                      net::ERR_BLOCKED_BY_CLIENT);
   error_observer.Wait();
 
+  // If error page isolation is enabled the `child` pointer will be invalid
+  // and should be retrieved again. It is safe to do so even when disabled.
+  child = ChildFrameAt(shell()->web_contents()->GetMainFrame(), 0);
+
   EXPECT_FALSE(error_observer.last_navigation_succeeded());
   EXPECT_EQ(net::ERR_BLOCKED_BY_CLIENT, error_observer.last_net_error_code());
   EXPECT_EQ(child->GetLastCommittedURL(), url);
   EXPECT_EQ(error_html, EvalJs(child, "document.body.innerHTML"));
 
-  // Verify that the subframe error page did not commit in the error page
-  // process.
-  // TODO(crbug.com/1092524): Update the expectation once we have subframe error
-  // page isolation.
-  scoped_refptr<SiteInstance> error_site_instance = child->GetSiteInstance();
-  EXPECT_EQ(success_site_instance, error_site_instance);
-  EXPECT_NE(GURL(kUnreachableWebDataURL), error_site_instance->GetSiteURL());
+  // Verify that the subframe error page committed in the correct SiteInstance.
+  EXPECT_TRUE(IsExpectedSubframeErrorTransition(success_site_instance.get(),
+                                                child->GetSiteInstance()));
 }
 
 // Checks that a browser initiated error page navigation in a frame pending
@@ -10605,18 +11896,19 @@ IN_PROC_BROWSER_TEST_P(
                                      net::ERR_BLOCKED_BY_CLIENT);
   error_observer.Wait();
 
+  // If error page isolation is enabled the `child` pointer will be invalid
+  // and should be retrieved again. It is safe to do so even when disabled.
+  child = ChildFrameAt(shell()->web_contents()->GetMainFrame(), 0);
+
   EXPECT_FALSE(error_observer.last_navigation_succeeded());
   EXPECT_EQ(net::ERR_BLOCKED_BY_CLIENT, error_observer.last_net_error_code());
   EXPECT_EQ(child->GetLastCommittedURL(), error_url);
   EXPECT_EQ(error_html, EvalJs(child, "document.body.innerHTML"));
 
-  // Verify that the subframe error page did not commit in the error page
+  // Verify that the subframe error page committed in the correct SiteInstance.
   // process.
-  // TODO(crbug.com/1092524): Update the expectation once we have subframe error
-  // page isolation.
-  scoped_refptr<SiteInstance> error_site_instance = child->GetSiteInstance();
-  EXPECT_EQ(success_site_instance, error_site_instance);
-  EXPECT_NE(GURL(kUnreachableWebDataURL), error_site_instance->GetSiteURL());
+  EXPECT_TRUE(IsExpectedSubframeErrorTransition(success_site_instance.get(),
+                                                child->GetSiteInstance()));
 }
 
 // Test to verify that LoadPostCommitErrorPage works correctly when done on a
@@ -10717,18 +12009,17 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
 
   // The post-commit error page committed an error page and sets the last
   // committed URL to about:blank.
+  child = static_cast<RenderFrameHostImpl*>(
+      ChildFrameAt(shell()->web_contents()->GetMainFrame(), 0));
   EXPECT_EQ(child->GetLastCommittedURL(), GURL("about:blank"));
   EXPECT_FALSE(error_observer.last_navigation_succeeded());
   EXPECT_EQ(net::ERR_BLOCKED_BY_CLIENT, error_observer.last_net_error_code());
   EXPECT_EQ(error_html, EvalJs(child, "document.body.innerHTML"));
 
-  // Verify that the subframe error page did not commit in the error page
-  // process.
-  // TODO(crbug.com/1092524): Update the expectation once we have subframe error
-  // page isolation.
-  scoped_refptr<SiteInstance> error_site_instance = child->GetSiteInstance();
-  EXPECT_EQ(success_site_instance, error_site_instance);
-  EXPECT_NE(GURL(kUnreachableWebDataURL), error_site_instance->GetSiteURL());
+  // Verify that the subframe error page committed in the correct
+  // SiteInstance.
+  EXPECT_TRUE(IsExpectedSubframeErrorTransition(success_site_instance.get(),
+                                                child->GetSiteInstance()));
 
   // Since the iframe is now showing an error page, the main frame can no longer
   // access its contentDocument.
@@ -10794,13 +12085,10 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_EQ(net::ERR_BLOCKED_BY_CLIENT, error_observer.last_net_error_code());
   EXPECT_EQ(error_html, EvalJs(child, "document.body.innerHTML"));
 
-  // Verify that the subframe error page did not commit in the error page
-  // process.
-  // TODO(crbug.com/1092524): Update the expectation once we have subframe error
-  // page isolation.
-  scoped_refptr<SiteInstance> error_site_instance = child->GetSiteInstance();
-  EXPECT_EQ(success_site_instance, error_site_instance);
-  EXPECT_NE(GURL(kUnreachableWebDataURL), error_site_instance->GetSiteURL());
+  // Verify that the subframe error page committed in the correct
+  // SiteInstance.
+  EXPECT_TRUE(IsExpectedSubframeErrorTransition(success_site_instance.get(),
+                                                child->GetSiteInstance()));
 
   // Since the iframe is now showing an error page, the main frame can no longer
   // access its contentDocument.
@@ -12274,7 +13562,8 @@ class SandboxedNavigationControllerWithBfcacheBrowserTest
         {{features::kBackForwardCache,
           {{"TimeToLiveInBackForwardCacheInSeconds", "3600"}}},
          {features::kHistoryPreventSandboxedNavigation, {}}},
-        {});
+        // Allow BackForwardCache for all devices regardless of their memory.
+        {features::kBackForwardCacheMemoryControls});
     NavigationControllerBrowserTest::SetUp();
   }
 

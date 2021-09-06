@@ -12,6 +12,7 @@
 #include "chromeos/services/assistant/proxy/libassistant_service_host.h"
 #include "chromeos/services/assistant/proxy/service_controller_proxy.h"
 #include "chromeos/services/libassistant/libassistant_service.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace chromeos {
 namespace assistant {
@@ -24,12 +25,15 @@ AssistantProxy::~AssistantProxy() {
   StopLibassistantService();
 }
 
-void AssistantProxy::Initialize(LibassistantServiceHost* host) {
+void AssistantProxy::Initialize(
+    LibassistantServiceHost* host,
+    std::unique_ptr<network::PendingSharedURLLoaderFactory>
+        pending_url_loader_factory) {
   DCHECK(host);
   libassistant_service_host_ = host;
   LaunchLibassistantService();
 
-  BindControllers(host);
+  BindControllers(host, std::move(pending_url_loader_factory));
 }
 
 void AssistantProxy::LaunchLibassistantService() {
@@ -70,32 +74,52 @@ void AssistantProxy::StopLibassistantServiceOnBackgroundThread() {
   libassistant_service_host_->Stop();
 }
 
-void AssistantProxy::BindControllers(LibassistantServiceHost* host) {
+void AssistantProxy::BindControllers(
+    LibassistantServiceHost* host,
+    std::unique_ptr<network::PendingSharedURLLoaderFactory>
+        pending_url_loader_factory) {
   mojo::PendingRemote<AudioInputControllerMojom>
       pending_audio_input_controller_remote;
-  mojo::PendingRemote<AudioStreamFactoryDelegateMojom>
-      pending_audio_stream_factory_delegate_remote;
-  mojo::PendingRemote<ServiceControllerMojom> pending_service_controller_remote;
+  mojo::PendingRemote<AudioOutputDelegateMojom>
+      pending_audio_output_delegate_remote;
   mojo::PendingRemote<ConversationControllerMojom>
       pending_conversation_controller_remote;
+  mojo::PendingRemote<MediaDelegateMojom> pending_media_delegate_remote;
+  mojo::PendingRemote<PlatformDelegateMojom> pending_platform_delegate_remote;
+  mojo::PendingRemote<ServiceControllerMojom> pending_service_controller_remote;
+  mojo::PendingRemote<SpeakerIdEnrollmentControllerMojom>
+      pending_speaker_id_enrollment_controller_remote;
 
-  mojo::PendingReceiver<AudioStreamFactoryDelegateMojom>
-      pending_audio_stream_factory_delegate_receiver =
-          pending_audio_stream_factory_delegate_remote
-              .InitWithNewPipeAndPassReceiver();
-
+  mojo::PendingReceiver<MediaDelegateMojom> pending_media_delegate =
+      pending_media_delegate_remote.InitWithNewPipeAndPassReceiver();
+  mojo::PendingReceiver<PlatformDelegateMojom> pending_platform_delegate =
+      pending_platform_delegate_remote.InitWithNewPipeAndPassReceiver();
+  pending_audio_output_delegate_receiver_ =
+      pending_audio_output_delegate_remote.InitWithNewPipeAndPassReceiver();
   libassistant_service_remote_->Bind(
       pending_audio_input_controller_remote.InitWithNewPipeAndPassReceiver(),
-      std::move(pending_audio_stream_factory_delegate_remote),
       pending_conversation_controller_remote.InitWithNewPipeAndPassReceiver(),
       display_controller_remote_.BindNewPipeAndPassReceiver(),
-      pending_service_controller_remote.InitWithNewPipeAndPassReceiver());
+      media_controller_remote_.BindNewPipeAndPassReceiver(),
+      pending_service_controller_remote.InitWithNewPipeAndPassReceiver(),
+      pending_speaker_id_enrollment_controller_remote
+          .InitWithNewPipeAndPassReceiver(),
+      std::move(pending_audio_output_delegate_remote),
+      std::move(pending_media_delegate_remote),
+      std::move(pending_platform_delegate_remote));
 
-  service_controller_proxy_ = std::make_unique<ServiceControllerProxy>(
-      host, std::move(pending_service_controller_remote));
   conversation_controller_proxy_ =
       std::make_unique<ConversationControllerProxy>(
           std::move(pending_conversation_controller_remote));
+  service_controller_proxy_ = std::make_unique<ServiceControllerProxy>(
+      host, std::move(pending_url_loader_factory),
+      std::move(pending_service_controller_remote));
+
+  audio_input_controller_ = std::move(pending_audio_input_controller_remote);
+  speaker_id_enrollment_controller_ =
+      std::move(pending_speaker_id_enrollment_controller_remote);
+  media_delegate_ = std::move(pending_media_delegate);
+  platform_delegate_ = std::move(pending_platform_delegate);
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
@@ -108,6 +132,37 @@ ServiceControllerProxy& AssistantProxy::service_controller() {
   return *service_controller_proxy_;
 }
 
+mojo::PendingRemote<chromeos::libassistant::mojom::AudioInputController>
+AssistantProxy::ExtractAudioInputController() {
+  DCHECK(audio_input_controller_.is_valid());
+  return std::move(audio_input_controller_);
+}
+
+mojo::PendingReceiver<chromeos::libassistant::mojom::AudioOutputDelegate>
+AssistantProxy::ExtractAudioOutputDelegate() {
+  DCHECK(pending_audio_output_delegate_receiver_.is_valid());
+  return std::move(pending_audio_output_delegate_receiver_);
+}
+
+mojo::PendingReceiver<chromeos::libassistant::mojom::MediaDelegate>
+AssistantProxy::ExtractMediaDelegate() {
+  DCHECK(media_delegate_.is_valid());
+  return std::move(media_delegate_);
+}
+
+mojo::PendingReceiver<chromeos::libassistant::mojom::PlatformDelegate>
+AssistantProxy::ExtractPlatformDelegate() {
+  DCHECK(platform_delegate_.is_valid());
+  return std::move(platform_delegate_);
+}
+
+mojo::PendingRemote<
+    chromeos::libassistant::mojom::SpeakerIdEnrollmentController>
+AssistantProxy::ExtractSpeakerIdEnrollmentController() {
+  DCHECK(speaker_id_enrollment_controller_.is_valid());
+  return std::move(speaker_id_enrollment_controller_);
+}
+
 ConversationControllerProxy& AssistantProxy::conversation_controller_proxy() {
   DCHECK(conversation_controller_proxy_);
   return *conversation_controller_proxy_;
@@ -116,6 +171,11 @@ ConversationControllerProxy& AssistantProxy::conversation_controller_proxy() {
 AssistantProxy::DisplayController& AssistantProxy::display_controller() {
   DCHECK(display_controller_remote_.is_bound());
   return *display_controller_remote_.get();
+}
+
+AssistantProxy::MediaController& AssistantProxy::media_controller() {
+  DCHECK(media_controller_remote_.is_bound());
+  return *media_controller_remote_.get();
 }
 
 void AssistantProxy::AddSpeechRecognitionObserver(

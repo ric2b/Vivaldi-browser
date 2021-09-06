@@ -102,7 +102,8 @@ class ASH_EXPORT DesksController : public DesksHelper,
   // new user's windows have been shown.
   void OnNewUserShown();
 
-  // Destroys any pending animations in preparation for shutdown.
+  // Destroys any pending animations in preparation for shutdown and save desk
+  // metrics.
   void Shutdown();
 
   void AddObserver(Observer* observer);
@@ -120,11 +121,11 @@ class ASH_EXPORT DesksController : public DesksHelper,
   // there is at least one single desk at any time.
   bool CanRemoveDesks() const;
 
-  // Returns the next / previous desks to the currently active desk. Returns
-  // nullptr if the active desk is the first on the left or the last on the
-  // right, and previous and next desks are requested respectively.
-  Desk* GetNextDesk() const;
-  Desk* GetPreviousDesk() const;
+  // Returns the next / previous desks to the target / currently active desk.
+  // Returns nullptr if the active desk is the first on the left or the last on
+  // the right, and previous and next desks are requested respectively.
+  Desk* GetNextDesk(bool use_target_active_desk = true) const;
+  Desk* GetPreviousDesk(bool use_target_active_desk = true) const;
 
   // Creates a new desk. CanCreateDesks() must be checked before calling this.
   void NewDesk(DesksCreationRemovalSource source);
@@ -190,10 +191,20 @@ class ASH_EXPORT DesksController : public DesksHelper,
   // it was never modified by users.
   void RevertDeskNameToDefault(Desk* desk);
 
-  // Restores the desk at |index| to the given |name|. This is only for user-
-  // modified desk names, and hence |name| should never be empty since users are
-  // not allowed to set empty names.
+  // Restores the desk at |index| to the given |name|. This is only for
+  // user-modified desk names, and hence |name| should never be empty since
+  // users are not allowed to set empty names.
   void RestoreNameOfDeskAtIndex(base::string16 name, size_t index);
+
+  // Restores the creation time of the desk at |index|.
+  void RestoreCreationTimeOfDeskAtIndex(base::Time creation_time, size_t index);
+
+  // Restores the visited metrics of the desk at |index|. If it has been more
+  // than one day since |last_day_visited|, record and reset the consecutive
+  // daily visits metrics.
+  void RestoreVisitedMetricsOfDeskAtIndex(int first_day_visited,
+                                          int last_day_visited,
+                                          size_t index);
 
   // Called explicitly by the RootWindowController when a root window has been
   // added or about to be removed in order to update all the available desks.
@@ -229,6 +240,9 @@ class ASH_EXPORT DesksController : public DesksHelper,
   // SessionObserver:
   void OnActiveUserSessionChanged(const AccountId& account_id) override;
   void OnFirstSessionStarted() override;
+
+  // Fires the timer used for recording desk traversals immediately.
+  void FireMetricsTimerForTesting();
 
  private:
   class DeskTraversalsMetricsHelper;

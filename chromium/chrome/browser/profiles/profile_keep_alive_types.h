@@ -45,7 +45,33 @@ enum class ProfileKeepAliveOrigin {
   // ClearBrowsingDataOnExistList policy.
   kClearingBrowsingData = 6,
 
-  kMaxValue = kClearingBrowsingData,
+  // An app (Chrome app, web app, etc.) has a window open.
+  kAppWindow = 7,
+
+  // Background sync in progress.
+  kBackgroundSync = 8,
+
+  // A notification is active in the system tray.
+  kNotification = 9,
+
+  // The user just clicked on a notification. This might cause e.g. a new
+  // browser window to open, so wait for the event to finish processing.
+  kPendingNotificationClickEvent = 10,
+
+  // There's a visible Push Notification from a Service Worker.
+  kInFlightPushMessage = 11,
+
+  // Session restore in progress.
+  kSessionRestore = 12,
+
+  // Views wants to keep the BrowserProcess (and Profile) alive, e.g. because
+  // a dropdown menu is active.
+  kChromeViewsDelegate = 13,
+
+  // A DevTools window is open.
+  kDevToolsWindow = 14,
+
+  kMaxValue = kDevToolsWindow,
 };
 
 std::ostream& operator<<(std::ostream& out,

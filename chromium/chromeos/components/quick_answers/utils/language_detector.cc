@@ -4,9 +4,9 @@
 
 #include "chromeos/components/quick_answers/utils/language_detector.h"
 
+#include "ash/constants/ash_features.h"
 #include "base/callback.h"
 #include "base/metrics/field_trial_params.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace chromeos {
@@ -15,7 +15,7 @@ namespace {
 
 constexpr base::FeatureParam<double> kSelectedTextConfidenceThreshold{
     &features::kQuickAnswersTranslation, "selected_text_confidence_threshold",
-    /*default_value=*/0.7};
+    /*default_value=*/0.8};
 
 constexpr base::FeatureParam<double> kSurroundingTextConfidenceThreshold{
     &features::kQuickAnswersTranslation,

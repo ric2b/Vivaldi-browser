@@ -286,7 +286,7 @@ scoped_refptr<const NGLayoutResult> NGColumnLayoutAlgorithm::Layout() {
   LayoutUnit block_size = ComputeBlockSizeForFragment(
       ConstraintSpace(), Style(), BorderPadding(),
       previously_consumed_block_size + intrinsic_block_size_,
-      border_box_size.inline_size);
+      border_box_size.inline_size, Node().ShouldBeConsideredAsReplaced());
 
   container_builder_.SetFragmentsTotalBlockSize(block_size);
   container_builder_.SetIntrinsicBlockSize(intrinsic_block_size_);
@@ -940,6 +940,26 @@ LayoutUnit NGColumnLayoutAlgorithm::CalculateBalancedColumnBlockSize(
         To<NGPhysicalBoxFragment>(result->PhysicalFragment());
     LayoutUnit column_block_size =
         CalculateColumnContentBlockSize(fragment, space.GetWritingDirection());
+
+    // Encompass the block-size of the (single-strip column) fragment, to
+    // account for any trailing margins. We let them affect the column
+    // block-size, for compatibility reasons, if nothing else. The initial
+    // column balancing pass (i.e. here) is our opportunity to do that fairly
+    // easily. But note that this doesn't guarantee that no margins will ever
+    // get truncated. To avoid that we'd need to add some sort of mechanism that
+    // is invoked in *every* column balancing layout pass, where we'd
+    // essentially have to treat every margin as unbreakable (which kind of
+    // sounds both bad and difficult).
+    //
+    // We might want to revisit this approach, if it's worth it: Maybe it's
+    // better to not make any room at all for margins that might end up getting
+    // truncated. After all, they don't really require any space, so what we're
+    // doing currently might be seen as unnecessary (and slightly unpredictable)
+    // column over-stretching.
+    NGFragment logical_fragment(ConstraintSpace().GetWritingDirection(),
+                                fragment);
+    column_block_size =
+        std::max(column_block_size, logical_fragment.BlockSize());
     content_runs.emplace_back(column_block_size);
 
     tallest_unbreakable_block_size_ = std::max(
@@ -1022,13 +1042,11 @@ LayoutUnit NGColumnLayoutAlgorithm::ConstrainColumnBlockSize(
 
   const ComputedStyle& style = Style();
   LayoutUnit max = ResolveMaxBlockLength(
-      ConstraintSpace(), style, BorderPadding(), style.LogicalMaxHeight(),
-      LengthResolvePhase::kLayout);
+      ConstraintSpace(), style, BorderPadding(), style.LogicalMaxHeight());
   LayoutUnit extent = kIndefiniteSize;
   if (!style.LogicalHeight().IsAuto()) {
     extent = ResolveMainBlockLength(ConstraintSpace(), style, BorderPadding(),
-                                    style.LogicalHeight(), kIndefiniteSize,
-                                    LengthResolvePhase::kLayout);
+                                    style.LogicalHeight(), kIndefiniteSize);
     // A specified block-size will just constrain the maximum length.
     if (extent != kIndefiniteSize)
       max = std::min(max, extent);
@@ -1036,8 +1054,7 @@ LayoutUnit NGColumnLayoutAlgorithm::ConstrainColumnBlockSize(
 
   // A specified min-block-size may increase the maximum length.
   LayoutUnit min = ResolveMinBlockLength(
-      ConstraintSpace(), style, BorderPadding(), style.LogicalMinHeight(),
-      LengthResolvePhase::kLayout);
+      ConstraintSpace(), style, BorderPadding(), style.LogicalMinHeight());
   max = std::max(max, min);
 
   // If this multicol container is nested inside another fragmentation

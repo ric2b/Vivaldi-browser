@@ -11,6 +11,12 @@
 // by the app.
 extern NSString* const kLastHTTPURLOpenTime;
 
+// The feature parameter to indicate the open links arm.
+extern const char kDefaultBrowserFullscreenPromoCTAExperimentOpenLinksParam[];
+
+// The feature parameter to indicate the switch arm.
+extern const char kDefaultBrowserFullscreenPromoCTAExperimentSwitchParam[];
+
 // Logs the timestamp of user activity that is deemed to be an indication of
 // a user that would likely benefit from having Chrome set as their default
 // browser. Before logging the current activity, this method will also clear all
@@ -32,6 +38,12 @@ bool IsInRemindMeLaterGroup();
 // Returns true if the user is in the group that will be shown a modified
 // description and "Learn More" text.
 bool IsInModifiedStringsGroup();
+
+// Returns true if the user is in the CTA experiment in the open links group.
+bool IsInCTAOpenLinksGroup();
+
+// Returns true if the user is in the CTA experiment in the switch group.
+bool IsInCTASwitchGroup();
 
 // Returns true if the user has interacted with the Fullscreen Promo previously.
 // Returns false otherwise.

@@ -13,8 +13,11 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list_types.h"
 #include "base/optional.h"
+// TODO(https://crbug.com/1164001): move KioskAppId to forward declaration
+// when moved to chrome/browser/ash/.
+#include "chrome/browser/ash/app_mode/kiosk_app_types.h"
+#include "chrome/browser/ash/login/auth/auth_prewarmer.h"
 #include "chrome/browser/chromeos/customization/customization_document.h"
-#include "chrome/browser/chromeos/login/auth/auth_prewarmer.h"
 #include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/login/ui/login_display.h"
 #include "chrome/browser/chromeos/login/ui/signin_ui.h"
@@ -43,7 +46,6 @@ class ExistingUserController;
 class OobeUI;
 class WebUILoginView;
 class WizardController;
-class KioskAppId;
 
 // An interface that defines an out-of-box-experience (OOBE) or login screen
 // host. It contains code specific to the login UI implementation.
@@ -242,5 +244,10 @@ class LoginDisplayHost {
 };
 
 }  // namespace chromeos
+
+// TODO(https://crbug.com/1164001): remove when moved to ash.
+namespace ash {
+using ::chromeos::LoginDisplayHost;
+}
 
 #endif  // CHROME_BROWSER_CHROMEOS_LOGIN_UI_LOGIN_DISPLAY_HOST_H_

@@ -8,9 +8,11 @@
 #include "calendar/calendar_service_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_observer.h"
 #include "components/content_injection/content_injection_service_factory.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/page_actions/page_actions_service_factory.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
@@ -32,6 +34,7 @@
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/api/features/vivaldi_runtime_feature.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #endif
 
@@ -48,13 +51,78 @@ class RuleServiceDelegate : public adblock_filter::RuleService::Delegate {
   }
   void RuleServiceDeleted() override { delete this; }
 };
+
+class VivaldiProfileObserver : public ProfileObserver {
+ public:
+  VivaldiProfileObserver(Profile* profile) : profile_(profile) {
+    profile->AddObserver(this);
+
+    AddPrefsObservers();
+
+    OnPrefsChange(vivaldiprefs::kTranslateEnabled);
+  }
+  ~VivaldiProfileObserver() override = default;
+
+  void AddPrefsObservers() {
+    prefs_registrar_ = std::make_unique<PrefChangeRegistrar>();
+    prefs_registrar_->Init(profile_->GetPrefs());
+
+    // callback follows the lifetime of the registrar.
+    prefs_registrar_->Add(
+        vivaldiprefs::kTranslateEnabled,
+        base::BindRepeating(&VivaldiProfileObserver::OnPrefsChange,
+                            base::Unretained(this)));
+    prefs_registrar_->Add(
+        prefs::kOfferTranslateEnabled,
+        base::BindRepeating(&VivaldiProfileObserver::OnPrefsChange,
+                            base::Unretained(this)));
+  }
+
+  void RemovePrefsObservers() {
+    if (prefs_registrar_) {
+      prefs_registrar_->RemoveAll();
+      prefs_registrar_ = nullptr;
+    }
+  }
+
+  void OnProfileWillBeDestroyed(Profile* profile) override {
+    profile->RemoveObserver(this);
+    RemovePrefsObservers();
+    delete this;
+  }
+
+ private:
+  void OnPrefsChange(const std::string& prefs) {
+    PrefService* pref_service = profile_->GetPrefs();
+    // We used to hardcode kOfferTranslateEnabled to disabled, so we need a new
+    // prefs we can use to let the chromium prefs mirror. We sync these 2 prefs
+    // so what whatever method the user uses to set them, they are in sync.
+    if (prefs == vivaldiprefs::kTranslateEnabled) {
+      bool translate_enabled =
+          pref_service->GetBoolean(vivaldiprefs::kTranslateEnabled);
+      pref_service->SetBoolean(prefs::kOfferTranslateEnabled,
+                               translate_enabled);
+    } else if (prefs == prefs::kOfferTranslateEnabled) {
+      // Also handle if the user uses chrome://settings to disable translation
+      // offers.
+      bool translate_enabled =
+          pref_service->GetBoolean(prefs::kOfferTranslateEnabled);
+      pref_service->SetBoolean(vivaldiprefs::kTranslateEnabled,
+                               translate_enabled);
+    }
+  }
+
+  VivaldiProfileObserver(const VivaldiProfileObserver&) = delete;
+  VivaldiProfileObserver& operator=(const VivaldiProfileObserver&) = delete;
+
+  std::unique_ptr<PrefChangeRegistrar> prefs_registrar_;
+  Profile* profile_;
+};
+
 }  // namespace
 
 namespace vivaldi {
 void VivaldiInitProfile(Profile* profile) {
-  PrefService* pref_service = profile->GetPrefs();
-  pref_service->SetBoolean(prefs::kOfferTranslateEnabled, false);
-
   adblock_filter::RuleServiceFactory::GetForBrowserContext(profile)
       ->SetDelegate(new RuleServiceDelegate);
   content_injection::ServiceFactory::GetForBrowserContext(profile);
@@ -63,6 +131,28 @@ void VivaldiInitProfile(Profile* profile) {
   vivaldi::NotesModel* notes_model =
       vivaldi::NotesModelFactory::GetForBrowserContext(profile);
   notes_model->AddObserver(new vivaldi::NotesModelLoadedObserver(profile));
+
+  PrefService* pref_service = profile->GetPrefs();
+#if defined(OS_ANDROID)
+  bool enable_translation = true;
+#else
+  bool enable_translation =
+      vivaldi_runtime_feature::IsEnabled(profile, "translate_page");
+#endif  // OS_ANDROID
+
+  // Manages its own lifetime.
+  if (vivaldi::IsVivaldiRunning()) {
+    if (enable_translation) {
+      // Default legacy setting is to set kOfferTranslateEnabled to false, so
+      // not flipping inside the VivaldiProfileObserver keeps it disabled
+      // if the experiments flags is disabled on desktop.
+      new VivaldiProfileObserver(profile);
+    } else {
+      // Disable translate offer and automatic translate for 3.8.
+      pref_service->SetBoolean(prefs::kOfferTranslateEnabled,
+                               false);
+    }
+  }
 
 #if !defined(OS_ANDROID)
   menus::Menu_Model* menu_model =

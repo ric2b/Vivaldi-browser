@@ -4,12 +4,15 @@
 
 #include "chrome/browser/ui/views/page_action/page_action_icon_controller.h"
 
+#include "base/feature_list.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sharing/click_to_call/click_to_call_ui_controller.h"
 #include "chrome/browser/sharing/shared_clipboard/shared_clipboard_ui_controller.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/autofill/payments/local_card_migration_icon_view.h"
+#include "chrome/browser/ui/views/autofill/payments/offer_notification_icon_view.h"
 #include "chrome/browser/ui/views/autofill/payments/save_payment_icon_view.h"
+#include "chrome/browser/ui/views/autofill/save_address_profile_icon_view.h"
 #include "chrome/browser/ui/views/file_system_access/file_system_access_icon_view.h"
 #include "chrome/browser/ui/views/location_bar/cookie_controls_icon_view.h"
 #include "chrome/browser/ui/views/location_bar/find_bar_icon.h"
@@ -28,6 +31,8 @@
 #include "chrome/browser/ui/views/sharing/sharing_icon_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_icon_container_view.h"
 #include "chrome/browser/ui/views/translate/translate_icon_view.h"
+#include "chrome/browser/ui/views/webauthn/webauthn_icon_view.h"
+#include "content/public/common/content_features.h"
 #include "ui/views/layout/box_layout.h"
 
 PageActionIconController::PageActionIconController() = default;
@@ -44,6 +49,12 @@ void PageActionIconController::Init(const PageActionIconParams& params,
 
   for (PageActionIconType type : params.types_enabled) {
     switch (type) {
+      case PageActionIconType::kPaymentsOfferNotification:
+        offer_notification_icon_ = new autofill::OfferNotificationIconView(
+            params.command_updater, params.icon_label_bubble_delegate,
+            params.page_action_icon_delegate);
+        page_action_icons_.push_back(offer_notification_icon_);
+        break;
       case PageActionIconType::kBookmarkStar:
         bookmark_star_icon_ =
             new StarView(params.command_updater, params.browser,
@@ -121,6 +132,12 @@ void PageActionIconController::Init(const PageActionIconParams& params,
             params.browser->profile()->GetPrefs());
         page_action_icons_.push_back(reader_mode_icon_);
         break;
+      case PageActionIconType::kSaveAutofillAddress:
+        save_autofill_address_icon_ = new autofill::SaveAddressProfileIconView(
+            params.command_updater, params.icon_label_bubble_delegate,
+            params.page_action_icon_delegate);
+        page_action_icons_.push_back(save_autofill_address_icon_);
+        break;
       case PageActionIconType::kSaveCard:
         save_payment_icon_ = new autofill::SavePaymentIconView(
             params.command_updater, params.icon_label_bubble_delegate,
@@ -150,6 +167,13 @@ void PageActionIconController::Init(const PageActionIconParams& params,
             params.command_updater, params.icon_label_bubble_delegate,
             params.page_action_icon_delegate);
         page_action_icons_.push_back(translate_icon_);
+        break;
+      case PageActionIconType::kWebAuthn:
+        DCHECK(base::FeatureList::IsEnabled(features::kWebAuthConditionalUI));
+        webauthn_icon_ = new WebAuthnIconView(params.command_updater,
+                                              params.icon_label_bubble_delegate,
+                                              params.page_action_icon_delegate);
+        page_action_icons_.push_back(webauthn_icon_);
         break;
       case PageActionIconType::kZoom:
         zoom_icon_ = new ZoomView(params.icon_label_bubble_delegate,
@@ -181,6 +205,8 @@ void PageActionIconController::Init(const PageActionIconParams& params,
 PageActionIconView* PageActionIconController::GetIconView(
     PageActionIconType type) {
   switch (type) {
+    case PageActionIconType::kPaymentsOfferNotification:
+      return offer_notification_icon_;
     case PageActionIconType::kBookmarkStar:
       return bookmark_star_icon_;
     case PageActionIconType::kClickToCall:
@@ -203,6 +229,8 @@ PageActionIconView* PageActionIconController::GetIconView(
       return qrcode_generator_icon_view_;
     case PageActionIconType::kReaderMode:
       return reader_mode_icon_;
+    case PageActionIconType::kSaveAutofillAddress:
+      return save_autofill_address_icon_;
     case PageActionIconType::kSaveCard:
       return save_payment_icon_;
     case PageActionIconType::kSendTabToSelf:
@@ -211,6 +239,8 @@ PageActionIconView* PageActionIconController::GetIconView(
       return shared_clipboard_icon_;
     case PageActionIconType::kTranslate:
       return translate_icon_;
+    case PageActionIconType::kWebAuthn:
+      return webauthn_icon_;
     case PageActionIconType::kZoom:
       return zoom_icon_;
   }

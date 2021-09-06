@@ -20,6 +20,7 @@ var cartItemHTMLRegex = new RegExp('(cart|basket|bundle)[-_]?item', 'i')
 var cartItemTextContentRegex = new RegExp(
     'remove|delete|save for later|move to (favo(u?)rite|list|wish( ?)list)s?',
     'i')
+var notCartItemTextContentRegex = new RegExp('move to cart', 'i')
 
 function getLazyLoadingURL(image) {
   // FIXME: some lazy images in Nordstrom and Staples don't have URLs in the
@@ -61,7 +62,7 @@ function getLargeImages(root, atLeast, relaxed = false) {
     return false;
   }
   for (const image of candidates) {
-    if (verbose > 0)
+    if (verbose > 1)
       console.log('offsetHeight', image, image.offsetHeight);
     if (image.offsetHeight < atLeast) {
       if (!shouldStillKeep(image))
@@ -118,14 +119,16 @@ function extractImage(item) {
     return lazyUrl;
 
   // If |image| is <amp-img>, image.src won't work.
+  const src = image.src || image.getAttribute('src');
   if (verbose > 1)
-    console.log('image src', image.getAttribute('src'));
-  const src = image.getAttribute('src');
+    console.log('image src', src);
   if (src != null) {
     // data: images are usually placeholders.
     // Even if it's valid, we prefer http(s) URLs.
-    if (!src.startsWith('data:'))
-      return src;
+    if (!src.startsWith('data:')) {
+      // Get absolute URL in case it's <amp-img>.
+      return (new URL(src, document.location)).href
+    }
   }
   let sourceSet = image.getAttribute('data-search-image-source-set');
   if (sourceSet == null && image.parentElement.tagName == 'PICTURE') {
@@ -547,6 +550,15 @@ function hasOverlap(target, list) {
 
 function isCartItem(item) {
   // TODO: Improve the heuristic here to accommodate more formats of cart item.
+  if (item.parentElement) {
+    // Walmart has 'move to cart' outside of the div.cart-item.
+    if (item.parentElement.textContent.toLowerCase().match(
+            notCartItemTextContentRegex))
+      return false;
+  } else {
+    if (item.textContent.toLowerCase().match(notCartItemTextContentRegex))
+      return false;
+  }
   return item.textContent.toLowerCase().match(cartItemTextContentRegex) ||
       item.innerHTML.toLowerCase().match(cartItemHTMLRegex);
 }

@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.history;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 
@@ -13,6 +14,7 @@ import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.ui.base.DeviceFormFactor;
 
 import org.vivaldi.browser.panels.PanelUtils;
 import org.chromium.chrome.browser.ChromeApplication;
@@ -21,21 +23,21 @@ import org.chromium.chrome.browser.ChromeApplication;
  * Utility methods for the browsing history manager.
  */
 public class HistoryManagerUtils {
-
     /**
      * Opens the browsing history manager.
      *
-     * @param activity The {@link ChromeActivity} that owns the {@link HistoryManager}.
+     * @param activity The {@link Activity} that owns the {@link HistoryManager}.
      * @param tab The {@link Tab} to used to display the native page version of the
      *            {@link HistoryManager}.
+     * @param isIncognitoSelected Whether the incognito {@TabModelSelector} is selected.
      */
-    public static void showHistoryManager(ChromeActivity activity, Tab tab) {
+    public static void showHistoryManager(Activity activity, Tab tab, boolean isIncognitoSelected) {
         if (ChromeApplication.isVivaldi()) {
-            showHistoryManagerForVivaldi(activity);
+            showHistoryManagerForVivaldi((ChromeActivity) activity, isIncognitoSelected);
             return;
         }
         Context appContext = ContextUtils.getApplicationContext();
-        if (activity.isTablet()) {
+        if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(activity)) {
             // History shows up as a tab on tablets.
             LoadUrlParams params = new LoadUrlParams(UrlConstants.NATIVE_HISTORY_URL);
                 tab.loadUrl(params);
@@ -43,14 +45,13 @@ public class HistoryManagerUtils {
             Intent intent = new Intent();
             intent.setClass(appContext, HistoryActivity.class);
             intent.putExtra(IntentHandler.EXTRA_PARENT_COMPONENT, activity.getComponentName());
-            intent.putExtra(IntentHandler.EXTRA_INCOGNITO_MODE,
-                    activity.getTabModelSelector().isIncognitoSelected());
+            intent.putExtra(IntentHandler.EXTRA_INCOGNITO_MODE, isIncognitoSelected);
             activity.startActivity(intent);
         }
     }
 
-    public static void showHistoryManagerForVivaldi(ChromeActivity activity) {
-        PanelUtils.showPanel(activity, UrlConstants.NATIVE_HISTORY_URL,
-                activity.getTabModelSelector().isIncognitoSelected());
+    private static void showHistoryManagerForVivaldi(ChromeActivity activity,
+                                                     boolean isIncognitoSelected) {
+        PanelUtils.showPanel(activity, UrlConstants.NATIVE_HISTORY_URL, isIncognitoSelected);
     }
 }

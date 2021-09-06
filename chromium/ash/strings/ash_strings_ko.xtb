@@ -11,6 +11,7 @@
 <translation id="1037492556044956303"><ph name="DEVICE_NAME" /> 추가됨</translation>
 <translation id="1047017786576569492">부분</translation>
 <translation id="1047773237499189053">새 기능을 이용할 수 있습니다. 자세히 알아보려면 위쪽 화살표 키를 사용하세요.</translation>
+<translation id="1052916631016577720">항목 스캔</translation>
 <translation id="1056775291175587022">네트워크 없음</translation>
 <translation id="1059194134494239015"><ph name="DISPLAY_NAME" />: <ph name="RESOLUTION" /></translation>
 <translation id="108486256082349153">셀룰러: <ph name="ADDRESS" /></translation>
@@ -24,6 +25,7 @@
 <translation id="1165712434476988950">업데이트를 적용하려면 기기를 다시 시작해야 합니다.</translation>
 <translation id="1175572348579024023">스크롤</translation>
 <translation id="1178581264944972037">일시중지</translation>
+<translation id="1181037720776840403">삭제</translation>
 <translation id="118532027333893379">전체 화면을 캡처하려면 아무 곳이나 탭하세요.</translation>
 <translation id="1190609913194133056">알림 센터</translation>
 <translation id="1195412055398077112">오버스캔</translation>
@@ -147,6 +149,7 @@
 <translation id="2220572644011485463">PIN 또는 비밀번호</translation>
 <translation id="2222338659135520253">로그인 필요</translation>
 <translation id="2222841058024245321">데스크 7</translation>
+<translation id="2224075387478458881">보호된 콘텐츠가 보일 때는 화면 녹화를 할 수 없습니다.</translation>
 <translation id="225680501294068881">기기 검색 중...</translation>
 <translation id="2268130516524549846">블루투스를 사용 안 함</translation>
 <translation id="2268813581635650749">모두 로그아웃</translation>
@@ -239,7 +242,6 @@
 <translation id="3038571455154067151">로그인하려면 Family Link 부모 액세스 코드를 입력하세요</translation>
 <translation id="3039939407102840004">스타일러스 배터리 잔량이 <ph name="PERCENTAGE" />%입니다.</translation>
 <translation id="3045488863354895414">즐거운 오후 보내세요</translation>
-<translation id="3051128274746680507">관리 대상 사용자 프로필이 곧 삭제됩니다. 자세히 알아보려면 로그인하세요.</translation>
 <translation id="3055162170959710888">오늘 이 기기를 <ph name="USED_TIME" /> 동안 사용했습니다.</translation>
 <translation id="3077734595579995578">Shift</translation>
 <translation id="3081696990447829002">메뉴 펼치기</translation>
@@ -252,13 +254,11 @@
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" />(블루투스)</translation>
 <translation id="3126069444801937830">업데이트하려면 다시 시작</translation>
 <translation id="3139942575505304791">데스크 1</translation>
-<translation id="3147157020428159854">화면 녹화 중지됨</translation>
 <translation id="315116470104423982">모바일 데이터</translation>
 <translation id="3151786313568798007">방향</translation>
 <translation id="3153444934357957346">멀티 로그인에는 계정을 <ph name="MULTI_PROFILE_USER_LIMIT" />개까지만 사용할 수 있습니다.</translation>
 <translation id="3154351730702813399">기기 관리자가 탐색 활동을 모니터링할 수 있습니다.</translation>
 <translation id="3181441307743005334">다시 시작하는 데 시간이 다소 걸릴 수 있습니다</translation>
-<translation id="3190230207529484457">보호된 콘텐츠가 보일 때는 화면 캡처를 할 수 없습니다.</translation>
 <translation id="3202010236269062730">{NUM_DEVICES,plural, =1{기기 1개에 연결됨}other{기기 #개에 연결됨}}</translation>
 <translation id="320207200541803018">타이머 설정</translation>
 <translation id="3203405173652969239">스위치 제어 사용 중</translation>
@@ -267,7 +267,6 @@
 <translation id="3226991577105957773">외 <ph name="COUNT" />개</translation>
 <translation id="3236488194889173876">사용할 수 있는 모바일 네트워크 없음</translation>
 <translation id="3249513730522716925"><ph name="WINDOW_TITLE" /> 창이 <ph name="ACTIVE_DESK" /> 데스크에서 <ph name="TARGET_DESK" /> 데스크로 이동했습니다.</translation>
-<translation id="3252068179161473151"><ph name="WIRELESS_PROVIDER" />, 신호 강도 <ph name="SIGNAL_STRENGTH" />퍼센트</translation>
 <translation id="3255483164551725916">무엇을 할 수 있어?</translation>
 <translation id="3269597722229482060">마우스 오른쪽 버튼 클릭</translation>
 <translation id="3289674678944039601">어댑터를 통해 충전 중</translation>
@@ -306,6 +305,7 @@
 <translation id="3571734092741541777">설정</translation>
 <translation id="3573179567135747900">'<ph name="FROM_LOCALE" />'(으)로 다시 변경(다시 시작해야 함)</translation>
 <translation id="3576141592585647168">시간대 변경</translation>
+<translation id="3593039967545720377"><ph name="SHORTCUT_KEY_NAME" /> + V 키를 눌러 클립보드를 열면 클립보드 기록에 액세스할 수 있습니다. 시작하려면 항목을 복사하세요.</translation>
 <translation id="3593646411856133110">위로 스와이프한 후 눌러 열려 있는 앱 보기</translation>
 <translation id="3595596368722241419">배터리 충전 완료</translation>
 <translation id="3604801046548457007"><ph name="DESK_TITILE" /> 데스크가 생성되었습니다.</translation>
@@ -349,6 +349,7 @@
 <translation id="3901991538546252627"><ph name="NAME" />에 연결 중</translation>
 <translation id="3943857333388298514">붙여넣기</translation>
 <translation id="394485226368336402">오디오 설정</translation>
+<translation id="3945319193631853098">설정을 완료하려면 탭하세요.</translation>
 <translation id="3945867833895287237">핫스팟에 연결 중...</translation>
 <translation id="3962859241508114581">이전 트랙</translation>
 <translation id="3969043077941541451">사용 안함</translation>
@@ -393,10 +394,12 @@
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4321776623976362024">고대비 단축키를 누르셨습니다. 사용 설정할까요?</translation>
 <translation id="4331809312908958774">크롬 OS</translation>
+<translation id="4333628967105022692">Lacros는 여러 사용자가 로그인된 상태에서 지원되지 않습니다.</translation>
 <translation id="4338109981321384717">돋보기</translation>
 <translation id="4351433414020964307">어시스턴트 로드 중...</translation>
 <translation id="4356930093361201197">고대비 모드</translation>
 <translation id="4371348193907997655">전송 설정</translation>
+<translation id="4378479437904450384"><ph name="WIRELESS_PROVIDER" />, 신호 강도 <ph name="SIGNAL_STRENGTH" />퍼센트</translation>
 <translation id="4378551569595875038">연결 중...</translation>
 <translation id="4379531060876907730">스타일러스 도구입니다</translation>
 <translation id="4389184120735010762">고정 돋보기 단축키를 누르셨습니다. 사용 설정할까요?</translation>
@@ -404,6 +407,7 @@
 <translation id="4421231901400348175">원격 지원을 통해 <ph name="HELPER_NAME" />와(과) 화면 제어 공유</translation>
 <translation id="4424159417645388645">데스크 5</translation>
 <translation id="4430019312045809116">볼륨</translation>
+<translation id="4449692009715125625">{NUM_NOTIFICATIONS,plural, =1{중요 알림 1개}other{중요 알림 #개}}</translation>
 <translation id="4450893287417543264">다시 표시하지 않음</translation>
 <translation id="445864333228800152">편안한 저녁 보내세요</translation>
 <translation id="4458688154122353284">화면 녹화 중지</translation>
@@ -475,6 +479,10 @@
 <translation id="4961318399572185831">화면 전송</translation>
 <translation id="4969092041573468113"><ph name="HOURS" />시간 <ph name="MINUTES" />분 <ph name="SECONDS" />초</translation>
 <translation id="4975771730019223894">앱 배지 설정</translation>
+<translation id="4977493774330778463"><ph name="NUM_IMPORTANT_NOTIFICATION" />:
+        <ph name="NOTIFICATION_1" />,
+        <ph name="NOTIFICATION_2" />,
+        <ph name="NUM_OTHER_NOTIFICATION" /></translation>
 <translation id="5003993274120026347">다음 문장</translation>
 <translation id="5030687792513154421">시간이 다 됨</translation>
 <translation id="5033299697334913360">전체 화면을 캡처하려면 아무 곳이나 클릭하세요</translation>
@@ -488,6 +496,7 @@
 <translation id="5168181903108465623">전송 기기를 사용할 수 있음</translation>
 <translation id="5170568018924773124">폴더 열기</translation>
 <translation id="5176318573511391780">화면 일부 녹화</translation>
+<translation id="5206057955438543357">{NUM_NOTIFICATIONS,plural, =1{기타 알림 1개}other{기타 알림 #개}}</translation>
 <translation id="5207949376430453814">텍스트 캐럿 강조표시</translation>
 <translation id="5208059991603368177">켜짐</translation>
 <translation id="5222676887888702881">로그아웃</translation>
@@ -556,6 +565,7 @@
 <translation id="5825969630400862129">연결된 기기 설정</translation>
 <translation id="5837036133683224804"><ph name="RECEIVER_NAME" />에서 <ph name="ROUTE_TITLE" /> 중지</translation>
 <translation id="5860033963881614850">사용 안함</translation>
+<translation id="5860491529813859533">사용</translation>
 <translation id="5876666360658629066">부모 코드 입력</translation>
 <translation id="5881540930187678962">휴대전화 허브 나중에 설정하기</translation>
 <translation id="5895138241574237353">다시 시작</translation>
@@ -587,6 +597,7 @@
 <translation id="6043212731627905357"><ph name="DEVICE_TYPE" />과(와) 호환되지 않는 모니터입니다(지원되지 않는 모니터임).</translation>
 <translation id="6043994281159824495">지금 로그아웃</translation>
 <translation id="6047696787498798094">다른 사용자로 전환하면 화면 공유가 중단됩니다. 계속하시겠습니까?</translation>
+<translation id="6050368268239407309">프레젠테이션 도구</translation>
 <translation id="6054305421211936131">스마트 카드로 로그인</translation>
 <translation id="6059276912018042191">최근 Chrome 탭</translation>
 <translation id="6062360702481658777"><ph name="LOGOUT_TIME_LEFT" /> 후 자동으로 로그아웃됩니다.</translation>
@@ -597,10 +608,10 @@
 <translation id="612734058257491180">게스트 세션에서는 Google 어시스턴트를 사용할 수 없습니다.</translation>
 <translation id="6137566720514957455"><ph name="USER_EMAIL_ADDRESS" /> 삭제 대화상자 열기</translation>
 <translation id="615957422585914272">터치 키보드 표시</translation>
-<translation id="6164005077879661055">관리 대상 사용자를 제거하면 해당 관리 대상 사용자와 연결되어 있는 모든 파일 및 로컬 데이터가 영구적으로 삭제됩니다. 하지만 관리자는 관리 대상 사용자의 방문한 웹사이트 및 설정을 <ph name="MANAGEMENT_URL" /> 페이지에서 계속 볼 수 있습니다.</translation>
 <translation id="6165508094623778733">자세히 알아보기</translation>
 <translation id="6179832488876878285">여기에 중요한 파일을 고정할 수 있습니다. 시작하려면 파일 앱을 여세요.</translation>
 <translation id="622484624075952240">아래</translation>
+<translation id="6231419273573514727">주변기기 성능이 제한될 수 있습니다</translation>
 <translation id="6236290670123303279">설정 관리</translation>
 <translation id="6237231532760393653">1X</translation>
 <translation id="6254629735336163724">가로로 잠김</translation>
@@ -617,6 +628,7 @@
 <translation id="6376931439017688372">블루투스 사용 중</translation>
 <translation id="6381109794406942707">기기의 잠금을 해제하려면 PIN을 입력하세요.</translation>
 <translation id="639644700271529076">CAPS LOCK이 꺼져 있음</translation>
+<translation id="6396835948284782440">나가려면 [Esc]를 길게 누르세요.</translation>
 <translation id="6406704438230478924">altgr</translation>
 <translation id="6424520630891723617"><ph name="SECURITY_STATUS" />, 신호 강도 <ph name="SIGNAL_STRENGTH" /></translation>
 <translation id="642644398083277086">알림 모두 지우기</translation>
@@ -661,6 +673,7 @@
 <translation id="6715542151869432661">휴대기기를 찾을 수 없습니다.</translation>
 <translation id="6723839937902243910">전원</translation>
 <translation id="6727969043791803658">연결됨, 배터리 <ph name="BATTERY_PERCENTAGE" />%</translation>
+<translation id="6732800389263199929">+<ph name="COUNT" /></translation>
 <translation id="6751052314767925245">관리자가 시행함</translation>
 <translation id="6751826523481687655">성능 추적이 사용 설정되어 있습니다.</translation>
 <translation id="6752912906630585008"><ph name="REMOVED_DESK" /> 데스크가 삭제되고 <ph name="RECEIVE_DESK" /> 데스크와 병합되었습니다.</translation>
@@ -672,6 +685,7 @@
 <translation id="6818242057446442178">한 단어 뒤로 이동</translation>
 <translation id="6820676911989879663">잠시 쉬어 가세요.</translation>
 <translation id="6850010208275816200">현재 앱이 전체 화면 모드로 실행 중입니다. 앱에서 비밀번호를 요구하면 먼저 전체 화면을 종료하세요.</translation>
+<translation id="6852052252232534364">클릭하여 활성화</translation>
 <translation id="6857725247182211756"><ph name="SECONDS" />초</translation>
 <translation id="6857811139397017780"><ph name="NETWORKSERVICE" /> 활성화</translation>
 <translation id="685782768769951078">{NUM_DIGITS,plural, =1{1자리 남음}other{#자리 남음}}</translation>
@@ -695,6 +709,7 @@
 <translation id="7029814467594812963">세션 종료</translation>
 <translation id="703425375924687388"><ph name="QUERY_NAME" />, Google 어시스턴트</translation>
 <translation id="7042322267639375032">상태 영역 접기</translation>
+<translation id="7055910611768509537">1주일 넘게 스타일러스가 사용되지 않았습니다.</translation>
 <translation id="7066646422045619941">관리자가 사용 중지한 네트워크입니다.</translation>
 <translation id="7067196344162293536">자동 회전</translation>
 <translation id="7068360136237591149">파일을 열어 줘</translation>
@@ -720,6 +735,7 @@
 <translation id="7346909386216857016">확인</translation>
 <translation id="7348093485538360975">터치 키보드</translation>
 <translation id="735745346212279324">VPN 연결 끊김</translation>
+<translation id="7360036564632145207">주변기기 데이터 액세스 보호 설정을 변경하면 성능을 최적화할 수 있습니다.</translation>
 <translation id="7371404428569700291">창 녹화</translation>
 <translation id="7377169924702866686">Caps Lock이 켜져 있습니다.</translation>
 <translation id="7378203170292176219">드래그하여 녹화할 영역을 선택하세요.</translation>
@@ -728,11 +744,13 @@
 <translation id="7392563512730092880">나중에 설정으로 이동하여 언제든지 설정할 수 있습니다.</translation>
 <translation id="7398254312354928459">네트워크 연결 전환됨</translation>
 <translation id="7405710164030118432">기기의 잠금을 해제하려면 Family Link 부모 액세스 코드를 입력하세요.</translation>
+<translation id="7406608787870898861">모바일 네트워크 설정 완료</translation>
 <translation id="741244894080940828">변환</translation>
 <translation id="7413851974711031813">Esc 키를 눌러 닫기</translation>
 <translation id="742594950370306541">카메라가 사용 중입니다.</translation>
 <translation id="742608627846767349">좋은 아침이에요</translation>
 <translation id="743058460480092004">카메라와 마이크가 사용 중입니다.</translation>
+<translation id="7434543979546293336">핵심 아이디어로 표시됨</translation>
 <translation id="7452560014878697800">다른 애플리케이션에서 카메라를 사용 중입니다.</translation>
 <translation id="7456049842111127849">캡처 모드, 기본값은 <ph name="SOURCE" /> <ph name="TYPE" />입니다.</translation>
 <translation id="7461924472993315131">고정</translation>
@@ -776,6 +794,7 @@
 <translation id="7780159184141939021">화면 회전</translation>
 <translation id="7796353162336583443">실행기에서 스타일러스 버튼을 탭하여 메모를 작성하거나, 스크린샷을 찍거나, Google 어시스턴트, 레이저 포인터, 돋보기를 활용할 수 있습니다.</translation>
 <translation id="7798302898096527229">취소하려면 검색 또는 Shift 키를 누르세요.</translation>
+<translation id="7807966291075028781">보안상의 이유로 게스트 모드에서는 주변기기가 지원되지 않습니다.</translation>
 <translation id="7814236020522506259"><ph name="HOUR" />시간 <ph name="MINUTE" />분</translation>
 <translation id="7829386189513694949">신호 강함</translation>
 <translation id="7837740436429729974">시간 종료</translation>
@@ -844,6 +863,7 @@
 <translation id="8345019317483336363"><ph name="WINDOW_TITLE" /> 창 선택됨</translation>
 <translation id="8351131234907093545">메모 만들기</translation>
 <translation id="8371779926711439835">한 글자 앞으로 이동</translation>
+<translation id="8371991222807690464">게스트 모드에서 주변기기 성능이 제한될 수 있습니다.</translation>
 <translation id="8375916635258623388">이 <ph name="DEVICE_NAME" />과(와) 휴대전화가 자동으로 연결됩니다.</translation>
 <translation id="8380784334203145311">편안한 밤 보내세요</translation>
 <translation id="8388750414311082622">마지막 데스크는 삭제할 수 없습니다.</translation>
@@ -946,6 +966,8 @@
 <translation id="9091626656156419976">디스플레이 <ph name="DISPLAY_NAME" /> 제거됨</translation>
 <translation id="9098969848082897657">휴대전화 무음 설정</translation>
 <translation id="9099154003160514616">Lacros 업데이트 사용 가능</translation>
+<translation id="9105450214093926548">Lacros 브라우저가 실행되는 동안에는 두 번째 사용자 로그인이 지원되지 않습니다. 대신 Lacros에서 두 번째 브라우저 프로필을 사용하거나 Lacros를 닫았다가 다시 시도해 보세요.</translation>
+<translation id="9133335900048457298">보호된 콘텐츠는 녹화할 수 없음</translation>
 <translation id="9151726767154816831">업데이트하려면 다시 시작하고 Powerwash하세요.</translation>
 <translation id="9166331175924255663">Nearby Share 모든 기기에 공개 설정 전환</translation>
 <translation id="9168436347345867845">나중에</translation>

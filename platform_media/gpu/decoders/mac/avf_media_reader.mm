@@ -496,6 +496,34 @@ AVAssetTrack* AVFMediaReader::GetTrack(
   }
 }
 
+media::Strides AVFMediaReader::GetStrides() {
+  base::ScopedCFTypeRef<CMSampleBufferRef> sample_buffer(
+    reinterpret_cast<CMSampleBufferRef>(
+        [stream_readers_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO].output
+            copyNextSampleBuffer]));
+  media::Strides strides;
+  if (!sample_buffer) {
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " No buffer available";
+    strides.stride_Y = 0;
+    strides.stride_UV = 0;
+    return strides;
+  }
+
+  CVImageBufferRef pixel_buffer = CMSampleBufferGetImageBuffer(sample_buffer);
+  if (!pixel_buffer) {
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " No pixel_buffer available";
+    strides.stride_Y = 0;
+    strides.stride_UV = 0;
+    return strides;
+  }
+
+  ScopedBufferLock auto_lock(pixel_buffer);
+  strides.stride_Y = CVPixelBufferGetBytesPerRowOfPlane(pixel_buffer, 0);
+  strides.stride_UV = CVPixelBufferGetBytesPerRowOfPlane(pixel_buffer, 1);
+  return strides;
+}
+
 void AVFMediaReader::GetNextMediaSample(
     PlatformMediaDataType type,
     IPCDecodingBuffer* ipc_buffer) {

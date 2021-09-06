@@ -34,6 +34,7 @@ class CORE_EXPORT NGPhysicalBoxFragment final
                                const base::Optional<PhysicalRect>
                                    updated_layout_overflow = base::nullopt);
 
+  using MulticolCollection = NGContainerFragmentBuilder::MulticolCollection;
   using PassKey = base::PassKey<NGPhysicalBoxFragment>;
   NGPhysicalBoxFragment(PassKey,
                         NGBoxFragmentBuilder* builder,
@@ -161,10 +162,10 @@ class CORE_EXPORT NGPhysicalBoxFragment final
     return !ComputeRareDataAddress()->multicols_with_pending_oofs.IsEmpty();
   }
 
-  HashSet<NGBlockNode> MulticolsWithPendingOOFs() const {
+  MulticolCollection MulticolsWithPendingOOFs() const {
     if (!has_rare_data_)
-      return HashSet<NGBlockNode>();
-    return const_cast<HashSet<NGBlockNode>&>(
+      return MulticolCollection();
+    return const_cast<MulticolCollection&>(
         ComputeRareDataAddress()->multicols_with_pending_oofs);
   }
 
@@ -204,6 +205,14 @@ class CORE_EXPORT NGPhysicalBoxFragment final
   bool IsInlineFormattingContext() const {
     return is_inline_formatting_context_;
   }
+
+  // The |LayoutBox| whose |PhysicalFragments()| contains |this|. This is
+  // different from |GetLayoutObject()| if |this.IsColumnBox()|.
+  const LayoutBox* OwnerLayoutBox() const;
+  LayoutBox* MutableOwnerLayoutBox() const;
+
+  // Returns the offset in the |OwnerLayoutBox| coordinate system.
+  PhysicalOffset OffsetFromOwnerLayoutBox() const;
 
   PhysicalRect ScrollableOverflow(TextHeightType height_type) const;
   PhysicalRect ScrollableOverflowFromChildren(TextHeightType height_type) const;
@@ -319,7 +328,7 @@ class CORE_EXPORT NGPhysicalBoxFragment final
 
     Vector<NGPhysicalOutOfFlowPositionedNode>
         oof_positioned_fragmentainer_descendants;
-    HashSet<NGBlockNode> multicols_with_pending_oofs;
+    MulticolCollection multicols_with_pending_oofs;
     const std::unique_ptr<const NGMathMLPaintInfo> mathml_paint_info;
 
     // TablesNG rare data.

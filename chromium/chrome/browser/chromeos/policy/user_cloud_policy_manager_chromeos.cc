@@ -7,6 +7,7 @@
 #include <set>
 #include <utility>
 
+#include "ash/constants/ash_switches.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
@@ -38,7 +39,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/chrome_features.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "components/enterprise/browser/reporting/report_generator.h"
 #include "components/enterprise/browser/reporting/report_scheduler.h"
 #include "components/invalidation/impl/profile_invalidation_provider.h"
@@ -324,10 +324,6 @@ void UserCloudPolicyManagerChromeOS::OnWildcardCheckCompleted(
     if (fatal_error_callback_)
       std::move(fatal_error_callback_).Run();
   }
-}
-
-bool UserCloudPolicyManagerChromeOS::IsClientRegistered() const {
-  return client() && client()->is_registered();
 }
 
 void UserCloudPolicyManagerChromeOS::EnableWildcardLoginCheck(
@@ -619,8 +615,9 @@ void UserCloudPolicyManagerChromeOS::FetchPolicyOAuthToken() {
     token_fetcher_ = PolicyOAuth2TokenFetcher::CreateInstance();
     token_fetcher_->StartWithRefreshToken(
         refresh_token, system_url_loader_factory,
-        base::Bind(&UserCloudPolicyManagerChromeOS::OnOAuth2PolicyTokenFetched,
-                   base::Unretained(this)));
+        base::BindOnce(
+            &UserCloudPolicyManagerChromeOS::OnOAuth2PolicyTokenFetched,
+            base::Unretained(this)));
     return;
   }
 

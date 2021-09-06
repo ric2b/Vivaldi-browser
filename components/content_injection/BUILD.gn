@@ -16,9 +16,9 @@ source_set("content_injection") {
     "frame_injection_helper.h",
   ]
   deps = [
+    "mojom",
     "//base",
     "//content/public/browser",
     "//content/public/common",
-    "//vivaldi_mojom/components/content_injection/mojom"
   ]
 }

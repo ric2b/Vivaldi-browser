@@ -31,6 +31,8 @@
 <translation id="2486841023299517366">Kafsha 4</translation>
 <translation id="2612127540243995147">Gatim për instalim. Vivaldi do të mbyllet dhe hapet automatikisht.</translation>
 <translation id="2613387515621326337">Tregoj faqen e përditësimit</translation>
+<translation id="2647368062414805334">Fatkeqësisht, nuk mund të importohen parametrat e Edge kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni të gjitha dritaret e Edge. Pastaj klikoni Vazhdoj.</translation>
+<translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Kafsha 3</translation>
 <translation id="2873951654529031587">Koshi</translation>
 <translation id="292258461174562431">Monstra 4</translation>
@@ -61,6 +63,7 @@
 <translation id="3732157130969736834">Shtoj lidhjen te faqet interesante</translation>
 <translation id="3732388226447288666">Kafsha 2</translation>
 <translation id="3732439195215136813">Kafsha 5</translation>
+<translation id="3795800845758778870">Fatkeqësisht, nuk mund të importohen parametrat e Brave kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni të gjitha dritaret e Brave. Pastaj klikoni Vazhdoj.</translation>
 <translation id="3832132597516774400">Peizazhi 5</translation>
 <translation id="3914946330804881301">Të importuara nga Opera</translation>
 <translation id="3921292902397893431">Monstra 8</translation>
@@ -115,6 +118,8 @@
 <translation id="6551219277044048123">Shtoj si mot&amp;or kërkimi...</translation>
 <translation id="6630781781151951863">Peizazhi 18</translation>
 <translation id="6635049669875534328">Të rejat e programit:</translation>
+<translation id="6693585104974197539">Përzgjidhni dosjen e profilit të Edge për ta importuar</translation>
+<translation id="6726279523566323394">Përzgjidhni dosjen e profilit të Brave për ta importuar</translation>
 <translation id="6804831687363620480">Fatkeqësisht, nuk mund të importohen parametrat e Opera 15+ kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni të gjitha dritaret e Opera 15+. Pastaj klikoni Vazhdoj.</translation>
 <translation id="6892812721183419409">Hap lidhjen si <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopjoj</translation>
@@ -160,5 +165,6 @@
 <translation id="912022491595344261">Hap imazhin si <ph name="USER" /></translation>
 <translation id="9157539936604258187">Hap lidhjen</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Peizazhi 16</translation>
 </translationbundle>

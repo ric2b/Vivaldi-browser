@@ -826,8 +826,7 @@ void NGBoxFragmentPainter::PaintFloatingChildren(
       PaintFloatingItems(float_paint_info, &descendants);
       return;
     }
-    DCHECK(!RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled() ||
-           !box->IsInlineBox());
+    DCHECK(!box->IsInlineBox());
   }
 }
 
@@ -1596,7 +1595,7 @@ void NGBoxFragmentPainter::PaintTextClipMask(GraphicsContext& context,
                                              const IntRect& mask_rect,
                                              const PhysicalOffset& paint_offset,
                                              bool object_has_multiple_boxes) {
-  PaintInfo paint_info(context, mask_rect, PaintPhase::kTextClip,
+  PaintInfo paint_info(context, CullRect(mask_rect), PaintPhase::kTextClip,
                        kGlobalPaintNormalPhase, 0);
   if (!object_has_multiple_boxes) {
     PaintObject(paint_info, paint_offset);
@@ -2053,8 +2052,7 @@ bool NGBoxFragmentPainter::HitTestChildren(
   // Check descendants of this fragment because floats may be in the
   // |NGFragmentItems| of the descendants.
   if (hit_test.action == kHitTestFloat &&
-      box_fragment_.HasFloatingDescendantsForPaint() &&
-      RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled()) {
+      box_fragment_.HasFloatingDescendantsForPaint()) {
     return HitTestFloatingChildren(hit_test, box_fragment_, accumulated_offset);
   }
 
@@ -2225,8 +2223,7 @@ bool NGBoxFragmentPainter::HitTestFloatingChildren(
     // If this is a legacy root, fallback to legacy. It does not have
     // |HasFloatingDescendantsForPaint()| set, but it may have floating
     // descendants.
-    if (child_container->IsLegacyLayoutRoot() &&
-        RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled()) {
+    if (child_container->IsLegacyLayoutRoot()) {
       if (child_container->GetMutableLayoutObject()->NodeAtPoint(
               *hit_test.result, hit_test.location, child_offset,
               hit_test.action))

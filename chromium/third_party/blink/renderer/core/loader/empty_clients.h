@@ -86,6 +86,7 @@ namespace blink {
 
 class CORE_EXPORT EmptyChromeClient : public ChromeClient {
  public:
+  EmptyChromeClient() = default;
   ~EmptyChromeClient() override = default;
 
   // ChromeClient implementation.
@@ -97,7 +98,7 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   void DidFocusPage() override {}
   bool CanTakeFocus(mojom::blink::FocusType) override { return false; }
   void TakeFocus(mojom::blink::FocusType) override {}
-  void Show(const base::UnguessableToken& opener_frame_token,
+  void Show(const blink::LocalFrameToken& opener_frame_token,
             NavigationPolicy navigation_policy,
             const IntRect& initial_rect,
             bool user_gesture) override {}
@@ -175,7 +176,9 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   float WindowToViewportScalar(LocalFrame*, const float s) const override {
     return s;
   }
-  ScreenInfo GetScreenInfo(LocalFrame&) const override { return ScreenInfo(); }
+  const ScreenInfo& GetScreenInfo(LocalFrame&) const override {
+    return empty_screen_info_;
+  }
   void ContentsSizeChanged(LocalFrame*, const IntSize&) const override {}
   void ShowMouseOverURL(const HitTestResult&) override {}
   void SetToolTip(LocalFrame&, const String&, TextDirection) override {}
@@ -223,6 +226,9 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   void MainFrameScrollOffsetChanged(LocalFrame& main_frame) const override {}
   void BatterySavingsChanged(LocalFrame& main_frame,
                              BatterySavingsFlags savings) override {}
+
+ private:
+  const ScreenInfo empty_screen_info_ = {};
 };
 
 class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
@@ -277,7 +283,9 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
           initiator_csp,
       network::mojom::IPAddressSpace,
       mojo::PendingRemote<mojom::blink::NavigationInitiator>,
-      const base::UnguessableToken* initiator_frame_token) override;
+      const LocalFrameToken* initiator_frame_token,
+      mojo::PendingRemote<mojom::blink::PolicyContainerHostKeepAliveHandle>)
+      override;
 
   void DispatchWillSendSubmitEvent(HTMLFormElement*) override;
 
@@ -326,7 +334,6 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
   WebRemotePlaybackClient* CreateWebRemotePlaybackClient(
       HTMLMediaElement&) override;
 
-  void DidCreateInitialEmptyDocument() override {}
   void DidCommitDocumentReplacementNavigation(DocumentLoader*) override {}
   void DispatchDidClearWindowObjectInMainWorld() override {}
   void DocumentElementAvailable() override {}

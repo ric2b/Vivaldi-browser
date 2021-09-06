@@ -36,7 +36,7 @@ class PrefRegistrySyncable;
 namespace device {
 class FidoAuthenticator;
 class FidoDiscoveryFactory;
-}
+}  // namespace device
 
 class ChromeAuthenticatorRequestDelegate
     : public content::AuthenticatorRequestClientDelegate,
@@ -65,7 +65,9 @@ class ChromeAuthenticatorRequestDelegate
 
   base::WeakPtr<ChromeAuthenticatorRequestDelegate> AsWeakPtr();
 
-  AuthenticatorRequestDialogModel* WeakDialogModelForTesting() const;
+  AuthenticatorRequestDialogModel* dialog_model() const {
+    return weak_dialog_model_;
+  }
 
   // content::AuthenticatorRequestClientDelegate:
   base::Optional<std::string> MaybeGetRelyingPartyIdOverride(
@@ -95,10 +97,13 @@ class ChromeAuthenticatorRequestDelegate
       base::OnceCallback<void(device::AuthenticatorGetAssertionResponse)>
           callback) override;
   bool IsFocused() override;
+  base::Optional<bool> IsUserVerifyingPlatformAuthenticatorAvailableOverride()
+      override;
   void UpdateLastTransportUsed(
       device::FidoTransportProtocol transport) override;
   void DisableUI() override;
   bool IsWebAuthnUIEnabled() override;
+  void SetConditionalRequest(bool is_conditional) override;
 
   // device::FidoRequestHandlerBase::Observer:
   void OnTransportAvailabilityEnumerated(
@@ -117,11 +122,10 @@ class ChromeAuthenticatorRequestDelegate
   void OnSampleCollected(int bio_samples_remaining) override;
   void FinishCollectToken() override;
   void OnRetryUserVerification(int attempts) override;
-  void SetMightCreateResidentCredential(bool v) override;
 
   // AuthenticatorRequestDialogModel::Observer:
   void OnStartOver() override;
-  void OnModelDestroyed() override;
+  void OnModelDestroyed(AuthenticatorRequestDialogModel* model) override;
   void OnCancelRequest() override;
 
  private:
@@ -165,6 +169,10 @@ class ChromeAuthenticatorRequestDelegate
   // disable_embedder_ui is set, this will be set to true. No UI must be
   // rendered and all request handler callbacks will be ignored.
   bool disable_ui_ = false;
+
+  // If true, show a more subtle UI unless the user has platform discoverable
+  // credentials on the device.
+  bool is_conditional_ = false;
 
   base::WeakPtrFactory<ChromeAuthenticatorRequestDelegate> weak_ptr_factory_{
       this};

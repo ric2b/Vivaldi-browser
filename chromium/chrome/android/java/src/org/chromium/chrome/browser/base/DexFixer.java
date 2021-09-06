@@ -26,8 +26,6 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.DeferredStartupHandler;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.version.ChromeVersionInfo;
@@ -80,7 +78,7 @@ public class DexFixer {
         if (reason > DexFixerReason.NOT_NEEDED) {
             Log.w(TAG, "Triggering dex compile. Reason=%d", reason);
             try {
-                String cmd = "cmd package compile -r shared ";
+                String cmd = "/system/bin/cmd package compile -r shared ";
                 if (reason == DexFixerReason.NOT_READABLE && BuildConfig.ISOLATED_SPLITS_ENABLED) {
                     // Isolated processes need only access the base split.
                     String apkBaseName = new File(appInfo.sourceDir).getName();
@@ -167,10 +165,6 @@ public class DexFixer {
                     }
                 }
             }
-        }
-
-        if (!CachedFeatureFlags.isEnabled(ChromeFeatureList.DEX_FIXER)) {
-            return DexFixerReason.NOT_NEEDED;
         }
 
         String oatPath = odexPathFromApkPath(appInfo.sourceDir);

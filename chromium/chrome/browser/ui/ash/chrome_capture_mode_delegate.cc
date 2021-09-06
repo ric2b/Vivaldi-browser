@@ -7,6 +7,7 @@
 #include "ash/services/recording/public/mojom/recording_service.mojom.h"
 #include "base/check.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/i18n/time_formatting.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
@@ -72,11 +73,22 @@ void ChromeCaptureModeDelegate::InterruptVideoRecordingIfAny() {
     std::move(interrupt_video_recording_callback_).Run();
 }
 
-base::FilePath ChromeCaptureModeDelegate::GetActiveUserDownloadsDir() const {
-  DCHECK(chromeos::LoginState::Get()->IsUserLoggedIn());
-  DownloadPrefs* download_prefs =
-      DownloadPrefs::FromBrowserContext(ProfileManager::GetActiveUserProfile());
-  return download_prefs->DownloadPath();
+base::FilePath ChromeCaptureModeDelegate::GetScreenCaptureDir() const {
+  if (chromeos::LoginState::Get()->IsUserLoggedIn()) {
+    DownloadPrefs* download_prefs = DownloadPrefs::FromBrowserContext(
+        ProfileManager::GetActiveUserProfile());
+    // We use the default downloads directory instead of the one that can be
+    // configured from the browser's settings, since it can point to an invalid
+    // location, which the browser handles by prompting the user to select
+    // another one when accessed, but Capture Mode doesn't have this capability.
+    // We also decided that this browser setting should not affect when the OS
+    // saves the captured files. https://crbug.com/1192406.
+    return download_prefs->GetDefaultDownloadDirectoryForProfile();
+  }
+  base::FilePath tmp_dir;
+  if (!base::GetTempDir(&tmp_dir))
+    LOG(ERROR) << "Failed to find temporary directory.";
+  return tmp_dir;
 }
 
 void ChromeCaptureModeDelegate::ShowScreenCaptureItemInFolder(

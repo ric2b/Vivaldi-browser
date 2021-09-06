@@ -11,6 +11,7 @@
 <translation id="1037492556044956303">Добавлено устройство <ph name="DEVICE_NAME" /></translation>
 <translation id="1047017786576569492">часть экрана</translation>
 <translation id="1047773237499189053">Доступна новая функция. Чтобы получить подробную информацию, нажмите на стрелку вверх.</translation>
+<translation id="1052916631016577720">Сканирование</translation>
 <translation id="1056775291175587022">Нет сетей</translation>
 <translation id="1059194134494239015">Разрешение экрана <ph name="DISPLAY_NAME" />: <ph name="RESOLUTION" /></translation>
 <translation id="108486256082349153">MAC-адрес мобильного устройства: <ph name="ADDRESS" /></translation>
@@ -24,6 +25,7 @@
 <translation id="1165712434476988950">Чтобы применить обновление, необходимо перезапустить устройство.</translation>
 <translation id="1175572348579024023">Прокрутка</translation>
 <translation id="1178581264944972037">Пауза</translation>
+<translation id="1181037720776840403">Удалить</translation>
 <translation id="118532027333893379">Чтобы снять экран полностью, нажмите в любом его месте</translation>
 <translation id="1190609913194133056">Центр уведомлений</translation>
 <translation id="1195412055398077112">Каемка экрана</translation>
@@ -147,6 +149,7 @@
 <translation id="2220572644011485463">PIN-код или пароль</translation>
 <translation id="2222338659135520253">Требуется выполнить вход.</translation>
 <translation id="2222841058024245321">Рабочий стол 7</translation>
+<translation id="2224075387478458881">Запись экрана запрещена, так как на нем есть защищенный контент.</translation>
 <translation id="225680501294068881">Поиск устройств…</translation>
 <translation id="2268130516524549846">Bluetooth отключен</translation>
 <translation id="2268813581635650749">Выйти для всех</translation>
@@ -239,7 +242,6 @@
 <translation id="3038571455154067151">Чтобы войти, введите родительский код доступа Family Link.</translation>
 <translation id="3039939407102840004">Заряд батареи стилуса составляет <ph name="PERCENTAGE" /> процентов.</translation>
 <translation id="3045488863354895414">Добрый день!</translation>
-<translation id="3051128274746680507">Скоро будет удален ваш контролируемый профиль. Войдите в аккаунт, чтобы получить подробную информацию.</translation>
 <translation id="3055162170959710888">Сегодня вы уже использовали это устройство <ph name="USED_TIME" />.</translation>
 <translation id="3077734595579995578">shift</translation>
 <translation id="3081696990447829002">Развернуть меню</translation>
@@ -252,13 +254,11 @@
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
 <translation id="3126069444801937830">Перезагрузите, чтобы обновить</translation>
 <translation id="3139942575505304791">Рабочий стол 1</translation>
-<translation id="3147157020428159854">Запись видео с экрана остановлена</translation>
 <translation id="315116470104423982">Мобильное подключение</translation>
 <translation id="3151786313568798007">Ориентация</translation>
 <translation id="3153444934357957346">Для множественного входа можно использовать не более <ph name="MULTI_PROFILE_USER_LIMIT" /> аккаунтов.</translation>
 <translation id="3154351730702813399">Администратору устройства доступна информация о том, какие страницы вы просматриваете в браузере.</translation>
 <translation id="3181441307743005334">Перезапуск может занять несколько минут</translation>
-<translation id="3190230207529484457">Запись экрана запрещена, так как на нем есть защищенный контент.</translation>
 <translation id="3202010236269062730">{NUM_DEVICES,plural, =1{Подключено одно устройство}one{Подключено # устройство}few{Подключено # устройства}many{Подключено # устройств}other{Подключено # устройства}}</translation>
 <translation id="320207200541803018">Установи таймер</translation>
 <translation id="3203405173652969239">Функция Switch Access включена</translation>
@@ -267,7 +267,6 @@
 <translation id="3226991577105957773">Ещё <ph name="COUNT" /></translation>
 <translation id="3236488194889173876">Нет доступных мобильных сетей</translation>
 <translation id="3249513730522716925">Окно "<ph name="WINDOW_TITLE" />" перемещено с рабочего стола "<ph name="ACTIVE_DESK" />" на рабочий стол "<ph name="TARGET_DESK" />".</translation>
-<translation id="3252068179161473151"><ph name="WIRELESS_PROVIDER" />, уровень сигнала – <ph name="SIGNAL_STRENGTH" /> %</translation>
 <translation id="3255483164551725916">Что ты умеешь?</translation>
 <translation id="3269597722229482060">Правый клик</translation>
 <translation id="3289674678944039601">Зарядка с помощью адаптера питания</translation>
@@ -306,6 +305,7 @@
 <translation id="3571734092741541777">Настроить</translation>
 <translation id="3573179567135747900">Вернуться к языку: "<ph name="FROM_LOCALE" />" (потребуется перезагрузка)</translation>
 <translation id="3576141592585647168">Изменение часового пояса</translation>
+<translation id="3593039967545720377">Чтобы посмотреть историю буфера обмена, нажмите клавиши <ph name="SHORTCUT_KEY_NAME" /> + V. Чтобы начать, скопируйте объект.</translation>
 <translation id="3593646411856133110">Чтобы увидеть открытые приложения, проведите по экрану вверх и удерживайте палец.</translation>
 <translation id="3595596368722241419">Аккумулятор заряжен</translation>
 <translation id="3604801046548457007">Создан рабочий стол "<ph name="DESK_TITILE" />".</translation>
@@ -349,6 +349,7 @@
 <translation id="3901991538546252627">Подключение к <ph name="NAME" /></translation>
 <translation id="3943857333388298514">Вставить</translation>
 <translation id="394485226368336402">Настройки звука</translation>
+<translation id="3945319193631853098">Нажмите, чтобы завершить настройку.</translation>
 <translation id="3945867833895287237">Подключение к точке доступа…</translation>
 <translation id="3962859241508114581">Предыдущий трек</translation>
 <translation id="3969043077941541451">Отключен</translation>
@@ -393,10 +394,12 @@
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4321776623976362024">Вы нажали сочетание клавиш для включения режима высокой контрастности. Выполнить это действие?</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
+<translation id="4333628967105022692">Lacros не поддерживается, если выполнен вход в несколько аккаунтов.</translation>
 <translation id="4338109981321384717">Лупа</translation>
 <translation id="4351433414020964307">Загрузка Ассистента…</translation>
 <translation id="4356930093361201197">Режим высокой контрастности</translation>
 <translation id="4371348193907997655">Настройки трансляции</translation>
+<translation id="4378479437904450384"><ph name="WIRELESS_PROVIDER" />, уровень сигнала – <ph name="SIGNAL_STRENGTH" /> %</translation>
 <translation id="4378551569595875038">Подключение…</translation>
 <translation id="4379531060876907730">Инструменты для работы со стилусом</translation>
 <translation id="4389184120735010762">Вы нажали сочетание клавиш для включения закрепленной лупы. Выполнить это действие?</translation>
@@ -404,6 +407,7 @@
 <translation id="4421231901400348175">Доступ к экрану для <ph name="HELPER_NAME" /> с помощью удаленного помощника</translation>
 <translation id="4424159417645388645">Рабочий стол 5</translation>
 <translation id="4430019312045809116">Объем</translation>
+<translation id="4449692009715125625">{NUM_NOTIFICATIONS,plural, =1{1 важное уведомление}one{# важное уведомление}few{# важных уведомления}many{# важных уведомлений}other{# важного уведомления}}</translation>
 <translation id="4450893287417543264">Больше не показывать</translation>
 <translation id="445864333228800152">Добрый вечер!</translation>
 <translation id="4458688154122353284">Остановить запись с экрана</translation>
@@ -475,6 +479,10 @@
 <translation id="4961318399572185831">Трансляция экрана</translation>
 <translation id="4969092041573468113"><ph name="HOURS" /> ч. <ph name="MINUTES" /> мин. <ph name="SECONDS" /> сек.</translation>
 <translation id="4975771730019223894">Число уведомлений на значке приложения</translation>
+<translation id="4977493774330778463"><ph name="NUM_IMPORTANT_NOTIFICATION" />:
+        <ph name="NOTIFICATION_1" />,
+        <ph name="NOTIFICATION_2" />,
+        <ph name="NUM_OTHER_NOTIFICATION" /></translation>
 <translation id="5003993274120026347">К следующему предложению</translation>
 <translation id="5030687792513154421">Время вышло</translation>
 <translation id="5033299697334913360">Чтобы снять экран полностью, нажмите в любом его месте</translation>
@@ -488,6 +496,7 @@
 <translation id="5168181903108465623">Доступны устройства для трансляции</translation>
 <translation id="5170568018924773124">Показать в папке</translation>
 <translation id="5176318573511391780">Запись видео с части экрана</translation>
+<translation id="5206057955438543357">{NUM_NOTIFICATIONS,plural, =1{ещё 1 уведомление}one{ещё # уведомление}few{ещё # уведомления}many{ещё # уведомлений}other{ещё # уведомления}}</translation>
 <translation id="5207949376430453814">Выделять курсор при вводе текста</translation>
 <translation id="5208059991603368177">Включено</translation>
 <translation id="5222676887888702881">Выйти</translation>
@@ -556,6 +565,7 @@
 <translation id="5825969630400862129">Настройки подключенных устройств</translation>
 <translation id="5837036133683224804">Остановить трансляцию <ph name="ROUTE_TITLE" /> на устройство "<ph name="RECEIVER_NAME" />"</translation>
 <translation id="5860033963881614850">ВЫКЛ</translation>
+<translation id="5860491529813859533">Включить</translation>
 <translation id="5876666360658629066">Введите родительский код</translation>
 <translation id="5881540930187678962">Настройте функцию "Управление телефоном" позже</translation>
 <translation id="5895138241574237353">Перезапустить</translation>
@@ -587,6 +597,7 @@
 <translation id="6043212731627905357">Монитор не совместим с устройством <ph name="DEVICE_TYPE" />.</translation>
 <translation id="6043994281159824495">Выйти</translation>
 <translation id="6047696787498798094">Если перейти к другому пользователю, доступ к экрану будет закрыт. Продолжить?</translation>
+<translation id="6050368268239407309">Инструменты для презентаций</translation>
 <translation id="6054305421211936131">Войти с помощью смарт-карты</translation>
 <translation id="6059276912018042191">Недавние вкладки в Chrome</translation>
 <translation id="6062360702481658777">Выход из системы будет выполнен автоматически через <ph name="LOGOUT_TIME_LEFT" />.</translation>
@@ -597,10 +608,10 @@
 <translation id="612734058257491180">В рамках гостевого сеанса Google Ассистент недоступен.</translation>
 <translation id="6137566720514957455">Открыть диалоговое окно удаления аккаунта <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="615957422585914272">Показывать экранную клавиатуру</translation>
-<translation id="6164005077879661055">После удаления контролируемого профиля все файлы и локальные данные, связанные с ним, будут удалены. Посещенные страницы и настройки этого профиля будут видны его менеджеру на странице: <ph name="MANAGEMENT_URL" />.</translation>
 <translation id="6165508094623778733">Подробнее</translation>
 <translation id="6179832488876878285">Вы можете закрепить здесь важные документы. Чтобы начать, откройте приложение "Файлы".</translation>
 <translation id="622484624075952240">Вниз</translation>
+<translation id="6231419273573514727">Производительность периферийных устройств может быть ограничена</translation>
 <translation id="6236290670123303279">Настройки</translation>
 <translation id="6237231532760393653">1X</translation>
 <translation id="6254629735336163724">Заблокировано в горизонтальном положении</translation>
@@ -617,6 +628,7 @@
 <translation id="6376931439017688372">Bluetooth включен</translation>
 <translation id="6381109794406942707">Чтобы разблокировать устройство, введите PIN-код.</translation>
 <translation id="639644700271529076">CAPS LOCK отключен</translation>
+<translation id="6396835948284782440">Чтобы выйти, нажмите и удерживайте [Esc]</translation>
 <translation id="6406704438230478924">altgr</translation>
 <translation id="6424520630891723617">Статус защиты – "<ph name="SECURITY_STATUS" />", уровень сигнала – <ph name="SIGNAL_STRENGTH" /></translation>
 <translation id="642644398083277086">Удалить все уведомления</translation>
@@ -661,6 +673,7 @@
 <translation id="6715542151869432661">Мобильные устройства не найдены.</translation>
 <translation id="6723839937902243910">Питание</translation>
 <translation id="6727969043791803658">Подключено, батарея заряжена на <ph name="BATTERY_PERCENTAGE" /> %</translation>
+<translation id="6732800389263199929">ещё <ph name="COUNT" /></translation>
 <translation id="6751052314767925245">Функция принудительно включена администратором</translation>
 <translation id="6751826523481687655">Отслеживание эффективности включено.</translation>
 <translation id="6752912906630585008">Рабочий стол "<ph name="REMOVED_DESK" />" удален и объединен с рабочим столом "<ph name="RECEIVE_DESK" />".</translation>
@@ -672,6 +685,7 @@
 <translation id="6818242057446442178">Назад на одно слово</translation>
 <translation id="6820676911989879663">Пора отдохнуть!</translation>
 <translation id="6850010208275816200">Текущее приложение используется в полноэкранном режиме. Если оно запрашивает пароль, сначала выйдите из этого режима.</translation>
+<translation id="6852052252232534364">Активировать</translation>
 <translation id="6857725247182211756"><ph name="SECONDS" /> сек.</translation>
 <translation id="6857811139397017780">Активировать <ph name="NETWORKSERVICE" /></translation>
 <translation id="685782768769951078">{NUM_DIGITS,plural, =1{Осталась 1 цифра}one{Осталась # цифра}few{Осталось # цифры}many{Осталось # цифр}other{Осталось # цифры}}</translation>
@@ -695,6 +709,7 @@
 <translation id="7029814467594812963">Завершить сеанс</translation>
 <translation id="703425375924687388">Запрос "<ph name="QUERY_NAME" />" для Google Ассистента</translation>
 <translation id="7042322267639375032">Свернуть панель состояния</translation>
+<translation id="7055910611768509537">Стилус не использовался больше недели</translation>
 <translation id="7066646422045619941">Эта сеть отключена администратором.</translation>
 <translation id="7067196344162293536">Автоповорот</translation>
 <translation id="7068360136237591149">Открыть файлы</translation>
@@ -720,6 +735,7 @@
 <translation id="7346909386216857016">ОК</translation>
 <translation id="7348093485538360975">Экранная клавиатура</translation>
 <translation id="735745346212279324">VPN-соединение прервано</translation>
+<translation id="7360036564632145207">Чтобы оптимизировать производительность, измените настройки доступа к данным для периферийных устройств.</translation>
 <translation id="7371404428569700291">Запись контента в окне</translation>
 <translation id="7377169924702866686">Включен режим Caps Lock.</translation>
 <translation id="7378203170292176219">Выделите область для записи с помощью перетаскивания</translation>
@@ -728,11 +744,13 @@
 <translation id="7392563512730092880">Вы можете задать параметры функции позже в настройках.</translation>
 <translation id="7398254312354928459">Установлено соединение с другой сетью</translation>
 <translation id="7405710164030118432">Чтобы разблокировать устройство, введите родительский код доступа Family Link.</translation>
+<translation id="7406608787870898861">Завершите настройку мобильной сети</translation>
 <translation id="741244894080940828">перевести в другие ед. измерения</translation>
 <translation id="7413851974711031813">Чтобы закрыть, нажмите клавишу Escape</translation>
 <translation id="742594950370306541">Камера используется.</translation>
 <translation id="742608627846767349">Доброе утро!</translation>
 <translation id="743058460480092004">Камера и микрофон используются.</translation>
+<translation id="7434543979546293336">Помечено как основная идея.</translation>
 <translation id="7452560014878697800">Приложение использует вашу камеру</translation>
 <translation id="7456049842111127849">Режим съемки. По умолчанию: <ph name="SOURCE" />, <ph name="TYPE" />.</translation>
 <translation id="7461924472993315131">Закрепить</translation>
@@ -776,6 +794,7 @@
 <translation id="7780159184141939021">Поворот экрана</translation>
 <translation id="7796353162336583443">Нажмите кнопку стилуса на панели запуска, чтобы создать заметку, запустить Ассистента либо использовать стилус в качестве лупы или лазерной указки.</translation>
 <translation id="7798302898096527229">Для отмены нажмите SEARCH или SHIFT.</translation>
+<translation id="7807966291075028781">В целях безопасности периферийное устройство не поддерживается в гостевом режиме.</translation>
 <translation id="7814236020522506259"><ph name="HOUR" /> <ph name="MINUTE" /></translation>
 <translation id="7829386189513694949">хороший сигнал</translation>
 <translation id="7837740436429729974">Время истекло</translation>
@@ -844,6 +863,7 @@
 <translation id="8345019317483336363">Выбрано окно "<ph name="WINDOW_TITLE" />"</translation>
 <translation id="8351131234907093545">Создать заметку</translation>
 <translation id="8371779926711439835">Вперед на одну букву</translation>
+<translation id="8371991222807690464">Производительность периферийных устройств в гостевом режиме может быть ограничена.</translation>
 <translation id="8375916635258623388"><ph name="DEVICE_NAME" /> и телефон будут подключены друг к другу автоматически</translation>
 <translation id="8380784334203145311">Доброй ночи!</translation>
 <translation id="8388750414311082622">Удалить единственный рабочий стол нельзя.</translation>
@@ -946,6 +966,8 @@
 <translation id="9091626656156419976">Удален экран "<ph name="DISPLAY_NAME" />"</translation>
 <translation id="9098969848082897657">Отключить звук на телефоне</translation>
 <translation id="9099154003160514616">Доступно обновление Lacros</translation>
+<translation id="9105450214093926548">Во время работы Lacros не поддерживается вход в несколько аккаунтов. Вы можете использовать второй профиль браузера или закрыть Lacros и повторить попытку.</translation>
+<translation id="9133335900048457298">Не удается записать видео с экрана из-за защищенного контента</translation>
 <translation id="9151726767154816831">Чтобы обновить систему, перезапустите ее и выполните Powerwash</translation>
 <translation id="9166331175924255663">Включить или отключить широкий доступ для Обмена с окружением</translation>
 <translation id="9168436347345867845">Позже</translation>

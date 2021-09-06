@@ -10,13 +10,6 @@ namespace auto_update = extensions::vivaldi::auto_update;
 namespace extensions {
 
 /* static */
-void AutoUpdateAPI::Init() {
-#ifdef OS_WIN
-  InitUpgradeDetection();
-#endif
-}
-
-/* static */
 void AutoUpdateAPI::SendDidFindValidUpdate(const std::string& url) {
   ::vivaldi::BroadcastEventToAllProfiles(
       auto_update::OnDidFindValidUpdate::kEventName,

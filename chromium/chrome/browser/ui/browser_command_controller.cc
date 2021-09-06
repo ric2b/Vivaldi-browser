@@ -66,6 +66,7 @@
 #include "content/public/common/url_constants.h"
 #include "extensions/browser/extension_system.h"
 #include "printing/buildflags/buildflags.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 #if defined(OS_MAC)
@@ -92,7 +93,6 @@
 #endif
 
 #if defined(USE_OZONE)
-#include "ui/base/ui_base_features.h"
 #include "ui/ozone/public/ozone_platform.h"
 #endif
 
@@ -422,6 +422,10 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       NewTab(browser_);
       break;
     }
+    case IDC_NEW_TAB_TO_RIGHT: {
+      NewTabToRight(browser_);
+      break;
+    }
     case IDC_CLOSE_TAB:
       base::RecordAction(base::UserMetricsAction("CloseTabByKey"));
       CloseTab(browser_);
@@ -551,12 +555,17 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       BasicPrint(browser_);
       break;
 #endif  // ENABLE_PRINTING
-
+    case IDC_OFFERS_AND_REWARDS_FOR_PAGE:
+      ShowOffersAndRewardsForPage(browser_);
+      break;
     case IDC_SAVE_CREDIT_CARD_FOR_PAGE:
       SaveCreditCard(browser_);
       break;
     case IDC_MIGRATE_LOCAL_CREDIT_CARD_FOR_PAGE:
       MigrateLocalCards(browser_);
+      break;
+    case IDC_SAVE_AUTOFILL_ADDRESS:
+      SaveAutofillAddress(browser_);
       break;
     case IDC_TRANSLATE_PAGE:
       Translate(browser_);
@@ -757,6 +766,13 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_HELP_PAGE_VIA_MENU:
       ShowHelp(browser_, HELP_SOURCE_MENU);
       break;
+    case IDC_CHROME_TIPS:
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+      ShowChromeTips(browser_);
+#else
+      NOTREACHED();
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+      break;
     case IDC_SHOW_BETA_FORUM:
       ShowBetaForum(browser_);
       break;
@@ -829,6 +845,14 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       }
       break;
     }
+
+    // UI debug commands
+    case IDC_DEBUG_TOGGLE_TABLET_MODE:
+    case IDC_DEBUG_PRINT_VIEW_TREE:
+    case IDC_DEBUG_PRINT_VIEW_TREE_DETAILS:
+      ExecuteUIDebugCommand(id, browser_);
+      break;
+
     default:
       if (!vivaldi::ExecuteVivaldiCommands(browser_, id)) {
       LOG(WARNING) << "Received Unimplemented Command: " << id;
@@ -1098,6 +1122,7 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(IDC_SELECT_TAB_6, supports_tabs);
   command_updater_.UpdateCommandEnabled(IDC_SELECT_TAB_7, supports_tabs);
   command_updater_.UpdateCommandEnabled(IDC_SELECT_LAST_TAB, supports_tabs);
+  command_updater_.UpdateCommandEnabled(IDC_NEW_TAB_TO_RIGHT, supports_tabs);
 
   // These are always enabled; the menu determines their menu item visibility.
   command_updater_.UpdateCommandEnabled(IDC_UPGRADE_DIALOG, true);
@@ -1121,6 +1146,13 @@ void BrowserCommandController::InitCommandState() {
                                         enable_tab_search_commands);
   command_updater_.UpdateCommandEnabled(IDC_TAB_SEARCH_CLOSE,
                                         enable_tab_search_commands);
+
+  if (base::FeatureList::IsEnabled(features::kUIDebugTools)) {
+    command_updater_.UpdateCommandEnabled(IDC_DEBUG_TOGGLE_TABLET_MODE, true);
+    command_updater_.UpdateCommandEnabled(IDC_DEBUG_PRINT_VIEW_TREE, true);
+    command_updater_.UpdateCommandEnabled(IDC_DEBUG_PRINT_VIEW_TREE_DETAILS,
+                                          true);
+  }
 
   // Initialize other commands whose state changes based on various conditions.
   UpdateCommandsForFullscreenMode();
@@ -1375,6 +1407,9 @@ void BrowserCommandController::UpdateCommandsForFullscreenMode() {
   command_updater_.UpdateCommandEnabled(IDC_EDIT_SEARCH_ENGINES, show_main_ui);
   command_updater_.UpdateCommandEnabled(IDC_VIEW_PASSWORDS, show_main_ui);
   command_updater_.UpdateCommandEnabled(IDC_ABOUT, show_main_ui);
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  command_updater_.UpdateCommandEnabled(IDC_CHROME_TIPS, show_main_ui);
+#endif
   command_updater_.UpdateCommandEnabled(IDC_QRCODE_GENERATOR, show_main_ui);
   command_updater_.UpdateCommandEnabled(IDC_SHOW_APP_MENU, show_main_ui);
   command_updater_.UpdateCommandEnabled(IDC_SEND_TAB_TO_SELF, show_main_ui);

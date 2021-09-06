@@ -20,15 +20,15 @@
 #include "base/values.h"
 #include "chrome/browser/policy/messaging_layer/upload/dm_server_upload_service.h"
 #include "chrome/browser/policy/messaging_layer/upload/record_upload_request_builder.h"
-#include "chrome/browser/policy/messaging_layer/util/status.h"
-#include "chrome/browser/policy/messaging_layer/util/status_macros.h"
-#include "chrome/browser/policy/messaging_layer/util/statusor.h"
-#include "chrome/browser/policy/messaging_layer/util/task_runner_context.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/reporting_util.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
-#include "components/policy/proto/record.pb.h"
-#include "components/policy/proto/record_constants.pb.h"
+#include "components/reporting/proto/record.pb.h"
+#include "components/reporting/proto/record_constants.pb.h"
+#include "components/reporting/util/status.h"
+#include "components/reporting/util/status_macros.h"
+#include "components/reporting/util/statusor.h"
+#include "components/reporting/util/task_runner_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -116,6 +116,9 @@ class RecordHandlerImpl::ReportUploader
 
   // Set for the highest record being uploaded.
   base::Optional<SequencingInformation> highest_sequencing_information_;
+
+  // Set to |true| if force_confirm flag is present. |false| by default.
+  bool force_confirm_{false};
 };
 
 RecordHandlerImpl::ReportUploader::ReportUploader(
@@ -210,7 +213,10 @@ void RecordHandlerImpl::ReportUploader::OnUploadComplete(
 
 void RecordHandlerImpl::ReportUploader::HandleFailedUpload() {
   if (highest_sequencing_information_.has_value()) {
-    Complete(std::move(highest_sequencing_information_.value()));
+    Complete(DmServerUploadService::SuccessfulUploadResponse{
+        .sequencing_information =
+            std::move(highest_sequencing_information_.value()),
+        .force_confirm = force_confirm_});
     return;
   }
 
@@ -225,6 +231,8 @@ void RecordHandlerImpl::ReportUploader::HandleSuccessfulUpload() {
   //      "failedUploadedRecord": ... // SequencingInformation proto
   //      "failureStatus": ... // Status proto
   //    }
+  //    "forceConfirm": true  // if present, flag that lastSucceedUploadedRecord
+  //                          // is to be accepted unconditionally by client
   //    "encryptionSettings": ... // EncryptionSettings proto
   //  }
   const base::Value* last_succeed_uploaded_record =
@@ -239,6 +247,12 @@ void RecordHandlerImpl::ReportUploader::HandleSuccessfulUpload() {
                     "for lastSucceedUploadedRecord:"
                  << *last_succeed_uploaded_record;
     }
+  }
+
+  // Handle forceConfirm flag, if present.
+  const auto force_confirm_flag = last_response_.FindBoolKey("forceConfirm");
+  if (force_confirm_flag.has_value() && force_confirm_flag.value()) {
+    force_confirm_ = true;
   }
 
   // Handle the encryption settings.
@@ -273,7 +287,7 @@ void RecordHandlerImpl::ReportUploader::HandleSuccessfulUpload() {
   // Check if a record was unprocessable on the server.
   const base::Value* failed_uploaded_record = last_response_.FindDictPath(
       "firstFailedUploadedRecord.failedUploadedRecord");
-  if (failed_uploaded_record != nullptr) {
+  if (!force_confirm_ && failed_uploaded_record != nullptr) {
     // The record we uploaded previously was unprocessable by the server, if the
     // record was after the current |highest_sequencing_information_| we should
     // return a gap record. A gap record consists of an EncryptedRecord with
@@ -299,7 +313,10 @@ void RecordHandlerImpl::ReportUploader::HandleSuccessfulUpload() {
   // No more records to process. Return the highest_sequencing_information_ if
   // available.
   if (highest_sequencing_information_.has_value()) {
-    Complete(highest_sequencing_information_.value());
+    Complete(DmServerUploadService::SuccessfulUploadResponse{
+        .sequencing_information =
+            std::move(highest_sequencing_information_.value()),
+        .force_confirm = force_confirm_});
     return;
   }
 
@@ -356,18 +373,35 @@ RecordHandlerImpl::ReportUploader::SequencingInformationValueToProto(
       GetPriorityProtoFromSequencingInformationValue(value);
 
   // If any of the previous values don't exist, or are malformed, return error.
-  uint64_t seq_id;
-  uint64_t gen_id;
-  if (!sequencing_id || sequencing_id->empty() ||
-      !base::StringToUint64(*sequencing_id, &seq_id) || !generation_id ||
-      generation_id->empty() ||
-      !base::StringToUint64(*generation_id, &gen_id) || gen_id == 0 ||
-      !priority_result.has_value() ||
+  int64_t seq_id;
+  int64_t gen_id;
+  if (!sequencing_id || generation_id->empty() || !generation_id ||
+      generation_id->empty() || !priority_result.has_value() ||
       !Priority_IsValid(priority_result.value())) {
     return Status(error::INVALID_ARGUMENT,
-                  base::StrCat({"Provided value did not conform to a valid "
+                  base::StrCat({"Provided value lacks some fields required by "
                                 "SequencingInformation proto: ",
                                 value.DebugString()}));
+  }
+
+  if (!base::StringToInt64(*sequencing_id, &seq_id) ||
+      !base::StringToInt64(*generation_id, &gen_id) || gen_id == 0) {
+    // For backwards compatibility accept unsigned values if signed are not
+    // parsed.
+    // TODO(b/177677467): Remove this duplication once server is fully
+    // transitioned.
+    uint64_t unsigned_seq_id;
+    uint64_t unsigned_gen_id;
+    if (!base::StringToUint64(*sequencing_id, &unsigned_seq_id) ||
+        !base::StringToUint64(*generation_id, &unsigned_gen_id) ||
+        unsigned_gen_id == 0) {
+      return Status(error::INVALID_ARGUMENT,
+                    base::StrCat({"Provided value did not conform to a valid "
+                                  "SequencingInformation proto: ",
+                                  value.DebugString()}));
+    }
+    seq_id = static_cast<int64_t>(unsigned_seq_id);
+    gen_id = static_cast<int64_t>(unsigned_gen_id);
   }
 
   SequencingInformation proto;

@@ -8,6 +8,8 @@
 namespace winsparkle {
 
 vivaldi::InstallType g_install_type = vivaldi::InstallType::kForCurrentUser;
+bool g_install_mode = false;
+bool g_manual_check = false;
 bool g_silent_update = false;
 
 namespace {
@@ -50,7 +52,7 @@ const Config& GetConfig() {
 }
 
 void InitConfig(Config config) {
-  DCHECK(!config.locale.empty());
+  DCHECK(!config.language.empty());
   DCHECK(config.appcast_url.is_valid());
   DCHECK(!config.registry_path.empty());
   DCHECK(!config.app_name.empty());

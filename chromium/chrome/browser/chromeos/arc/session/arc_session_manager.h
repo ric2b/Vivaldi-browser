@@ -285,16 +285,6 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
     property_files_expansion_result_.reset();
   }
 
-  void set_property_files_source_dir_for_testing(
-      const base::FilePath& property_files_source_dir) {
-    property_files_source_dir_ = property_files_source_dir;
-  }
-
-  void set_property_files_dest_dir_for_testing(
-      const base::FilePath& property_files_dest_dir) {
-    property_files_dest_dir_ = property_files_dest_dir;
-  }
-
   // chromeos::ConciergeClient::VmObserver overrides.
   void OnVmStarted(
       const vm_tools::concierge::VmStartedSignal& vm_signal) override;
@@ -307,6 +297,9 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
 
   // Getter for |serialno|.
   std::string GetSerialNumber() const;
+
+  // Stops mini-ARC instance. This should only be called before login.
+  void StopMiniArcIfNecessary();
 
  private:
   // Reports statuses of OptIn flow to UMA.
@@ -394,6 +387,9 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   // chromeos::SessionManagerClient::Observer:
   void EmitLoginPromptVisibleCalled() override;
 
+  // Called when the first part of ExpandPropertyFilesAndReadSalt is done.
+  void OnExpandPropertyFiles(bool result);
+
   // Called when ExpandPropertyFilesAndReadSalt is done.
   void OnExpandPropertyFilesAndReadSalt(ExpansionResult result);
 
@@ -445,8 +441,6 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   base::Optional<std::string> arc_salt_on_disk_;
 
   base::Optional<bool> property_files_expansion_result_;
-  base::FilePath property_files_source_dir_;
-  base::FilePath property_files_dest_dir_;
 
   base::Optional<vm_tools::concierge::VmInfo> vm_info_;
 

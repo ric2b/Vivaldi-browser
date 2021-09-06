@@ -51,7 +51,7 @@
       }
     ]
   },
-  "ADDRESS_HOME_APT_NUMBER": {
+  "ADDRESS_HOME_APT_NUM": {
     "en": [
       {
         "pattern_identifier": "en_apartment_number",
@@ -251,7 +251,7 @@
       }
     ]
   },
-  "COMPANY": {
+  "COMPANY_NAME": {
     "en": [
       {
         "pattern_identifier": "en_company_preserving",

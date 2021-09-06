@@ -18,6 +18,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_metrics.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
@@ -36,6 +37,7 @@
 #include "chrome/browser/ui/web_applications/web_app_dialog_manager.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_manager.h"
 #include "chrome/browser/ui/web_applications/web_app_ui_manager_impl.h"
+#include "chrome/browser/web_applications/components/app_icon_manager.h"
 #include "chrome/browser/web_applications/components/install_finalizer.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
@@ -61,19 +63,6 @@
 #include "extensions/common/constants.h"
 #include "ui/message_center/public/cpp/notification.h"
 #include "url/origin.h"
-
-namespace {
-
-std::string GetDesktopPWAsAttentionBadgingFlag() {
-  const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
-  if (cmdline->HasSwitch(switches::kDesktopPWAsAttentionBadgingCrOS)) {
-    return cmdline->GetSwitchValueASCII(
-        switches::kDesktopPWAsAttentionBadgingCrOS);
-  }
-  return switches::kDesktopPWAsAttentionBadgingCrOSApiOnly;
-}
-
-}  // namespace
 
 namespace apps {
 
@@ -105,13 +94,6 @@ WebAppsChromeOs::WebAppsChromeOs(
     : WebAppsBase(app_service, profile), instance_registry_(instance_registry) {
   DCHECK(instance_registry_);
   Initialize();
-  badge_manager_ = badging::BadgeManagerFactory::GetForProfile(profile);
-  // badge_manager_ is nullptr in guest and incognito profiles.
-  if (badge_manager_) {
-    badge_manager_->SetDelegate(
-        std::make_unique<apps::WebAppsChromeOs::BadgeManagerDelegate>(
-            weak_ptr_factory_.GetWeakPtr()));
-  }
 }
 
 WebAppsChromeOs::~WebAppsChromeOs() {
@@ -151,8 +133,18 @@ void WebAppsChromeOs::Initialize() {
     return;
   }
 
+  media_dispatcher_.Observe(MediaCaptureDevicesDispatcher::GetInstance());
+
   notification_display_service_.Add(
       NotificationDisplayServiceFactory::GetForProfile(profile()));
+
+  badge_manager_ = badging::BadgeManagerFactory::GetForProfile(profile());
+  // badge_manager_ is nullptr in guest and incognito profiles.
+  if (badge_manager_) {
+    badge_manager_->SetDelegate(
+        std::make_unique<apps::WebAppsChromeOs::BadgeManagerDelegate>(
+            weak_ptr_factory_.GetWeakPtr()));
+  }
 }
 
 void WebAppsChromeOs::LaunchAppWithIntent(
@@ -160,9 +152,10 @@ void WebAppsChromeOs::LaunchAppWithIntent(
     int32_t event_flags,
     apps::mojom::IntentPtr intent,
     apps::mojom::LaunchSource launch_source,
-    int64_t display_id) {
+    apps::mojom::WindowInfoPtr window_info) {
   auto* tab = WebAppsChromeOs::LaunchAppWithIntentImpl(
-      app_id, event_flags, std::move(intent), launch_source, display_id);
+      app_id, event_flags, std::move(intent), launch_source,
+      window_info ? window_info->display_id : display::kInvalidDisplayId);
 
   if (launch_source != apps::mojom::LaunchSource::kFromArc || !tab) {
     return;
@@ -278,6 +271,83 @@ void WebAppsChromeOs::GetMenuModel(const std::string& app_id,
                    &menu_items);
   }
 
+  // Read shortcuts menu item icons from disk, if any.
+  if (base::FeatureList::IsEnabled(
+          features::kDesktopPWAsAppIconShortcutsMenuUI) &&
+      !web_app->shortcuts_menu_item_infos().empty()) {
+    // TODO(crbug.com/1152661): ReadAllShortcutsMenuIcons must support
+    // IconPurpose::MASKABLE.
+    provider()->icon_manager().ReadAllShortcutsMenuIcons(
+        app_id,
+        base::BindOnce(&WebAppsChromeOs::OnShortcutsMenuIconsRead,
+                       base::AsWeakPtr<WebAppsChromeOs>(this), app_id,
+                       menu_type, std::move(menu_items), std::move(callback)));
+  } else {
+    std::move(callback).Run(std::move(menu_items));
+  }
+}
+
+void WebAppsChromeOs::OnShortcutsMenuIconsRead(
+    const std::string& app_id,
+    apps::mojom::MenuType menu_type,
+    apps::mojom::MenuItemsPtr menu_items,
+    GetMenuModelCallback callback,
+    ShortcutsMenuIconsBitmaps shortcuts_menu_icons_bitmaps) {
+  const web_app::WebApp* web_app = GetWebApp(app_id);
+  if (!web_app) {
+    std::move(callback).Run(apps::mojom::MenuItems::New());
+    return;
+  }
+
+  AddSeparator(ui::DOUBLE_SEPARATOR, &menu_items);
+
+  int menu_item_index = 0;
+
+  for (const WebApplicationShortcutsMenuItemInfo& menu_item_info :
+       web_app->shortcuts_menu_item_infos()) {
+    const std::map<SquareSizePx, SkBitmap>* menu_item_icon_bitmaps = nullptr;
+    if (menu_item_index < shortcuts_menu_icons_bitmaps.size()) {
+      menu_item_icon_bitmaps = &shortcuts_menu_icons_bitmaps[menu_item_index];
+    }
+
+    if (menu_item_index != 0) {
+      AddSeparator(ui::PADDED_SEPARATOR, &menu_items);
+    }
+
+    gfx::ImageSkia icon;
+    if (menu_item_icon_bitmaps) {
+      // TODO(crbug.com/1140356): Unify this constant with kAppShortcutIconSize
+      // from ArcAppShortcutsRequest class.
+      constexpr int kAppShortcutIconSizeDip = 32;
+
+      // TODO(crbug.com/1152661): Remove kCrOsStandardIcon and add
+      // kCrOsStandardBackground|kCrOsStandardMask effects for web app menu
+      // maskable icons.
+      IconEffects icon_effects = IconEffects::kNone;
+      if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon)) {
+        icon_effects = IconEffects::kCrOsStandardIcon;
+      }
+
+      icon = ConvertSquareBitmapsToImageSkia(
+          *menu_item_icon_bitmaps, icon_effects,
+          /*size_hint_in_dip=*/kAppShortcutIconSizeDip);
+    }
+
+    // Uses integer |command_id| to store menu item index.
+    const int command_id = ash::LAUNCH_APP_SHORTCUT_FIRST + menu_item_index;
+    // Passes menu_type argument as shortcut_id to use it in
+    // ExecuteContextMenuCommand().
+    std::string shortcut_id{MenuTypeToString(menu_type)};
+
+    const std::string label = base::UTF16ToUTF8(menu_item_info.name);
+
+    // TODO(crbug.com/1140356): Rename AddArcCommandItem to
+    // AddPublisherCommandItem.
+    AddArcCommandItem(command_id, shortcut_id, label, icon, &menu_items);
+
+    ++menu_item_index;
+  }
+
   std::move(callback).Run(std::move(menu_items));
 }
 
@@ -285,8 +355,37 @@ void WebAppsChromeOs::ExecuteContextMenuCommand(const std::string& app_id,
                                                 int command_id,
                                                 const std::string& shortcut_id,
                                                 int64_t display_id) {
-  // TODO(crbug.com/1129721) Implement it for shortcut menu in web apps.
-  NOTIMPLEMENTED();
+  const web_app::WebApp* web_app = GetWebApp(app_id);
+  if (!web_app) {
+    return;
+  }
+
+  apps::mojom::LaunchSource launch_source;
+  // shortcut_id contains menu_type.
+  switch (MenuTypeFromString(shortcut_id)) {
+    case apps::mojom::MenuType::kShelf:
+      launch_source = apps::mojom::LaunchSource::kFromShelf;
+      break;
+    case apps::mojom::MenuType::kAppList:
+      launch_source = apps::mojom::LaunchSource::kFromAppListGridContextMenu;
+      break;
+  }
+
+  web_app::DisplayMode display_mode =
+      GetRegistrar()->GetAppEffectiveDisplayMode(app_id);
+
+  apps::AppLaunchParams params(
+      app_id, web_app::ConvertDisplayModeToAppLaunchContainer(display_mode),
+      WindowOpenDisposition::CURRENT_TAB, GetAppLaunchSource(launch_source),
+      display_id);
+
+  size_t menu_item_index = command_id - ash::LAUNCH_APP_SHORTCUT_FIRST;
+  if (menu_item_index < web_app->shortcuts_menu_item_infos().size()) {
+    params.override_url =
+        web_app->shortcuts_menu_item_infos()[menu_item_index].url;
+  }
+
+  LaunchAppWithParams(std::move(params));
 }
 
 void WebAppsChromeOs::OnWebAppWillBeUninstalled(const web_app::AppId& app_id) {
@@ -297,6 +396,10 @@ void WebAppsChromeOs::OnWebAppWillBeUninstalled(const web_app::AppId& app_id) {
 
   app_notifications_.RemoveNotificationsForApp(app_id);
   paused_apps_.MaybeRemoveApp(app_id);
+
+  auto result = media_requests_.RemoveRequests(app_id);
+  ModifyCapabilityAccess(subscribers(), app_id, result.camera,
+                         result.microphone);
 
   WebAppsBase::OnWebAppWillBeUninstalled(app_id);
 }
@@ -342,6 +445,64 @@ void WebAppsChromeOs::OnPackageListInitialRefreshed() {
 
 void WebAppsChromeOs::OnArcAppListPrefsDestroyed() {
   arc_prefs_ = nullptr;
+}
+
+void WebAppsChromeOs::OnRequestUpdate(int render_process_id,
+                                      int render_frame_id,
+                                      blink::mojom::MediaStreamType stream_type,
+                                      const content::MediaRequestState state) {
+  content::WebContents* web_contents =
+      content::WebContents::FromRenderFrameHost(
+          content::RenderFrameHost::FromID(render_process_id, render_frame_id));
+
+  if (!web_contents) {
+    return;
+  }
+
+  base::Optional<web_app::AppId> app_id =
+      web_app::FindInstalledAppWithUrlInScope(profile(), web_contents->GetURL(),
+                                              /*window_only=*/false);
+  if (!app_id.has_value()) {
+    return;
+  }
+
+  const web_app::WebApp* web_app = GetWebApp(app_id.value());
+  if (!web_app || !Accepts(app_id.value())) {
+    return;
+  }
+
+  if (media_requests_.IsNewRequest(app_id.value(), web_contents, state)) {
+    content::WebContentsUserData<AppWebContentsData>::CreateForWebContents(
+        web_contents, this);
+  }
+
+  auto result = media_requests_.UpdateRequests(app_id.value(), web_contents,
+                                               stream_type, state);
+  ModifyCapabilityAccess(subscribers(), app_id.value(), result.camera,
+                         result.microphone);
+}
+
+void WebAppsChromeOs::OnWebContentsDestroyed(
+    content::WebContents* web_contents) {
+  DCHECK(web_contents);
+
+  base::Optional<web_app::AppId> app_id =
+      web_app::FindInstalledAppWithUrlInScope(
+          profile(), web_contents->GetLastCommittedURL(),
+          /*window_only=*/false);
+  if (!app_id.has_value()) {
+    return;
+  }
+
+  const web_app::WebApp* web_app = GetWebApp(app_id.value());
+  if (!web_app || !Accepts(app_id.value())) {
+    return;
+  }
+
+  auto result =
+      media_requests_.OnWebContentsDestroyed(app_id.value(), web_contents);
+  ModifyCapabilityAccess(subscribers(), app_id.value(), result.camera,
+                         result.microphone);
 }
 
 void WebAppsChromeOs::OnNotificationDisplayed(
@@ -499,14 +660,13 @@ void WebAppsChromeOs::SetIconEffect(const std::string& app_id) {
 
 content::WebContents* WebAppsChromeOs::LaunchAppWithParams(
     AppLaunchParams params) {
-  AppLaunchParams params_for_restore(params.app_id, params.container,
-                                     params.disposition, params.display_id,
-                                     params.launch_files, params.intent);
+  AppLaunchParams params_for_restore(
+      params.app_id, params.container, params.disposition, params.source,
+      params.display_id, params.launch_files, params.intent);
 
   auto* web_contents = WebAppsBase::LaunchAppWithParams(std::move(params));
 
-  int session_id = GetSessionIdForRestoreFromWebContents(
-      params_for_restore.container, web_contents);
+  int session_id = GetSessionIdForRestoreFromWebContents(web_contents);
   if (!SessionID::IsValidValue(session_id)) {
     return web_contents;
   }
@@ -521,19 +681,10 @@ content::WebContents* WebAppsChromeOs::LaunchAppWithParams(
         params_for_restore.disposition, params_for_restore.display_id,
         std::move(params_for_restore.launch_files),
         std::move(params_for_restore.intent));
-  } else {
-    // If the app is not a system web app, the browser session restore can
-    // restore the app after reboot, so we don't need to save the launch
-    // parameters to launch the app after reboot. Only the browser session id is
-    // saved as the window id, to restore the window stack, snap, etc. The app
-    // id is modified as the Chrome browser id, so that it won't be launched
-    // after reboot. Also for web apps opened with tabs in one browser window,
-    // we don't need to save multiple records in the full restore data.
-    launch_info = std::make_unique<full_restore::AppLaunchInfo>(
-        extension_misc::kChromeAppId, session_id);
+    full_restore::SaveAppLaunchInfo(profile()->GetPath(),
+                                    std::move(launch_info));
   }
 
-  full_restore::SaveAppLaunchInfo(profile()->GetPath(), std::move(launch_info));
   return web_contents;
 }
 
@@ -545,22 +696,25 @@ bool WebAppsChromeOs::Accepts(const std::string& app_id) {
 apps::mojom::OptionalBool WebAppsChromeOs::ShouldShowBadge(
     const std::string& app_id,
     apps::mojom::OptionalBool has_notification) {
-  std::string flag = GetDesktopPWAsAttentionBadgingFlag();
+  bool enabled =
+      base::FeatureList::IsEnabled(features::kDesktopPWAsAttentionBadgingCrOS);
+  std::string flag =
+      enabled ? features::kDesktopPWAsAttentionBadgingCrOSParam.Get() : "";
   if (flag == switches::kDesktopPWAsAttentionBadgingCrOSApiOnly) {
     // Show a badge based only on the Web Badging API.
     return badge_manager_ && badge_manager_->GetBadgeValue(app_id).has_value()
                ? apps::mojom::OptionalBool::kTrue
                : apps::mojom::OptionalBool::kFalse;
   } else if (flag ==
-             switches::kDesktopPWAsAttentionBadgingCrOSNotificationsOnly) {
-    // Show a badge only if a notification is showing.
-    return has_notification;
-  } else {
+             switches::kDesktopPWAsAttentionBadgingCrOSApiAndNotifications) {
     // When the flag is set to "api-and-notifications" we show a badge if either
     // a notification is showing or the Web Badging API has a badge set.
     return badge_manager_ && badge_manager_->GetBadgeValue(app_id).has_value()
                ? apps::mojom::OptionalBool::kTrue
                : has_notification;
+  } else {
+    // Show a badge only if a notification is showing.
+    return has_notification;
   }
 }
 }  // namespace apps

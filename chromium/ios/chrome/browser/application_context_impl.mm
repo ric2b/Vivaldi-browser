@@ -22,6 +22,7 @@
 #include "base/task/thread_pool.h"
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
+#include "components/breadcrumbs/core/breadcrumb_manager.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/component_updater/timer_update_scheduler.h"
 #include "components/gcm_driver/gcm_client_factory.h"
@@ -49,7 +50,6 @@
 #include "ios/chrome/browser/chrome_paths.h"
 #include "ios/chrome/browser/component_updater/ios_component_updater_configurator.h"
 #import "ios/chrome/browser/crash_report/breadcrumbs/application_breadcrumbs_logger.h"
-#include "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_manager.h"
 #include "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_persistent_storage_manager.h"
 #include "ios/chrome/browser/crash_report/breadcrumbs/features.h"
 #include "ios/chrome/browser/gcm/ios_chrome_gcm_profile_service_factory.h"
@@ -123,6 +123,10 @@ void SetLastSessionExitedCleanly(PrefService* local_state, bool clean) {
   local_state->SetBoolean(prefs::kLastSessionExitedCleanly, clean);
 }
 
+// If enabled, keep logging and reporting UMA while chrome is backgrounded.
+const base::Feature kUmaBackgroundSessions{"IOSUMABackgroundSessions",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
 }  // namespace
 
 ApplicationContextImpl::ApplicationContextImpl(
@@ -169,7 +173,7 @@ void ApplicationContextImpl::PreMainMessageLoopRun() {
   }
 
   if (base::FeatureList::IsEnabled(kLogBreadcrumbs)) {
-    breadcrumb_manager_ = std::make_unique<BreadcrumbManager>();
+    breadcrumb_manager_ = std::make_unique<breadcrumbs::BreadcrumbManager>();
     application_breadcrumbs_logger_ =
         std::make_unique<ApplicationBreadcrumbsLogger>(
             breadcrumb_manager_.get());
@@ -283,8 +287,11 @@ void ApplicationContextImpl::OnAppEnterBackground() {
 
   // Tell the metrics services they were cleanly shutdown.
   metrics::MetricsService* metrics_service = GetMetricsService();
-  if (metrics_service && local_state)
-    metrics_service->OnAppEnterBackground();
+  if (metrics_service && local_state) {
+    const bool keep_reporting =
+        base::FeatureList::IsEnabled(kUmaBackgroundSessions);
+    metrics_service->OnAppEnterBackground(keep_reporting);
+  }
   ukm::UkmService* ukm_service = GetMetricsServicesManager()->GetUkmService();
   if (ukm_service)
     ukm_service->OnAppEnterBackground();
@@ -362,11 +369,6 @@ ukm::UkmRecorder* ApplicationContextImpl::GetUkmRecorder() {
 variations::VariationsService* ApplicationContextImpl::GetVariationsService() {
   DCHECK(thread_checker_.CalledOnValidThread());
   return GetMetricsServicesManager()->GetVariationsService();
-}
-
-rappor::RapporServiceImpl* ApplicationContextImpl::GetRapporServiceImpl() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  return GetMetricsServicesManager()->GetRapporServiceImpl();
 }
 
 net::NetLog* ApplicationContextImpl::GetNetLog() {

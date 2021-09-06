@@ -10,7 +10,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/browser/notifications/notification_handler.h"
 #include "chrome/browser/ui/cocoa/notifications/notification_builder_mac.h"
-#include "chrome/browser/ui/cocoa/notifications/notification_constants_mac.h"
+#include "chrome/services/mac_notifications/public/cpp/notification_constants_mac.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 TEST(NotificationBuilderMacTest, TestNotificationNoButtons) {
@@ -21,7 +21,7 @@ TEST(NotificationBuilderMacTest, TestNotificationNoButtons) {
   [builder setTitle:@"Title"];
   [builder setSubTitle:@"https://www.miguel.com"];
   [builder setContextMessage:@""];
-  [builder setTag:@"tag1"];
+  [builder setIdentifier:@"identifier"];
   [builder setIcon:[NSImage imageNamed:@"NSApplicationIcon"]];
   [builder setNotificationId:@"notificationId"];
   [builder setProfileId:@"profileId"];
@@ -39,7 +39,7 @@ TEST(NotificationBuilderMacTest, TestNotificationNoButtons) {
   EXPECT_EQ(nullptr, [notification informativeText]);
   EXPECT_EQ("https://www.miguel.com",
             base::SysNSStringToUTF8([notification subtitle]));
-  EXPECT_EQ("tag1",
+  EXPECT_EQ("identifier",
             base::SysNSStringToUTF8([notification valueForKey:@"identifier"]));
 
   EXPECT_TRUE([notification hasActionButton]);

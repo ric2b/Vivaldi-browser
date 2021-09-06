@@ -12,6 +12,7 @@
 #include <set>
 
 #include "base/containers/contains.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -27,6 +28,7 @@
 #include "ui/base/clipboard/custom_data_helper.h"
 #include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
 #include "ui/base/nine_image_painter_factory.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/x/selection_owner.h"
 #include "ui/base/x/selection_requestor.h"
 #include "ui/base/x/selection_utils.h"
@@ -482,6 +484,12 @@ void ClipboardX11::OnPreShutdown() {
   x11_details_->StoreCopyPasteDataAndWait();
 }
 
+DataTransferEndpoint* ClipboardX11::GetSource(ClipboardBuffer buffer) const {
+  DCHECK(CalledOnValidThread());
+  auto it = data_src_.find(buffer);
+  return it == data_src_.end() ? nullptr : it->second.get();
+}
+
 uint64_t ClipboardX11::GetSequenceNumber(ClipboardBuffer buffer) const {
   DCHECK(CalledOnValidThread());
   if (buffer == ClipboardBuffer::kCopyPaste)
@@ -511,6 +519,7 @@ void ClipboardX11::Clear(ClipboardBuffer buffer) {
   DCHECK(CalledOnValidThread());
   DCHECK(IsSupportedClipboardBuffer(buffer));
   x11_details_->Clear(buffer);
+  data_src_[buffer].reset();
 }
 
 // |data_dst| is not used. It's only passed to be consistent with other
@@ -534,6 +543,10 @@ void ClipboardX11::ReadAvailableTypes(
     types->push_back(base::UTF8ToUTF16(kMimeTypeRTF));
   if (target_list.ContainsFormat(ClipboardFormatType::GetBitmapType()))
     types->push_back(base::UTF8ToUTF16(kMimeTypePNG));
+  // Only support filenames if chrome://flags#clipboard-filenames is enabled.
+  if (target_list.ContainsFormat(ClipboardFormatType::GetFilenamesType()) &&
+      base::FeatureList::IsEnabled(features::kClipboardFilenames))
+    types->push_back(base::UTF8ToUTF16(kMimeTypeURIList));
 
   SelectionData data(x11_details_->RequestAndWaitForTypes(
       buffer, x11_details_->GetAtomsForFormat(
@@ -692,6 +705,23 @@ void ClipboardX11::ReadCustomData(ClipboardBuffer buffer,
 
 // |data_dst| is not used. It's only passed to be consistent with other
 // platforms.
+void ClipboardX11::ReadFilenames(ClipboardBuffer buffer,
+                                 const DataTransferEndpoint* data_dst,
+                                 std::vector<ui::FileInfo>* result) const {
+  DCHECK(CalledOnValidThread());
+  RecordRead(ClipboardFormatMetric::kFilenames);
+
+  SelectionData data(x11_details_->RequestAndWaitForTypes(
+      buffer, x11_details_->GetAtomsForFormat(
+                  ClipboardFormatType::GetFilenamesType())));
+  std::string uri_list;
+  if (data.IsValid())
+    data.AssignTo(&uri_list);
+  *result = ui::URIListToFileInfos(uri_list);
+}
+
+// |data_dst| is not used. It's only passed to be consistent with other
+// platforms.
 void ClipboardX11::ReadBookmark(const DataTransferEndpoint* data_dst,
                                 base::string16* title,
                                 std::string* url) const {
@@ -747,6 +777,8 @@ void ClipboardX11::WritePortableRepresentations(
       x11_details_->TakeOwnershipOfSelection(ClipboardBuffer::kSelection);
     }
   }
+
+  data_src_[buffer] = std::move(data_src);
 }
 
 // |data_src| is not used. It's only passed to be consistent with other
@@ -761,6 +793,7 @@ void ClipboardX11::WritePlatformRepresentations(
   x11_details_->CreateNewClipboardData();
   DispatchPlatformRepresentations(std::move(platform_representations));
   x11_details_->TakeOwnershipOfSelection(buffer);
+  data_src_[buffer] = std::move(data_src);
 }
 
 void ClipboardX11::WriteText(const char* text_data, size_t text_len) {
@@ -802,6 +835,14 @@ void ClipboardX11::WriteSvg(const char* markup_data, size_t markup_len) {
 
 void ClipboardX11::WriteRTF(const char* rtf_data, size_t data_len) {
   WriteData(ClipboardFormatType::GetRtfType(), rtf_data, data_len);
+}
+
+void ClipboardX11::WriteFilenames(std::vector<ui::FileInfo> filenames) {
+  std::string uri_list = ui::FileInfosToURIList(filenames);
+  scoped_refptr<base::RefCountedMemory> mem(
+      base::RefCountedString::TakeString(&uri_list));
+  x11_details_->InsertMapping(ClipboardFormatType::GetFilenamesType().GetName(),
+                              mem);
 }
 
 void ClipboardX11::WriteBookmark(const char* title_data,

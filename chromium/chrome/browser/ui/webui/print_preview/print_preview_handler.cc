@@ -25,6 +25,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/account_manager_facade_factory.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/bad_message.h"
 #include "chrome/browser/browser_process.h"
@@ -80,12 +81,12 @@
 #include "third_party/icu/source/i18n/unicode/ulocdata.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/chromeos/account_manager/account_manager_util.h"
+#include "ash/constants/ash_features.h"
+#include "chrome/browser/ash/account_manager/account_manager_util.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/browser/ui/webui/signin/inline_login_dialog_chromeos.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/account_manager_core/account_manager_facade.h"
 #endif
 
@@ -712,13 +713,13 @@ void PrintPreviewHandler::HandleSignin(const base::ListValue* /*args*/) {
   DCHECK(profile);
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (chromeos::IsAccountManagerAvailable(profile)) {
+  if (ash::IsAccountManagerAvailable(profile)) {
     // Chrome OS Account Manager is enabled on this Profile and hence, all
     // account management flows will go through native UIs and not through a
     // tabbed browser window.
-    chromeos::InlineLoginDialogChromeOS::ShowDeprecated(
-        account_manager::AccountManagerFacade::AccountAdditionSource::
-            kPrintPreviewDialog);
+    ::GetAccountManagerFacade(profile->GetPath().value())
+        ->ShowAddAccountDialog(account_manager::AccountManagerFacade::
+                                   AccountAdditionSource::kPrintPreviewDialog);
     return;
   }
 #endif

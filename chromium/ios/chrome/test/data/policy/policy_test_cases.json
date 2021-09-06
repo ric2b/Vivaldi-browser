@@ -354,7 +354,17 @@
       }
     ]
   },
-
+  "PolicyRefreshRate": {
+    "os": ["ios"],
+    "policy_pref_mapping_tests": [
+      {
+        "policies": {
+          "PolicyRefreshRate": 300000
+        },
+        "prefs": { "policy.user_refresh_rate": { "location": "local_state", "value": 300000 } }
+      }
+    ]
+  },
   "PopupsAllowedForUrls": {
     "os": [ "ios" ],
     "note": "TODO(crbug.com/106682): Flag this with can_be_recommended",
@@ -481,6 +491,24 @@
       {
         "policies": {"URLAllowlist": ["google.com"]},
         "prefs": { "policy.url_allowlist": {}}
+      }
+    ]
+  },
+
+  "UrlKeyedAnonymizedDataCollectionEnabled": {
+    "os": ["ios"],
+    "policy_pref_mapping_tests": [
+      {
+        "policies": {
+          "UrlKeyedAnonymizedDataCollectionEnabled": true
+        },
+        "prefs": { "url_keyed_anonymized_data_collection.enabled": { "value": true } }
+      },
+      {
+        "policies": {
+          "UrlKeyedAnonymizedDataCollectionEnabled": false
+        },
+        "prefs": { "url_keyed_anonymized_data_collection.enabled": { "value": false } }
       }
     ]
   },

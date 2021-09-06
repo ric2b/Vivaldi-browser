@@ -11,6 +11,7 @@ Her er nogle af de ting, du kan prøve for at komme godt i gang.</translation>
 <translation id="1037492556044956303"><ph name="DEVICE_NAME" /> blev tilføjet</translation>
 <translation id="1047017786576569492">afgrænset</translation>
 <translation id="1047773237499189053">Nye funktioner er tilgængelige. Tryk på pil op for at få flere oplysninger.</translation>
+<translation id="1052916631016577720">Scan elementer</translation>
 <translation id="1056775291175587022">Ingen netværk</translation>
 <translation id="1059194134494239015"><ph name="DISPLAY_NAME" />: <ph name="RESOLUTION" /></translation>
 <translation id="108486256082349153">Mobil: <ph name="ADDRESS" /></translation>
@@ -24,6 +25,7 @@ Her er nogle af de ting, du kan prøve for at komme godt i gang.</translation>
 <translation id="1165712434476988950">Enheden skal genstartes, før opdateringen anvendes.</translation>
 <translation id="1175572348579024023">Rul</translation>
 <translation id="1178581264944972037">Pause</translation>
+<translation id="1181037720776840403">Fjern</translation>
 <translation id="118532027333893379">Tryk et vilkårligt sted for at tage et billede af hele skærmen</translation>
 <translation id="1190609913194133056">Underretningcenter</translation>
 <translation id="1195412055398077112">overscan</translation>
@@ -147,6 +149,7 @@ Her er nogle af de ting, du kan prøve for at komme godt i gang.</translation>
 <translation id="2220572644011485463">Pin- eller adgangskode</translation>
 <translation id="2222338659135520253">Login er påkrævet</translation>
 <translation id="2222841058024245321">Skrivebord 7</translation>
+<translation id="2224075387478458881">Skærmoptagelse er ikke tilladt, når beskyttet indhold er synligt</translation>
 <translation id="225680501294068881">Søger efter enheder...</translation>
 <translation id="2268130516524549846">Bluetooth er deaktiveret</translation>
 <translation id="2268813581635650749">Log alle ud</translation>
@@ -239,7 +242,6 @@ Her er nogle af de ting, du kan prøve for at komme godt i gang.</translation>
 <translation id="3038571455154067151">Angiv forældreadgangskoden til Family Link for at logge ind</translation>
 <translation id="3039939407102840004">Styluspennens batteriniveau er på <ph name="PERCENTAGE" /> procent.</translation>
 <translation id="3045488863354895414">Goddag</translation>
-<translation id="3051128274746680507">Din administrerede brugerprofil fjernes snart. Log ind for at få flere oplysninger.</translation>
 <translation id="3055162170959710888">Du har brugt denne enhed i <ph name="USED_TIME" /> i dag</translation>
 <translation id="3077734595579995578">Shift</translation>
 <translation id="3081696990447829002">Udvid menu</translation>
@@ -252,13 +254,11 @@ Her er nogle af de ting, du kan prøve for at komme godt i gang.</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
 <translation id="3126069444801937830">Genstart for at opdatere</translation>
 <translation id="3139942575505304791">Skrivebord 1</translation>
-<translation id="3147157020428159854">Skærmoptagelsen er stoppet</translation>
 <translation id="315116470104423982">Mobildata</translation>
 <translation id="3151786313568798007">Retning</translation>
 <translation id="3153444934357957346">Du kan kun have op til <ph name="MULTI_PROFILE_USER_LIMIT" /> konti i samlet login fra flere konti.</translation>
 <translation id="3154351730702813399">Administratoren af enheden kan overvåge din browseraktivitet.</translation>
 <translation id="3181441307743005334">Genstarten kan tage lidt tid</translation>
-<translation id="3190230207529484457">Der kan ikke tages screenshots, når der vises beskyttet indhold</translation>
 <translation id="3202010236269062730">{NUM_DEVICES,plural, =1{Forbundet til en enhed}one{Forbundet til # enhed}other{Forbundet til # enheder}}</translation>
 <translation id="320207200541803018">Indstil timer</translation>
 <translation id="3203405173652969239">Kontaktadgang blev aktiveret</translation>
@@ -267,7 +267,6 @@ Her er nogle af de ting, du kan prøve for at komme godt i gang.</translation>
 <translation id="3226991577105957773">+<ph name="COUNT" /> andre</translation>
 <translation id="3236488194889173876">Der er ingen tilgængelige mobilnetværk</translation>
 <translation id="3249513730522716925">Vindue <ph name="WINDOW_TITLE" /> blev flyttet fra Skrivebord <ph name="ACTIVE_DESK" /> til Skrivebord <ph name="TARGET_DESK" /></translation>
-<translation id="3252068179161473151"><ph name="WIRELESS_PROVIDER" />, signalstyrke <ph name="SIGNAL_STRENGTH" /> procent.</translation>
 <translation id="3255483164551725916">Hvad kan du gøre?</translation>
 <translation id="3269597722229482060">Højreklik</translation>
 <translation id="3289674678944039601">Oplader via adapter</translation>
@@ -306,6 +305,7 @@ Her er nogle af de ting, du kan prøve for at komme godt i gang.</translation>
 <translation id="3571734092741541777">Konfigurer</translation>
 <translation id="3573179567135747900">Skift tilbage til "<ph name="FROM_LOCALE" />" (kræver genstart)</translation>
 <translation id="3576141592585647168">Skift tidszone</translation>
+<translation id="3593039967545720377">Tryk på <ph name="SHORTCUT_KEY_NAME" />+V for at gå til din udklipsholders historik. Kopiér et element for at komme i gang.</translation>
 <translation id="3593646411856133110">Stryg opad, og hold fingeren nede for at se åbne apps</translation>
 <translation id="3595596368722241419">Batteri helt opladet</translation>
 <translation id="3604801046548457007">Skrivebord <ph name="DESK_TITILE" /> blev oprettet</translation>
@@ -349,6 +349,7 @@ Her er nogle af de ting, du kan prøve for at komme godt i gang.</translation>
 <translation id="3901991538546252627">Opretter forbindelse til <ph name="NAME" /></translation>
 <translation id="3943857333388298514">Indsæt</translation>
 <translation id="394485226368336402">Lydindstillinger</translation>
+<translation id="3945319193631853098">Tryk for at afslutte konfigurationen</translation>
 <translation id="3945867833895287237">Opretter forbindelse til hotspot…</translation>
 <translation id="3962859241508114581">Forrige nummer</translation>
 <translation id="3969043077941541451">Fra</translation>
@@ -393,10 +394,12 @@ Her er nogle af de ting, du kan prøve for at komme godt i gang.</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4321776623976362024">Du trykkede på tastaturgenvejen for høj kontrast. Vil du aktivere indstillingen?</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
+<translation id="4333628967105022692">Lacros understøttes ikke, når flere brugere er logget ind.</translation>
 <translation id="4338109981321384717">Forstørrelsesglas</translation>
 <translation id="4351433414020964307">Assistenten indlæses...</translation>
 <translation id="4356930093361201197">tilstanden Høj kontrast</translation>
 <translation id="4371348193907997655">Cast-indstillinger</translation>
+<translation id="4378479437904450384"><ph name="WIRELESS_PROVIDER" />, signalstyrke på <ph name="SIGNAL_STRENGTH" /> procent.</translation>
 <translation id="4378551569595875038">Tilslutter...</translation>
 <translation id="4379531060876907730">Dette er dine styluspenværktøjer</translation>
 <translation id="4389184120735010762">Du trykkede på tastaturgenvejen for det fastgjorte lupvindue. Vil du aktivere indstillingen?</translation>
@@ -404,6 +407,7 @@ Her er nogle af de ting, du kan prøve for at komme godt i gang.</translation>
 <translation id="4421231901400348175">Skærmdeling med <ph name="HELPER_NAME" /> via Fjernsupport.</translation>
 <translation id="4424159417645388645">Skrivebord 5</translation>
 <translation id="4430019312045809116">Lydstyrke</translation>
+<translation id="4449692009715125625">{NUM_NOTIFICATIONS,plural, =1{1 vigtig notifikation}one{# vigtig notifikation}other{# vigtige notifikationer}}</translation>
 <translation id="4450893287417543264">Vis ikke igen</translation>
 <translation id="445864333228800152">Godaften</translation>
 <translation id="4458688154122353284">Stop skærmoptagelse</translation>
@@ -475,6 +479,10 @@ Her er nogle af de ting, du kan prøve for at komme godt i gang.</translation>
 <translation id="4961318399572185831">Cast skærm</translation>
 <translation id="4969092041573468113"><ph name="HOURS" /> t., <ph name="MINUTES" /> min. og <ph name="SECONDS" /> sek.</translation>
 <translation id="4975771730019223894">Appbadges</translation>
+<translation id="4977493774330778463"><ph name="NUM_IMPORTANT_NOTIFICATION" />:
+        <ph name="NOTIFICATION_1" />,
+        <ph name="NOTIFICATION_2" />,
+        <ph name="NUM_OTHER_NOTIFICATION" /></translation>
 <translation id="5003993274120026347">Næste sætning</translation>
 <translation id="5030687792513154421">Tiden er gået</translation>
 <translation id="5033299697334913360">Klik et vilkårligt sted for at tage et billede af hele skærmen</translation>
@@ -488,6 +496,7 @@ Her er nogle af de ting, du kan prøve for at komme godt i gang.</translation>
 <translation id="5168181903108465623">Tilgængelige Cast-enheder</translation>
 <translation id="5170568018924773124">Vis i mappe</translation>
 <translation id="5176318573511391780">Optag dele af skærmen</translation>
+<translation id="5206057955438543357">{NUM_NOTIFICATIONS,plural, =1{1 anden notifikation}one{# anden notifikation}other{# andre notifikationer}}</translation>
 <translation id="5207949376430453814">Fremhæv tekstmarkør</translation>
 <translation id="5208059991603368177">Til</translation>
 <translation id="5222676887888702881">Log ud</translation>
@@ -556,6 +565,7 @@ Her er nogle af de ting, du kan prøve for at komme godt i gang.</translation>
 <translation id="5825969630400862129">Indstillinger for tilsluttede enheder</translation>
 <translation id="5837036133683224804">Stop <ph name="ROUTE_TITLE" /> på <ph name="RECEIVER_NAME" /></translation>
 <translation id="5860033963881614850">Fra</translation>
+<translation id="5860491529813859533">Aktivér</translation>
 <translation id="5876666360658629066">Angiv forældrekode</translation>
 <translation id="5881540930187678962">Konfigurer Telefonstyring senere</translation>
 <translation id="5895138241574237353">Genstart</translation>
@@ -587,6 +597,7 @@ Her er nogle af de ting, du kan prøve for at komme godt i gang.</translation>
 <translation id="6043212731627905357">Denne skærm fungerer ikke sammen med <ph name="DEVICE_TYPE" /> (skærmen understøttes ikke).</translation>
 <translation id="6043994281159824495">Log ud nu</translation>
 <translation id="6047696787498798094">Skærmdeling ophører, når du skifter til en anden bruger. Vil du fortsætte?</translation>
+<translation id="6050368268239407309">Præsentationsværktøjer</translation>
 <translation id="6054305421211936131">Log ind med chipkort</translation>
 <translation id="6059276912018042191">Seneste Chrome-faner</translation>
 <translation id="6062360702481658777">Du bliver automatisk logget ud om <ph name="LOGOUT_TIME_LEFT" />.</translation>
@@ -597,11 +608,10 @@ Her er nogle af de ting, du kan prøve for at komme godt i gang.</translation>
 <translation id="612734058257491180">Google Assistent er ikke tilgængelig i en gæstesession.</translation>
 <translation id="6137566720514957455">Åbn dialogboksen til fjernelse for <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="615957422585914272">Vis skærmtastatur</translation>
-<translation id="6164005077879661055">Alle filer og lokale data, der er knyttet til den administrerede bruger, 
-slettes permanent, når den administrerede bruger fjernes. Besøgte websites og indstillinger for denne administrerede bruger er muligvis stadig synlige for administratoren på <ph name="MANAGEMENT_URL" />.</translation>
 <translation id="6165508094623778733">Flere oplysninger</translation>
 <translation id="6179832488876878285">Du kan fastgøre dine vigtige filer her. Åbn appen Filer for at komme i gang.</translation>
 <translation id="622484624075952240">Ned</translation>
+<translation id="6231419273573514727">Din eksterne enheds ydeevne kan være begrænset</translation>
 <translation id="6236290670123303279">Administrer indstillinger</translation>
 <translation id="6237231532760393653">1X</translation>
 <translation id="6254629735336163724">Altid vandret</translation>
@@ -618,6 +628,7 @@ slettes permanent, når den administrerede bruger fjernes. Besøgte websites og 
 <translation id="6376931439017688372">Bluetooth er slået til</translation>
 <translation id="6381109794406942707">Angiv din pinkode for at låse enheden op.</translation>
 <translation id="639644700271529076">CAPS LOCK er deaktiveret</translation>
+<translation id="6396835948284782440">Hold [Esc] nede for at afslutte.</translation>
 <translation id="6406704438230478924">altgr</translation>
 <translation id="6424520630891723617"><ph name="SECURITY_STATUS" />, signalstyrke <ph name="SIGNAL_STRENGTH" /></translation>
 <translation id="642644398083277086">Ryd alle notifikationer</translation>
@@ -662,6 +673,7 @@ slettes permanent, når den administrerede bruger fjernes. Besøgte websites og 
 <translation id="6715542151869432661">Der blev ikke fundet nogen mobilenheder.</translation>
 <translation id="6723839937902243910">Strøm</translation>
 <translation id="6727969043791803658">Tilsluttet, <ph name="BATTERY_PERCENTAGE" /> % batteri</translation>
+<translation id="6732800389263199929">+<ph name="COUNT" /></translation>
 <translation id="6751052314767925245">Håndhæves af din administrator</translation>
 <translation id="6751826523481687655">Sporing af effektivitet er slået til</translation>
 <translation id="6752912906630585008">Skrivebord <ph name="REMOVED_DESK" /> blev fjernet og slået sammen med Skrivebord <ph name="RECEIVE_DESK" /></translation>
@@ -673,6 +685,7 @@ slettes permanent, når den administrerede bruger fjernes. Besøgte websites og 
 <translation id="6818242057446442178">Et ord tilbage</translation>
 <translation id="6820676911989879663">Hold en pause</translation>
 <translation id="6850010208275816200">Din aktuelle app er åbnet i fuld skærm. Afslut fuld skærm, hvis appen beder dig om at angive din adgangskode.</translation>
+<translation id="6852052252232534364">Aktivér</translation>
 <translation id="6857725247182211756"><ph name="SECONDS" /> sek.</translation>
 <translation id="6857811139397017780">Aktivér <ph name="NETWORKSERVICE" /></translation>
 <translation id="685782768769951078">{NUM_DIGITS,plural, =1{Der skal angives ét ciffer mere}one{Der skal angives # ciffer mere}other{Der skal angives # cifre mere}}</translation>
@@ -696,6 +709,7 @@ slettes permanent, når den administrerede bruger fjernes. Besøgte websites og 
 <translation id="7029814467594812963">Afslut session</translation>
 <translation id="703425375924687388"><ph name="QUERY_NAME" />, Google Assistent</translation>
 <translation id="7042322267639375032">Skjul statusområde</translation>
+<translation id="7055910611768509537">Styluspennen har ikke været i brug i over en uge</translation>
 <translation id="7066646422045619941">Din administrator har deaktiveret dette netværk.</translation>
 <translation id="7067196344162293536">Automatisk rotering</translation>
 <translation id="7068360136237591149">Åbn filer</translation>
@@ -721,6 +735,7 @@ slettes permanent, når den administrerede bruger fjernes. Besøgte websites og 
 <translation id="7346909386216857016">OK</translation>
 <translation id="7348093485538360975">Skærmtastatur</translation>
 <translation id="735745346212279324">VPN afbrudt</translation>
+<translation id="7360036564632145207">Du kan forbedre ydeevnen ved at ændre indstillingen Beskyttelse af dataadgang for eksterne enheder</translation>
 <translation id="7371404428569700291">Optag vindue</translation>
 <translation id="7377169924702866686">Caps Lock er slået til.</translation>
 <translation id="7378203170292176219">Træk for at vælge et område, der skal optages</translation>
@@ -729,11 +744,13 @@ slettes permanent, når den administrerede bruger fjernes. Besøgte websites og 
 <translation id="7392563512730092880">Du kan altid konfigurere senere under Indstillinger.</translation>
 <translation id="7398254312354928459">Der blev skiftet netværksforbindelse</translation>
 <translation id="7405710164030118432">Angiv forældreadgangskoden til Family Link for at låse enheden op</translation>
+<translation id="7406608787870898861">Afslut konfigurationen af dit mobilnetværk</translation>
 <translation id="741244894080940828">konvertering</translation>
 <translation id="7413851974711031813">Tryk på Escape for at lukke</translation>
 <translation id="742594950370306541">Kameraet er i brug.</translation>
 <translation id="742608627846767349">Godmorgen</translation>
 <translation id="743058460480092004">Kamera og mikrofon er i brug.</translation>
+<translation id="7434543979546293336">Markeret som hovedidé</translation>
 <translation id="7452560014878697800">Dit kamera anvendes af en app</translation>
 <translation id="7456049842111127849">Optagelsestilstand, standard er <ph name="SOURCE" /> <ph name="TYPE" />.</translation>
 <translation id="7461924472993315131">Fastgør</translation>
@@ -777,6 +794,7 @@ slettes permanent, når den administrerede bruger fjernes. Besøgte websites og 
 <translation id="7780159184141939021">Roter skærm</translation>
 <translation id="7796353162336583443">Tryk på knappen for styluspen på hylden for at skrive en note, tage et screenshot eller bruge Google Assistent, laserpegepinden eller luppen.</translation>
 <translation id="7798302898096527229">Tryk på Søg eller Shift for at annullere.</translation>
+<translation id="7807966291075028781">Af sikkerhedshensyn understøttes eksterne enheder ikke i Gæstetilstand</translation>
 <translation id="7814236020522506259"><ph name="HOUR" /> og <ph name="MINUTE" /></translation>
 <translation id="7829386189513694949">Stærkt signal</translation>
 <translation id="7837740436429729974">Tiden er gået</translation>
@@ -845,6 +863,7 @@ slettes permanent, når den administrerede bruger fjernes. Besøgte websites og 
 <translation id="8345019317483336363">Vinduet <ph name="WINDOW_TITLE" /> er valgt</translation>
 <translation id="8351131234907093545">Opret note</translation>
 <translation id="8371779926711439835">Et bogstav frem</translation>
+<translation id="8371991222807690464">Din eksterne enheds ydeevne kan være begrænset i Gæstetilstand</translation>
 <translation id="8375916635258623388">Denne <ph name="DEVICE_NAME" /> og din telefon forbindes automatisk</translation>
 <translation id="8380784334203145311">Hej</translation>
 <translation id="8388750414311082622">Det seneste skrivebord kan ikke fjernes.</translation>
@@ -947,6 +966,8 @@ slettes permanent, når den administrerede bruger fjernes. Besøgte websites og 
 <translation id="9091626656156419976">Skærmen <ph name="DISPLAY_NAME" /> blev fjernet</translation>
 <translation id="9098969848082897657">Sæt telefonen på lydløs</translation>
 <translation id="9099154003160514616">Der er en Lacros-opdatering</translation>
+<translation id="9105450214093926548">Det er ikke muligt at logge ind med en yderligere bruger, mens Lacros-browseren kører. Du skal i stedet bruge en yderligere browserprofil i Lacros, eller du kan lukke Lacros og prøve igen.</translation>
+<translation id="9133335900048457298">Der kan ikke optages beskyttet indhold</translation>
 <translation id="9151726767154816831">Genstart, og udfør en powerwash for at opdatere</translation>
 <translation id="9166331175924255663">Slå høj synlighed for Deling tæt på til/fra.</translation>
 <translation id="9168436347345867845">Gør det senere</translation>

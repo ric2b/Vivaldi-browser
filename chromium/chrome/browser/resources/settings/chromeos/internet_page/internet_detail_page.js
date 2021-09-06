@@ -854,6 +854,8 @@ Polymer({
       case chromeos.networkConfig.mojom.NetworkType.kCellular:
         managedProperties.typeProperties.cellular.signalStrength =
             networkState.typeState.cellular.signalStrength;
+        managedProperties.typeProperties.cellular.simLocked =
+            networkState.typeState.cellular.simLocked;
         break;
       case chromeos.networkConfig.mojom.NetworkType.kTether:
         managedProperties.typeProperties.tether.signalStrength =
@@ -929,18 +931,6 @@ Polymer({
           this.i18n('networkOutOfRange');
     }
 
-    if (managedProperties.type ===
-            chromeos.networkConfig.mojom.NetworkType.kCellular &&
-        !managedProperties.connectable) {
-      if (managedProperties.typeProperties.cellular.homeProvider &&
-          managedProperties.typeProperties.cellular.homeProvider.name) {
-        return this.i18n(
-            'cellularContactSpecificCarrier',
-            managedProperties.typeProperties.cellular.homeProvider.name);
-      }
-      return this.i18n('cellularContactDefaultCarrier');
-    }
-
     return this.i18n(
         OncMojo.getConnectionStateString(managedProperties.connectionState));
   },
@@ -984,32 +974,6 @@ Polymer({
   isConnectedState_(managedProperties) {
     return !!managedProperties &&
         OncMojo.connectionStateIsConnected(managedProperties.connectionState);
-  },
-
-  /**
-   * @param {!chromeos.networkConfig.mojom.ManagedProperties|undefined}
-   *     managedProperties
-   * @param {boolean} outOfRange
-   * @param {?OncMojo.DeviceStateProperties} deviceState
-   * @return {boolean} True if the network shown cannot initiate a connection.
-   * @private
-   */
-  isConnectionErrorState_(managedProperties, outOfRange, deviceState) {
-    if (this.isOutOfRangeOrNotEnabled_(outOfRange, deviceState)) {
-      return true;
-    }
-
-    if (!managedProperties) {
-      return false;
-    }
-
-    // It's still possible to initiate a connection to a network if it is not
-    // connectable as long as the network has an associated configuration flow.
-    // Cellular networks do not have a configuration flow, so a Cellular network
-    // that is not connectable represents an error state.
-    return managedProperties.type ===
-        chromeos.networkConfig.mojom.NetworkType.kCellular &&
-        !managedProperties.connectable;
   },
 
   /**
@@ -1115,17 +1079,12 @@ Polymer({
       return false;
     }
 
-    // Cellular is not configurable, so we always show the connect button, and
-    // disable it if 'connectable' is false.
-    if (managedProperties.type ===
-        chromeos.networkConfig.mojom.NetworkType.kCellular) {
-      return true;
-    }
-
-    // If 'connectable' is false we show the configure button.
-    return managedProperties.connectable &&
-        managedProperties.type !==
+    const isEthernet = managedProperties.type ===
         chromeos.networkConfig.mojom.NetworkType.kEthernet;
+
+    // Note: Ethernet networks do not have an explicit "Connect" button in the
+    // UI.
+    return OncMojo.isNetworkConnectable(managedProperties) && !isEthernet;
   },
 
   /**
@@ -1341,21 +1300,25 @@ Polymer({
             deviceState)) {
       return false;
     }
+
     if (!propertiesReceived || outOfRange) {
       return false;
     }
-    // Cellular networks are not configurable, so we show a disabled 'Connect'
-    // button when not connectable.
-    if (managedProperties.type ===
-            chromeos.networkConfig.mojom.NetworkType.kCellular &&
-        !managedProperties.connectable) {
-      return false;
-    }
+
     if (managedProperties.type ===
             chromeos.networkConfig.mojom.NetworkType.kVPN &&
         !defaultNetwork) {
       return false;
     }
+
+    // Cannot connect to a network which is SIM locked; the user must first
+    // unlock the SIM before attempting a connection.
+    if (managedProperties.type ===
+            chromeos.networkConfig.mojom.NetworkType.kCellular &&
+        managedProperties.typeProperties.cellular.simLocked) {
+      return false;
+    }
+
     return true;
   },
 

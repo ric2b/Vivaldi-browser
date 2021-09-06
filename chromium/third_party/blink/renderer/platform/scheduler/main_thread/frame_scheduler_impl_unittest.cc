@@ -144,10 +144,11 @@ constexpr TaskType kAllFrameTaskTypes[] = {
     TaskType::kInternalTranslation,
     TaskType::kInternalInspector,
     TaskType::kInternalNavigationAssociatedUnfreezable,
-    TaskType::kInternalHighPriorityLocalFrame};
+    TaskType::kInternalHighPriorityLocalFrame,
+    TaskType::kWakeLock};
 
 static_assert(
-    static_cast<int>(TaskType::kCount) == 76,
+    static_cast<int>(TaskType::kCount) == 77,
     "When adding a TaskType, make sure that kAllFrameTaskTypes is updated.");
 
 void AppendToVectorTestTask(Vector<String>* vector, String value) {
@@ -437,14 +438,12 @@ class FrameSchedulerImplTest : public testing::Test {
 
   bool IsThrottled() {
     EXPECT_TRUE(throttleable_task_queue());
-    return scheduler_->task_queue_throttler()->IsThrottled(
-        throttleable_task_queue()->GetTaskQueue());
+    return throttleable_task_queue()->IsThrottled();
   }
 
   bool IsTaskTypeThrottled(TaskType task_type) {
     scoped_refptr<MainThreadTaskQueue> task_queue = GetTaskQueue(task_type);
-    return scheduler_->task_queue_throttler()->IsThrottled(
-        task_queue->GetTaskQueue());
+    return task_queue->IsThrottled();
   }
 
   SchedulingLifecycleState CalculateLifecycleState(

@@ -12,7 +12,6 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
-#include "build/chromeos_buildflags.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/test_data_util.h"
 #include "media/ffmpeg/ffmpeg_common.h"
@@ -406,13 +405,6 @@ TEST_F(AV1DecoderTest, Decode10bitStream) {
   const std::string k10bitStream("bear-av1-320x180-10bit.webm");
   std::vector<scoped_refptr<DecoderBuffer>> buffers = ReadWebm(k10bitStream);
   ASSERT_FALSE(buffers.empty());
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
-  std::vector<DecodeResult> expected = {DecodeResult::kDecodeError};
-  EXPECT_EQ(Decode(buffers[0]), expected);
-  // Once AV1Decoder gets into an error state, Decode() returns kDecodeError
-  // until Reset().
-  EXPECT_EQ(Decode(buffers[0]), expected);
-#else
   constexpr gfx::Size kFrameSize(320, 180);
   constexpr gfx::Size kRenderSize(320, 180);
   constexpr auto kProfile = libgav1::BitstreamProfile::kProfile0;
@@ -442,7 +434,6 @@ TEST_F(AV1DecoderTest, Decode10bitStream) {
     testing::Mock::VerifyAndClearExpectations(mock_accelerator_);
   }
   EXPECT_EQ(results, expected);
-#endif
 }
 
 TEST_F(AV1DecoderTest, DecodeSVCStream) {
@@ -472,13 +463,6 @@ TEST_F(AV1DecoderTest, DecodeFilmGrain) {
   const std::string kFilmGrainStream("av1-film_grain.ivf");
   std::vector<scoped_refptr<DecoderBuffer>> buffers = ReadIVF(kFilmGrainStream);
   ASSERT_FALSE(buffers.empty());
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
-  std::vector<DecodeResult> expected = {DecodeResult::kDecodeError};
-  EXPECT_EQ(Decode(buffers[0]), expected);
-  // Once AV1Decoder gets into an error state, Decode() returns kDecodeError
-  // until Reset().
-  EXPECT_EQ(Decode(buffers[0]), expected);
-#else
   constexpr size_t kDecodedFrames = 11;
   constexpr size_t kOutputFrames = 10;
   constexpr gfx::Size kFrameSize(352, 288);
@@ -511,7 +495,6 @@ TEST_F(AV1DecoderTest, DecodeFilmGrain) {
     expected.push_back(DecodeResult::kRanOutOfStreamData);
   }
   EXPECT_EQ(results, expected);
-#endif
 }
 
 // TODO(b/175895249): Test in isolation each of the conditions that trigger a
@@ -566,14 +549,15 @@ TEST_F(AV1DecoderTest, Reset) {
   constexpr gfx::Size kRenderSize(320, 240);
   constexpr auto kProfile = libgav1::BitstreamProfile::kProfile0;
   constexpr auto kMediaProfile = VideoCodecProfile::AV1PROFILE_PROFILE_MAIN;
+  constexpr uint8_t kBitDepth = 8u;
   const std::string kSimpleStream("bear-av1.webm");
   std::vector<DecodeResult> expected;
   std::vector<DecodeResult> results;
 
   std::vector<scoped_refptr<DecoderBuffer>> buffers = ReadWebm(kSimpleStream);
   ASSERT_FALSE(buffers.empty());
+  expected.push_back(DecodeResult::kConfigChange);
   for (int k = 0; k < 2; k++) {
-    expected.push_back(DecodeResult::kConfigChange);
     for (auto buffer : buffers) {
       ::testing::InSequence sequence;
       auto av1_picture = base::MakeRefCounted<AV1Picture>();
@@ -598,10 +582,16 @@ TEST_F(AV1DecoderTest, Reset) {
       EXPECT_EQ(decoder_->GetProfile(), kMediaProfile);
       EXPECT_EQ(decoder_->GetPicSize(), kFrameSize);
       EXPECT_EQ(decoder_->GetVisibleRect(), gfx::Rect(kRenderSize));
+      EXPECT_EQ(decoder_->GetBitDepth(), kBitDepth);
       testing::Mock::VerifyAndClearExpectations(mock_accelerator_);
     }
 
     Reset();
+    // Ensures Reset() doesn't clear the stored stream states.
+    EXPECT_EQ(decoder_->GetProfile(), kMediaProfile);
+    EXPECT_EQ(decoder_->GetPicSize(), kFrameSize);
+    EXPECT_EQ(decoder_->GetVisibleRect(), gfx::Rect(kRenderSize));
+    EXPECT_EQ(decoder_->GetBitDepth(), kBitDepth);
   }
   EXPECT_EQ(results, expected);
 }
@@ -613,6 +603,7 @@ TEST_F(AV1DecoderTest, ResetAndConfigChange) {
                                         "bear-av1-480x360.webm"};
   constexpr gfx::Size kFrameSizes[] = {{320, 240}, {480, 360}};
   constexpr gfx::Size kRenderSizes[] = {{320, 240}, {480, 360}};
+  constexpr uint8_t kBitDepth = 8u;
   std::vector<DecodeResult> expected;
   std::vector<DecodeResult> results;
 
@@ -645,10 +636,16 @@ TEST_F(AV1DecoderTest, ResetAndConfigChange) {
       EXPECT_EQ(decoder_->GetProfile(), kMediaProfile);
       EXPECT_EQ(decoder_->GetPicSize(), kFrameSizes[i]);
       EXPECT_EQ(decoder_->GetVisibleRect(), gfx::Rect(kRenderSizes[i]));
+      EXPECT_EQ(decoder_->GetBitDepth(), kBitDepth);
       testing::Mock::VerifyAndClearExpectations(mock_accelerator_);
     }
 
     Reset();
+    // Ensures Reset() doesn't clear the stored stream states.
+    EXPECT_EQ(decoder_->GetProfile(), kMediaProfile);
+    EXPECT_EQ(decoder_->GetPicSize(), kFrameSizes[i]);
+    EXPECT_EQ(decoder_->GetVisibleRect(), gfx::Rect(kRenderSizes[i]));
+    EXPECT_EQ(decoder_->GetBitDepth(), kBitDepth);
   }
   EXPECT_EQ(results, expected);
 }
@@ -682,8 +679,6 @@ TEST_F(AV1DecoderTest, InconsistentReferenceFrameState) {
     // frames are valid.
     const libgav1::DecoderState* decoder_state = GetDecoderState();
     ASSERT_TRUE(decoder_state);
-    EXPECT_EQ(base::STLCount(decoder_state->reference_valid, false),
-              base::checked_cast<long>(decoder_state->reference_valid.size()));
     EXPECT_EQ(base::STLCount(decoder_state->reference_frame, nullptr),
               base::checked_cast<long>(decoder_state->reference_frame.size()));
 
@@ -710,8 +705,6 @@ TEST_F(AV1DecoderTest, InconsistentReferenceFrameState) {
     // reference frames have been updated): libgav1 should have decided that all
     // reference frames are valid.
     ASSERT_TRUE(decoder_state);
-    EXPECT_EQ(base::STLCount(decoder_state->reference_valid, true),
-              base::checked_cast<long>(decoder_state->reference_valid.size()));
     EXPECT_EQ(base::STLCount(decoder_state->reference_frame, nullptr), 0);
 
     // And to be consistent, all the reference frames tracked by the AV1Decoder
@@ -750,8 +743,6 @@ TEST_F(AV1DecoderTest, InconsistentReferenceFrameState) {
   // were valid.
   const libgav1::DecoderState* decoder_state = GetDecoderState();
   ASSERT_TRUE(decoder_state);
-  EXPECT_EQ(base::STLCount(decoder_state->reference_valid, true),
-            base::checked_cast<long>(decoder_state->reference_valid.size()));
   EXPECT_EQ(base::STLCount(decoder_state->reference_frame, nullptr), 0);
 }
 

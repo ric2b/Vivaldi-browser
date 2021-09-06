@@ -10,6 +10,8 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.metrics.RecordHistogram;
 
+import org.chromium.base.BuildConfig;
+
 /**
  * VariationsSeedBridge is a class which is used to pass variations first run seed that was fetched
  * before the actual Chrome first run to Chromium core. Class provides methods to store the seed
@@ -44,6 +46,7 @@ public class VariationsSeedBridge {
     }
 
     protected static String getVariationsFirstRunSeedPref(String prefName) {
+        if (BuildConfig.IS_VIVALDI) return "";  // Vivaldi says NO to field trials.
         return ContextUtils.getAppSharedPreferences().getString(prefName, "");
     }
 

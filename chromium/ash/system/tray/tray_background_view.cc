@@ -25,11 +25,11 @@
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_container.h"
 #include "ash/system/tray/tray_event_filter.h"
-#include "ash/window_factory.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_multi_source_observation.h"
 #include "base/time/time.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/aura/window.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_element.h"
 #include "ui/compositor/layer_animation_sequence.h"
@@ -48,6 +48,7 @@
 #include "ui/views/background.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/painter.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/wm/core/window_animations.h"
@@ -127,9 +128,6 @@ class HighlightPathGenerator : public views::HighlightPathGenerator {
 
 }  // namespace
 
-// static
-const char TrayBackgroundView::kViewClassName[] = "tray/TrayBackgroundView";
-
 // Used to track when the anchor widget changes position on screen so that the
 // bubble position can be updated.
 class TrayBackgroundView::TrayWidgetObserver : public views::WidgetObserver {
@@ -145,11 +143,12 @@ class TrayBackgroundView::TrayWidgetObserver : public views::WidgetObserver {
     host_->AnchorUpdated();
   }
 
-  void Add(views::Widget* widget) { observer_.Add(widget); }
+  void Add(views::Widget* widget) { observations_.AddObservation(widget); }
 
  private:
   TrayBackgroundView* host_;
-  ScopedObserver<views::Widget, views::WidgetObserver> observer_{this};
+  base::ScopedMultiSourceObservation<views::Widget, views::WidgetObserver>
+      observations_{this};
 
   DISALLOW_COPY_AND_ASSIGN(TrayWidgetObserver);
 };
@@ -261,10 +260,6 @@ void TrayBackgroundView::StartVisibilityAnimation(bool visible) {
   } else {
     HideAnimation();
   }
-}
-
-const char* TrayBackgroundView::GetClassName() const {
-  return kViewClassName;
 }
 
 void TrayBackgroundView::AboutToRequestFocusFromTabTraversal(bool reverse) {
@@ -590,5 +585,8 @@ bool TrayBackgroundView::GetEffectiveVisibility() {
 
   return true;
 }
+
+BEGIN_METADATA(TrayBackgroundView, ActionableView)
+END_METADATA
 
 }  // namespace ash

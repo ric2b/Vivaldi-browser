@@ -14,6 +14,7 @@
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
+#include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/signin/chrome_device_id_helper.h"
@@ -33,9 +34,9 @@
 #include "content/public/browser/storage_partition.h"
 #include "extensions/browser/extension_system_provider.h"
 #include "extensions/browser/extensions_browser_client.h"
+#include "sync/note_sync_service_factory.h"
 #include "sync/vivaldi_profile_sync_service.h"
 #include "sync/vivaldi_sync_client.h"
-#include "sync/note_sync_service_factory.h"
 #include "vivaldi_account/vivaldi_account_manager_factory.h"
 
 namespace vivaldi {
@@ -113,48 +114,40 @@ VivaldiProfileSyncServiceFactory::~VivaldiProfileSyncServiceFactory() {}
 
 KeyedService* VivaldiProfileSyncServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  Profile* profile = static_cast<Profile*>(context);
+  Profile* profile = Profile::FromBrowserContext(context);
 
   ProfileSyncService::InitParams init_params;
+  std::unique_ptr<VivaldiSyncClient> sync_client =
+      std::make_unique<VivaldiSyncClient>(profile);
 
-  init_params.identity_manager = IdentityManagerFactory::GetForProfile(profile);
+  auto invalidation_service = sync_client->GetVivaldiInvalidationService();
+
+  init_params.sync_client = std::move(sync_client);
+  init_params.network_time_update_callback = base::Bind(&UpdateNetworkTime);
   init_params.url_loader_factory =
       content::BrowserContext::GetDefaultStoragePartition(profile)
           ->GetURLLoaderFactoryForBrowserProcess();
-
-  init_params.start_behavior = ProfileSyncService::MANUAL_START;
-
-  VivaldiSyncClient* sync_client = new VivaldiSyncClient(profile);
-  init_params.sync_client = base::WrapUnique(sync_client);
-
-  init_params.network_time_update_callback = base::Bind(&UpdateNetworkTime);
   init_params.network_connection_tracker =
       content::GetNetworkConnectionTracker();
-  init_params.debug_identifier = profile->GetDebugName();
   init_params.channel = chrome::GetChannel();
+  init_params.debug_identifier = profile->GetDebugName();
+  init_params.policy_service =
+      profile->GetProfilePolicyConnector()->policy_service();
+  init_params.identity_manager = IdentityManagerFactory::GetForProfile(profile);
+  init_params.start_behavior = ProfileSyncService::MANUAL_START;
 
-  if (vivaldi::ForcedVivaldiRunning()) {
-    auto* fcm_invalidation_provider =
-        invalidation::ProfileInvalidationProviderFactory::GetForProfile(
-            profile);
-    if (fcm_invalidation_provider) {
-      init_params.invalidations_identity_provider =
-          fcm_invalidation_provider->GetIdentityProvider();
-    }
-  }
+  auto vpss = std::make_unique<VivaldiProfileSyncService>(
+      &init_params, profile, invalidation_service,
+      VivaldiAccountManagerFactory::GetForProfile(profile));
 
-  auto vss = base::WrapUnique(new VivaldiProfileSyncService(
-      &init_params, profile, sync_client->GetVivaldiInvalidationService(),
-      VivaldiAccountManagerFactory::GetForProfile(profile)));
-
-  vss->Initialize();
+  vpss->Initialize();
 
   // Hook PSS into PersonalDataManager (a circular dependency).
   autofill::PersonalDataManager* pdm =
-    autofill::PersonalDataManagerFactory::GetForProfile(profile);
-  pdm->OnSyncServiceInitialized(vss.get());
+      autofill::PersonalDataManagerFactory::GetForProfile(profile);
+  pdm->OnSyncServiceInitialized(vpss.get());
 
-  return vss.release();
+  return vpss.release();
 }
 
 }  // namespace vivaldi

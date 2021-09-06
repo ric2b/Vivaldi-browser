@@ -6,6 +6,7 @@
 
 #include "base/notreached.h"
 #include "base/syslog_logging.h"
+#include "chrome/browser/chromeos/policy/dlp/dlp_histogram_helper.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_factory.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -100,8 +101,10 @@ DlpRulesManager::Level IsDataTransferAllowed(
 
 // static
 void DataTransferDlpController::Init(const DlpRulesManager& dlp_rules_manager) {
-  if (!HasInstance())
+  if (!HasInstance()) {
+    DlpBooleanHistogram(dlp::kDataTransferControllerStartedUMA, true);
     new DataTransferDlpController(dlp_rules_manager);
+  }
 }
 
 bool DataTransferDlpController::IsClipboardReadAllowed(
@@ -113,18 +116,47 @@ bool DataTransferDlpController::IsClipboardReadAllowed(
   bool notify_on_paste = !data_dst || data_dst->notify_if_restricted();
   // Files Apps continuously reads the clipboard data which triggers a lot of
   // notifications while the user isn't actually initiating any copy/paste.
+  // In BLOCK mode, data access by Files app will be denied silently.
+  // In WARN mode, data access by Files app will be allowed silently.
   // TODO(crbug.com/1152475): Find a better way to handle File app.
   // When ClipboardHistory tries to read the clipboard we should allow it
   // silently.
   if (IsFilesApp(data_dst) || IsClipboardHistory(data_dst))
     notify_on_paste = false;
 
-  if (level == DlpRulesManager::Level::kBlock && notify_on_paste) {
-    SYSLOG(INFO) << "DLP blocked paste from clipboard";
-    DoNotifyBlockedPaste(data_src, data_dst);
-  }
+  bool is_read_allowed = true;
 
-  return level == DlpRulesManager::Level::kAllow;
+  switch (level) {
+    case DlpRulesManager::Level::kBlock:
+      if (notify_on_paste) {
+        SYSLOG(INFO) << "DLP blocked paste from clipboard";
+        NotifyBlockedPaste(data_src, data_dst);
+      }
+      is_read_allowed = false;
+      break;
+
+    case DlpRulesManager::Level::kWarn:
+      if (notify_on_paste) {
+        // In case the clipboard data is in warning mode, it will be allowed to
+        // be shared with Arc, Crostini, and Plugin VM without waiting for the
+        // user decision.
+        if (data_dst && (data_dst->type() == ui::EndpointType::kArc ||
+                         data_dst->type() == ui::EndpointType::kPluginVm ||
+                         data_dst->type() == ui::EndpointType::kCrostini)) {
+          WarnOnPaste(data_src, data_dst);
+        } else if (!ShouldProceedOnWarn(data_dst)) {
+          SYSLOG(INFO) << "DLP warned on paste from clipboard";
+          WarnOnPaste(data_src, data_dst);
+          is_read_allowed = false;
+        }
+      }
+      break;
+
+    default:
+      break;
+  }
+  DlpBooleanHistogram(dlp::kClipboardReadBlockedUMA, !is_read_allowed);
+  return is_read_allowed;
 }
 
 bool DataTransferDlpController::IsDragDropAllowed(
@@ -136,10 +168,12 @@ bool DataTransferDlpController::IsDragDropAllowed(
 
   if (level == DlpRulesManager::Level::kBlock && is_drop) {
     SYSLOG(INFO) << "DLP blocked drop of dragged data";
-    DoNotifyBlockedPaste(data_src, data_dst);
+    NotifyBlockedPaste(data_src, data_dst);
   }
 
-  return level == DlpRulesManager::Level::kAllow;
+  const bool is_drop_allowed = level == DlpRulesManager::Level::kAllow;
+  DlpBooleanHistogram(dlp::kDragDropBlockedUMA, !is_drop_allowed);
+  return is_drop_allowed;
 }
 
 DataTransferDlpController::DataTransferDlpController(
@@ -148,10 +182,27 @@ DataTransferDlpController::DataTransferDlpController(
 
 DataTransferDlpController::~DataTransferDlpController() = default;
 
-void DataTransferDlpController::DoNotifyBlockedPaste(
+void DataTransferDlpController::NotifyBlockedPaste(
     const ui::DataTransferEndpoint* const data_src,
     const ui::DataTransferEndpoint* const data_dst) {
-  helper_.NotifyBlockedPaste(data_src, data_dst);
+  clipboard_notifier_.NotifyBlockedAction(data_src, data_dst);
+}
+
+void DataTransferDlpController::WarnOnPaste(
+    const ui::DataTransferEndpoint* const data_src,
+    const ui::DataTransferEndpoint* const data_dst) {
+  clipboard_notifier_.WarnOnAction(data_src, data_dst);
+}
+
+bool DataTransferDlpController::ShouldProceedOnWarn(
+    const ui::DataTransferEndpoint* const data_dst) {
+  return clipboard_notifier_.DidUserProceedOnWarn(data_dst);
+}
+
+void DataTransferDlpController::NotifyBlockedDrop(
+    const ui::DataTransferEndpoint* const data_src,
+    const ui::DataTransferEndpoint* const data_dst) {
+  drag_drop_notifier_.NotifyBlockedAction(data_src, data_dst);
 }
 
 }  // namespace policy

@@ -351,14 +351,6 @@ TEST_F(NinjaRustBinaryTargetWriterTest, NonRustDeps) {
   Err err;
   TestWithScope setup;
 
-  Target staticlib(setup.settings(), Label(SourceDir("//foo/"), "static"));
-  staticlib.set_output_type(Target::STATIC_LIBRARY);
-  staticlib.visibility().SetPublic();
-  staticlib.sources().push_back(SourceFile("//foo/static.cpp"));
-  staticlib.source_types_used().Set(SourceFile::SOURCE_CPP);
-  staticlib.SetToolchain(setup.toolchain());
-  ASSERT_TRUE(staticlib.OnResolved(&err));
-
   Target rlib(setup.settings(), Label(SourceDir("//bar/"), "mylib"));
   rlib.set_output_type(Target::RUST_LIBRARY);
   rlib.visibility().SetPublic();
@@ -370,6 +362,14 @@ TEST_F(NinjaRustBinaryTargetWriterTest, NonRustDeps) {
   rlib.rust_values().crate_name() = "mylib";
   rlib.SetToolchain(setup.toolchain());
   ASSERT_TRUE(rlib.OnResolved(&err));
+
+  Target staticlib(setup.settings(), Label(SourceDir("//foo/"), "static"));
+  staticlib.set_output_type(Target::STATIC_LIBRARY);
+  staticlib.visibility().SetPublic();
+  staticlib.sources().push_back(SourceFile("//foo/static.cpp"));
+  staticlib.source_types_used().Set(SourceFile::SOURCE_CPP);
+  staticlib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(staticlib.OnResolved(&err));
 
   Target sharedlib(setup.settings(), Label(SourceDir("//foo/"), "shared"));
   sharedlib.set_output_type(Target::SHARED_LIBRARY);
@@ -438,11 +438,9 @@ TEST_F(NinjaRustBinaryTargetWriterTest, NonRustDeps) {
         "obj/foo/libstatic.a ./libshared.so ./libshared_with_toc.so.TOC "
         "|| obj/baz/sourceset.stamp\n"
         "  externs = --extern mylib=obj/bar/libmylib.rlib\n"
-        "  rustdeps = -Ldependency=obj/bar "
-        "-Lnative=obj/baz -Lnative=obj/foo -Lnative=. "
-        "-Clink-arg=obj/baz/sourceset.csourceset.o "
-        "-Clink-arg=obj/foo/libstatic.a -Clink-arg=./libshared.so "
-        "-Clink-arg=./libshared_with_toc.so\n"
+        "  rustdeps = -Ldependency=obj/bar -Lnative=obj/baz -Lnative=obj/foo "
+        "-Lnative=. -Clink-arg=obj/baz/sourceset.csourceset.o -lstatic "
+        "-lshared -lshared_with_toc\n"
         "  sources = ../../foo/source.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -479,46 +477,8 @@ TEST_F(NinjaRustBinaryTargetWriterTest, NonRustDeps) {
         "build ./foo_bar: rust_bin ../../foo/main.rs | ../../foo/source.rs "
         "../../foo/main.rs obj/foo/libstatic.a\n"
         "  externs =\n"
-        "  rustdeps = -Lnative=obj/foo -Clink-arg=obj/foo/libstatic.a\n"
+        "  rustdeps = -Lnative=obj/foo -lstatic\n"
         "  sources = ../../foo/source.rs ../../foo/main.rs\n";
-    std::string out_str = out.str();
-    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
-  }
-
-  Target rstaticlib(setup.settings(), Label(SourceDir("//baz/"), "baz"));
-  rstaticlib.set_output_type(Target::STATIC_LIBRARY);
-  rstaticlib.visibility().SetPublic();
-  SourceFile bazlib("//baz/lib.rs");
-  rstaticlib.sources().push_back(bazlib);
-  rstaticlib.source_types_used().Set(SourceFile::SOURCE_RS);
-  rstaticlib.rust_values().set_crate_root(bazlib);
-  rstaticlib.rust_values().crate_name() = "baz";
-  rstaticlib.private_deps().push_back(LabelTargetPair(&staticlib));
-  rstaticlib.SetToolchain(setup.toolchain());
-  ASSERT_TRUE(rstaticlib.OnResolved(&err));
-
-  {
-    std::ostringstream out;
-    NinjaRustBinaryTargetWriter writer(&rstaticlib, out);
-    writer.Run();
-
-    const char expected[] =
-        "crate_name = baz\n"
-        "crate_type = staticlib\n"
-        "output_extension = .a\n"
-        "output_dir = \n"
-        "rustflags =\n"
-        "rustenv =\n"
-        "root_out_dir = .\n"
-        "target_out_dir = obj/baz\n"
-        "target_output_name = libbaz\n"
-        "\n"
-        "build obj/baz/libbaz.a: rust_staticlib ../../baz/lib.rs | "
-        "../../baz/lib.rs "
-        "obj/foo/libstatic.a\n"
-        "  externs =\n"
-        "  rustdeps = -Lnative=obj/foo -Clink-arg=obj/foo/libstatic.a\n"
-        "  sources = ../../baz/lib.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }

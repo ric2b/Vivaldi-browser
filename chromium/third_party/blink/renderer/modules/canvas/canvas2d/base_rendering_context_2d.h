@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/geometry/dom_matrix.h"
 #include "third_party/blink/renderer/core/html/canvas/image_data.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_gradient.h"
+#include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_image_source_util.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_path.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d_state.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_style.h"
@@ -23,9 +24,6 @@ class CanvasImageSource;
 class Color;
 class Image;
 class Path2D;
-
-typedef CSSImageValueOrHTMLImageElementOrSVGImageElementOrHTMLVideoElementOrHTMLCanvasElementOrImageBitmapOrOffscreenCanvas
-    CanvasImageSourceUnion;
 
 class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
                                               public CanvasPath {
@@ -82,21 +80,61 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   void reset();
 
   void scale(double sx, double sy);
+  void scale(double sx, double sy, double sz);
   void rotate(double angle_in_radians);
+  void rotate3d(double rx, double ry, double rz);
+  void rotateAxis(double axisX,
+                  double axisY,
+                  double axisZ,
+                  double angle_in_radians);
   void translate(double tx, double ty);
+  void translate(double tx, double ty, double tz);
+  void perspective(double length);
   void transform(double m11,
                  double m12,
                  double m21,
                  double m22,
                  double dx,
                  double dy);
+  void transform(double m11,
+                 double m12,
+                 double m13,
+                 double m14,
+                 double m21,
+                 double m22,
+                 double m23,
+                 double m24,
+                 double m31,
+                 double m32,
+                 double m33,
+                 double m34,
+                 double m41,
+                 double m42,
+                 double m43,
+                 double m44);
+  void setTransform(double m11,
+                    double m12,
+                    double m13,
+                    double m14,
+                    double m21,
+                    double m22,
+                    double m23,
+                    double m24,
+                    double m31,
+                    double m32,
+                    double m33,
+                    double m34,
+                    double m41,
+                    double m42,
+                    double m43,
+                    double m44);
   void setTransform(double m11,
                     double m12,
                     double m21,
                     double m22,
                     double dx,
                     double dy);
-  void setTransform(DOMMatrix2DInit*, ExceptionState&);
+  void setTransform(DOMMatrixInit*, ExceptionState&);
   virtual DOMMatrix* getTransform();
   virtual void resetTransform();
 
@@ -454,6 +492,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
                          Image*,
                          const FloatRect& src_rect,
                          const FloatRect& dst_rect,
+                         const SkSamplingOptions&,
                          const PaintFlags*);
   void ClipInternal(const Path&, const String& winding_rule_string);
 

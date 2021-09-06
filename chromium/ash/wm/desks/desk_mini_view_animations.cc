@@ -46,7 +46,7 @@ constexpr float kEnterOrExitZeroStateScale = 0.6f;
 void InitScopedAnimationSettings(ui::ScopedLayerAnimationSettings* settings,
                                  base::TimeDelta duration) {
   settings->SetTransitionDuration(duration);
-  settings->SetTweenType(gfx::Tween::FAST_OUT_SLOW_IN);
+  settings->SetTweenType(gfx::Tween::ACCEL_20_DECEL_60);
   settings->SetPreemptionStrategy(
       ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
 }
@@ -298,8 +298,8 @@ void PerformReorderDeskMiniViewAnimation(
 
   // Since |old_index| and |new_index| are unequal valid indices, there
   // must be at least two desks.
-  int shift_x = mini_views[0]->bounds().origin().x() -
-                mini_views[1]->bounds().origin().x();
+  int shift_x = mini_views[0]->GetMirroredBounds().x() -
+                mini_views[1]->GetMirroredBounds().x();
   shift_x = move_right ? -shift_x : shift_x;
   gfx::Transform desks_transform;
   desks_transform.Translate(shift_x, 0);
@@ -318,8 +318,8 @@ void PerformReorderDeskMiniViewAnimation(
   // Back to old position.
   gfx::Transform reorder_desk_transform;
   reorder_desk_transform.Translate(
-      mini_views[old_index]->bounds().origin().x() -
-          reorder_view->bounds().origin().x(),
+      mini_views[old_index]->GetMirroredBounds().x() -
+          reorder_view->GetMirroredBounds().x(),
       0);
   layer->SetTransform(reorder_desk_transform);
 

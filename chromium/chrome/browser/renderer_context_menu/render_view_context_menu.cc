@@ -104,6 +104,7 @@
 #include "components/google/core/common/google_util.h"
 #include "components/guest_view/browser/guest_view_base.h"
 #include "components/language/core/browser/language_model_manager.h"
+#include "components/lens/lens_features.h"
 #include "components/media_router/browser/media_router_dialog_controller.h"
 #include "components/media_router/browser/media_router_metrics.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
@@ -139,7 +140,6 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/menu_item.h"
 #include "content/public/common/url_utils.h"
 #include "extensions/buildflags/buildflags.h"
 #include "media/base/media_switches.h"
@@ -151,8 +151,8 @@
 #include "printing/buildflags/buildflags.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/context_menu_data/context_menu_data.h"
 #include "third_party/blink/public/common/context_menu_data/edit_flags.h"
-#include "third_party/blink/public/common/context_menu_data/input_field_type.h"
 #include "third_party/blink/public/mojom/context_menu/context_menu.mojom.h"
 #include "third_party/blink/public/mojom/frame/media_player_action.mojom.h"
 #include "third_party/blink/public/public_buildflags.h"
@@ -218,22 +218,20 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/clipboard_history_controller.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/intent_helper/open_with_menu.h"
 #include "chrome/browser/chromeos/arc/intent_helper/start_smart_selection_action_menu.h"
 #include "chrome/browser/renderer_context_menu/quick_answers_menu_observer.h"
-#include "chromeos/constants/chromeos_features.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
 #include "browser/vivaldi_browser_finder.h"
 
 using base::UserMetricsAction;
+using blink::ContextMenuData;
 using blink::ContextMenuDataEditFlags;
-using blink::WebContextMenuData;
-using blink::WebString;
-using blink::WebURL;
 using blink::mojom::ContextMenuDataMediaType;
 using content::BrowserContext;
 using content::ChildProcessSecurityPolicy;
@@ -379,13 +377,14 @@ const std::map<int, int>& GetIdcToUmaMap(UmaEnumIdLookupType type) {
        {IDC_CONTENT_CONTEXT_GENERATE_QR_CODE, 110},
        {IDC_CONTENT_CLIPBOARD_HISTORY_MENU, 111},
        {IDC_CONTENT_CONTEXT_COPYLINKTOTEXT, 112},
+       {IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE, 113},
        // To add new items:
        //   - Add one more line above this comment block, using the UMA value
        //     from the line below this comment block.
        //   - Increment the UMA value in that latter line.
        //   - Add the new item to the RenderViewContextMenuItem enum in
        //     tools/metrics/histograms/enums.xml.
-       {0, 113}});
+       {0, 114}});
 
   // These UMA values are for the the ContextMenuOptionDesktop enum, used for
   // the ContextMenu.SelectedOptionDesktop histograms.
@@ -411,13 +410,14 @@ const std::map<int, int>& GetIdcToUmaMap(UmaEnumIdLookupType type) {
        {IDC_CONTENT_CONTEXT_PASTE, 18},
        {IDC_CONTENT_CONTEXT_GOTOURL, 19},
        {IDC_CONTENT_CONTEXT_COPYLINKTOTEXT, 20},
+       {IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE, 21},
        // To add new items:
        //   - Add one more line above this comment block, using the UMA value
        //     from the line below this comment block.
        //   - Increment the UMA value in that latter line.
        //   - Add the new item to the ContextMenuOptionDesktop enum in
        //     tools/metrics/histograms/enums.xml.
-       {0, 21}});
+       {0, 22}});
 
   return *(type == UmaEnumIdLookupType::GeneralEnumId ? kGeneralMap
                                                       : kSpecificMap);
@@ -559,12 +559,12 @@ void OnProfileCreated(const GURL& link_url,
 }
 
 bool DoesInputFieldTypeSupportEmoji(
-    blink::ContextMenuDataInputFieldType text_input_type) {
+    blink::mojom::ContextMenuDataInputFieldType text_input_type) {
   // Disable emoji for input types that definitely do not support emoji.
   switch (text_input_type) {
-    case blink::ContextMenuDataInputFieldType::kNumber:
-    case blink::ContextMenuDataInputFieldType::kTelephone:
-    case blink::ContextMenuDataInputFieldType::kOther:
+    case blink::mojom::ContextMenuDataInputFieldType::kNumber:
+    case blink::mojom::ContextMenuDataInputFieldType::kTelephone:
+    case blink::mojom::ContextMenuDataInputFieldType::kOther:
       return false;
     default:
       return true;
@@ -604,7 +604,7 @@ RenderViewContextMenu::RenderViewContextMenu(
       extension_items_(browser_context_,
                        this,
                        &menu_model_,
-                       base::Bind(MenuItemMatchesParams, params_)),
+                       base::BindRepeating(MenuItemMatchesParams, params_)),
       profile_link_submenu_model_(this),
       multiple_profiles_open_(false),
       protocol_handler_submenu_model_(this),
@@ -837,7 +837,11 @@ void RenderViewContextMenu::InitMenu() {
 
   if (content_type_->SupportsGroup(
           ContextMenuContentType::ITEM_GROUP_SEARCHWEBFORIMAGE)) {
-    AppendSearchWebForImageItems();
+    if (base::FeatureList::IsEnabled(lens::features::kLensStandalone)) {
+      AppendSearchLensForImageItems();
+    } else {
+      AppendSearchWebForImageItems();
+    }
   }
 
   if (content_type_->SupportsGroup(
@@ -1434,6 +1438,22 @@ void RenderViewContextMenu::AppendSearchWebForImageItems() {
                                  provider->short_name()));
 }
 
+void RenderViewContextMenu::AppendSearchLensForImageItems() {
+  if (!params_.has_image_contents)
+    return;
+
+  TemplateURLService* service =
+      TemplateURLServiceFactory::GetForProfile(GetProfile());
+  const TemplateURL* const provider = service->GetDefaultSearchProvider();
+  if (!provider || provider->image_url().empty() ||
+      !provider->image_url_ref().IsValid(service->search_terms_data())) {
+    return;
+  }
+
+  menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE,
+                                  IDS_CONTENT_CONTEXT_SEARCHLENSFORIMAGE);
+}
+
 void RenderViewContextMenu::AppendAudioItems() {
   AppendMediaItems();
   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
@@ -1628,7 +1648,7 @@ void RenderViewContextMenu::AppendCopyLinkToTextItem() {
 void RenderViewContextMenu::AppendPrintItem() {
   if (GetPrefs(browser_context_)->GetBoolean(prefs::kPrintingEnabled) &&
       (params_.media_type == ContextMenuDataMediaType::kNone ||
-       params_.media_flags & WebContextMenuData::kMediaCanPrint) &&
+       params_.media_flags & ContextMenuData::kMediaCanPrint) &&
       params_.misspelled_word.empty()) {
     menu_model_.AddItemWithStringId(IDC_PRINT, IDS_CONTENT_CONTEXT_PRINT);
   }
@@ -1642,7 +1662,7 @@ void RenderViewContextMenu::AppendMediaRouterItem() {
 }
 
 void RenderViewContextMenu::AppendRotationItems() {
-  if (params_.media_flags & WebContextMenuData::kMediaCanRotate) {
+  if (params_.media_flags & ContextMenuData::kMediaCanRotate) {
     menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
     menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_ROTATECW,
                                     IDS_CONTENT_CONTEXT_ROTATECW);
@@ -1762,9 +1782,15 @@ void RenderViewContextMenu::AppendEditableItems() {
     menu_model_.AddItemWithStringId(
         IDC_CONTENT_CLIPBOARD_HISTORY_MENU,
         IDS_CONTEXT_MENU_SHOW_CLIPBOARD_HISTORY_MENU);
-    menu_model_.SetIsNewFeatureAt(
-        menu_model_.GetIndexOfCommandId(IDC_CONTENT_CLIPBOARD_HISTORY_MENU),
-        chromeos::features::IsClipboardHistoryContextMenuNudgeEnabled());
+    ash::ClipboardHistoryController* clipboard_history_controller =
+        ash::ClipboardHistoryController::Get();
+    if (clipboard_history_controller &&
+        clipboard_history_controller->ShouldShowNewFeatureBadge()) {
+      menu_model_.SetIsNewFeatureAt(
+          menu_model_.GetIndexOfCommandId(IDC_CONTENT_CLIPBOARD_HISTORY_MENU),
+          true);
+      clipboard_history_controller->MarkNewFeatureBadgeShown();
+    }
   }
 #endif
 
@@ -2022,6 +2048,7 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
     case IDC_CONTENT_CONTEXT_LOAD_IMAGE:
     case IDC_CONTENT_CONTEXT_OPENIMAGENEWTAB:
     case IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE:
+    case IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE:
       return params_.src_url.is_valid() &&
              (params_.src_url.scheme() != content::kChromeUIScheme);
 
@@ -2031,21 +2058,21 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
     // Media control commands should all be disabled if the player is in an
     // error state.
     case IDC_CONTENT_CONTEXT_PLAYPAUSE:
-      return (params_.media_flags & WebContextMenuData::kMediaInError) == 0;
+      return (params_.media_flags & ContextMenuData::kMediaInError) == 0;
 
     // Loop command should be disabled if the player is in an error state.
     case IDC_CONTENT_CONTEXT_LOOP:
-      return (params_.media_flags & WebContextMenuData::kMediaCanLoop) != 0 &&
-             (params_.media_flags & WebContextMenuData::kMediaInError) == 0;
+      return (params_.media_flags & ContextMenuData::kMediaCanLoop) != 0 &&
+             (params_.media_flags & ContextMenuData::kMediaInError) == 0;
 
     // Mute and unmute should also be disabled if the player has no audio.
     case IDC_CONTENT_CONTEXT_MUTE:
-      return (params_.media_flags & WebContextMenuData::kMediaHasAudio) != 0 &&
-             (params_.media_flags & WebContextMenuData::kMediaInError) == 0;
+      return (params_.media_flags & ContextMenuData::kMediaHasAudio) != 0 &&
+             (params_.media_flags & ContextMenuData::kMediaInError) == 0;
 
     case IDC_CONTENT_CONTEXT_CONTROLS:
-      return (params_.media_flags &
-              WebContextMenuData::kMediaCanToggleControls) != 0;
+      return (params_.media_flags & ContextMenuData::kMediaCanToggleControls) !=
+             0;
 
     case IDC_CONTENT_CONTEXT_ROTATECW:
     case IDC_CONTENT_CONTEXT_ROTATECCW: {
@@ -2057,7 +2084,7 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
           IsPdfPluginURL(GetDocumentURL(params_)) && IsHTML5Fullscreen();
 #endif
       return !is_pdf_viewer_fullscreen &&
-             (params_.media_flags & WebContextMenuData::kMediaCanRotate) != 0;
+             (params_.media_flags & ContextMenuData::kMediaCanRotate) != 0;
     }
 
     case IDC_CONTENT_CONTEXT_COPYAVLOCATION:
@@ -2071,7 +2098,7 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
       // Currently, a media element can be opened in a new tab iff it can
       // be saved. So rather than duplicating the MediaCanSave flag, we rely
       // on that here.
-      return !!(params_.media_flags & WebContextMenuData::kMediaCanSave);
+      return !!(params_.media_flags & ContextMenuData::kMediaCanSave);
 
     case IDC_SAVE_PAGE:
       return IsSavePageEnabled();
@@ -2150,7 +2177,7 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
 
     case IDC_CONTENT_CONTEXT_PICTUREINPICTURE:
       return !!(params_.media_flags &
-                WebContextMenuData::kMediaCanPictureInPicture);
+                ContextMenuData::kMediaCanPictureInPicture);
 
     case IDC_CONTENT_CONTEXT_EMOJI:
       return params_.is_editable;
@@ -2183,14 +2210,13 @@ bool RenderViewContextMenu::IsCommandIdChecked(int id) const {
 
   // See if the video is set to looping.
   if (id == IDC_CONTENT_CONTEXT_LOOP)
-    return (params_.media_flags & WebContextMenuData::kMediaLoop) != 0;
+    return (params_.media_flags & ContextMenuData::kMediaLoop) != 0;
 
   if (id == IDC_CONTENT_CONTEXT_CONTROLS)
-    return (params_.media_flags & WebContextMenuData::kMediaControls) != 0;
+    return (params_.media_flags & ContextMenuData::kMediaControls) != 0;
 
   if (id == IDC_CONTENT_CONTEXT_PICTUREINPICTURE)
-    return (params_.media_flags & WebContextMenuData::kMediaPictureInPicture) !=
-           0;
+    return (params_.media_flags & ContextMenuData::kMediaPictureInPicture) != 0;
 
   if (id == IDC_CONTENT_CONTEXT_EMOJI)
     return false;
@@ -2291,6 +2317,10 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
 
     case IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE:
       ExecSearchWebForImage();
+      break;
+
+    case IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE:
+      ExecSearchLensForImage();
       break;
 
     case IDC_CONTENT_CONTEXT_OPEN_ORIGINAL_IMAGE_NEW_TAB:
@@ -2710,7 +2740,7 @@ bool RenderViewContextMenu::IsSaveAsEnabled() const {
     return false;
 
   const GURL& url = params_.src_url;
-  bool can_save = (params_.media_flags & WebContextMenuData::kMediaCanSave) &&
+  bool can_save = (params_.media_flags & ContextMenuData::kMediaCanSave) &&
                   url.is_valid() &&
                   ProfileIOData::IsHandledProtocol(url.scheme());
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -2767,7 +2797,7 @@ bool RenderViewContextMenu::IsPasteAndMatchStyleEnabled() const {
 
 bool RenderViewContextMenu::IsPrintPreviewEnabled() const {
   if (params_.media_type != ContextMenuDataMediaType::kNone &&
-      !(params_.media_flags & WebContextMenuData::kMediaCanPrint)) {
+      !(params_.media_flags & ContextMenuData::kMediaCanPrint)) {
     return false;
   }
 
@@ -2844,6 +2874,9 @@ bool RenderViewContextMenu::IsOpenLinkOTREnabled() const {
   if (browser_context_->IsOffTheRecord() || !params_.link_url.is_valid())
     return false;
 
+  if (Profile::FromBrowserContext(browser_context_)->IsEphemeralGuestProfile())
+    return false;
+
   if (!IsURLAllowedInIncognito(params_.link_url, browser_context_))
     return false;
 
@@ -2893,8 +2926,8 @@ void RenderViewContextMenu::ExecOpenLinkInProfile(int profile_index) {
   base::FilePath profile_path = profile_link_paths_[profile_index];
   profiles::SwitchToProfile(
       profile_path, false,
-      base::Bind(OnProfileCreated, params_.link_url,
-                 CreateReferrer(params_.link_url, params_)));
+      base::BindRepeating(OnProfileCreated, params_.link_url,
+                          CreateReferrer(params_.link_url, params_)));
 }
 
 void RenderViewContextMenu::ExecInspectElement() {
@@ -2973,8 +3006,15 @@ void RenderViewContextMenu::ExecSaveAs() {
     const GURL& url = params_.src_url;
     content::Referrer referrer = CreateReferrer(url, params_);
     std::string headers;
-    source_web_contents_->SaveFrameWithHeaders(url, referrer, headers,
-                                               params_.suggested_filename);
+
+    RenderFrameHost* frame_host =
+        (params_.media_type == ContextMenuDataMediaType::kPlugin)
+            ? source_web_contents_->GetOuterWebContentsFrame()
+            : GetRenderFrameHost();
+    if (frame_host) {
+      source_web_contents_->SaveFrameWithHeaders(
+          url, referrer, headers, params_.suggested_filename, frame_host);
+    }
   }
 }
 
@@ -3001,6 +3041,18 @@ void RenderViewContextMenu::ExecCopyImageAt() {
     frame_host->CopyImageAt(params_.x, params_.y);
 }
 
+void RenderViewContextMenu::ExecSearchLensForImage() {
+  CoreTabHelper* core_tab_helper =
+      CoreTabHelper::FromWebContents(source_web_contents_);
+  if (!core_tab_helper)
+    return;
+  RenderFrameHost* render_frame_host = GetRenderFrameHost();
+  if (!render_frame_host)
+    return;
+
+  core_tab_helper->SearchWithLensInNewTab(render_frame_host, params().src_url);
+}
+
 void RenderViewContextMenu::ExecSearchWebForImage() {
   CoreTabHelper* core_tab_helper =
       CoreTabHelper::FromWebContents(source_web_contents_);
@@ -3023,7 +3075,7 @@ void RenderViewContextMenu::ExecLoadImage() {
 }
 
 void RenderViewContextMenu::ExecPlayPause() {
-  bool play = !!(params_.media_flags & WebContextMenuData::kMediaPaused);
+  bool play = !!(params_.media_flags & ContextMenuData::kMediaPaused);
   if (play)
     base::RecordAction(UserMetricsAction("MediaContextMenu_Play"));
   else
@@ -3035,7 +3087,7 @@ void RenderViewContextMenu::ExecPlayPause() {
 }
 
 void RenderViewContextMenu::ExecMute() {
-  bool mute = !(params_.media_flags & WebContextMenuData::kMediaMuted);
+  bool mute = !(params_.media_flags & ContextMenuData::kMediaMuted);
   if (mute)
     base::RecordAction(UserMetricsAction("MediaContextMenu_Mute"));
   else

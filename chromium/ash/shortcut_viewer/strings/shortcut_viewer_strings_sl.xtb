@@ -5,7 +5,7 @@
 <translation id="104962181688258143">Odpiranje aplikacije Datoteke</translation>
 <translation id="1122869341872663659">Prikaz toliko rezultatov iskanja za poizvedbo <ph name="QUERY" />: <ph name="N" /></translation>
 <translation id="1195667586424773550">Povlecite povezavo v naslovno vrstico zavihka</translation>
-<translation id="1204450209689312104">Odpiranje novega okna v načinu brez beleženja zgodovine</translation>
+<translation id="1204450209689312104">Odpiranje novega okna v anonimnem načinu</translation>
 <translation id="1251638888133819822">Vklop ali izklop celozaslonske lupe</translation>
 <translation id="1290373024480130896"><ph name="MODIFIER1" /><ph name="SEPARATOR1" /><ph name="MODIFIER2" /><ph name="SEPARATOR2" /><ph name="MODIFIER3" /><ph name="SEPARATOR3" /><ph name="KEY" /></translation>
 <translation id="1293699935367580298">Esc</translation>
@@ -29,6 +29,7 @@
 <translation id="1996162290124031907">Premik na naslednji zavihek</translation>
 <translation id="2010818616644390445">Premik na zadnji zavihek v oknu</translation>
 <translation id="2040706009561734834">Odpiranje/zapiranje zaganjalnika</translation>
+<translation id="2086334242442703436">Odpiranje izbirnika emodžijev</translation>
 <translation id="2088054208777350526">Iskanje bližnjičnih tipk</translation>
 <translation id="2125211348069077981"><ph name="ALT" /><ph name="SEPARATOR" /><ph name="E" /> ali <ph name="F" /></translation>
 <translation id="2145908266289632567">Urejanje besedila</translation>
@@ -47,6 +48,7 @@
 <translation id="2480851840841871861">Odpiranje Pomočnika Google</translation>
 <translation id="2488661730534396940">Aktiviranje namizja na levi</translation>
 <translation id="2515586267016047495">Alt</translation>
+<translation id="2516999188535378855">Odpiranje aplikacije za diagnostiko.</translation>
 <translation id="2530339807289914946">Pomikanje navzdol po spletni strani</translation>
 <translation id="2530896289327917474">Vklop ali izklop brskanja s kazalko</translation>
 <translation id="2574014812750545982">Ponastavitev povečave/pomanjšave na strani</translation>

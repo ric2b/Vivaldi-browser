@@ -42,14 +42,13 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/public/ash_interfaces.h"
 #include "base/strings/stringprintf.h"
+#include "chrome/browser/ash/login/demo_mode/demo_session.h"
+#include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/policy/arc_policy_bridge.h"
 #include "chrome/browser/chromeos/crosapi/browser_manager.h"
 #include "chrome/browser/chromeos/crosapi/browser_util.h"
-#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/chromeos/login/login_pref_names.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/metrics/chromeos_metrics_provider.h"
 #include "chrome/browser/metrics/enrollment_status.h"
 #include "chromeos/dbus/util/version_loader.h"
@@ -79,7 +78,7 @@ constexpr char kPowerApiListKey[] = "chrome.power extensions";
 constexpr char kDataReductionProxyKey[] = "data_reduction_proxy";
 constexpr char kChromeVersionTag[] = "CHROME VERSION";
 
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 constexpr char kLacrosChromeVersionPrefix[] = "Lacros ";
 #endif
 
@@ -237,12 +236,6 @@ std::string GetChromeVersionString() {
   // Version of the current running browser.
   std::string browser_version = chrome::GetVersionString();
 
-// This is used by simple lacros feedback for backward compatibility.
-// TODO(http://crbug.com/1132106): Remove after M87 beta when Feedback
-// crosapi is available in all ash versions.
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  browser_version = kLacrosChromeVersionPrefix + browser_version;
-#endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // If the device is receiving LTS updates, add a prefix to the version string.
@@ -254,13 +247,13 @@ std::string GetChromeVersionString() {
     browser_version = kLTSChromeVersionPrefix + browser_version;
 
   // If lacros-chrome is allowed & supported, and launched before, which
-  // is indicated by |lacros_version| in BrowserManager being set to non-empty
+  // is indicated by |browser_version| in BrowserManager being set to non-empty
   // string during lacros startup, attach its version in the chrome
   // version string.
   if (crosapi::browser_util::IsLacrosEnabled() &&
-      !crosapi::BrowserManager::Get()->lacros_version().empty()) {
+      !crosapi::BrowserManager::Get()->browser_version().empty()) {
     std::string lacros_version =
-        crosapi::BrowserManager::Get()->lacros_version();
+        crosapi::BrowserManager::Get()->browser_version();
     return kLacrosChromeVersionPrefix + lacros_version + ", " +
            kAshChromeVersionPrefix + browser_version;
   }

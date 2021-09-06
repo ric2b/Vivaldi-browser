@@ -259,10 +259,10 @@ float GetWantedDropTargetOpacity(
   }
 }
 
-gfx::Insets GetGridInsets(const gfx::Rect& grid_bounds) {
+gfx::Insets GetGridInsetsImpl(const gfx::Rect& grid_bounds) {
   const int horizontal_inset =
-      base::ClampFloor(std::min(kOverviewInsetRatio * grid_bounds.width(),
-                                kOverviewInsetRatio * grid_bounds.height()));
+      base::ClampFloor(kOverviewInsetRatio *
+                       std::min(grid_bounds.width(), grid_bounds.height()));
   const int vertical_inset =
       horizontal_inset +
       kOverviewVerticalInset * (grid_bounds.height() - 2 * horizontal_inset);
@@ -945,13 +945,6 @@ void OverviewGrid::OnSplitViewStateChanged(
       split_view_controller->end_reason() ==
           SplitViewController::EndReason::kUnsnappableWindowActivated;
 
-  // Restore focus unless either a window was just snapped (and activated) or
-  // split view mode was ended by activating an unsnappable window.
-  if (state != SplitViewController::State::kNoSnap ||
-      unsnappable_window_activated) {
-    overview_session_->ResetFocusRestoreWindow(false);
-  }
-
   // If two windows were snapped to both sides of the screen or an unsnappable
   // window was just activated, or we're in single split mode in clamshell mode
   // and there is no window in overview, end overview mode and bail out.
@@ -959,6 +952,7 @@ void OverviewGrid::OnSplitViewStateChanged(
       unsnappable_window_activated ||
       (split_view_controller->InClamshellSplitViewMode() &&
        overview_session_->IsEmpty())) {
+    overview_session_->RestoreWindowActivation(false);
     overview_controller->EndOverview();
     return;
   }
@@ -1020,7 +1014,6 @@ void OverviewGrid::OnStartingAnimationComplete(bool canceled) {
 
   for (auto& window : window_list())
     window->OnStartingAnimationComplete();
-
 }
 
 void OverviewGrid::CalculateWindowListAnimationStates(
@@ -1349,6 +1342,10 @@ gfx::Rect OverviewGrid::GetGridEffectiveBounds() const {
   return effective_bounds;
 }
 
+gfx::Insets OverviewGrid::GetGridInsets() const {
+  return GetGridInsetsImpl(GetGridEffectiveBounds());
+}
+
 bool OverviewGrid::IntersectsWithDesksBar(const gfx::Point& screen_location,
                                           bool update_desks_bar_drag_details,
                                           bool for_drop) {
@@ -1415,7 +1412,7 @@ void OverviewGrid::StartScroll() {
   // to fit the rightmost window into |total_bounds|. The max is zero which is
   // default because windows are aligned to the left from the beginning.
   gfx::Rect total_bounds = GetGridEffectiveBounds();
-  total_bounds.Inset(GetGridInsets(total_bounds));
+  total_bounds.Inset(GetGridInsetsImpl(total_bounds));
 
   float rightmost_window_right = 0;
   items_scrolling_bounds_.resize(window_list_.size());
@@ -1635,7 +1632,7 @@ std::vector<gfx::RectF> OverviewGrid::GetWindowRects(
   gfx::Rect total_bounds = GetGridEffectiveBounds();
 
   // Windows occupy vertically centered area with additional vertical insets.
-  total_bounds.Inset(GetGridInsets(total_bounds));
+  total_bounds.Inset(GetGridInsetsImpl(total_bounds));
   std::vector<gfx::RectF> rects;
 
   // Keep track of the lowest coordinate.
@@ -1739,7 +1736,7 @@ std::vector<gfx::RectF> OverviewGrid::GetWindowRectsForTabletModeLayout(
     const base::flat_set<OverviewItem*>& ignored_items) {
   gfx::Rect total_bounds = GetGridEffectiveBounds();
   // Windows occupy vertically centered area with additional vertical insets.
-  total_bounds.Inset(GetGridInsets(total_bounds));
+  total_bounds.Inset(GetGridInsetsImpl(total_bounds));
 
   // |scroll_offset_min_| may be changed on positioning (either by closing
   // windows or display changes). Recalculate it and clamp |scroll_offset_|, so

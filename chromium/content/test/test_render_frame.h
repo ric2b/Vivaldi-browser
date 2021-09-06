@@ -48,11 +48,6 @@ class TestRenderFrame : public RenderFrameImpl {
 
   mojom::DidCommitProvisionalLoadParamsPtr TakeLastCommitParams();
 
-  // Sets a callback to be run the next time DidAddMessageToConsole
-  // is called (e.g. window.console.log() is called).
-  void SetDidAddMessageToConsoleCallback(
-      base::OnceCallback<void(const base::string16& msg)> callback);
-
   mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker>
   TakeLastBrowserInterfaceBrokerReceiver();
 
@@ -61,6 +56,17 @@ class TestRenderFrame : public RenderFrameImpl {
   bool IsPageStateUpdated() const;
 
   bool IsURLOpened() const;
+
+  // Returns a pending Frame receiver that represents a renderer-side connection
+  // from a non-existent browser, so no messages would ever be received on it.
+  static mojo::PendingAssociatedReceiver<mojom::Frame>
+  CreateStubFrameReceiver();
+
+  // Returns a pending BrowserInterfaceBroker remote that represents a
+  // connection to a non-existent browser, where all messages will go into the
+  // void.
+  static mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
+  CreateStubBrowserInterfaceBrokerRemote();
 
  protected:
   explicit TestRenderFrame(RenderFrameImpl::CreateParams params);

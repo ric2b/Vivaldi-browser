@@ -49,6 +49,19 @@ void FakeCrosHealthdService::SendNetworkDiagnosticsRoutines(
   network_diagnostics_routines_.Bind(std::move(network_diagnostics_routines));
 }
 
+void FakeCrosHealthdService::GetSystemService(
+    mojom::CrosHealthdSystemServiceRequest service) {
+  system_receiver_set_.Add(this, std::move(service));
+}
+
+void FakeCrosHealthdService::GetServiceStatus(
+    GetServiceStatusCallback callback) {
+  auto response = mojom::ServiceStatus::New();
+  response->network_health_bound = network_health_remote_.is_bound();
+  response->network_diagnostics_bound = network_health_remote_.is_bound();
+  std::move(callback).Run(std::move(response));
+}
+
 void FakeCrosHealthdService::GetAvailableRoutines(
     GetAvailableRoutinesCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
@@ -265,6 +278,12 @@ void FakeCrosHealthdService::RunHttpsLatencyRoutine(
   std::move(callback).Run(run_routine_response_.Clone());
 }
 
+void FakeCrosHealthdService::RunVideoConferencingRoutine(
+    const base::Optional<std::string>& stun_server_hostname,
+    RunVideoConferencingRoutineCallback callback) {
+  std::move(callback).Run(run_routine_response_.Clone());
+}
+
 void FakeCrosHealthdService::AddBluetoothObserver(
     mojom::CrosHealthdBluetoothObserverPtr observer) {
   bluetooth_observers_.Add(observer.PassInterface());
@@ -278,6 +297,12 @@ void FakeCrosHealthdService::AddLidObserver(
 void FakeCrosHealthdService::AddPowerObserver(
     mojom::CrosHealthdPowerObserverPtr observer) {
   power_observers_.Add(observer.PassInterface());
+}
+
+void FakeCrosHealthdService::AddNetworkObserver(
+    mojo::PendingRemote<chromeos::network_health::mojom::NetworkEventsObserver>
+        observer) {
+  network_observers_.Add(std::move(observer));
 }
 
 void FakeCrosHealthdService::ProbeTelemetryInfo(
@@ -384,6 +409,24 @@ void FakeCrosHealthdService::EmitLidClosedEventForTesting() {
 void FakeCrosHealthdService::EmitLidOpenedEventForTesting() {
   for (auto& observer : lid_observers_)
     observer->OnLidOpened();
+}
+
+void FakeCrosHealthdService::EmitConnectionStateChangedEventForTesting(
+    const std::string& network_guid,
+    chromeos::network_health::mojom::NetworkState state) {
+  for (auto& observer : network_observers_) {
+    observer->OnConnectionStateChanged(network_guid, state);
+  }
+}
+
+void FakeCrosHealthdService::EmitSignalStrengthChangedEventForTesting(
+    const std::string& network_guid,
+    chromeos::network_health::mojom::UInt32ValuePtr signal_strength) {
+  for (auto& observer : network_observers_) {
+    observer->OnSignalStrengthChanged(
+        network_guid, chromeos::network_health::mojom::UInt32Value::New(
+                          signal_strength->value));
+  }
 }
 
 void FakeCrosHealthdService::RequestNetworkHealthForTesting(

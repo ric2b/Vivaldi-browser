@@ -55,6 +55,7 @@
 #include "extensions/browser/install/sandboxed_unpacker_failure_reason.h"
 #include "extensions/browser/management_policy.h"
 #include "extensions/browser/notification_types.h"
+#include "extensions/browser/renderer_startup_helper.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/extension_features.h"
@@ -69,9 +70,9 @@
 #include "ui/base/l10n/l10n_util.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_switches.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/extensions/extension_assets_manager_chromeos.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "components/user_manager/scoped_user_manager.h"
 #endif
 
@@ -311,6 +312,9 @@ class ExtensionCrxInstallerTest : public ExtensionBrowserTest {
     const Extension* extension = GetInstalledExtension(extension_id);
     ASSERT_NE(nullptr, extension);
     ASSERT_EQ(version, extension->VersionString());
+
+    RendererStartupHelperFactory::GetForBrowserContext(browser()->profile())
+        ->OnExtensionLoaded(*extension);
   }
 
   static void InstallerCallback(base::OnceClosure quit_closure,

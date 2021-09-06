@@ -4,5 +4,6 @@
 
 // https://wicg.github.io/local-font-access/
 dictionary QueryOptions {
-    sequence<DOMString> select;
+    boolean persistentAccess = false;
+    sequence<DOMString> select = [];
 };

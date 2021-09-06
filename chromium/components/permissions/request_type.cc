@@ -12,6 +12,7 @@
 #if defined(OS_ANDROID)
 #include "components/resources/android/theme_resources.h"
 #else
+#include "components/permissions/vector_icons/vector_icons.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icon_types.h"
@@ -63,7 +64,7 @@ int GetIconIdAndroid(RequestType type) {
 const gfx::VectorIcon& GetIconIdDesktop(RequestType type) {
   switch (type) {
     case RequestType::kAccessibilityEvents:
-      return vector_icons::kAccessibilityIcon;
+      return kAccessibilityIcon;
     case RequestType::kArSession:
     case RequestType::kVrSession:
       return vector_icons::kVrHeadsetIcon;
@@ -79,7 +80,7 @@ const gfx::VectorIcon& GetIconIdDesktop(RequestType type) {
     case RequestType::kGeolocation:
       return vector_icons::kLocationOnIcon;
     case RequestType::kIdleDetection:
-      return vector_icons::kPersonIcon;
+      return vector_icons::kDevicesIcon;
     case RequestType::kMicStream:
       return vector_icons::kMicIcon;
     case RequestType::kMidiSysex:
@@ -97,7 +98,7 @@ const gfx::VectorIcon& GetIconIdDesktop(RequestType type) {
     case RequestType::kRegisterProtocolHandler:
       return vector_icons::kProtocolHandlerIcon;
     case RequestType::kSecurityAttestation:
-      return vector_icons::kUsbSecurityKeyIcon;
+      return kUsbSecurityKeyIcon;
     case RequestType::kStorageAccess:
       return vector_icons::kCookieIcon;
     case RequestType::kWindowPlacement:
@@ -172,6 +173,65 @@ IconId GetIconId(RequestType type) {
     return override_id;
   return GetIconIdDesktop(type);
 #endif
+}
+
+const char* PermissionKeyForRequestType(permissions::RequestType request_type) {
+  switch (request_type) {
+    case permissions::RequestType::kAccessibilityEvents:
+      return "accessibility_events";
+    case permissions::RequestType::kArSession:
+      return "ar_session";
+#if !defined(OS_ANDROID)
+    case permissions::RequestType::kCameraPanTiltZoom:
+      return "camera_pan_tilt_zoom";
+#endif
+    case permissions::RequestType::kCameraStream:
+      return "camera_stream";
+    case permissions::RequestType::kClipboard:
+      return "clipboard";
+    case permissions::RequestType::kDiskQuota:
+      return "disk_quota";
+#if !defined(OS_ANDROID)
+    case permissions::RequestType::kFontAccess:
+      return "font_access";
+#endif
+    case permissions::RequestType::kGeolocation:
+      return "geolocation";
+    case permissions::RequestType::kIdleDetection:
+      return "idle_detection";
+    case permissions::RequestType::kMicStream:
+      return "mic_stream";
+    case permissions::RequestType::kMidiSysex:
+      return "midi_sysex";
+    case permissions::RequestType::kMultipleDownloads:
+      return "multiple_downloads";
+#if defined(OS_ANDROID)
+    case permissions::RequestType::kNfcDevice:
+      return "nfc_device";
+#endif
+    case permissions::RequestType::kNotifications:
+      return "notifications";
+#if defined(OS_ANDROID) || BUILDFLAG(IS_CHROMEOS_ASH)
+    case permissions::RequestType::kProtectedMediaIdentifier:
+      return "protected_media_identifier";
+#endif
+#if !defined(OS_ANDROID)
+    case permissions::RequestType::kRegisterProtocolHandler:
+      return "register_protocol_handler";
+    case permissions::RequestType::kSecurityAttestation:
+      return "security_attestation";
+#endif
+    case permissions::RequestType::kStorageAccess:
+      return "storage_access";
+    case permissions::RequestType::kVrSession:
+      return "vr_session";
+#if !defined(OS_ANDROID)
+    case permissions::RequestType::kWindowPlacement:
+      return "window_placement";
+#endif
+  }
+
+  return nullptr;
 }
 
 }  // namespace permissions

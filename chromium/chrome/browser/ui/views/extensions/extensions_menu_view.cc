@@ -29,7 +29,9 @@
 #include "ui/views/controls/separator.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/flex_layout.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/view_class_properties.h"
+#include "ui/views/view_utils.h"
 
 namespace {
 // If true, allows more than one instance of the ExtensionsMenuView, which may
@@ -51,7 +53,7 @@ bool CompareExtensionMenuItemViews(const ExtensionsMenuItemView* a,
 // when the view is known to be one). It is only used as an extra measure to
 // prevent bad static casts.
 ExtensionsMenuItemView* GetAsMenuItemView(views::View* view) {
-  DCHECK_EQ(ExtensionsMenuItemView::kClassName, view->GetClassName());
+  DCHECK(views::IsViewClass<ExtensionsMenuItemView>(view));
   return static_cast<ExtensionsMenuItemView*>(view);
 }
 
@@ -534,3 +536,6 @@ ExtensionsMenuView::GetSortedItemsForSectionForTesting(
     menu_item_views.push_back(GetAsMenuItemView(view));
   return menu_item_views;
 }
+
+BEGIN_METADATA(ExtensionsMenuView, views::BubbleDialogDelegateView)
+END_METADATA

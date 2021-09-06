@@ -14,8 +14,8 @@ const char kDuckDuckGoList[] =
     "https://downloads.vivaldi.com/ddg/tds-v2-current.json";
 const char kEasyList[] =
     "https://downloads.vivaldi.com/easylist/easylist-current.txt";
-/*const char kAdblockPlucaAntiCv[] =
-    "https://easylist-downloads.adblockplus.org/abp-filters-anti-cv.txt";*/
+const char kAdblockPlucaAntiCv[] =
+    "https://downloads.vivaldi.com/lists/abp/abp-filters-anti-cv-current.txt";
 const char kPartnersList[] =
     "https://downloads.vivaldi.com/lists/vivaldi/partners-current.txt";
 
@@ -34,7 +34,7 @@ const PermanentSource kPermanentKnownTrackingSources[] = {
 const PermanentSource kPermanentKnownAdBlockSources[] = {
     {kEasyList, false},
     {kPartnersList, false},
-    /*{kAdblockPlucaAntiCv, true}*/};
+    {kAdblockPlucaAntiCv, true}};
 
 struct PresetSourceInfo {
   base::StringPiece url;
@@ -222,6 +222,13 @@ KnownRuleSourcesHandlerImpl::KnownRuleSourcesHandlerImpl(
     EnableSource(
         RuleGroup::kAdBlockingRules,
         KnownRuleSource(GURL(kRussianList), RuleGroup::kAdBlockingRules).id);
+  }
+
+  if (rule_service->delegate() && storage_version < 6) {
+    EnableSource(
+        RuleGroup::kAdBlockingRules,
+        KnownRuleSource(GURL(kAdblockPlucaAntiCv), RuleGroup::kAdBlockingRules)
+            .id);
   }
 }
 

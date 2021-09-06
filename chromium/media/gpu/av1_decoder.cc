@@ -10,7 +10,6 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
-#include "build/chromeos_buildflags.h"
 #include "media/base/limits.h"
 #include "media/gpu/av1_picture.h"
 #include "third_party/libgav1/src/src/decoder_state.h"
@@ -109,16 +108,12 @@ bool AV1Decoder::Flush() {
 void AV1Decoder::Reset() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   ClearCurrentFrame();
-  // Resetting current sequence header might not be necessary. But this violates
-  // AcceleratedVideoDecoder interface spec, "Reset any current state that may
-  // be cached in the accelerator."
-  // TODO(hiroh): We may want to change this interface spec so that a caller
-  // doesn't have to allocate video frames buffers every seek operation.
+
+  // We must reset the |current_sequence_header_| to ensure we don't try to
+  // decode frames using an incorrect sequence header. If the first
+  // DecoderBuffer after the reset doesn't contain a sequence header, we'll just
+  // skip it and will keep skipping until we get a sequence header.
   current_sequence_header_.reset();
-  visible_rect_ = gfx::Rect();
-  frame_size_ = gfx::Size();
-  profile_ = VideoCodecProfile::VIDEO_CODEC_PROFILE_UNKNOWN;
-  bit_depth_ = 0;
   stream_id_ = 0;
   stream_ = nullptr;
   stream_size_ = 0;
@@ -230,19 +225,6 @@ AcceleratedVideoDecoder::DecodeResult AV1Decoder::DecodeInternal() {
                    << ", profile=" << GetProfileName(new_profile);
           return kDecodeError;
         }
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
-        if (current_sequence_header_->film_grain_params_present) {
-          // TODO(b/176927551): Decode film grain streams on ChromeOS once the
-          // issue is fixed.
-          DVLOG(1) << "Film grain streams are not supported";
-          return kDecodeError;
-        }
-        if (new_bit_depth != 8u) {
-          // TODO(b/174722425): Decode 10 bits streams once it is fixed.
-          DVLOG(1) << "10 and 12 bits streams are not supported";
-          return kDecodeError;
-        }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
         const gfx::Size new_frame_size(
             base::strict_cast<int>(current_sequence_header_->max_frame_width),
@@ -415,11 +397,9 @@ bool AV1Decoder::CheckAndCleanUpReferenceFrames() {
   DCHECK(state_);
   DCHECK(current_frame_header_);
   for (size_t i = 0; i < libgav1::kNumReferenceFrameTypes; ++i) {
-    if (state_->reference_valid[i] &&
-        (!state_->reference_frame[i] || !ref_frames_[i])) {
+    if (state_->reference_frame[i] && !ref_frames_[i])
       return false;
-    }
-    if (!state_->reference_valid[i] && ref_frames_[i])
+    if (!state_->reference_frame[i] && ref_frames_[i])
       ref_frames_[i].reset();
   }
 
@@ -503,9 +483,10 @@ uint8_t AV1Decoder::GetBitDepth() const {
 
 size_t AV1Decoder::GetRequiredNumOfPictures() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  // TODO(hiroh): Double this value in the case of film grain sequence.
   constexpr size_t kPicsInPipeline = limits::kMaxVideoFrames + 1;
-  return kPicsInPipeline + GetNumReferenceFrames();
+  DCHECK(current_sequence_header_);
+  return (kPicsInPipeline + GetNumReferenceFrames()) *
+         (1 + current_sequence_header_->film_grain_params_present);
 }
 
 size_t AV1Decoder::GetNumReferenceFrames() const {

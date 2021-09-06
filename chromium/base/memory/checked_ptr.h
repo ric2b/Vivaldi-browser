@@ -10,21 +10,20 @@
 
 #include <utility>
 
-#include "base/allocator/partition_allocator/checked_ptr_support.h"
-#include "base/allocator/partition_allocator/partition_address_space.h"
-#include "base/allocator/partition_allocator/partition_alloc_forward.h"
-#include "base/allocator/partition_allocator/partition_ref_count.h"
 #include "base/check_op.h"
 #include "base/compiler_specific.h"
 #include "base/partition_alloc_buildflags.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
 
-#define ENABLE_BACKUP_REF_PTR_IMPL 0
-#if ENABLE_BACKUP_REF_PTR_IMPL
-static_assert(ENABLE_REF_COUNT_FOR_BACKUP_REF_PTR,
-              "BackupRefPtrImpl can only by used if PartitionRefCount is "
-              "enabled");
+// USE_BACKUP_REF_PTR implies USE_PARTITION_ALLOC, needed for code under
+// allocator/partition_allocator/ to be built.
+#if BUILDFLAG(USE_BACKUP_REF_PTR)
+#include "base/allocator/partition_allocator/address_pool_manager_bitmap.h"
+#include "base/allocator/partition_allocator/partition_address_space.h"
+#include "base/allocator/partition_allocator/partition_alloc_constants.h"
+#include "base/allocator/partition_allocator/partition_alloc_forward.h"
+#include "base/allocator/partition_allocator/partition_ref_count.h"
 #endif
 
 namespace base {
@@ -100,12 +99,62 @@ struct CheckedPtrNoOpImpl {
   static ALWAYS_INLINE void IncrementSwapCountForTest() {}
 };
 
-#if ENABLE_BACKUP_REF_PTR_IMPL
+#if BUILDFLAG(USE_BACKUP_REF_PTR)
 
 struct BackupRefPtrImpl {
   // Note that `BackupRefPtrImpl` itself is not thread-safe. If multiple threads
   // modify the same smart pointer object without synchronization, a data race
   // will occur.
+
+  static ALWAYS_INLINE bool IsSupportedAndNotNull(void* ptr) {
+#if BUILDFLAG(MAKE_GIGACAGE_GRANULARITY_PARTITION_PAGE_SIZE)
+    // This covers the nullptr case, as address 0 is never in GigaCage.
+    bool ret = IsManagedByPartitionAllocNormalBuckets(ptr);
+
+    // There may be pointers immediately after the allocation, e.g.
+    //   CheckedPtr<T> ptr = AllocateNotFromPartitionAlloc(X * sizeof(T));
+    //   for (size_t i = 0; i < X; i++) { ptr++; }
+    // Such pointers are *not* at risk of accidentally falling into normal
+    // buckets, because:
+    // 1) On 64-bit systems, normal buckets are preceded by direct map.
+    // 2) On 32-bit systems, the guard pages and metadata of normal bucket super
+    //    pages are not considered to be part of normal buckets.
+    //
+    // This allows us to make a stronger assertion that if
+    // IsManagedByPartitionAllocNormalBuckets returns true for a valid pointer,
+    // it must be at least partition page away from the beginning of a super
+    // page.
+    if (ret) {
+      DCHECK(reinterpret_cast<uintptr_t>(ptr) % kSuperPageSize >=
+             PartitionPageSize());
+    }
+    return ret;
+#else
+    // There is a problem on 32-bit systems, where the fake "GigaCage" has many
+    // normal bucket pool regions spread throughout the address space. A pointer
+    // immediately past an allocation may fall into the normal bucket pool,
+    // hence check if |ptr-1| belongs to that pool. However, checking only
+    // |ptr-1| causes a problem with pointers to the beginning of an
+    // out-of-the-pool allocation that happen to be where the pool ends, so
+    // checking for |ptr| is also necessary.
+    //
+    // Note, if |ptr| is in the normal bucket pool, |ptr-1| will not fall out of
+    // it, thanks to the leading guard pages (i.e. |ptr| will never point to the
+    // beginning of GigaCage).
+    //
+    // 64-bit systems don't have this problem, because there is only one normal
+    // bucket pool region, positioned after the direct map pool.
+    bool is_in_normal_buckets = true;
+#if !(defined(ARCH_CPU_64_BITS) && !defined(OS_NACL))
+    auto* adjusted_ptr = reinterpret_cast<char*>(ptr) - 1;
+    is_in_normal_buckets &=
+        IsManagedByPartitionAllocNormalBuckets(adjusted_ptr);
+#endif
+    // This covers the nullptr case, as address 0 is never in GigaCage.
+    is_in_normal_buckets &= IsManagedByPartitionAllocNormalBuckets(ptr);
+    return is_in_normal_buckets;
+#endif
+  }
 
   // Wraps a pointer, and returns its uintptr_t representation.
   // Use |const volatile| to prevent compiler error. These will be dropped
@@ -114,9 +163,10 @@ struct BackupRefPtrImpl {
     void* ptr = const_cast<void*>(cv_ptr);
     uintptr_t addr = reinterpret_cast<uintptr_t>(ptr);
 
-    // This check already covers the nullptr case.
-    if (IsManagedByPartitionAllocNormalBuckets(ptr))
+    if (IsSupportedAndNotNull(ptr)) {
+      DCHECK(ptr != nullptr);
       AcquireInternal(ptr);
+    }
 
     return addr;
   }
@@ -125,9 +175,10 @@ struct BackupRefPtrImpl {
   static ALWAYS_INLINE void ReleaseWrappedPtr(uintptr_t wrapped_ptr) {
     void* ptr = reinterpret_cast<void*>(wrapped_ptr);
 
-    // This check already covers the nullptr case.
-    if (IsManagedByPartitionAllocNormalBuckets(ptr))
+    if (IsSupportedAndNotNull(ptr)) {
+      DCHECK(ptr != nullptr);
       ReleaseInternal(ptr);
+    }
   }
 
   // Returns equivalent of |WrapRawPtr(nullptr)|. Separated out to make it a
@@ -144,8 +195,10 @@ struct BackupRefPtrImpl {
       uintptr_t wrapped_ptr) {
 #if DCHECK_IS_ON()
     void* ptr = reinterpret_cast<void*>(wrapped_ptr);
-    if (IsManagedByPartitionAllocNormalBuckets(ptr))
+    if (IsSupportedAndNotNull(ptr)) {
+      DCHECK(ptr != nullptr);
       DCHECK(IsPointeeAlive(ptr));
+    }
 #endif
     return reinterpret_cast<void*>(wrapped_ptr);
   }
@@ -200,7 +253,7 @@ struct BackupRefPtrImpl {
   static BASE_EXPORT NOINLINE bool IsPointeeAlive(void* ptr);
 };
 
-#endif  // ENABLE_BACKUP_REF_PTR_IMPL
+#endif  // BUILDFLAG(USE_BACKUP_REF_PTR)
 
 }  // namespace internal
 
@@ -219,18 +272,14 @@ struct BackupRefPtrImpl {
 //    we aren't striving to maximize compatibility with raw pointers, merely
 //    adding support for cases encountered so far).
 template <typename T,
-#if BUILDFLAG(USE_PARTITION_ALLOC)
-#if ENABLE_BACKUP_REF_PTR_IMPL
+#if BUILDFLAG(USE_BACKUP_REF_PTR)
           typename Impl = internal::BackupRefPtrImpl>
 #else
           typename Impl = internal::CheckedPtrNoOpImpl>
 #endif
-#else  // BUILDFLAG(USE_PARTITION_ALLOC)
-          typename Impl = internal::CheckedPtrNoOpImpl>
-#endif
 class CheckedPtr {
  public:
-#if ENABLE_BACKUP_REF_PTR_IMPL
+#if BUILDFLAG(USE_BACKUP_REF_PTR)
 
   // BackupRefPtr requires a non-trivial default constructor, destructor, etc.
   constexpr ALWAYS_INLINE CheckedPtr() noexcept
@@ -267,7 +316,7 @@ class CheckedPtr {
     wrapped_ptr_ = Impl::GetWrappedNullPtr();
   }
 
-#else  // ENABLE_BACKUP_REF_PTR_IMPL
+#else  // BUILDFLAG(USE_BACKUP_REF_PTR)
 
   // CheckedPtr can be trivially default constructed (leaving |wrapped_ptr_|
   // uninitialized).  This is needed for compatibility with raw pointers.
@@ -288,7 +337,7 @@ class CheckedPtr {
 
   ~CheckedPtr() = default;
 
-#endif  // ENABLE_BACKUP_REF_PTR_IMPL
+#endif  // BUILDFLAG(USE_BACKUP_REF_PTR)
 
   // Deliberately implicit, because CheckedPtr is supposed to resemble raw ptr.
   // NOLINTNEXTLINE(runtime/explicit)
@@ -316,7 +365,7 @@ class CheckedPtr {
   // NOLINTNEXTLINE(google-explicit-constructor)
   ALWAYS_INLINE CheckedPtr(CheckedPtr<U, Impl>&& ptr) noexcept
       : wrapped_ptr_(Impl::template Upcast<T, U>(ptr.wrapped_ptr_)) {
-#if ENABLE_BACKUP_REF_PTR_IMPL
+#if BUILDFLAG(USE_BACKUP_REF_PTR)
     ptr.wrapped_ptr_ = Impl::GetWrappedNullPtr();
 #endif
   }
@@ -354,7 +403,7 @@ class CheckedPtr {
            reinterpret_cast<uintptr_t>(&ptr));
     Impl::ReleaseWrappedPtr(wrapped_ptr_);
     wrapped_ptr_ = Impl::template Upcast<T, U>(ptr.wrapped_ptr_);
-#if ENABLE_BACKUP_REF_PTR_IMPL
+#if BUILDFLAG(USE_BACKUP_REF_PTR)
     ptr.wrapped_ptr_ = Impl::GetWrappedNullPtr();
 #endif
     return *this;

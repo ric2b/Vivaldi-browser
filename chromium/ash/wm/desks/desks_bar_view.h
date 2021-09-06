@@ -11,23 +11,29 @@
 #include "ash/ash_export.h"
 #include "ash/wm/desks/desks_controller.h"
 #include "base/macros.h"
+#include "ui/views/controls/scroll_view.h"
 #include "ui/views/view.h"
 
 namespace ash {
 
+class BentoDesksBarLayout;
+class BentoDesksBarScrollViewLayout;
 class DeskBarHoverObserver;
 class DeskDragProxy;
 class DeskMiniView;
 class ExpandedStateNewDeskButton;
+class GradientLayerDelegate;
 class NewDeskButton;
 class OverviewGrid;
+class ScrollArrowButton;
 class ZeroStateDefaultDeskButton;
 class ZeroStateNewDeskButton;
 
 // A bar that resides at the top portion of the overview mode's ShieldView,
 // which contains the virtual desks mini_views, as well as the new desk button.
 class ASH_EXPORT DesksBarView : public views::View,
-                                public DesksController::Observer {
+                                public DesksController::Observer,
+                                public views::ScrollView::Observer {
  public:
   explicit DesksBarView(OverviewGrid* overview_grid);
   ~DesksBarView() override;
@@ -107,25 +113,33 @@ class ASH_EXPORT DesksBarView : public views::View,
   // there's only a single desk available, in which case the bar is shown in a
   // minimized state.
   bool IsZeroState() const;
-  // Handle drag & drop events for each desk preview.
-  void HandleStartDragEvent(DeskMiniView* mini_view,
+  // Handle the mouse press event from a desk preview.
+  void HandlePressEvent(DeskMiniView* mini_view, const ui::LocatedEvent& event);
+  // Handle the gesture long press event from a desk preview.
+  void HandleLongPressEvent(DeskMiniView* mini_view,
                             const ui::LocatedEvent& event);
-  // Return true if the drag event is handled by drag & drop.
-  bool HandleDragEvent(DeskMiniView* mini_view, const ui::LocatedEvent& event);
-  // Return true if the release event is handled by drag & drop.
+  // Handle the drag event from a desk preview.
+  void HandleDragEvent(DeskMiniView* mini_view, const ui::LocatedEvent& event);
+  // Handle the release event from a desk preview. Return true if a drag event
+  // is ended.
   bool HandleReleaseEvent(DeskMiniView* mini_view,
                           const ui::LocatedEvent& event);
 
-  // Trigger drag & drop. Create a proxy for the dragged desk.
+  // Finalize any unfinished drag & drop. Initialize a new drag proxy.
+  void InitDragDesk(DeskMiniView* mini_view,
+                    const gfx::PointF& location_in_screen);
+  // Start to drag. Scale up the drag proxy.
   void StartDragDesk(DeskMiniView* mini_view,
                      const gfx::PointF& location_in_screen);
-  // Reorder desks according to the drag proxy's location. Return true if the
-  // dragged desk is reordered.
-  bool ContinueDragDesk(DeskMiniView* mini_view,
+  // Reorder desks according to the drag proxy's location.
+  void ContinueDragDesk(DeskMiniView* mini_view,
                         const gfx::PointF& location_in_screen);
-  // Snap back the drag proxy to the drag view's location. Return true if
-  // current drag is ended.
-  bool EndDragDesk(DeskMiniView* mini_view, bool end_by_user);
+  // If the desk is dropped by user (|end_by_user| = true), scale down and snap
+  // back the drag proxy. Otherwise, directly finalize the drag & drop. Note
+  // that when we want to end the current drag immediately, if the drag is
+  // initialized but did not start, |FinalizeDragDesk| should be use; if the
+  // drag started, |EndDragDesk| should be used with |end_by_user| = false.
+  void EndDragDesk(DeskMiniView* mini_view, bool end_by_user);
   // Reset the drag view and the drag proxy.
   void FinalizeDragDesk();
   // If a desk is in a drag & drop cycle.
@@ -152,6 +166,9 @@ class ASH_EXPORT DesksBarView : public views::View,
   void OnDeskSwitchAnimationLaunching() override;
   void OnDeskSwitchAnimationFinished() override;
 
+  // views::ScrollView::Observer:
+  void OnContentsScrolled() override;
+
   // This is called on initialization, creating a new desk through the
   // NewDeskButton or ExpandedStateNewDeskButton, or expanding from zero state
   // bar to the expanded desks bar when Bento is enabled. Performs the expanding
@@ -160,7 +177,37 @@ class ASH_EXPORT DesksBarView : public views::View,
   // their final positions if |initializing_bar_view| is false.
   void UpdateNewMiniViews(bool initializing_bar_view, bool expanding_bar_view);
 
+  // If the focused |mini_view| is outside of the scroll view's visible bounds,
+  // scrolls the bar to make sure it can always be seen.
+  void ScrollToShowMiniViewIfNecessary(const DeskMiniView* mini_view);
+
+  ScrollArrowButton* GetLeftScrollButtonForTesting() const {
+    return left_scroll_button_;
+  }
+  ScrollArrowButton* GetRightScrollButtonForTesting() const {
+    return right_scroll_button_;
+  }
+  views::ScrollView* GetScrollViewForTesting() const { return scroll_view_; }
+
+  // Get drag view for test.
+  const DeskMiniView* GetDragDeskMiniViewForTesting() const {
+    return drag_view_;
+  }
+
  private:
+  friend class BentoDesksBarLayout;
+  friend class BentoDesksBarScrollViewLayout;
+
+  // Determine the new index of the dragged desk at the position of
+  // |location_in_screen|.
+  int DetermineMoveIndex(int location_in_screen) const;
+
+  // If drag a desk over a scroll button (i.e., the desk intersects the button),
+  // scroll the desk bar. If the desk is dropped or leaves the button, end
+  // scroll. Return true if the scroll is triggered. Return false if the scroll
+  // is ended.
+  bool MaybeScrollByDraggedDesk();
+
   // Returns the mini_view associated with |desk| or nullptr if no mini_view
   // has been created for it yet.
   DeskMiniView* FindMiniViewForDesk(const Desk* desk) const;
@@ -182,6 +229,23 @@ class ASH_EXPORT DesksBarView : public views::View,
   // and the ExpandedStateNewDeskButton on the desk bar's state. Used only when
   // Bento is enabled.
   void UpdateBentoDeskButtonsVisibility();
+
+  // Updates the visibility of |left_scroll_button_| and |right_scroll_button_|.
+  // Show |left_scroll_button_| if there are contents outside of the left edge
+  // of the |scroll_view_|, the same for |right_scroll_button_| based on the
+  // right side of the |scroll_view_|.
+  void UpdateScrollButtonsVisibility();
+
+  // We will show a fade in gradient besides |left_scroll_button_| and a fade
+  // out gradient besides |right_scroll_button_|. Show the gradient only when
+  // the corresponding scroll button is visible.
+  void UpdateGradientZone();
+
+  // Scrolls the desks bar to the previous or next page. The page size is the
+  // width of the scroll view, the contents that are outside of the scroll view
+  // will be clipped and can not be seen.
+  void ScrollToPreviousPage();
+  void ScrollToNextPage();
 
   // A view that shows a dark gary transparent background that can be animated
   // when the very first mini_views are created.
@@ -220,13 +284,19 @@ class ASH_EXPORT DesksBarView : public views::View,
   views::View* scroll_view_contents_ = nullptr;
 
   // Used only when Bento is enabled.
-  ZeroStateDefaultDeskButton* zero_state_default_desk_button_;
-  ZeroStateNewDeskButton* zero_state_new_desk_button_;
-  ExpandedStateNewDeskButton* expanded_state_new_desk_button_;
+  ZeroStateDefaultDeskButton* zero_state_default_desk_button_ = nullptr;
+  ZeroStateNewDeskButton* zero_state_new_desk_button_ = nullptr;
+  ExpandedStateNewDeskButton* expanded_state_new_desk_button_ = nullptr;
+  ScrollArrowButton* left_scroll_button_ = nullptr;
+  ScrollArrowButton* right_scroll_button_ = nullptr;
   // Mini view whose preview is being dragged.
   DeskMiniView* drag_view_ = nullptr;
   // Drag proxy for the dragged desk.
   std::unique_ptr<DeskDragProxy> drag_proxy_;
+
+  // The layer delegate used for |scroll_view_|'s mask layer, with left and
+  // right gradient asides the scroll buttons.
+  std::unique_ptr<GradientLayerDelegate> gradient_layer_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(DesksBarView);
 };

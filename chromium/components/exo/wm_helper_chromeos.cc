@@ -14,6 +14,7 @@
 #include "ui/aura/client/focus_client.h"
 #include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 #include "ui/display/manager/display_configurator.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/types/display_snapshot.h"
@@ -140,12 +141,16 @@ void WMHelperChromeOS::OnDragExited() {
     observer.OnDragExited();
 }
 
-int WMHelperChromeOS::OnPerformDrop(const ui::DropTargetEvent& event,
-                                    std::unique_ptr<ui::OSExchangeData> data) {
-  int valid_operation = ui::DragDropTypes::DRAG_NONE;
-  for (DragDropObserver& observer : drag_drop_observers_)
-    valid_operation = valid_operation | observer.OnPerformDrop(event);
-  return valid_operation;
+ui::mojom::DragOperation WMHelperChromeOS::OnPerformDrop(
+    const ui::DropTargetEvent& event,
+    std::unique_ptr<ui::OSExchangeData> data) {
+  auto operation = ui::mojom::DragOperation::kNone;
+  for (DragDropObserver& observer : drag_drop_observers_) {
+    auto observer_op = observer.OnPerformDrop(event);
+    if (observer_op != ui::mojom::DragOperation::kNone)
+      operation = observer_op;
+  }
+  return operation;
 }
 
 void WMHelperChromeOS::AddVSyncParameterObserver(

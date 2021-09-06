@@ -32,6 +32,12 @@ const char kCastNoDestinationFoundURL[] =
 const char kChooserBluetoothOverviewURL[] =
     "https://support.google.com/chrome?p=bluetooth";
 
+const char kChooserHidOverviewUrl[] =
+    "https://support.google.com/chrome?p=webhid";
+
+const char kChooserSerialOverviewUrl[] =
+    "https://support.google.com/chrome?p=webserial";
+
 const char kChooserUsbOverviewURL[] =
     "https://support.google.com/chrome?p=webusb";
 
@@ -168,9 +174,6 @@ const char kGooglePhotosURL[] = "https://photos.google.com";
 const char kLearnMoreReportingURL[] =
     "https://support.google.com/chrome/?p=ui_usagestat";
 
-const char kLegacySupervisedUserManagementDisplayURL[] =
-    "www.chrome.com/manage";
-
 const char kManagedUiLearnMoreUrl[] =
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     "https://support.google.com/chromebook/?p=is_chrome_managed";
@@ -238,9 +241,6 @@ const char kPrivacyLearnMoreURL[] =
     "https://support.google.com/chrome/?p=settings_privacy";
 #endif
 
-const char kPrivacySandboxURL[] =
-    "https://www.chromium.org/Home/chromium-privacy/privacy-sandbox";
-
 const char kRemoveNonCWSExtensionURL[] =
     "https://support.google.com/chrome/?p=ui_remove_non_cws_extensions";
 
@@ -285,17 +285,13 @@ const char kUpgradeHelpCenterBaseURL[] =
 const char kWhoIsMyAdministratorHelpURL[] =
     "https://support.google.com/chrome?p=your_administrator";
 
-#if defined(OS_ANDROID)
-const char kAndroidAppScheme[] = "android-app";
-#endif
-
 #if BUILDFLAG(IS_CHROMEOS_ASH) || defined(OS_ANDROID)
 const char kEnhancedPlaybackNotificationLearnMoreURL[] =
 #endif
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     "https://support.google.com/chromebook/?p=enhanced_playback";
 #elif defined(OS_ANDROID)
-// Keep in sync with chrome/android/java/strings/android_chrome_strings.grd
+// Keep in sync with chrome/browser/ui/android/strings/android_chrome_strings.grd
     "https://support.google.com/chrome/?p=mobile_protected_content";
 #endif
 
@@ -403,6 +399,9 @@ const char kAdditionalToSOnlineURLPath[] =
 
 const char kOsSettingsSearchHelpURL[] =
     "https://support.google.com/chromebook/?p=settings_search_help";
+
+const char kPeripheralDataAccessHelpURL[] =
+    "https://support.google.com/chromebook?p=connect_thblt_usb4_accy";
 
 const char kTPMFirmwareUpdateLearnMoreURL[] =
     "https://support.google.com/chromebook/?p=tpm_update";

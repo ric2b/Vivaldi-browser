@@ -39,6 +39,9 @@ import org.chromium.chrome.browser.ntp.NewTabPageUma;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.offlinepages.RequestCoordinatorBridge;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.share.ChromeShareExtras;
+import org.chromium.chrome.browser.share.ShareDelegate;
+import org.chromium.chrome.browser.share.ShareDelegateImpl.ShareOrigin;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.suggestions.NavigationRecorder;
 import org.chromium.chrome.browser.suggestions.SuggestionsConfig;
@@ -54,7 +57,6 @@ import org.chromium.chrome.browser.xsurface.SurfaceScope;
 import org.chromium.chrome.browser.xsurface.SurfaceScopeDependencyProvider;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
-import org.chromium.components.browser_ui.share.ShareHelper;
 import org.chromium.components.browser_ui.share.ShareParams;
 import org.chromium.components.browser_ui.widget.animation.Interpolators;
 import org.chromium.components.feed.proto.FeedUiProto.SharedState;
@@ -69,6 +71,9 @@ import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.common.Referrer;
 import org.chromium.network.mojom.ReferrerPolicy;
 import org.chromium.ui.base.PageTransition;
+import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.display.DisplayAndroid;
+import org.chromium.ui.display.DisplayAndroid.DisplayAndroidObserver;
 import org.chromium.ui.mojom.WindowOpenDisposition;
 import org.chromium.url.GURL;
 
@@ -83,8 +88,10 @@ import java.util.Map;
  *
  * Created once for each StreamSurfaceMediator corresponding to each NTP/start surface.
  */
+
 @JNINamespace("feed")
-public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHandler {
+public class FeedStreamSurface
+        implements SurfaceActionsHandler, FeedActionsHandler, DisplayAndroidObserver {
     private static final String TAG = "FeedStreamSurface";
 
     private static final int SNACKBAR_DURATION_MS_SHORT = 4000;
@@ -94,8 +101,6 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
     static final String FEEDBACK_REPORT_TYPE =
             "com.google.chrome.feed.USER_INITIATED_FEEDBACK_REPORT";
     @VisibleForTesting
-    static final String FEEDBACK_CONTEXT = "mobile_browser";
-    @VisibleForTesting
     static final String XSURFACE_CARD_URL = "Card URL";
     // For testing some functionality in the public APK.
     @VisibleForTesting
@@ -103,7 +108,7 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
 
     private final long mNativeFeedStreamSurface;
     private final FeedListContentManager mContentManager;
-    private final SurfaceScope mSurfaceScope;  
+    private final SurfaceScope mSurfaceScope;
     @VisibleForTesting
     RecyclerView mRootView;
     private final HybridListRenderer mHybridListRenderer;
@@ -132,6 +137,7 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
     private boolean mIsPlaceholderShown;
     // TabSupplier for the current tab to share.
     private final ShareHelperWrapper mShareHelper;
+    private final DisplayAndroid mDisplayAndroid;
 
     private static ProcessScope sXSurfaceProcessScope;
 
@@ -219,9 +225,12 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
      * Makes it easier to test.
      */
     public static class ShareHelperWrapper {
-        private Supplier<Tab> mTabSupplier;
-        public ShareHelperWrapper(Supplier<Tab> tabSupplier) {
-            mTabSupplier = tabSupplier;
+        private WindowAndroid mWindowAndroid;
+        private Supplier<ShareDelegate> mShareDelegateSupplier;
+        public ShareHelperWrapper(
+                WindowAndroid windowAndroid, Supplier<ShareDelegate> shareDelegateSupplier) {
+            mWindowAndroid = windowAndroid;
+            mShareDelegateSupplier = shareDelegateSupplier;
         }
 
         /**
@@ -229,10 +238,9 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
          * Brings up the share sheet.
          */
         public void share(String url, String title) {
-            ShareParams params =
-                    new ShareParams.Builder(mTabSupplier.get().getWindowAndroid(), url, title)
-                            .build();
-            ShareHelper.shareWithUi(params);
+            ShareParams params = new ShareParams.Builder(mWindowAndroid, title, url).build();
+            mShareDelegateSupplier.get().share(
+                    params, new ChromeShareExtras.Builder().build(), ShareOrigin.FEED);
         }
     }
 
@@ -347,7 +355,7 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
             SnackbarManager snackbarManager, NativePageNavigationDelegate pageNavigationDelegate,
             BottomSheetController bottomSheetController,
             HelpAndFeedbackLauncher helpAndFeedbackLauncher, boolean isPlaceholderShown,
-            ShareHelperWrapper shareHelper) {
+            ShareHelperWrapper shareHelper, DisplayAndroid displayAndroid) {
         mNativeFeedStreamSurface = FeedStreamSurfaceJni.get().init(FeedStreamSurface.this);
         mSnackbarManager = snackbarManager;
         mActivity = activity;
@@ -361,6 +369,7 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
 
         mIsPlaceholderShown = isPlaceholderShown;
         mShareHelper = shareHelper;
+        mDisplayAndroid = displayAndroid;
 
         Context context = new ContextThemeWrapper(
                 activity, (isBackgroundDark ? R.style.Dark : R.style.Light));
@@ -389,6 +398,11 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
             mRootView = null;
         }
 
+        // Attach as an observer of window events so we can consume window rotation events.
+        if (mDisplayAndroid != null) {
+            mDisplayAndroid.addObserver(this);
+        }
+
         trackSurface(this);
     }
 
@@ -403,6 +417,9 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
             mSliceViewTracker = null;
         }
         mHybridListRenderer.unbind();
+        if (mDisplayAndroid != null) {
+            mDisplayAndroid.removeObserver(this);
+        }
     }
 
     /**
@@ -696,8 +713,8 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
     @Override
     public void navigateIncognitoTab(String url) {
         assert ThreadUtils.runningOnUiThread();
-        FeedStreamSurfaceJni.get().reportOpenInNewIncognitoTabAction(
-                mNativeFeedStreamSurface, FeedStreamSurface.this);
+        FeedStreamSurfaceJni.get().reportOtherUserAction(mNativeFeedStreamSurface,
+                FeedStreamSurface.this, FeedUserActionType.TAPPED_OPEN_IN_NEW_INCOGNITO_TAB);
         NewTabPageUma.recordAction(NewTabPageUma.ACTION_OPENED_SNIPPET);
 
         openUrl(url, WindowOpenDisposition.OFF_THE_RECORD);
@@ -709,8 +726,8 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
     @Override
     public void downloadLink(String url) {
         assert ThreadUtils.runningOnUiThread();
-        FeedStreamSurfaceJni.get().reportDownloadAction(
-                mNativeFeedStreamSurface, FeedStreamSurface.this);
+        FeedStreamSurfaceJni.get().reportOtherUserAction(mNativeFeedStreamSurface,
+                FeedStreamSurface.this, FeedUserActionType.TAPPED_DOWNLOAD);
         RequestCoordinatorBridge.getForProfile(Profile.getLastUsedRegularProfile())
                 .savePageLater(
                         url, OfflinePageBridge.NTP_SUGGESTIONS_NAMESPACE, true /* user requested*/);
@@ -721,8 +738,8 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
         assert ThreadUtils.runningOnUiThread();
         dismissBottomSheet();
 
-        FeedStreamSurfaceJni.get().reportContextMenuOpened(
-                mNativeFeedStreamSurface, FeedStreamSurface.this);
+        FeedStreamSurfaceJni.get().reportOtherUserAction(mNativeFeedStreamSurface,
+                FeedStreamSurface.this, FeedUserActionType.OPENED_CONTEXT_MENU);
 
         // Make a sheetContent with the view.
         mBottomSheetContent = new CardMenuBottomSheetContent(view);
@@ -740,11 +757,24 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
         mBottomSheetOriginatingSliceId = null;
     }
 
-    @Override
+    public void recordActionManageActivity() {
+        FeedStreamSurfaceJni.get().reportOtherUserAction(mNativeFeedStreamSurface,
+                FeedStreamSurface.this, FeedUserActionType.TAPPED_MANAGE_ACTIVITY);
+    }
+
     public void recordActionManageInterests() {
-        assert ThreadUtils.runningOnUiThread();
-        FeedStreamSurfaceJni.get().reportManageInterestsAction(
-                mNativeFeedStreamSurface, FeedStreamSurface.this);
+        FeedStreamSurfaceJni.get().reportOtherUserAction(mNativeFeedStreamSurface,
+                FeedStreamSurface.this, FeedUserActionType.TAPPED_MANAGE_INTERESTS);
+    }
+
+    public void recordActionManageReactions() {
+        FeedStreamSurfaceJni.get().reportOtherUserAction(mNativeFeedStreamSurface,
+                FeedStreamSurface.this, FeedUserActionType.TAPPED_MANAGE_REACTIONS);
+    }
+
+    public void recordActionLearnMore() {
+        FeedStreamSurfaceJni.get().reportOtherUserAction(mNativeFeedStreamSurface,
+                FeedStreamSurface.this, FeedUserActionType.TAPPED_LEARN_MORE);
     }
 
     @Override
@@ -766,19 +796,15 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
 
     @Override
     public void processViewAction(byte[] data) {
-        // TODO(crbug.com/1117586): The caller should be calling on the Ui thread.
-        // assert ThreadUtils.runningOnUiThread();
-        PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> {
-            FeedStreamSurfaceJni.get().processViewAction(
-                    mNativeFeedStreamSurface, FeedStreamSurface.this, data);
-        });
+        FeedStreamSurfaceJni.get().processViewAction(
+                mNativeFeedStreamSurface, FeedStreamSurface.this, data);
     }
 
     @Override
     public void sendFeedback(Map<String, String> productSpecificDataMap) {
         assert ThreadUtils.runningOnUiThread();
-        FeedStreamSurfaceJni.get().reportSendFeedbackAction(
-                mNativeFeedStreamSurface, FeedStreamSurface.this);
+        FeedStreamSurfaceJni.get().reportOtherUserAction(mNativeFeedStreamSurface,
+                FeedStreamSurface.this, FeedUserActionType.TAPPED_SEND_FEEDBACK);
 
         // Make sure the bottom sheet is dismissed before we take a snapshot.
         dismissBottomSheet();
@@ -792,13 +818,11 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
 
         Map<String, String> feedContext = convertNameFormat(productSpecificDataMap);
 
-        // FEEDBACK_CONTEXT: This identifies this feedback as coming from Chrome for Android (as
-        // opposed to desktop).
         // FEEDBACK_REPORT_TYPE: Reports for Chrome mobile must have a contextTag of the form
         // com.chrome.feed.USER_INITIATED_FEEDBACK_REPORT, or they will be discarded for not
         // matching an allow list rule.
         mHelpAndFeedbackLauncher.showFeedback(
-                mActivity, profile, url, FEEDBACK_REPORT_TYPE, feedContext, FEEDBACK_CONTEXT);
+                mActivity, profile, url, FEEDBACK_REPORT_TYPE, feedContext);
     }
 
     // Since the XSurface client strings are slightly different than the Feed strings, convert the
@@ -897,6 +921,12 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
         updateSurfaceOpenState();
     }
 
+    public void toggledArticlesListVisible(boolean visible) {
+        FeedStreamSurfaceJni.get().reportOtherUserAction(mNativeFeedStreamSurface,
+                FeedStreamSurface.this,
+                visible ? FeedUserActionType.TAPPED_TURN_ON : FeedUserActionType.TAPPED_TURN_OFF);
+    }
+
     /**
      * Informs FeedStreamSurface of the visibility of its parent stream.
      */
@@ -979,8 +1009,6 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
         boolean inNewTab = (disposition == WindowOpenDisposition.NEW_BACKGROUND_TAB
                 || disposition == WindowOpenDisposition.OFF_THE_RECORD);
 
-        FeedStreamSurfaceJni.get().reportNavigationStarted(
-                mNativeFeedStreamSurface, FeedStreamSurface.this);
         if (tab != null) {
             tab.addObserver(new FeedTabNavigationObserver(inNewTab));
             NavigationRecorder.record(tab,
@@ -1093,6 +1121,15 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
         }
     }
 
+    // DisplayAndroidObserver methods.
+
+    // If the device rotates, we dismiss the bottom sheet to avoid a bad interaction
+    // between the XSurface client and the chrome bottom sheet.
+    @Override
+    public void onRotationChanged(int rotation) {
+        dismissBottomSheet();
+    }
+
     @NativeMethods
     interface Natives {
         long init(FeedStreamSurface caller);
@@ -1102,29 +1139,14 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
         void reportFeedViewed(long nativeFeedStreamSurface, FeedStreamSurface caller);
         void reportSliceViewed(
                 long nativeFeedStreamSurface, FeedStreamSurface caller, String sliceId);
-        void reportNavigationStarted(long nativeFeedStreamSurface, FeedStreamSurface caller);
         void reportPageLoaded(
                 long nativeFeedStreamSurface, FeedStreamSurface caller, boolean inNewTab);
         void reportOpenAction(
                 long nativeFeedStreamSurface, FeedStreamSurface caller, String sliceId);
         void reportOpenInNewTabAction(
                 long nativeFeedStreamSurface, FeedStreamSurface caller, String sliceId);
-        void reportOpenInNewIncognitoTabAction(
-                long nativeFeedStreamSurface, FeedStreamSurface caller);
-        void reportSendFeedbackAction(long nativeFeedStreamSurface, FeedStreamSurface caller);
-        void reportDownloadAction(long nativeFeedStreamSurface, FeedStreamSurface caller);
-        void reportContextMenuOpened(long nativeFeedStreamSurface, FeedStreamSurface caller);
-        void reportManageInterestsAction(long nativeFeedStreamSurface, FeedStreamSurface caller);
-        // TODO(crbug.com/1123044): Call these from the front end.
-        void reportTurnOnAction(long nativeFeedStreamSurface, FeedStreamSurface caller);
-        void reportTurnOffAction(long nativeFeedStreamSurface, FeedStreamSurface caller);
-
-        // TODO(crbug.com/1111101): These actions aren't visible to the client, so these functions
-        // are never called.
-        void reportLearnMoreAction(long nativeFeedStreamSurface, FeedStreamSurface caller);
-        void reportRemoveAction(long nativeFeedStreamSurface, FeedStreamSurface caller);
-        void reportNotInterestedInAction(long nativeFeedStreamSurface, FeedStreamSurface caller);
-
+        void reportOtherUserAction(long nativeFeedStreamSurface, FeedStreamSurface caller,
+                @FeedUserActionType int userAction);
         void reportStreamScrolled(
                 long nativeFeedStreamSurface, FeedStreamSurface caller, int distanceDp);
         void reportStreamScrollStart(long nativeFeedStreamSurface, FeedStreamSurface caller);

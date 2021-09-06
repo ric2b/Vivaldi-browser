@@ -35,17 +35,18 @@
 #include "ui/resources/grit/webui_resources.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "ash/constants/ash_features.h"
+#include "ash/constants/ash_pref_names.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/supervised_user/supervised_user_features.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/webui/chromeos/edu_account_login_handler_chromeos.h"
-#include "chrome/browser/ui/webui/chromeos/edu_coexistence_login_handler_chromeos.h"
+#include "chrome/browser/ui/webui/chromeos/edu_coexistence/edu_coexistence_login_handler_chromeos.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/browser/ui/webui/signin/inline_login_handler_chromeos.h"
-#include "chromeos/constants/chromeos_features.h"
-#include "chromeos/constants/chromeos_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/chromeos/devicetype_utils.h"
 #include "ui/strings/grit/ui_strings.h"
 #else
 #include "chrome/browser/ui/webui/signin/inline_login_handler_impl.h"
@@ -174,10 +175,9 @@ content::WebUIDataSource* CreateWebUIDataSource(Profile* profile) {
     {"account_manager_welcome_2x.png", IDR_ACCOUNT_MANAGER_WELCOME_2X_PNG},
     {"googleg.svg", IDR_ACCOUNT_MANAGER_WELCOME_GOOGLE_LOGO_SVG},
 #endif
-    {"family_link_logo.svg", IDR_FAMILY_LINK_LOGO_SVG},
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   };
-  webui::AddResourcePathsBulk(source, kResources);
+  source->AddResourcePaths(kResources);
 
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
     {"title", IDS_CHROME_SIGNIN_TITLE},
@@ -187,8 +187,6 @@ content::WebUIDataSource* CreateWebUIDataSource(Profile* profile) {
     {"ok", IDS_APP_OK},
     {"accountManagerDialogWelcomeTitle",
      IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_TITLE},
-    {"accountManagerDialogWelcomeBody",
-     IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_BODY},
     {"accountManagerDialogWelcomeCheckbox",
      IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_CHECKBOX},
     {"accountManagerErrorNoInternetTitle",
@@ -201,7 +199,7 @@ content::WebUIDataSource* CreateWebUIDataSource(Profile* profile) {
      IDS_ACCOUNT_MANAGER_ERROR_CANNOT_ADD_ACCOUNT_BODY},
 #endif
   };
-  AddLocalizedStringsBulk(source, kLocalizedStrings);
+  source->AddLocalizedStrings(kLocalizedStrings);
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   source->AddBoolean("isAccountManagementFlowsV2Enabled",
@@ -209,6 +207,15 @@ content::WebUIDataSource* CreateWebUIDataSource(Profile* profile) {
   source->AddBoolean("shouldSkipWelcomePage",
                      profile->GetPrefs()->GetBoolean(
                          chromeos::prefs::kShouldSkipInlineLoginWelcomePage));
+  source->AddString(
+      "accountManagerDialogWelcomeBody",
+      l10n_util::GetStringFUTF16(
+          IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_BODY,
+          base::UTF8ToUTF16(
+              chrome::GetOSSettingsUrl(
+                  chromeos::settings::mojom::kMyAccountsSubpagePath)
+                  .spec()),
+          ui::GetChromeOSDeviceName()));
 
   user_manager::User* user =
       chromeos::ProfileHelper::Get()->GetUserByProfile(profile);

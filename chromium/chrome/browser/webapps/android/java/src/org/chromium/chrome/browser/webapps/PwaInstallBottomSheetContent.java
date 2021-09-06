@@ -10,6 +10,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
+import org.chromium.components.webapps.AddToHomescreenViewDelegate;
 
 /**
  * The class handling the bottom sheet install for PWA installs. The UI is shown on construction
@@ -40,6 +41,11 @@ public class PwaInstallBottomSheetContent implements BottomSheetContent {
     @Override
     public View getToolbarView() {
         return mView.getToolbarView();
+    }
+
+    @Override
+    public float getFullHeightRatio() {
+        return BottomSheetContent.HeightMode.WRAP_CONTENT;
     }
 
     @Override

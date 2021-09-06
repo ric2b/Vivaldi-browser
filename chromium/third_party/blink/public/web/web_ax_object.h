@@ -34,7 +34,6 @@
 #include <memory>
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_private_ptr.h"
-#include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_ax_enums.h"
 #include "ui/accessibility/ax_enums.mojom-shared.h"
@@ -45,9 +44,12 @@ class SkMatrix44;
 namespace gfx {
 class Point;
 class RectF;
+class Rect;
+class Size;
 }
 
 namespace ui {
+struct AXActionData;
 struct AXNodeData;
 }
 
@@ -59,8 +61,6 @@ class WebNode;
 class WebDocument;
 class WebString;
 class WebURL;
-struct WebRect;
-struct WebSize;
 
 // A container for passing around a reference to AXObject.
 class WebAXObject {
@@ -164,15 +164,15 @@ class WebAXObject {
   BLINK_EXPORT bool CanvasHasFallbackContent() const;
   BLINK_EXPORT WebAXObject ErrorMessage() const;
   // If this is an image, returns the image (scaled to maxSize) as a data url.
-  BLINK_EXPORT WebString ImageDataUrl(const WebSize& max_size) const;
+  BLINK_EXPORT WebString ImageDataUrl(const gfx::Size& max_size) const;
   BLINK_EXPORT ax::mojom::InvalidState InvalidState() const;
   // Only used when invalidState() returns WebAXInvalidStateOther.
   BLINK_EXPORT WebString AriaInvalidValue() const;
   BLINK_EXPORT int HeadingLevel() const;
   BLINK_EXPORT int HierarchicalLevel() const;
   BLINK_EXPORT WebAXObject HitTest(const gfx::Point&) const;
-  // Get the WebAXObject's bounds in frame-relative coordinates as a WebRect.
-  BLINK_EXPORT WebRect GetBoundsInFrameCoordinates() const;
+  // Get the WebAXObject's bounds in frame-relative coordinates as a gfx::Rect.
+  BLINK_EXPORT gfx::Rect GetBoundsInFrameCoordinates() const;
   BLINK_EXPORT WebString KeyboardShortcut() const;
   BLINK_EXPORT WebString Language() const;
   BLINK_EXPORT WebAXObject InPageLinkTarget() const;
@@ -181,7 +181,6 @@ class WebAXObject {
   BLINK_EXPORT WebString StringValue() const;
   BLINK_EXPORT ax::mojom::WritingDirection GetTextDirection() const;
   BLINK_EXPORT WebURL Url() const;
-  BLINK_EXPORT WebAXObject ChooserPopup() const;
 
   // Retrieves the accessible name of the object, an enum indicating where the
   // name was derived from, and a list of related objects that were used to
@@ -252,26 +251,25 @@ class WebAXObject {
   BLINK_EXPORT WebString ComputedStyleDisplay() const;
   BLINK_EXPORT bool AccessibilityIsIgnored() const;
   BLINK_EXPORT bool AccessibilityIsIncludedInTree() const;
-  BLINK_EXPORT void Markers(WebVector<ax::mojom::MarkerType>& types,
-                            WebVector<int>& starts,
-                            WebVector<int>& ends) const;
+
+  // Get the verb associated with performing the default action
+  // on this object.
+  BLINK_EXPORT ax::mojom::DefaultActionVerb Action() const;
+
+  // Perform an action, return true if handled.
+  //
+  // NEW: we're migrating to have all actions handled via this interface.
+  BLINK_EXPORT bool PerformAction(const ui::AXActionData&) const;
 
   // Actions. Return true if handled.
-  BLINK_EXPORT ax::mojom::DefaultActionVerb Action() const;
-  BLINK_EXPORT bool ClearAccessibilityFocus() const;
-  BLINK_EXPORT bool Click() const;
-  BLINK_EXPORT bool Decrement() const;
-  BLINK_EXPORT bool Increment() const;
-  BLINK_EXPORT bool Focus() const;
-  BLINK_EXPORT bool SetAccessibilityFocus() const;
+  //
+  // OLD: the od way is that we had separate APIs for every individual
+  // action. We're migrating to use PerformAction() for everything.
   BLINK_EXPORT bool SetSelected(bool) const;
   BLINK_EXPORT bool SetSelection(const WebAXObject& anchor_object,
                                  int anchor_offset,
                                  const WebAXObject& focus_object,
                                  int focus_offset) const;
-  BLINK_EXPORT bool SetSequentialFocusNavigationStartingPoint() const;
-  BLINK_EXPORT bool SetValue(WebString) const;
-  BLINK_EXPORT bool ShowContextMenu() const;
   // Make this object visible by scrolling as many nested scrollable views as
   // needed.
   BLINK_EXPORT bool ScrollToMakeVisible() const;
@@ -279,16 +277,13 @@ class WebAXObject {
   // in local coordinates. We also allow passing horizontal and vertical scroll
   // alignments. These specify where in the content area to scroll the object.
   BLINK_EXPORT bool ScrollToMakeVisibleWithSubFocus(
-      const WebRect&,
+      const gfx::Rect&,
       ax::mojom::ScrollAlignment horizontal_scroll_alignment =
           ax::mojom::ScrollAlignment::kScrollAlignmentCenter,
       ax::mojom::ScrollAlignment vertical_scroll_alignment =
           ax::mojom::ScrollAlignment::kScrollAlignmentCenter,
       ax::mojom::ScrollBehavior scroll_behavior =
           ax::mojom::ScrollBehavior::kDoNotScrollIfVisible) const;
-  // Scroll this object to a given point in global coordinates of the top-level
-  // window.
-  BLINK_EXPORT bool ScrollToGlobalPoint(const gfx::Point&) const;
 
   // For a table
   BLINK_EXPORT unsigned ColumnCount() const;
@@ -383,4 +378,4 @@ class WebAXObject {
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_AX_OBJECT_H_

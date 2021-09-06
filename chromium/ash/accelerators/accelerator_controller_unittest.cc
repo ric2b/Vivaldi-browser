@@ -1039,7 +1039,8 @@ TEST_F(AcceleratorControllerTest, ProcessOnce) {
   controller_->Register({accelerator_a}, &target);
 
   // The accelerator is processed only once.
-  ui::EventSink* sink = Shell::GetPrimaryRootWindow()->GetHost()->event_sink();
+  ui::EventSink* sink =
+      Shell::GetPrimaryRootWindow()->GetHost()->GetEventSink();
 
   ui::KeyEvent key_event1(ui::ET_KEY_PRESSED, ui::VKEY_A, ui::EF_NONE);
   ui::EventDispatchDetails details = sink->OnEventFromSource(&key_event1);
@@ -2250,7 +2251,7 @@ class MagnifiersAcceleratorsTester : public AcceleratorControllerTest {
 }  // namespace
 
 // TODO (afakhry): Remove this class after refactoring MagnificationManager.
-// Mocked chrome/browser/chromeos/accessibility/magnification_manager.cc
+// Mocked chrome/browser/ash/accessibility/magnification_manager.cc
 class FakeMagnificationManager {
  public:
   FakeMagnificationManager() = default;

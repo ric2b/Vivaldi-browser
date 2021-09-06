@@ -25,6 +25,14 @@ BluetoothServerSocket::~BluetoothServerSocket() {
 }
 
 std::unique_ptr<api::BluetoothSocket> BluetoothServerSocket::Accept() {
+  // Check if Close() has already been called which can happen when quickly
+  // toggling between high-viz and contact based advertising.
+  if (!server_socket_) {
+    VLOG(1) << "BluetoothServerSocket::Accept() called but mojo remote was"
+            << " already closed.";
+    return nullptr;
+  }
+
   bluetooth::mojom::AcceptConnectionResultPtr result;
   bool success = server_socket_->Accept(&result);
 
@@ -39,12 +47,16 @@ std::unique_ptr<api::BluetoothSocket> BluetoothServerSocket::Accept() {
 
 Exception BluetoothServerSocket::Close() {
   if (server_socket_) {
-    if (server_socket_->Disconnect()) {
+    // Release |server_socket_| and only keep it for the remainder of this
+    // method. This prevents (expected) re-entry into this method from
+    // triggering multiple calls to ServerSocket::Disconnect().
+    auto server_socket_copy = std::move(server_socket_);
+
+    if (server_socket_copy->Disconnect()) {
       VLOG(1) << "Successfully tore down Nearby Bluetooth server socket.";
     } else {
       LOG(ERROR) << "Failed to tear down Nearby Bluetooth server socket.";
     }
-    server_socket_.reset();
   }
   return {Exception::kSuccess};
 }

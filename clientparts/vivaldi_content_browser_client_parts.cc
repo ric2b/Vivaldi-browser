@@ -14,8 +14,6 @@
 #include "content/public/browser/browser_url_handler.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
-#include "extensions/api/features/vivaldi_runtime_feature.h"
-#include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/buildflags/buildflags.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/renderer/core/html/media/autoplay_policy.h"
@@ -23,7 +21,9 @@
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/api/features/vivaldi_runtime_feature.h"
 #include "extensions/api/runtime/runtime_api.h"
+#include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/helper/vivaldi_app_helper.h"
 #endif
 
@@ -62,14 +62,12 @@ void VivaldiContentBrowserClientParts::BrowserURLHandlerCreated(
 }
 
 void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
-    content::RenderViewHost* rvh,
+    content::WebContents* web_contents,
     blink::web_pref::WebPreferences* web_prefs) {
 #if !defined(OS_ANDROID)
   if (!vivaldi::IsVivaldiRunning())
     return;
 
-  content::WebContents* web_contents =
-      content::WebContents::FromRenderViewHost(rvh);
   if (web_contents) {
     // web_contents is nullptr on interstitial pages.
     Profile* profile =

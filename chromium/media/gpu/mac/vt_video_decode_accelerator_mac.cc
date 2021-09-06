@@ -1526,8 +1526,10 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
                   SFT_PLATFORM_ERROR);
   }
   gl_image->DisableInUseByWindowServer();
+
   gfx::ColorSpace color_space = GetImageBufferColorSpace(frame.image);
   gl_image->SetColorSpaceForYUVToRGBConversion(color_space);
+  gl_image->SetColorSpaceShallow(color_space);
 
   scoped_refptr<Picture::ScopedSharedImage> scoped_shared_image;
   if (picture_info->uses_shared_images) {
@@ -1708,6 +1710,12 @@ bool VTVideoDecodeAccelerator::SupportsSharedImagePictureBuffers() const {
   return true;
 }
 
+VideoDecodeAccelerator::TextureAllocationMode
+VTVideoDecodeAccelerator::GetSharedImageTextureAllocationMode() const {
+  return VideoDecodeAccelerator::TextureAllocationMode::
+      kDoNotAllocateGLTextures;
+}
+
 // static
 VideoDecodeAccelerator::SupportedProfiles
 VTVideoDecodeAccelerator::GetSupportedProfiles(
@@ -1722,8 +1730,6 @@ VTVideoDecodeAccelerator::GetSupportedProfiles(
       if (workarounds.disable_accelerated_vp9_decode)
         continue;
       if (!base::mac::IsAtLeastOS11())
-        continue;
-      if (!base::FeatureList::IsEnabled(kVideoToolboxVp9Decoding))
         continue;
       if (__builtin_available(macOS 10.13, *)) {
         if ((supported_profile == VP9PROFILE_PROFILE0 ||

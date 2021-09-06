@@ -24,6 +24,8 @@ import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.omnibox.LocationBarLayout;
+import org.chromium.chrome.browser.omnibox.NewTabPageDelegate;
+import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
 import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.test.util.ToolbarTestUtils;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
@@ -55,6 +57,8 @@ public final class ToolbarSecurityIconTest {
 
     @Mock
     private LocationBarModel mLocationBarModel;
+    @Mock
+    private SearchEngineLogoUtils mSearchEngineLogoUtils;
 
     @Before
     public void setUp() {
@@ -63,9 +67,12 @@ public final class ToolbarSecurityIconTest {
         NativeLibraryTestUtils.loadNativeLibraryNoBrowserProcess();
 
         mocker.mock(SecurityStateModelJni.TEST_HOOKS, mSecurityStateMocks);
+        // clang-format off
         mLocationBarModel = spy(
                 new LocationBarModel(ContextUtils.getApplicationContext(), NewTabPageDelegate.EMPTY,
-                        url -> url, window -> null, ToolbarTestUtils.OFFLINE_STATUS));
+                        (url) -> url.getSpec(), (window) -> null, ToolbarTestUtils.OFFLINE_STATUS,
+                        mSearchEngineLogoUtils));
+        // clang-format on
         mLocationBarModel.initializeWithNative();
     }
 

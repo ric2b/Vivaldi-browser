@@ -81,11 +81,13 @@ OsIntegrationManager::OsIntegrationManager(
     Profile* profile,
     std::unique_ptr<AppShortcutManager> shortcut_manager,
     std::unique_ptr<FileHandlerManager> file_handler_manager,
-    std::unique_ptr<ProtocolHandlerManager> protocol_handler_manager)
+    std::unique_ptr<ProtocolHandlerManager> protocol_handler_manager,
+    std::unique_ptr<UrlHandlerManager> url_handler_manager)
     : profile_(profile),
       shortcut_manager_(std::move(shortcut_manager)),
       file_handler_manager_(std::move(file_handler_manager)),
-      protocol_handler_manager_(std::move(protocol_handler_manager)) {}
+      protocol_handler_manager_(std::move(protocol_handler_manager)),
+      url_handler_manager_(std::move(url_handler_manager)) {}
 
 OsIntegrationManager::~OsIntegrationManager() = default;
 
@@ -98,6 +100,8 @@ void OsIntegrationManager::SetSubsystems(AppRegistrar* registrar,
   shortcut_manager_->SetSubsystems(icon_manager, registrar);
   if (protocol_handler_manager_)
     protocol_handler_manager_->SetSubsystems(registrar);
+  if (url_handler_manager_)
+    url_handler_manager_->SetSubsystems(registrar);
 }
 
 void OsIntegrationManager::Start() {
@@ -169,7 +173,6 @@ void OsIntegrationManager::UninstallAllOsHooks(
 void OsIntegrationManager::UninstallOsHooks(const AppId& app_id,
                                             const OsHooksResults& os_hooks,
                                             UninstallOsHooksCallback callback) {
-
   if (g_suppress_os_hooks_for_testing_) {
     base::SequencedTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), os_hooks));
@@ -213,6 +216,9 @@ void OsIntegrationManager::UninstallOsHooks(const AppId& app_id,
   if (os_hooks[OsHookType::kProtocolHandlers])
     UnregisterProtocolHandlers(app_id);
 
+  if (os_hooks[OsHookType::kUrlHandlers])
+    UnregisterUrlHandlers(app_id);
+
   // There is a chance uninstallation point was created with feature flag
   // enabled so we need to clean it up regardless of feature flag state.
   if (os_hooks[OsHookType::kUninstallationViaOsSettings])
@@ -241,6 +247,8 @@ void OsIntegrationManager::UpdateOsHooks(
     // shortcuts_menu_item_infos is empty.
     shortcut_manager_->UnregisterShortcutsMenuWithOs(app_id);
   }
+
+  UpdateUrlHandlers(app_id);
 }
 
 void OsIntegrationManager::GetShortcutInfoForApp(
@@ -340,11 +348,22 @@ void OsIntegrationManager::RegisterProtocolHandlers(
     return;
   }
 
-  // TODO(crbug.com/1019239): Call protocol_handler_manager_ implementation.
+  protocol_handler_manager_->RegisterOsProtocolHandlers(app_id);
 
   // TODO(crbug.com/1087219): callback should be run after all hooks are
   // deployed, need to refactor protocol_handler_manager to allow this.
   std::move(callback).Run(true);
+}
+
+void OsIntegrationManager::RegisterUrlHandlers(
+    const AppId& app_id,
+    base::OnceCallback<void(bool success)> callback) {
+  if (!url_handler_manager_) {
+    std::move(callback).Run(true);
+    return;
+  }
+
+  url_handler_manager_->RegisterUrlHandlers(app_id, std::move(callback));
 }
 
 void OsIntegrationManager::RegisterShortcutsMenu(
@@ -454,13 +473,29 @@ void OsIntegrationManager::UnregisterProtocolHandlers(const AppId& app_id) {
   if (!protocol_handler_manager_)
     return;
 
-  // TODO(crbug.com/1019239): Call protocol_handler_manager_ implementation.
+  // TODO(https://crbug.com/1019239) Make this take a callback, and return bool
+  // success or a single/list of enum errors.
+  protocol_handler_manager_->UnregisterOsProtocolHandlers(app_id);
+}
+
+void OsIntegrationManager::UnregisterUrlHandlers(const AppId& app_id) {
+  if (!url_handler_manager_)
+    return;
+
+  url_handler_manager_->UnregisterUrlHandlers(app_id);
 }
 
 void OsIntegrationManager::UnregisterWebAppOsUninstallation(
     const AppId& app_id) {
   if (ShouldRegisterUninstallationViaOsSettingsWithOs())
     UnegisterUninstallationViaOsSettingsWithOs(app_id, profile_);
+}
+
+void OsIntegrationManager::UpdateUrlHandlers(const AppId& app_id) {
+  if (!url_handler_manager_)
+    return;
+
+  url_handler_manager_->UpdateUrlHandlers(app_id);
 }
 
 std::unique_ptr<ShortcutInfo> OsIntegrationManager::BuildShortcutInfo(
@@ -493,6 +528,11 @@ void OsIntegrationManager::OnShortcutsCreated(
                                          OsHookType::kProtocolHandlers));
   }
 
+  if (options.os_hooks[OsHookType::kUrlHandlers]) {
+    RegisterUrlHandlers(app_id, barrier->CreateBarrierCallbackForType(
+                                    OsHookType::kUrlHandlers));
+  }
+
   if (options.os_hooks[OsHookType::kShortcuts] &&
       options.add_to_quick_launch_bar) {
     AddAppToQuickLaunchBar(app_id);
@@ -514,7 +554,7 @@ void OsIntegrationManager::OnShortcutsCreated(
 
   if (options.os_hooks[OsHookType::kRunOnOsLogin] &&
       base::FeatureList::IsEnabled(features::kDesktopPWAsRunOnOsLogin)) {
-    // TODO(crbug.com/897302): Implement Run on OS Login mode selection.
+    // TODO(crbug.com/1091964): Implement Run on OS Login mode selection.
     // Currently it is set to be the default: RunOnOsLoginMode::kWindowed
     RegisterRunOnOsLogin(app_id, barrier->CreateBarrierCallbackForType(
                                      OsHookType::kRunOnOsLogin));

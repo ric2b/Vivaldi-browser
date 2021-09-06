@@ -11,7 +11,7 @@ script can be run in standalone mode to check for existing violations.
 Example command:
 
 $ git ls-files third_party/blink \
-    | python third_party/blink/tools/audit_non_blink_usage.py
+    | python third_party/blink/tools/blinkpy/presubmit/audit_non_blink_usage.py
 """
 
 import os
@@ -76,17 +76,28 @@ _CONFIG = [
             'base::UnsafeSharedMemoryRegion',
             'base::WeakPtr',
             'base::WeakPtrFactory',
+            'base::WrapRefCounted',
             'base::WritableSharedMemoryMapping',
             'base::as_bytes',
             'base::in_place',
             'base::make_optional',
             'base::make_span',
             'base::nullopt',
+            'base::ranges::.+',
             'base::sequence_manager::TaskTimeObserver',
             'base::size',
             'base::span',
             'logging::GetVlogLevel',
             'base::PassKey',
+
+            # //base/allocator/partition_allocator/partition_alloc_constants.h
+            'base::kAlignment',
+
+            # //base/bind_post_task.h
+            'base::BindPostTask',
+
+            # //base/bits.h
+            'base::bits::.+',
 
             # //base/observer_list.h.
             'base::ObserverList',
@@ -256,6 +267,8 @@ _CONFIG = [
             'cc::NodeInfo',
 
             # Chromium geometry types.
+            'gfx::Insets',
+            'gfx::InsetsF',
             'gfx::Point',
             'gfx::PointF',
             'gfx::Point3F',
@@ -273,6 +286,8 @@ _CONFIG = [
 
             # Chromium geometry operations.
             'cc::MathUtil',
+            'gfx::ComputeApproximateMaxScale',
+            'gfx::ComputeTransform2dScaleComponents',
             'gfx::ToFlooredPoint',
 
             # Range type.
@@ -482,6 +497,7 @@ _CONFIG = [
 
             # Accessibility base types and the non-Blink enums they
             # depend on.
+            'ui::AXActionData',
             'ui::AXEvent',
             'ui::AXEventIntent',
             'ui::AXMode',
@@ -493,6 +509,7 @@ _CONFIG = [
 
             # Accessibility helper functions - mostly used in Blink for
             # serialization.
+            'ui::CanHaveInlineTextBoxChildren',
             'ui::IsDialog',
             'ui::IsHeading',
             'ui::IsContainerWithSelectableChildren',
@@ -614,12 +631,14 @@ _CONFIG = [
             'cc::ApplyViewportChangesArgs',
             'cc::LayerTreeSettings',
             'cc::PaintBenchmarkResult',
+            'cc::RenderFrameMetadata',
             'cc::TaskGraphRunner',
             'gfx::DisplayColorSpaces',
             'gfx::FontRenderParams',
             'ui::ImeTextSpan',
             'viz::FrameSinkId',
             'viz::LocalSurfaceId',
+            'viz::SurfaceId',
         ],
     },
     {
@@ -695,10 +714,13 @@ _CONFIG = [
         ],
     },
     {
-        'paths':
-        ['third_party/blink/renderer/core/fileapi/file_reader_loader.cc'],
+        'paths': [
+            'third_party/blink/renderer/core/fileapi/file_reader_loader.cc',
+            'third_party/blink/renderer/modules/file_system_access/file_system_underlying_sink.cc'
+        ],
         'allowed': [
-            'net::ERR_FILE_NOT_FOUND',
+            'net::ERR_.+',
+            'net::OK',
         ],
     },
     {
@@ -770,6 +792,16 @@ _CONFIG = [
         ],
     },
     {
+        'paths': [
+            'third_party/blink/renderer/core/inspector/inspector_contrast.cc',
+            'third_party/blink/renderer/core/inspector/inspector_contrast.h'
+        ],
+        'allowed': [
+            'color_utils::GetContrastRatio',
+            'cc::RTree',
+        ],
+    },
+    {
         'paths':
         ['third_party/blink/renderer/core/inspector/locale_controller.cc'],
         'allowed': [
@@ -824,6 +856,7 @@ _CONFIG = [
             'third_party/blink/renderer/core/html/media/',
             'third_party/blink/renderer/modules/vr/',
             'third_party/blink/renderer/modules/webgl/',
+            'third_party/blink/renderer/modules/webgpu/',
             'third_party/blink/renderer/modules/xr/',
         ],
         # The modules listed above need access to the following GL drawing and
@@ -836,6 +869,11 @@ _CONFIG = [
             'gpu::Mailbox',
             'gpu::MailboxHolder',
             'display::Display',
+            'media::IsOpaque',
+            'media::PaintCanvasVideoRenderer',
+            'media::PIXEL_FORMAT_Y16',
+            'media::VideoFrame',
+            'viz::RasterContextProvider',
         ],
     },
     {
@@ -1004,12 +1042,18 @@ _CONFIG = [
             'third_party/blink/renderer/modules/webcodecs/',
         ],
         'allowed': [
+            'base::PlatformThreadRef',
+            'base::WrapRefCounted',
             'gpu::kNullSurfaceHandle',
             'gpu::SHARED_IMAGE_.+',
             'gpu::raster::RasterInterface',
             'gpu::Mailbox',
             'gpu::MailboxHolder',
-            "viz::RasterContextProvider",
+            'gpu::SharedImageInterface',
+            'gpu::SyncToken',
+            'viz::RasterContextProvider',
+            'viz::ResourceFormat',
+            'viz::SingleReleaseCallback',
             'media::.+',
             'libyuv::.+',
         ]
@@ -1136,6 +1180,7 @@ _CONFIG = [
     },
     {
         'paths': [
+            'third_party/blink/renderer/core/css/counter_style.cc',
             'third_party/blink/renderer/core/layout/',
             'third_party/blink/renderer/core/paint/',
         ],
@@ -1235,6 +1280,15 @@ _CONFIG = [
         'allowed': ['net::RequestPriority'],
     },
     {
+        'paths':
+        ['third_party/blink/renderer/core/fetch/fetch_response_data.cc'],
+        'allowed': [
+            'storage::ComputeRandomResponsePadding',
+            'storage::ComputeStableResponsePadding',
+            'storage::ShouldPadResponseType'
+        ],
+    },
+    {
         'paths': ['third_party/blink/renderer/core/frame/local_frame_view.cc'],
         'allowed': [
             'base::LapTimer',
@@ -1254,6 +1308,20 @@ _CONFIG = [
         'allowed': [
             'net::registry_controlled_domains::.+',
         ],
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/platform/audio/',
+            'third_party/blink/renderer/modules/webaudio/',
+        ],
+        'allowed': ['fdlibm::.+'],
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/core/html/canvas/html_canvas_element.cc',
+            'third_party/blink/renderer/core/html/canvas/html_canvas_element.h',
+        ],
+        'allowed': ['viz::ResourceId'],
     },
 ]
 
@@ -1393,7 +1461,8 @@ def check(path, contents):
     if (ext not in ('.cc', '.cpp', '.h', '.mm') or path.find('/testing/') >= 0
             or path.find('/core/web_test/') >= 0 or path.find('/tests/') >= 0
             or basename.endswith('_test') or basename.endswith('_test_helpers')
-            or basename.endswith('_unittest') or basename.endswith('_fuzzer')):
+            or basename.endswith('_unittest') or basename.endswith('_fuzzer')
+            or basename.endswith('_perftest')):
         return results
     entries = _find_matching_entries(path)
     if not entries:

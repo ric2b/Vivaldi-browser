@@ -95,6 +95,7 @@ public class QueryTileSection {
                 ImageFetcherFactory.createImageFetcher(ImageFetcherConfig.IN_MEMORY_WITH_DISK_CACHE,
                         profile, GlobalDiscardableReferencePool.getReferencePool());
         mSearchBoxCoordinator.addVoiceSearchButtonClickListener(v -> reloadTiles());
+        mSearchBoxCoordinator.addLensButtonClickListener(v -> reloadTiles());
         reloadTiles();
     }
 
@@ -129,6 +130,7 @@ public class QueryTileSection {
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.QUERY_TILES_LOCAL_ORDERING)) {
             mTileProvider.onTileClicked(queryTile.id);
         }
+        QueryTileUtils.onQueryTileClicked();
 
         // TODO(qinmin): make isLastLevelTile a member variable of ImageTile.
         boolean isLastLevelTile = queryTile.children.isEmpty();

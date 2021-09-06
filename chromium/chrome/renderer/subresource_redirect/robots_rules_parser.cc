@@ -30,7 +30,7 @@ bool IsMatchingRobotsRule(const std::string& path, const std::string& pattern) {
   }
 
   size_t numpos = 1;
-  size_t pos[path.length() + 1];
+  std::vector<size_t> pos(path.length() + 1, 0);
 
   // The pos[] array holds a sorted list of indexes of 'path', with length
   // 'numpos'.  At the start and end of each iteration of the main loop below,
@@ -39,7 +39,6 @@ bool IsMatchingRobotsRule(const std::string& path, const std::string& pattern) {
   // return false. If we reach the end of 'pattern' with at least one element
   // in pos[], return true.
 
-  pos[0] = 0;
   for (auto pat = pattern.begin(); pat != pattern.end(); ++pat) {
     if (*pat == '$' && pat + 1 == pattern.end()) {
       return (pos[numpos - 1] == path.length());
@@ -82,12 +81,13 @@ bool RobotsRulesParser::RobotsRule::Match(const std::string& path) const {
   return IsMatchingRobotsRule(path, pattern_);
 }
 
-RobotsRulesParser::RobotsRulesParser() {
+RobotsRulesParser::RobotsRulesParser(
+    const base::TimeDelta& rules_receive_timeout) {
   // Using base::Unretained(this) is safe here, since the timer
   // |rules_receive_timeout_timer_| is owned by |this| and destroyed before
   // |this|.
   rules_receive_timeout_timer_.Start(
-      FROM_HERE, GetRobotsRulesReceiveTimeout(),
+      FROM_HERE, rules_receive_timeout,
       base::BindOnce(&RobotsRulesParser::OnRulesReceiveTimeout,
                      base::Unretained(this)));
   rules_receive_state_ = RulesReceiveState::kTimerRunning;

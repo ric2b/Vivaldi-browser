@@ -24,6 +24,7 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.UserDataHost;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.WarmupManager;
@@ -55,7 +56,9 @@ import org.chromium.content_public.browser.ChildProcessImportance;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsAccessibility;
+import org.chromium.content_public.browser.navigation_controller.UserAgentOverrideOption;
 import org.chromium.content_public.common.ResourceRequestBody;
+import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.util.ColorUtils;
@@ -81,6 +84,8 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
     private static final String TAG = "Tab";
 
     private static final String PRODUCT_VERSION = ChromeVersionInfo.getProductVersion();
+
+    private static final String REQUEST_DESKTOP_ENABLED_PARAM = "enabled";
 
     private long mNativeTabAndroid;
 
@@ -206,6 +211,9 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
     private final TabThemeColorHelper mThemeColorHelper;
     private int mThemeColor;
     private boolean mUsedCriticalPersistedTabData;
+
+    /** Whether or not the user manually changed the user agent. */
+    private boolean mUserForcedUserAgent;
 
     //** Vivaldi */
     private SharedPreferencesManager.Observer mPreferenceObserver;
@@ -399,7 +407,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
     }
 
     @Override
-    public String getOriginalUrl() {
+    public GURL getOriginalUrl() {
         return DomDistillerUrlUtils.getOriginalUrlFromDistillerUrl(getUrl());
     }
 
@@ -516,6 +524,9 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
                 throw new RuntimeException("Tab.loadUrl called when no native side exists");
             }
 
+            // Request desktop sites for large screen tablets.
+            params.setOverrideUserAgent(calculateUserAgentOverrideOption());
+
             // We load the URL from the tab rather than directly from the ContentView so the tab has
             // a chance of using a prerenderer page is any.
             int loadType = TabImplJni.get().loadUrl(mNativeTabAndroid, params.getUrl(),
@@ -528,7 +539,8 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
                     params.getReferrer() != null ? params.getReferrer().getPolicy() : 0,
                     params.getIsRendererInitiated(), params.getShouldReplaceCurrentEntry(),
                     params.getHasUserGesture(), params.getShouldClearHistoryList(),
-                    params.getInputStartTimestamp(), params.getIntentReceivedTimestamp());
+                    params.getInputStartTimestamp(), params.getIntentReceivedTimestamp(),
+                    params.getUserAgentOverrideOption());
 
             for (TabObserver observer : mObservers) {
                 observer.onLoadUrl(this, params, loadType);
@@ -561,6 +573,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
             return true;
         }
 
+        switchUserAgentIfNeeded();
         restoreIfNeeded();
         return true;
     }
@@ -574,13 +587,17 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
             OfflinePageUtils.reload(getWebContents(),
                     /*loadUrlDelegate=*/new OfflinePageUtils.TabOfflinePageLoadUrlDelegate(this));
         } else {
-            if (getWebContents() != null) getWebContents().getNavigationController().reload(true);
+            if (getWebContents() != null) {
+                switchUserAgentIfNeeded();
+                getWebContents().getNavigationController().reload(true);
+            }
         }
     }
 
     @Override
     public void reloadIgnoringCache() {
         if (getWebContents() != null) {
+            switchUserAgentIfNeeded();
             getWebContents().getNavigationController().reloadBypassingCache(true);
         }
     }
@@ -938,6 +955,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
                 hasThemeColor = tabState.hasThemeColor();
             }
             if (hasThemeColor != null) {
+                if (!ChromeApplication.isVivaldi())
                 updateThemeColor(hasThemeColor ? themeColor : TabState.UNSPECIFIED_THEME_COLOR);
             }
 
@@ -1347,6 +1365,17 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
         mNativeTabAndroid = nativePtr;
     }
 
+    @CalledByNative
+    private static long[] getAllNativePtrs(TabImpl[] tabsArray) {
+        if (tabsArray == null) return null;
+
+        long[] tabsPtrArray = new long[tabsArray.length];
+        for (int i = 0; i < tabsArray.length; i++) {
+            tabsPtrArray[i] = tabsArray[i].getNativePtr();
+        }
+        return tabsPtrArray;
+    }
+
     /**
      * Initializes the {@link WebContents}. Completes the browser content components initialization
      * around a native WebContents pointer.
@@ -1380,7 +1409,9 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
             }
 
             mWebContents.setImportance(mImportance);
-            ContentUtils.setUserAgentOverride(mWebContents);
+
+            ContentUtils.setUserAgentOverride(mWebContents,
+                    calculateUserAgentOverrideOption() == UserAgentOverrideOption.TRUE);
 
             mContentView.addOnAttachStateChangeListener(mAttachStateChangeListener);
             updateInteractableState();
@@ -1420,6 +1451,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
             }
             pushNativePageStateToNavigationEntry();
 
+            if (!ChromeApplication.isVivaldi())
             updateThemeColor(TabState.UNSPECIFIED_THEME_COLOR);
         });
     }
@@ -1565,7 +1597,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
     }
 
     @CalledByNative
-    private boolean isCustomTab() {
+    public boolean isCustomTab() {
         ChromeActivity activity = getActivity();
         return activity != null && activity.isCustomTab();
     }
@@ -1635,6 +1667,54 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
         }
     }
 
+    private @UserAgentOverrideOption int calculateUserAgentOverrideOption() {
+        boolean currentRequestDesktopSite = getWebContents() == null
+                ? false
+                : getWebContents().getNavigationController().getUseDesktopUserAgent();
+
+        if (!mUserForcedUserAgent && DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.REQUEST_DESKTOP_SITE_FOR_TABLETS)
+                && ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
+                        ChromeFeatureList.REQUEST_DESKTOP_SITE_FOR_TABLETS,
+                        REQUEST_DESKTOP_ENABLED_PARAM, false)) {
+            // We only do the following logic to choose the desktop/mobile user agent if
+            // 1. User never manually made choice in app menu for requesting desktop site or not.
+            // 2. The browser is running in tablets.
+            boolean shouldRequestDesktopSite = TabUtils.isTabLargeEnoughForDesktopSite(this);
+
+            if (shouldRequestDesktopSite != currentRequestDesktopSite) {
+                RecordHistogram.recordBooleanHistogram(
+                        "Android.RequestDesktopSite.UseDesktopUserAgent", shouldRequestDesktopSite);
+
+                // The user is not forcing any mode and we determined that we need to change,
+                // therefore we are using TRUE or FALSE option. On Android TRUE mean override to
+                // Desktop user agent, while FALSE means go with Mobile version.
+                return shouldRequestDesktopSite ? UserAgentOverrideOption.TRUE
+                                                : UserAgentOverrideOption.FALSE;
+            }
+        }
+        RecordHistogram.recordBooleanHistogram(
+                "Android.RequestDesktopSite.UseDesktopUserAgent", currentRequestDesktopSite);
+
+        // INHERIT means use the same that was used last time.
+        return UserAgentOverrideOption.INHERIT;
+    }
+
+    void setUserForcedUserAgent() {
+        mUserForcedUserAgent = true;
+    }
+
+    private void switchUserAgentIfNeeded() {
+        if (calculateUserAgentOverrideOption() == UserAgentOverrideOption.INHERIT
+                || getWebContents() == null) {
+            return;
+        }
+        boolean usingDesktopUserAgent =
+                getWebContents().getNavigationController().getUseDesktopUserAgent();
+        TabUtils.switchUserAgent(this, /* switchToDesktop */ !usingDesktopUserAgent,
+                /* forcedByUser */ false);
+    }
+
     /** Vivaldi. Update the user agent according to the global setting. */
     public void updateUserAgent() {
         boolean prefAlwaysShowDesktop =
@@ -1677,7 +1757,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
                 ResourceRequestBody postData, int transition, String referrerUrl,
                 int referrerPolicy, boolean isRendererInitiated, boolean shoulReplaceCurrentEntry,
                 boolean hasUserGesture, boolean shouldClearHistoryList, long inputStartTimestamp,
-                long intentReceivedTimestamp);
+                long intentReceivedTimestamp, int userAgentOverrideOption);
         void setActiveNavigationEntryTitleForUrl(long nativeTabAndroid, String url, String title);
         void loadOriginalImage(long nativeTabAndroid);
         void setAddApi2TransitionToFutureNavigations(long nativeTabAndroid, boolean shouldAdd);

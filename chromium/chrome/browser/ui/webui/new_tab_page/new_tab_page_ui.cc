@@ -21,6 +21,7 @@
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.h"
 #include "chrome/browser/ui/webui/new_tab_page/promo_browser_command/promo_browser_command_handler.h"
 #include "chrome/browser/ui/webui/new_tab_page/untrusted_source.h"
+#include "chrome/browser/ui/webui/realbox/realbox_handler.h"
 #include "chrome/browser/ui/webui/sanitized_image_source.h"
 #include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/browser/ui/webui/webui_util.h"
@@ -71,7 +72,6 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
                         .spec());
 
   // Realbox.
-  source->AddBoolean("realboxEnabled", true);
   source->AddBoolean(
       "realboxMatchOmniboxTheme",
       base::FeatureList::IsEnabled(ntp_features::kRealboxMatchOmniboxTheme));
@@ -95,9 +95,6 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       "oneGoogleBarModalOverlaysEnabled",
       base::FeatureList::IsEnabled(ntp_features::kOneGoogleBarModalOverlays));
 
-  source->AddBoolean(
-      "themeModeDoodlesEnabled",
-      base::FeatureList::IsEnabled(ntp_features::kWebUIThemeModeDoodles));
   source->AddBoolean("shortcutsEnabled",
                      base::FeatureList::IsEnabled(ntp_features::kNtpShortcuts));
   source->AddBoolean("logoEnabled",
@@ -147,7 +144,8 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       {"defaultThemeLabel", IDS_NTP_CUSTOMIZE_DEFAULT_LABEL},
       {"hideShortcuts", IDS_NTP_CUSTOMIZE_HIDE_SHORTCUTS_LABEL},
       {"hideShortcutsDesc", IDS_NTP_CUSTOMIZE_HIDE_SHORTCUTS_DESC},
-      {"showModules", IDS_NTP_CUSTOMIZE_SHOW_MODULES_LABEL},
+      {"hideAllCards", IDS_NTP_CUSTOMIZE_HIDE_ALL_CARDS_LABEL},
+      {"customizeCards", IDS_NTP_CUSTOMIZE_CUSTOMIZE_CARDS_LABEL},
       {"mostVisited", IDS_NTP_CUSTOMIZE_MOST_VISITED_LABEL},
       {"myShortcuts", IDS_NTP_CUSTOMIZE_MY_SHORTCUTS_LABEL},
       {"noBackground", IDS_NTP_CUSTOMIZE_NO_BACKGROUND_LABEL},
@@ -203,8 +201,23 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
 
       // Modules.
       {"dismissModuleToastMessage", IDS_NTP_MODULES_DISMISS_TOAST_MESSAGE},
+      {"disableModuleToastMessage", IDS_NTP_MODULES_DISABLE_TOAST_MESSAGE},
       {"moduleInfoButtonTitle", IDS_NTP_MODULES_INFO_BUTTON_TITLE},
-      {"moduleDismissButtonTitle", IDS_NTP_MODULES_DISMISS_BUTTON_TITLE},
+      {"modulesDismissButtonText", IDS_NTP_MODULES_DISMISS_BUTTON_TEXT},
+      {"modulesDisableButtonText", IDS_NTP_MODULES_DISABLE_BUTTON_TEXT},
+      {"modulesCustomizeButtonText", IDS_NTP_MODULES_CUSTOMIZE_BUTTON_TEXT},
+      {"modulesShoppingTasksSentence", IDS_NTP_MODULES_SHOPPING_TASKS_SENTENCE},
+      {"modulesShoppingTasksLower", IDS_NTP_MODULES_SHOPPING_TASKS_LOWER},
+      {"modulesRecipeTasksSentence", IDS_NTP_MODULES_RECIPE_TASKS_SENTENCE},
+      {"modulesRecipeTasksLower", IDS_NTP_MODULES_RECIPE_TASKS_LOWER},
+      {"modulesRecipeTasksLowerThese",
+       IDS_NTP_MODULES_RECIPE_TASKS_LOWER_THESE},
+      {"modulesCartSentence", IDS_NTP_MODULES_CART_SENTENCE},
+      {"modulesCartLower", IDS_NTP_MODULES_CART_LOWER},
+      {"modulesCartLowerThese", IDS_NTP_MODULES_CART_LOWER_THESE},
+      {"modulesCartLowerYour", IDS_NTP_MODULES_CART_LOWER_YOUR},
+      {"modulesDriveSentence", IDS_NTP_MODULES_DRIVE_SENTENCE},
+      {"modulesDummyLower", IDS_NTP_MODULES_DUMMY_LOWER},
       {"modulesDriveTitle", IDS_NTP_MODULES_DRIVE_TITLE},
       {"modulesDummyTitle", IDS_NTP_MODULES_DUMMY_TITLE},
       {"modulesDummy2Title", IDS_NTP_MODULES_DUMMY2_TITLE},
@@ -212,14 +225,9 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       {"modulesTasksInfoTitle", IDS_NTP_MODULES_SHOPPING_TASKS_INFO_TITLE},
       {"modulesTasksInfoClose", IDS_NTP_MODULES_SHOPPING_TASKS_INFO_CLOSE},
       {"modulesCartHeaderNew", IDS_NTP_MODULES_CART_HEADER_CHIP_NEW},
-      {"modulesCartTitle", IDS_NTP_MODULES_CART_TITLE},
       {"modulesCartWarmWelcome", IDS_NTP_MODULES_CART_WARM_WELCOME},
-      {"modulesCartModuleMenuHide", IDS_NTP_MODULES_CART_MODULE_MENU_HIDE},
       {"modulesCartModuleMenuHideToastMessage",
        IDS_NTP_MODULES_CART_MODULE_MENU_HIDE_TOAST_MESSAGE},
-      {"modulesCartModuleMenuRemove", IDS_NTP_MODULES_CART_MODULE_MENU_REMOVE},
-      {"modulesCartModuleMenuRemoveToastMessage",
-       IDS_NTP_MODULES_CART_MODULE_MENU_REMOVE_TOAST_MESSAGE},
       {"modulesCartCartMenuHideMerchant",
        IDS_NTP_MODULES_CART_CART_MENU_HIDE_MERCHANT},
       {"modulesCartCartMenuHideMerchantToastMessage",
@@ -229,7 +237,7 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       {"modulesCartCartMenuRemoveMerchantToastMessage",
        IDS_NTP_MODULES_CART_CART_MENU_REMOVE_MERCHANT_TOAST_MESSAGE},
   };
-  AddLocalizedStringsBulk(source, kStrings);
+  source->AddLocalizedStrings(kStrings);
 
   source->AddString("modulesTasksInfo1",
                     l10n_util::GetStringFUTF16(
@@ -262,7 +270,7 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       {omnibox::kPageIconResourceName, IDR_LOCAL_NTP_ICONS_PAGE},
       {omnibox::kSearchIconResourceName, IDR_WEBUI_IMAGES_ICON_SEARCH_SVG},
       {omnibox::kTrendingUpIconResourceName, IDR_LOCAL_NTP_ICONS_TRENDING_UP}};
-  webui::AddResourcePathsBulk(source, kImages);
+  source->AddResourcePaths(kImages);
 
   source->AddBoolean(
       "recipeTasksModuleEnabled",
@@ -361,6 +369,12 @@ void NewTabPageUI::BindInterface(
 }
 
 void NewTabPageUI::BindInterface(
+    mojo::PendingReceiver<realbox::mojom::PageHandler> pending_page_handler) {
+  realbox_handler_ = std::make_unique<RealboxHandler>(
+      std::move(pending_page_handler), profile_, web_contents_);
+}
+
+void NewTabPageUI::BindInterface(
     mojo::PendingReceiver<promo_browser_command::mojom::CommandHandler>
         pending_page_handler) {
   promo_browser_command_handler_ = std::make_unique<PromoBrowserCommandHandler>(
@@ -386,7 +400,8 @@ void NewTabPageUI::BindInterface(
 
 void NewTabPageUI::BindInterface(
     mojo::PendingReceiver<drive::mojom::DriveHandler> pending_receiver) {
-  drive_handler_ = std::make_unique<DriveHandler>(std::move(pending_receiver));
+  drive_handler_ =
+      std::make_unique<DriveHandler>(std::move(pending_receiver), profile_);
 }
 
 #if !defined(OFFICIAL_BUILD)

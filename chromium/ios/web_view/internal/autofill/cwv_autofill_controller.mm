@@ -665,6 +665,12 @@ showUnmaskPromptForCard:(const autofill::CreditCard&)creditCard
   }
 }
 
+- (void)showPasswordProtectionWarning:(NSString*)warningText
+                           completion:(void (^)(safe_browsing::WarningAction))
+                                          completion {
+  // No op.
+}
+
 #pragma mark - SharedPasswordControllerDelegate
 
 - (password_manager::PasswordManagerClient*)passwordManagerClient {

@@ -14,9 +14,8 @@
 #include "chrome/browser/profiles/profile_manager.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
-#include "chrome/browser/chromeos/login/lock/screen_locker.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/ash/accessibility/accessibility_manager.h"
+#include "chrome/browser/ash/login/lock/screen_locker.h"
 #endif
 
 namespace OnDisplayStateChanged =
@@ -187,7 +186,7 @@ BrailleDisplayPrivateUpdateBluetoothBrailleDisplayAddressFunction::Run() {
 #else
   std::string address;
   EXTENSION_FUNCTION_VALIDATE(args_->GetString(0, &address));
-  chromeos::AccessibilityManager::Get()->UpdateBluetoothBrailleDisplayAddress(
+  ash::AccessibilityManager::Get()->UpdateBluetoothBrailleDisplayAddress(
       address);
   return RespondNow(NoArguments());
 #endif

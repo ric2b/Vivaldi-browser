@@ -98,6 +98,10 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) FakeCryptohomeClient
                   const cryptohome::AuthorizationRequest& auth,
                   const cryptohome::CheckKeyRequest& request,
                   DBusMethodCallback<cryptohome::BaseReply> callback) override;
+  void ListKeysEx(const cryptohome::AccountIdentifier& cryptohome_id,
+                  const cryptohome::AuthorizationRequest& auth,
+                  const cryptohome::ListKeysRequest& request,
+                  DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void MountEx(const cryptohome::AccountIdentifier& cryptohome_id,
                const cryptohome::AuthorizationRequest& auth,
                const cryptohome::MountRequest& request,
@@ -121,15 +125,6 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) FakeCryptohomeClient
       const cryptohome::AccountIdentifier& cryptohome_id,
       const cryptohome::AuthorizationRequest& auth,
       const cryptohome::MassRemoveKeysRequest& request,
-      DBusMethodCallback<cryptohome::BaseReply> callback) override;
-  void GetBootAttribute(
-      const cryptohome::GetBootAttributeRequest& request,
-      DBusMethodCallback<cryptohome::BaseReply> callback) override;
-  void SetBootAttribute(
-      const cryptohome::SetBootAttributeRequest& request,
-      DBusMethodCallback<cryptohome::BaseReply> callback) override;
-  void FlushAndSignBootAttributes(
-      const cryptohome::FlushAndSignBootAttributesRequest& request,
       DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void MigrateToDircrypto(const cryptohome::AccountIdentifier& cryptohome_id,
                           const cryptohome::MigrateToDircryptoRequest& request,
@@ -281,31 +276,9 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) FakeCryptohomeClient
       const cryptohome::BaseReply& reply,
       DBusMethodCallback<cryptohome::BaseReply> callback);
 
-  // Posts tasks which return fake results to the UI thread.
-  void ReturnAsyncMethodResult(AsyncMethodCallback callback);
-
-  // Posts tasks which return fake data to the UI thread.
-  void ReturnAsyncMethodData(AsyncMethodCallback callback,
-                             const std::string& data);
-
-  // This method is used to implement ReturnAsyncMethodResult without data.
-  void ReturnAsyncMethodResultInternal(AsyncMethodCallback callback);
-
-  // This method is used to implement ReturnAsyncMethodResult with data.
-  void ReturnAsyncMethodDataInternal(AsyncMethodCallback callback,
-                                     const std::string& data);
-
   // This method is used to implement MigrateToDircrypto with simulated progress
   // updates.
   void OnDircryptoMigrationProgressUpdated();
-
-  // Notifies AsyncCallStatus() to Observer instances.
-  void NotifyAsyncCallStatus(int async_id, bool return_status, int return_code);
-
-  // Notifies AsyncCallStatusWithData() to Observer instances.
-  void NotifyAsyncCallStatusWithData(int async_id,
-                                     bool return_status,
-                                     const std::string& data);
 
   // Loads install attributes from the stub file.
   bool LoadInstallAttributes();
@@ -327,7 +300,6 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) FakeCryptohomeClient
 
   int remove_firmware_management_parameters_from_tpm_call_count_ = 0;
 
-  int async_call_id_ = 1;
   bool mount_create_required_ = false;
   bool unmount_result_ = true;
   std::vector<uint8_t> system_salt_{GetStubSystemSalt()};

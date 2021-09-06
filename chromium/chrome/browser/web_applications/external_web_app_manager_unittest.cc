@@ -51,7 +51,6 @@ constexpr char kAppAllUrl[] = "https://www.google.com/all";
 constexpr char kAppChildUrl[] = "https://www.google.com/child";
 constexpr char kAppGuestUrl[] = "https://www.google.com/guest";
 constexpr char kAppManagedUrl[] = "https://www.google.com/managed";
-constexpr char kAppSupervisedUrl[] = "https://www.google.com/supervised";
 constexpr char kAppUnmanagedUrl[] = "https://www.google.com/unmanaged";
 #endif
 
@@ -455,19 +454,14 @@ TEST_F(ExternalWebAppManagerTest, ManagedUser) {
   VerifySetOfApps(profile.get(), {GURL(kAppAllUrl), GURL(kAppManagedUrl)});
 }
 
-TEST_F(ExternalWebAppManagerTest, SupervisedUser) {
-  const auto profile = CreateProfileAndLogin();
-  profile->SetSupervisedUserId("asdf");
-  VerifySetOfApps(profile.get(), {GURL(kAppAllUrl), GURL(kAppSupervisedUrl)});
-}
-
 TEST_F(ExternalWebAppManagerTest, UnmanagedUser) {
   VerifySetOfApps(CreateProfileAndLogin().get(),
                   {GURL(kAppAllUrl), GURL(kAppUnmanagedUrl)});
 }
 
 TEST_F(ExternalWebAppManagerTest, NonPrimaryProfile) {
-  EXPECT_TRUE(LoadApps(kUserTypesTestDir, CreateProfile().get()).empty());
+  VerifySetOfApps(CreateProfile().get(),
+                  {GURL(kAppAllUrl), GURL(kAppUnmanagedUrl)});
 }
 #else   // BUILDFLAG(IS_CHROMEOS_ASH)
 // No app is expected for non-ChromeOS builds.

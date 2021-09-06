@@ -136,18 +136,26 @@ void StyleFetchedImage::RemoveClient(ImageResourceObserver* observer) {
 }
 
 void StyleFetchedImage::ImageNotifyFinished(ImageResourceContent*) {
+  if (!document_)
+    return;
+
   if (image_ && image_->HasImage()) {
     Image& image = *image_->GetImage();
 
-    auto* svg_image = DynamicTo<SVGImage>(image);
-    if (document_ && svg_image)
+    if (auto* svg_image = DynamicTo<SVGImage>(image)) {
+      // SVG's document should be completely loaded before access control
+      // checks, which can occur anytime after ImageNotifyFinished()
+      // (See SVGImage::CurrentFrameHasSingleSecurityOrigin()).
+      // We check the document is loaded here to catch violation of the
+      // assumption reliably.
+      svg_image->CheckLoaded();
       svg_image->UpdateUseCounters(*document_);
+    }
+    image_->RecordDecodedImageType(document_->GetExecutionContext());
   }
 
-  if (document_) {
-    if (LocalDOMWindow* window = document_->domWindow())
-      ImageElementTiming::From(*window).NotifyBackgroundImageFinished(this);
-  }
+  if (LocalDOMWindow* window = document_->domWindow())
+    ImageElementTiming::From(*window).NotifyBackgroundImageFinished(this);
 
   // Oilpan: do not prolong the Document's lifetime.
   document_.Clear();

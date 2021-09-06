@@ -9,7 +9,6 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.TypedArray;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.text.TextUtils;
@@ -17,6 +16,7 @@ import android.text.TextUtils;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.IntentUtils;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
@@ -24,6 +24,9 @@ import org.chromium.chrome.browser.webapps.WebApkExtras;
 import org.chromium.chrome.browser.webapps.WebappExtras;
 import org.chromium.chrome.browser.webapps.WebappLauncherActivity;
 import org.chromium.ui.base.DeviceFormFactor;
+
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * This class makes a decision what FRE type to launch and creates a corresponding intent. Should be
@@ -142,10 +145,8 @@ public class FreIntentCreator {
     private static void addPendingIntent(Context context, Intent firstRunIntent,
             Intent intentToLaunchAfterFreComplete, boolean requiresBroadcast) {
         final PendingIntent pendingIntent;
-        int pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_ONE_SHOT;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            pendingIntentFlags |= PendingIntent.FLAG_IMMUTABLE;
-        }
+        int pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_ONE_SHOT
+                | IntentUtils.getPendingIntentMutabilityFlag(false);
         if (requiresBroadcast) {
             pendingIntent = PendingIntent.getBroadcast(
                     context, 0, intentToLaunchAfterFreComplete, pendingIntentFlags);
@@ -180,6 +181,9 @@ public class FreIntentCreator {
      * This function returns whether to use the TabbedModeFRE.
      */
     private static boolean shouldSwitchToTabbedMode(Context caller) {
+        // Vivaldi
+        if (ChromeApplication.isVivaldi()) return false;
+
         // Caller must be an activity.
         if (!(caller instanceof Activity)) return false;
 

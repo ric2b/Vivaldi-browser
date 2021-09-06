@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/media_controller.h"
 #include "ash/public/cpp/notification_utils.h"
 #include "ash/public/cpp/toast_data.h"
@@ -20,10 +21,10 @@
 #include "base/system/sys_info.h"
 #include "base/task/current_thread.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/camera_mic/vm_camera_mic_manager.h"
 #include "chrome/browser/chromeos/extensions/media_player_api.h"
 #include "chrome/browser/chromeos/extensions/media_player_event_router.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/notifications/system_notification_helper.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
@@ -35,7 +36,6 @@
 #include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/user_manager/user_manager.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/media_session.h"

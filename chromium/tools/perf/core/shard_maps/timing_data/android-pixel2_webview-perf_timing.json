@@ -900,14 +900,6 @@
         "name": "blink_perf.owp_storage/idb-load-docs.html"
     },
     {
-        "duration": "25.0",
-        "name": "blink_perf.owp_storage/idb-put-all.html"
-    },
-    {
-        "duration": "30.0",
-        "name": "blink_perf.owp_storage/idb-put.html"
-    },
-    {
         "duration": "13.0",
         "name": "blink_perf.paint/appending-text.html"
     },
@@ -3600,10 +3592,6 @@
         "name": "system_health.common_mobile/browse:media:youtube:2019"
     },
     {
-        "duration": "51.0",
-        "name": "system_health.common_mobile/browse:news:cnn:2020"
-    },
-    {
         "duration": "4.0",
         "name": "system_health.common_mobile/browse:news:cricbuzz:2019"
     },
@@ -3890,10 +3878,6 @@
     {
         "duration": "55.0",
         "name": "system_health.memory_mobile/browse:media:youtube:2019"
-    },
-    {
-        "duration": "54.0",
-        "name": "system_health.memory_mobile/browse:news:cnn:2020"
     },
     {
         "duration": "4.0",
@@ -4204,10 +4188,6 @@
         "name": "v8.browsing_mobile/browse:media:youtube:2019"
     },
     {
-        "duration": "72.0",
-        "name": "v8.browsing_mobile/browse:news:cnn:2020"
-    },
-    {
         "duration": "11.0",
         "name": "v8.browsing_mobile/browse:news:cricbuzz:2019"
     },
@@ -4318,10 +4298,6 @@
     {
         "duration": "17.0",
         "name": "webrtc/insertable_streams_video_processing_camera_canvas2d_video"
-    },
-    {
-        "duration": "17.0",
-        "name": "webrtc/insertable_streams_video_processing_camera_drop_video"
     },
     {
         "duration": "17.0",

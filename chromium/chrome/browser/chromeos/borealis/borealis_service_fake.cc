@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/borealis/borealis_service_fake.h"
 
+#include "chrome/browser/chromeos/borealis/borealis_service.h"
 #include "chrome/browser/chromeos/borealis/borealis_service_factory.h"
 
 namespace borealis {
@@ -22,38 +23,48 @@ BorealisServiceFake* BorealisServiceFake::UseFakeForTesting(
 BorealisServiceFake::~BorealisServiceFake() = default;
 
 BorealisAppLauncher& BorealisServiceFake::AppLauncher() {
-  DCHECK(app_launcher_);
+  CHECK(app_launcher_);
   return *app_launcher_;
 }
 
+BorealisAppUninstaller& BorealisServiceFake::AppUninstaller() {
+  CHECK(app_uninstaller_);
+  return *app_uninstaller_;
+}
+
 BorealisContextManager& BorealisServiceFake::ContextManager() {
-  DCHECK(context_manager_);
+  CHECK(context_manager_);
   return *context_manager_;
 }
 
 BorealisFeatures& BorealisServiceFake::Features() {
-  DCHECK(features_);
+  CHECK(features_);
   return *features_;
 }
 
 BorealisInstaller& BorealisServiceFake::Installer() {
-  DCHECK(installer_);
+  CHECK(installer_);
   return *installer_;
 }
 
 BorealisShutdownMonitor& BorealisServiceFake::ShutdownMonitor() {
-  DCHECK(shutdown_monitor_);
+  CHECK(shutdown_monitor_);
   return *shutdown_monitor_;
 }
 
 BorealisWindowManager& BorealisServiceFake::WindowManager() {
-  DCHECK(window_manager_);
+  CHECK(window_manager_);
   return *window_manager_;
 }
 
 void BorealisServiceFake::SetAppLauncherForTesting(
     BorealisAppLauncher* app_launcher) {
   app_launcher_ = app_launcher;
+}
+
+void BorealisServiceFake::SetAppUninstallerForTesting(
+    BorealisAppUninstaller* app_uninstaller) {
+  app_uninstaller_ = app_uninstaller;
 }
 
 void BorealisServiceFake::SetContextManagerForTesting(

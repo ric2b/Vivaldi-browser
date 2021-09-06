@@ -849,8 +849,9 @@ TEST_F(AutofillTableTest, RemoveExpiredFormElements_NotOldEnough) {
 TEST_F(AutofillTableTest,
        AutofillProfile_StructuredNames_BackAndForthMigration) {
   // Enable the structured names.
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillEnableSupportForMoreStructureInNames);
+  scoped_feature_list_.InitWithFeatures(
+      {features::kAutofillEnableSupportForMoreStructureInNames},
+      {features::kAutofillEnableSupportForMoreStructureInAddresses});
 
   AutofillProfile structured_name_profile;
   structured_name_profile.set_origin(std::string());
@@ -1299,8 +1300,9 @@ TEST_F(AutofillTableTest,
 // names.
 TEST_F(AutofillTableTest, AutofillProfile_StructuredNames) {
   // Enable the structured names.
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillEnableSupportForMoreStructureInNames);
+  scoped_feature_list_.InitWithFeatures(
+      {features::kAutofillEnableSupportForMoreStructureInNames},
+      {features::kAutofillEnableSupportForMoreStructureInAddresses});
 
   AutofillProfile home_profile;
   home_profile.set_origin(std::string());
@@ -1309,6 +1311,10 @@ TEST_F(AutofillTableTest, AutofillProfile_StructuredNames) {
   // home_profile.SetRawInfoWithVerificationStatus(
   // NAME_HONORIFIC_PREFIX, ASCIIToUTF16("Dr."),
   // VerificationStatus::kObserved);
+
+  home_profile.SetRawInfoWithVerificationStatus(NAME_HONORIFIC_PREFIX,
+                                                ASCIIToUTF16("Dr."),
+                                                VerificationStatus::kObserved);
 
   home_profile.SetRawInfoWithVerificationStatus(
       NAME_FIRST, ASCIIToUTF16("John"), VerificationStatus::kObserved);
@@ -1330,6 +1336,11 @@ TEST_F(AutofillTableTest, AutofillProfile_StructuredNames) {
 
   home_profile.SetRawInfoWithVerificationStatus(
       NAME_FULL, ASCIIToUTF16("John Q. Agent 007 Smith"),
+      VerificationStatus::kObserved);
+
+  home_profile.SetRawInfoWithVerificationStatus(
+      NAME_FULL_WITH_HONORIFIC_PREFIX,
+      ASCIIToUTF16("Dr. John Q. Agent 007 Smith"),
       VerificationStatus::kObserved);
 
   home_profile.SetRawInfo(EMAIL_ADDRESS, ASCIIToUTF16("js@smith.xyz"));
@@ -1474,8 +1485,9 @@ TEST_F(AutofillTableTest, AutofillProfile_StructuredNames) {
 TEST_F(AutofillTableTest, AutofillProfile) {
   // Disable the structured names since this test is only applicable if
   // structured names are not used.
-  scoped_feature_list_.InitAndDisableFeature(
-      features::kAutofillEnableSupportForMoreStructureInNames);
+  scoped_feature_list_.InitWithFeatures(
+      {}, {features::kAutofillEnableSupportForMoreStructureInAddresses,
+           features::kAutofillEnableSupportForMoreStructureInNames});
 
   // Add a 'Home' profile with non-default data. The specific values are not
   // important.

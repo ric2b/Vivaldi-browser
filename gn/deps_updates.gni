@@ -110,7 +110,7 @@ if (vivaldi_build_tests) {
       ]
     }
     deps += [
-      #"//chrome/utility",
+      "//vivaldi/components/translate/renderer:renderer",
       "//vivaldi/importer",
       "//vivaldi/importer:browser",
       "//vivaldi/notes",

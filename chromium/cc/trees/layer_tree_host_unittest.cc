@@ -17,12 +17,13 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
+#include "base/test/bind.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/animation/animation_host.h"
-#include "cc/animation/timing_function.h"
+#include "cc/document_transition/document_transition_request.h"
 #include "cc/input/scroll_elasticity_helper.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/heads_up_display_layer.h"
@@ -67,6 +68,7 @@
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/frame_sinks/copy_output_result.h"
+#include "components/viz/common/quads/compositor_frame_transition_directive.h"
 #include "components/viz/common/quads/compositor_render_pass_draw_quad.h"
 #include "components/viz/common/quads/draw_quad.h"
 #include "components/viz/common/quads/tile_draw_quad.h"
@@ -80,6 +82,7 @@
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "third_party/skia/include/core/SkPicture.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
+#include "ui/gfx/animation/keyframe/timing_function.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
@@ -8267,7 +8270,7 @@ class LayerTreeHostTestImageAnimationDrawImage
 
  private:
   void AddImageOp(const PaintImage& image) override {
-    content_layer_client_.add_draw_image(image, gfx::Point(0, 0), PaintFlags());
+    content_layer_client_.add_draw_image(image, gfx::Point(0, 0));
   }
 };
 
@@ -8289,7 +8292,7 @@ class LayerTreeHostTestImageAnimationDrawRecordShader
     : public LayerTreeHostTestImageAnimation {
   void AddImageOp(const PaintImage& image) override {
     auto record = sk_make_sp<PaintOpBuffer>();
-    record->push<DrawImageOp>(image, 0.f, 0.f, nullptr);
+    record->push<DrawImageOp>(image, 0.f, 0.f);
     PaintFlags flags;
     flags.setShader(PaintShader::MakePaintRecord(
         record, SkRect::MakeWH(500, 500), SkTileMode::kClamp,
@@ -8304,7 +8307,7 @@ class LayerTreeHostTestImageAnimationPaintFilter
     : public LayerTreeHostTestImageAnimation {
   void AddImageOp(const PaintImage& image) override {
     auto record = sk_make_sp<PaintOpBuffer>();
-    record->push<DrawImageOp>(image, 0.f, 0.f, nullptr);
+    record->push<DrawImageOp>(image, 0.f, 0.f);
     PaintFlags flags;
     flags.setImageFilter(
         sk_make_sp<RecordPaintFilter>(record, SkRect::MakeWH(500, 500)));
@@ -8380,12 +8383,9 @@ class LayerTreeHostTestImageDecodingHints : public LayerTreeHostTest {
             .set_id(3)
             .set_decoding_mode(PaintImage::DecodingMode::kUnspecified)
             .TakePaintImage();
-    content_layer_client_.add_draw_image(async_image, gfx::Point(0, 0),
-                                         PaintFlags());
-    content_layer_client_.add_draw_image(sync_image, gfx::Point(1, 2),
-                                         PaintFlags());
-    content_layer_client_.add_draw_image(unspecified_image, gfx::Point(3, 4),
-                                         PaintFlags());
+    content_layer_client_.add_draw_image(async_image, gfx::Point(0, 0));
+    content_layer_client_.add_draw_image(sync_image, gfx::Point(1, 2));
+    content_layer_client_.add_draw_image(unspecified_image, gfx::Point(3, 4));
 
     layer_tree_host()->SetRootLayer(
         FakePictureLayer::Create(&content_layer_client_));
@@ -9451,6 +9451,72 @@ class LayerTreeHostUkmSmoothnessMemoryOwnership : public LayerTreeTest {
 };
 
 MULTI_THREAD_TEST_F(LayerTreeHostUkmSmoothnessMemoryOwnership);
+
+class LayerTreeHostTestDocumentTransitionsPropagatedToMetadata
+    : public LayerTreeHostTest {
+ protected:
+  void SetupTree() override {
+    SetInitialRootBounds(gfx::Size(10, 10));
+    LayerTreeHostTest::SetupTree();
+  }
+
+  void BeginTest() override {
+    layer_tree_host()->AddDocumentTransitionRequest(
+        DocumentTransitionRequest::CreatePrepare(
+            DocumentTransitionRequest::Effect::kExplode,
+            base::TimeDelta::FromMilliseconds(123),
+            base::BindLambdaForTesting([this]() { CommitLambdaCalled(); })));
+    layer_tree_host()->AddDocumentTransitionRequest(
+        DocumentTransitionRequest::CreateStart(
+            base::BindLambdaForTesting([this]() { CommitLambdaCalled(); })));
+  }
+
+  void CommitLambdaCalled() { ++num_lambda_calls_; }
+
+  void DisplayReceivedCompositorFrameOnThread(
+      const viz::CompositorFrame& frame) override {
+    ASSERT_EQ(2u, frame.metadata.transition_directives.size());
+    const auto& save = frame.metadata.transition_directives[0];
+
+    EXPECT_EQ(save.type(),
+              viz::CompositorFrameTransitionDirective::Type::kSave);
+    EXPECT_EQ(save.effect(),
+              viz::CompositorFrameTransitionDirective::Effect::kExplode);
+    EXPECT_EQ(save.duration(), base::TimeDelta::FromMilliseconds(123));
+
+    const auto& animate = frame.metadata.transition_directives[1];
+    EXPECT_GT(animate.sequence_id(), save.sequence_id());
+    EXPECT_EQ(animate.type(),
+              viz::CompositorFrameTransitionDirective::Type::kAnimate);
+
+    EndTest();
+  }
+
+  void AfterTest() override { EXPECT_EQ(2, num_lambda_calls_); }
+
+  int num_lambda_calls_ = 0;
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(
+    LayerTreeHostTestDocumentTransitionsPropagatedToMetadata);
+
+class LayerTreeHostTestDebugStateDowngrade : public LayerTreeHostTest {
+  void InitializeSettings(LayerTreeSettings* settings) override {
+    settings->initial_debug_state.show_fps_counter = true;
+  }
+
+  void BeginTest() override {
+    LayerTreeHost* host = layer_tree_host();
+    LayerTreeDebugState state = host->GetDebugState();
+    EXPECT_TRUE(state.show_fps_counter);
+    state.show_fps_counter = false;
+    host->SetDebugState(state);
+    EXPECT_FALSE(host->GetDebugState().show_fps_counter);
+    EndTest();
+  }
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestDebugStateDowngrade);
 
 }  // namespace
 }  // namespace cc

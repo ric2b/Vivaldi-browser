@@ -21,6 +21,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringize_macros.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -161,11 +162,14 @@ std::string GPUDeviceToString(const gpu::GPUInfo::GPUDevice& gpu) {
   std::string rt = base::StringPrintf("VENDOR= %s, DEVICE=%s", vendor.c_str(),
                                       device.c_str());
 #if defined(OS_WIN)
-  if (gpu.sub_sys_id || gpu.revision) {
-    rt += base::StringPrintf(", SUBSYS=0x%08x, REV=%u", gpu.sub_sys_id,
-                             gpu.revision);
-  }
-
+  if (gpu.sub_sys_id)
+    rt += base::StringPrintf(", SUBSYS=0x%08x", gpu.sub_sys_id);
+#endif
+#if defined(OS_WIN) || defined(OS_CHROMEOS)
+  if (gpu.revision)
+    rt += base::StringPrintf(", REV=%u", gpu.revision);
+#endif
+#if defined(OS_WIN)
   rt += base::StringPrintf(", LUID={%ld,%lu}", gpu.luid.HighPart,
                            gpu.luid.LowPart);
 #endif
@@ -827,8 +831,13 @@ std::unique_ptr<base::DictionaryValue> GpuMessageHandler::OnRequestClientInfo(
   auto dict = std::make_unique<base::DictionaryValue>();
 
   dict->SetString("version", GetContentClient()->browser()->GetProduct());
-  dict->SetString("command_line",
-      base::CommandLine::ForCurrentProcess()->GetCommandLineString());
+  base::CommandLine::StringType command_line =
+      base::CommandLine::ForCurrentProcess()->GetCommandLineString();
+#if defined(OS_WIN)
+  dict->SetString("command_line", base::WideToUTF8(command_line));
+#else
+  dict->SetString("command_line", command_line);
+#endif
   dict->SetString("operating_system",
                   base::SysInfo::OperatingSystemName() + " " +
                   base::SysInfo::OperatingSystemVersion());

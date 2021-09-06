@@ -50,6 +50,10 @@ void WebRuntimeFeatures::EnableBrowserVerifiedUserActivationMouse(bool enable) {
   RuntimeEnabledFeatures::SetBrowserVerifiedUserActivationMouseEnabled(enable);
 }
 
+void WebRuntimeFeatures::EnableCapabilityDelegationPaymentRequest(bool enable) {
+  RuntimeEnabledFeatures::SetCapabilityDelegationPaymentRequestEnabled(enable);
+}
+
 void WebRuntimeFeatures::EnableClickPointerEvent(bool enable) {
   RuntimeEnabledFeatures::SetClickPointerEventEnabled(enable);
 }
@@ -66,6 +70,14 @@ void WebRuntimeFeatures::EnableWebBluetoothRemoteCharacteristicNewWriteValue(
     bool enable) {
   RuntimeEnabledFeatures::
       SetWebBluetoothRemoteCharacteristicNewWriteValueEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableCompositeBGColorAnimation(bool enable) {
+  RuntimeEnabledFeatures::SetCompositeBGColorAnimationEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableCompositeRelativeKeyframes(bool enable) {
+  RuntimeEnabledFeatures::SetCompositeRelativeKeyframesEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableWebNfc(bool enable) {
@@ -103,6 +115,10 @@ void WebRuntimeFeatures::EnableAOMAriaRelationshipProperties(bool enable) {
 
 void WebRuntimeFeatures::EnableAccelerated2dCanvas(bool enable) {
   RuntimeEnabledFeatures::SetAccelerated2dCanvasEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableAccessibilityAriaVirtualContent(bool enable) {
+  RuntimeEnabledFeatures::SetAccessibilityAriaVirtualContentEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableAccessibilityExposeDisplayNone(bool enable) {
@@ -173,6 +189,10 @@ void WebRuntimeFeatures::EnableSameSiteByDefaultCookies(bool enable) {
 
 void WebRuntimeFeatures::EnableScrollTopLeftInterop(bool enable) {
   RuntimeEnabledFeatures::SetScrollTopLeftInteropEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableKeyboardAccessibleTooltip(bool enable) {
+  RuntimeEnabledFeatures::SetKeyboardAccessibleTooltipEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableKeyboardFocusableScrollers(bool enable) {
@@ -345,6 +365,10 @@ void WebRuntimeFeatures::EnableTextFragmentAnchor(bool enable) {
   RuntimeEnabledFeatures::SetTextFragmentIdentifiersEnabled(enable);
 }
 
+void WebRuntimeFeatures::EnableTextFragmentColorChange(bool enable) {
+  RuntimeEnabledFeatures::SetTextFragmentColorChangeEnabled(enable);
+}
+
 void WebRuntimeFeatures::EnablePreciseMemoryInfo(bool enable) {
   RuntimeEnabledFeatures::SetPreciseMemoryInfoEnabled(enable);
 }
@@ -391,6 +415,10 @@ void WebRuntimeFeatures::EnableWebXRCameraAccess(bool enable) {
 
 void WebRuntimeFeatures::EnableWebXRDepth(bool enable) {
   RuntimeEnabledFeatures::SetWebXRDepthEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableWebXRHandInput(bool enable) {
+  RuntimeEnabledFeatures::SetWebXRHandInputEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableWebXRHitTest(bool enable) {

@@ -147,7 +147,8 @@ StandaloneTrustedVaultClient::StandaloneTrustedVaultClient(
   std::unique_ptr<TrustedVaultConnection> connection;
   GURL trusted_vault_service_gurl =
       ExtractTrustedVaultServiceURLFromCommandLine();
-  if (trusted_vault_service_gurl.is_valid()) {
+  if (base::FeatureList::IsEnabled(switches::kFollowTrustedVaultKeyRotation) &&
+      trusted_vault_service_gurl.is_valid()) {
     connection = std::make_unique<TrustedVaultConnectionImpl>(
         trusted_vault_service_gurl, url_loader_factory->Clone(),
         std::make_unique<TrustedVaultAccessTokenFetcherImpl>(
@@ -169,7 +170,13 @@ StandaloneTrustedVaultClient::StandaloneTrustedVaultClient(
       backend_task_runner_, backend_, identity_manager);
 }
 
-StandaloneTrustedVaultClient::~StandaloneTrustedVaultClient() = default;
+StandaloneTrustedVaultClient::~StandaloneTrustedVaultClient() {
+  if (backend_) {
+    // |backend_| needs to be destroyed inside backend sequence, not the current
+    // one.
+    backend_task_runner_->ReleaseSoon(FROM_HERE, std::move(backend_));
+  }
+}
 
 void StandaloneTrustedVaultClient::AddObserver(Observer* observer) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);

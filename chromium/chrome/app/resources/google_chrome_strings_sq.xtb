@@ -10,6 +10,7 @@ Disa funksione mund të mos ofrohen dhe ndryshimet në preferenca nuk do të ruh
 <translation id="1088300314857992706"><ph name="USER_EMAIL_ADDRESS" /> ka përdorur më parë Chrome</translation>
 <translation id="1097330777386562916">Pastro kukit dhe të dhënat e sajteve kur të mbyllësh Chrome</translation>
 <translation id="110877069173485804">Ky është Chrome për ty</translation>
+<translation id="1125124144982679672">Kush po e përdor Chrome?</translation>
 <translation id="1142745911746664600">Chrome nuk mund të përditësohet</translation>
 <translation id="1154147086299354128">&amp;Hape në Chrome</translation>
 <translation id="123620459398936149">Sistemi operativ Chrome nuk mundi t'i sinkronizonte të dhënat e tua. Përditëso shprehjen tënde të kalimit të sinkronizimit.</translation>
@@ -19,7 +20,9 @@ Disa funksione mund të mos ofrohen dhe ndryshimet në preferenca nuk do të ruh
 <translation id="1399397803214730675">Ky kompjuter e ka tashmë një version më të ri të Google Chrome. Nëse softueri nuk punon, çinstaloje Google Chrome dhe provo sërish.</translation>
 <translation id="1434626383986940139">Aplikacionet e Chrome Canary</translation>
 <translation id="147727933880789532">Chrome rekomandon çaktivizimin e kësaj shtese sepse ajo nuk plotëson aktualisht standardet e "Shfletimit të sigurt të përmirësuar".</translation>
+<translation id="1516530951338665275">Google Chrome i nevojitet leje te Bluetooth-i për të vazhduar me çiftimin. <ph name="IDS_BLUETOOTH_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK" /></translation>
 <translation id="1553358976309200471">Përditëso Chrome</translation>
+<translation id="1583073672411044740"><ph name="EXISTING_USER" /> është i identifikuar tashmë në këtë profil të Chrome. Kjo do të krijojë një profil të ri të Chrome për <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="1587223624401073077">Google Chrome po përdor kamerën tënde.</translation>
 <translation id="1587325591171447154"><ph name="FILE_NAME" /> është i rrezikshëm, prandaj Chrome e ka bllokuar.</translation>
 <translation id="1597911401261118146">Për të kontrolluar nëse fjalëkalimet e tua janë të sigurta nga nxjerrjet e paautorizuara të të dhënave dhe probleme të tjera të sigurisë, <ph name="BEGIN_LINK" />identifikohu në Chrome<ph name="END_LINK" />.</translation>
@@ -89,6 +92,7 @@ Disa funksione mund të mos ofrohen dhe ndryshimet në preferenca nuk do të ruh
 <translation id="3065168410429928842">Skeda Chrome</translation>
 <translation id="3080151273017101988">Vazhdo ekzekutimin e aplikacioneve në sfond kur Google Chrome është i mbyllur</translation>
 <translation id="3089968997497233615">Ofrohet një version i ri dhe më i sigurt i Google Chrome.</translation>
+<translation id="3100998948628680988">Emërto profilin tënd të Chrome</translation>
 <translation id="3114643501466072395">Për të kontrolluar nëse fjalëkalimet e tjera janë të sigurta nga nxjerrjet e paautorizuara të të dhënave dhe probleme të tjera të sigurisë, <ph name="BEGIN_LINK" />identifikohu në Chrome<ph name="END_LINK" />.</translation>
 <translation id="3127818369811890733">Sistemi operativ Chrome nuk mund t'i sinkronizonte të dhënat e tua.</translation>
 <translation id="3140883423282498090">Ndryshimet e tua do të hyjnë në fuqi herën tjetër kur të rinisësh Google Chrome.</translation>
@@ -113,6 +117,7 @@ Disa funksione mund të mos ofrohen dhe ndryshimet në preferenca nuk do të ruh
 <translation id="3735758079232443276">Shtesa "<ph name="EXTENSION_NAME" />" ka ndryshuar se cila faqe shfaqet kur nis Chrome.</translation>
 <translation id="3779473566290487688">Për të marrë përditësimet e ardhshme të Google Chrome, do të të duhet versioni OS X 10.11 ose një version i mëvonshëm. Ky kompjuter përdor versionin OS X 10.10.</translation>
 <translation id="3780814664026482060">Chrome - <ph name="PAGE_TITLE" /></translation>
+<translation id="3835168907083856002">Kjo do të krijojë një profil të ri të Chrome për <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="386202838227397562">Mbyll të gjitha dritaret e Google Chrome dhe provo përsëri.</translation>
 <translation id="3865754807470779944">Është instaluar versioni i Chrome <ph name="PRODUCT_VERSION" /></translation>
 <translation id="3873044882194371212">Hape lidhjen në një dritare të fshehtë të Chrome</translation>
@@ -120,7 +125,6 @@ Disa funksione mund të mos ofrohen dhe ndryshimet në preferenca nuk do të ruh
 <translation id="4050175100176540509">Përmirësime të rëndësishme sigurie dhe funksione të reja ofrohen në versionin e fundit.</translation>
 <translation id="4053720452172726777">Personalizo dhe kontrollo Google Chrome</translation>
 <translation id="4110895483821904099">Konfiguro profilin tënd të ri të Chrome</translation>
-<translation id="4143243756087420366">Emri dhe fotografia e Chrome</translation>
 <translation id="4147555960264124640">Po identifikohesh me një llogari të menaxhuar dhe po i jep administratorit të saj kontroll mbi profilin tënd të Google Chrome. Të dhënat e tua të Chrome, siç janë aplikacionet, faqeshënuesit, fjalëkalimet dhe cilësime të tjera do të lidhen në mënyrë të përhershme me <ph name="USER_NAME" />. Ti do të jesh në gjendje t'i fshish këto të dhëna përmes Panelit të llogarive të Google, por nuk do të jesh në gjendje t'i shoqërosh këto të dhëna me një llogari tjetër. <ph name="LEARN_MORE" /></translation>
 <translation id="4149882025268051530">Instaluesi nuk arriti ta nxjerrë arkivin. Shkarko përsëri Google Chrome.</translation>
 <translation id="4191857738314598978">{0,plural, =1{Hap përsëri Chrome brenda një dite}other{Hap përsëri Chrome brenda # ditësh}}</translation>
@@ -149,7 +153,6 @@ Disa funksione mund të mos ofrohen dhe ndryshimet në preferenca nuk do të ruh
 <translation id="4633000520311261472">Për ta bërë më të sigurt Chrome, çaktivizuam disa shtesa që nuk janë të listuara në <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> dhe që mund të jenë shtuar pa dijeninë tënde.</translation>
 <translation id="4666328473657283332">Për t'u qasur te gjërat e Chrome nëpër të gjitha pajisjet, identifikohu që të mund të aktivizosh sinkronizimin.</translation>
 <translation id="4728575227883772061">Instalimi dështoi për shkak të një gabimi të paspecifikuar. Nëse Google Chrome është aktualisht në ekzekutim, mbylle dhe provo përsëri.</translation>
-<translation id="4750550185319565338">Rinis Chrome për të aktivizuar <ph name="PLUGIN_NAME" /></translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
 <translation id="4771048833395599659">Ky skedar mund të jetë i rrezikshëm, prandaj Chrome e ka bllokuar atë.</translation>
 <translation id="479167709087336770">Kjo përdor të njëjtin kontrollues drejtshkrimor që përdoret në kërkimin e Google. Teksti që shkruan në shfletues dërgohet te Google. Mund ta ndryshosh këtë sjellje gjithmonë te cilësimet.</translation>
@@ -175,10 +178,9 @@ Disa funksione mund të mos ofrohen. Specifiko një direktori tjetër të profil
 <translation id="5430073640787465221">Skedari i preferencave është i dëmtuar ose i pavlefshëm.
 
 Google Chrome nuk është në gjendje të rikuperojë cilësimet e tua.</translation>
+<translation id="5434383153637353914">Kjo faqe të lejon të menaxhosh "Llogaritë e tua të Google" ku je identifikuar. Këto llogari do të ofrohen në shfletuesin Chrome dhe në aplikacionet e "Dyqanit të Play", si dhe në shërbimet si Gmail, "Disku" dhe YouTube. <ph name="LINK_BEGIN" />Mëso më shumë<ph name="LINK_END" /></translation>
 <translation id="556024056938947818">Google Chrome po përpiqet të shfaqë fjalëkalimet.</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
-<translation id="5655746611259367388">Mund ta menaxhosh këtë dhe "Llogaritë e tjera të Google" që ke shtuar për <ph name="USER_NAME" /> nga një vend i vetëm te <ph name="LINK_BEGIN" />Cilësimet<ph name="LINK_END" />.
-          Lejet që u ke dhënë sajteve të uebit në shfletuesin Chrome dhe aplikacioneve nga Google Play mund të zbatohen për të gjitha llogaritë.</translation>
 <translation id="5657226924540934362">Nëse cilësimi nuk shfaqet në këtë faqe, shiko te <ph name="LINK_BEGIN" />
       cilësimet e sistemit operativ të Chrome<ph name="LINK_END" /></translation>
 <translation id="565744775970812598"><ph name="FILE_NAME" /> mund të jetë i rrezikshëm, prandaj Chrome e ka bllokuar.</translation>
@@ -187,6 +189,7 @@ Google Chrome nuk është në gjendje të rikuperojë cilësimet e tua.</transla
 <translation id="5690427481109656848">Google LLC</translation>
 <translation id="5715063361988620182">{SECONDS,plural, =1{Google Chrome do të riniset për 1 sekondë}other{Google Chrome do të riniset për # sekonda}}</translation>
 <translation id="573759479754913123">Rreth sistemit operativ Chrome</translation>
+<translation id="5756509061973259733">Një profil i Chrome me këtë llogari ekziston tashmë në këtë pajisje</translation>
 <translation id="5795887333006832406"><ph name="PAGE_TITLE" /> - Google Chrome Canary</translation>
 <translation id="5804318322022881572">Chrome nuk mund të hapej. Provo përsëri.</translation>
 <translation id="5867197326698922595">Google Chrome po përpiqet t'i modifikojë fjalëkalimet.</translation>
@@ -259,7 +262,6 @@ Google Chrome nuk është në gjendje të rikuperojë cilësimet e tua.</transla
 <translation id="7930071585467473040">Google Chrome po përpiqet të kopjojë fjalëkalimet.</translation>
 <translation id="7962410387636238736">Ky kompjuter nuk do të marrë më përditësime të Google Chrome sepse Windows XP dhe Windows Vista nuk mbështeten më</translation>
 <translation id="8008534537613507642">Instalo përsëri Chrome</translation>
-<translation id="8009904340233602924">Përdor Chrome pa pasur llogari</translation>
 <translation id="8013993649590906847">Nëse një imazh nuk ka një përshkrim të dobishëm, Chrome do të përpiqet të të japë një përshkrim. Për të krijuar përshkrime, imazhet dërgohen te Google.</translation>
 <translation id="8129812357326543296">Informacion rreth &amp;Google Chrome</translation>
 <translation id="8255190535488645436">Google Chrome po përdor kamerën dhe mikrofonin tënd.</translation>
@@ -300,6 +302,5 @@ Google Chrome nuk është në gjendje të rikuperojë cilësimet e tua.</transla
 <translation id="9138603949443464873">Për të zbatuar ndryshimet, rinis Chrome</translation>
 <translation id="919706545465235479">Përditëso Chrome për të nisur sinkronizimin</translation>
 <translation id="940313311831216333">Për t'u qasur te gjërat e Chrome nëpër të gjitha pajisjet, identifikohu dhe më pas aktivizo sinkronizimin.</translation>
-<translation id="94743460404517794">Nëse ke disa "Llogari të Google", mund t'i shtosh ato te <ph name="DEVICE_TYPE" />. Llogaritë e tua do të ofrohen në shfletuesin Chrome dhe në "Dyqanin e Play", si dhe në shërbimet si Gmail, "Disku" dhe YouTube. <ph name="LINK_BEGIN" />Mëso më shumë<ph name="LINK_END" /></translation>
 <translation id="989369509083708165">Google Chrome është shfletuesi yt i parazgjedhur</translation>
 </translationbundle>

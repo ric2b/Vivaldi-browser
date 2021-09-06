@@ -879,11 +879,13 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   // The background object may be null.
   void SetBackground(std::unique_ptr<Background> b);
+  Background* GetBackground() const;
   const Background* background() const { return background_.get(); }
   Background* background() { return background_.get(); }
 
   // The border object may be null.
   virtual void SetBorder(std::unique_ptr<Border> b);
+  Border* GetBorder() const;
   const Border* border() const { return border_.get(); }
   Border* border() { return border_.get(); }
 
@@ -1045,7 +1047,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Default implementation does nothing. Override as needed.
   virtual void OnMouseExited(const ui::MouseEvent& event);
 
-  // Set the MouseHandler for a drag session.
+  // Set both the MouseHandler and the GestureHandler for a drag session.
   //
   // A drag session is a stream of mouse events starting
   // with a MousePressed event, followed by several MouseDragged
@@ -1062,9 +1064,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   //
   // Note: if the mouse handler is no longer connected to a
   // view hierarchy, events won't be sent.
-  //
-  // TODO(sky): rename this.
-  virtual void SetMouseHandler(View* new_mouse_handler);
+  virtual void SetMouseAndGestureHandler(View* new_handler);
 
   // Invoked when a key is pressed or released.
   // Subclasses should return true if the event has been processed and false
@@ -1167,7 +1167,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   void InsertAfterInFocusList(View* view);
 
   // Gets/sets |FocusBehavior|. SetFocusBehavior() advances focus if necessary.
-  FocusBehavior GetFocusBehavior() const;
+  virtual FocusBehavior GetFocusBehavior() const;
   void SetFocusBehavior(FocusBehavior focus_behavior);
 
   // Returns true if this view is focusable, |enabled_| and drawn.
@@ -1309,7 +1309,8 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   // Invoked during a drag and drop session when OnDragUpdated returns a valid
   // operation and the user release the mouse.
-  virtual int OnPerformDrop(const ui::DropTargetEvent& event);
+  virtual ui::mojom::DragOperation OnPerformDrop(
+      const ui::DropTargetEvent& event);
 
   // Invoked from DoDrag after the drag completes. This implementation does
   // nothing, and is intended for subclasses to do cleanup.
@@ -1322,9 +1323,10 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Accessibility -------------------------------------------------------------
 
   // Get the object managing the accessibility interface for this View.
-  ViewAccessibility& GetViewAccessibility();
+  ViewAccessibility& GetViewAccessibility() const;
 
-  // Modifies |node_data| to reflect the current accessible state of this view.
+  // Modifies |node_data| to reflect the current accessible state of this
+  // view.
   virtual void GetAccessibleNodeData(ui::AXNodeData* node_data) {}
 
   // Handle a request from assistive technology to perform an action on this
@@ -1605,6 +1607,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   friend class internal::RootView;
   friend class internal::ScopedChildrenLock;
   friend class FocusManager;
+  friend class ViewDebugWrapperImpl;
   friend class ViewLayerTest;
   friend class ViewLayerPixelCanvasTest;
   friend class ViewTestApi;
@@ -1612,6 +1615,12 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   FRIEND_TEST_ALL_PREFIXES(ViewTest, PaintWithMovedViewUsesCache);
   FRIEND_TEST_ALL_PREFIXES(ViewTest, PaintWithMovedViewUsesCacheInRTL);
   FRIEND_TEST_ALL_PREFIXES(ViewTest, PaintWithUnknownInvalidation);
+
+  // http://crbug.com/1162949 : Instrumentation that indicates if this is alive.
+  enum class LifeCycleState : uint32_t {
+    kAlive = 0x600D600D,
+    kDestroyed = 0xBAADBAAD,
+  };
 
   // This is the default view layout. It is a very simple version of FillLayout,
   // which merely sets the bounds of the children to the content bounds. The
@@ -2103,7 +2112,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Accessibility -------------------------------------------------------------
 
   // Manages the accessibility interface for this View.
-  std::unique_ptr<ViewAccessibility> view_accessibility_;
+  mutable std::unique_ptr<ViewAccessibility> view_accessibility_;
 
   // Observers -----------------------------------------------------------------
 
@@ -2111,6 +2120,9 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   // Property Changed Callbacks ------------------------------------------------
   PropertyChangedVectors property_changed_vectors_;
+
+  // http://crbug.com/1162949 : Instrumentation that indicates if this is alive.
+  LifeCycleState life_cycle_state_ = LifeCycleState::kAlive;
 
   DISALLOW_COPY_AND_ASSIGN(View);
 };

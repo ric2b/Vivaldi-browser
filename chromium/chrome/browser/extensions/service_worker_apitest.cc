@@ -1042,8 +1042,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest,
 // Tests that fetch() from service worker and network fallback
 // go through webRequest.onBeforeRequest API.
 IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, OnBeforeRequest) {
-  const Extension* extension = LoadExtensionWithFlags(
-      test_data_dir_.AppendASCII("service_worker/webrequest"), kFlagNone);
+  const Extension* extension =
+      LoadExtension(test_data_dir_.AppendASCII("service_worker/webrequest"));
   ASSERT_TRUE(extension);
   ASSERT_TRUE(StartEmbeddedTestServer());
 
@@ -1465,10 +1465,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
 // but is not present in the extension directory, the Service Worker can still
 // serve the resource file.
 IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, WebAccessibleResourcesIframeSrc) {
-  const Extension* extension = LoadExtensionWithFlags(
-      test_data_dir_.AppendASCII(
-          "service_worker/web_accessible_resources/iframe_src"),
-      kFlagNone);
+  const Extension* extension = LoadExtension(test_data_dir_.AppendASCII(
+      "service_worker/web_accessible_resources/iframe_src"));
   ASSERT_TRUE(extension);
   ASSERT_TRUE(StartEmbeddedTestServer());
 
@@ -1531,9 +1529,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, WebAccessibleResourcesIframeSrc) {
 // Verifies that service workers that aren't specified as the background script
 // for the extension do not have extension API bindings.
 IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, VerifyNoApiBindings) {
-  const Extension* extension = LoadExtensionWithFlags(
-      test_data_dir_.AppendASCII("service_worker/verify_no_api_bindings"),
-      kFlagNone);
+  const Extension* extension = LoadExtension(
+      test_data_dir_.AppendASCII("service_worker/verify_no_api_bindings"));
   ASSERT_TRUE(extension);
   ui_test_utils::NavigateToURL(browser(),
                                extension->GetResourceURL("page.html"));
@@ -1557,8 +1554,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, VerifyNoApiBindings) {
 }
 
 IN_PROC_BROWSER_TEST_F(ServiceWorkerBackgroundSyncTest, Sync) {
-  const Extension* extension = LoadExtensionWithFlags(
-      test_data_dir_.AppendASCII("service_worker/sync"), kFlagNone);
+  const Extension* extension =
+      LoadExtension(test_data_dir_.AppendASCII("service_worker/sync"));
   ASSERT_TRUE(extension);
   ui_test_utils::NavigateToURL(browser(),
                                extension->GetResourceURL("page.html"));
@@ -1603,8 +1600,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest,
 }
 
 IN_PROC_BROWSER_TEST_F(ServiceWorkerPushMessagingTest, OnPush) {
-  const Extension* extension = LoadExtensionWithFlags(
-      test_data_dir_.AppendASCII("service_worker/push_messaging"), kFlagNone);
+  const Extension* extension = LoadExtension(
+      test_data_dir_.AppendASCII("service_worker/push_messaging"));
   ASSERT_TRUE(extension);
   GURL extension_url = extension->url();
 
@@ -1713,10 +1710,9 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
   event_listener_added.set_failure_message("ERROR");
 
   // Note: Extension is packed to avoid reloading while loading.
-  const Extension* extension = LoadExtensionWithFlags(
-      PackExtension(test_data_dir_.AppendASCII(
-          "service_worker/worker_based_background/events_to_stopped_worker")),
-      kFlagNone);
+  const Extension* extension =
+      LoadExtension(PackExtension(test_data_dir_.AppendASCII(
+          "service_worker/worker_based_background/events_to_stopped_worker")));
   ASSERT_TRUE(extension);
 
   observer.WaitForRegistrationStored();
@@ -1771,9 +1767,12 @@ constexpr char kTabsOnUpdatedSplitScript[] =
            inIncognitoContext ? 'incognito' : 'regular';
        var urls = [];
 
-       chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
-         if (changeInfo.status === 'complete') {
-           urls.push(tab.url);
+       chrome.tabs.onUpdated.addListener(function localListener(tabId,
+                                                                changeInfo,
+                                                                tab) {
+         if (changeInfo.status === 'loading') {
+           chrome.tabs.onUpdated.removeListener(localListener);
+           urls.push(changeInfo.url);
          }
        });
 
@@ -1804,9 +1803,7 @@ constexpr char kTabsOnUpdatedSpanningScript[] =
 
 }  // anonymous namespace
 
-// Flaky (crbug.com/1091141)
-IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
-                       DISABLED_TabsQuerySplit) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, TabsQuerySplit) {
   ExtensionTestMessageListener ready_regular("Script started regular", true);
   ExtensionTestMessageListener ready_incognito("Script started incognito",
                                                true);
@@ -1819,7 +1816,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
   test_dir.WriteManifest(base::StringPrintf(kIncognitoManifest, "split"));
   test_dir.WriteFile(FILE_PATH_LITERAL("worker.js"), kQueryWorkerScript);
 
-  const Extension* extension = LoadExtensionIncognito(test_dir.UnpackedPath());
+  const Extension* extension =
+      LoadExtension(test_dir.UnpackedPath(), {.allow_in_incognito = true});
   ASSERT_TRUE(extension);
 
   // Wait for the extension's service workers to be ready.
@@ -1847,9 +1845,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
   }
 }
 
-// Flaky (crbug.com/1091141)
-IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
-                       DISABLED_TabsQuerySpanning) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, TabsQuerySpanning) {
   ExtensionTestMessageListener ready_listener("Script started regular", true);
 
   // Open an incognito window.
@@ -1861,7 +1857,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
   test_dir.WriteManifest(base::StringPrintf(kIncognitoManifest, "spanning"));
   test_dir.WriteFile(FILE_PATH_LITERAL("worker.js"), kQueryWorkerScript);
 
-  const Extension* extension = LoadExtensionIncognito(test_dir.UnpackedPath());
+  const Extension* extension =
+      LoadExtension(test_dir.UnpackedPath(), {.allow_in_incognito = true});
   ASSERT_TRUE(extension);
 
   // Wait for the extension's service worker to be ready.
@@ -1880,9 +1877,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
             tabs_listener.message());
 }
 
-// Flaky (crbug.com/1091141)
-IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
-                       DISABLED_TabsOnUpdatedSplit) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, TabsOnUpdatedSplit) {
   ExtensionTestMessageListener ready_regular("Script started regular", true);
   ExtensionTestMessageListener ready_incognito("Script started incognito",
                                                true);
@@ -1895,7 +1890,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
   test_dir.WriteManifest(base::StringPrintf(kIncognitoManifest, "split"));
   test_dir.WriteFile(FILE_PATH_LITERAL("worker.js"), kTabsOnUpdatedSplitScript);
 
-  const Extension* extension = LoadExtensionIncognito(test_dir.UnpackedPath());
+  const Extension* extension =
+      LoadExtension(test_dir.UnpackedPath(), {.allow_in_incognito = true});
   ASSERT_TRUE(extension);
 
   // Wait for the extension's service workers to be ready.
@@ -1924,9 +1920,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
   }
 }
 
-// Flaky (crbug.com/1091141)
 IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
-                       DISABLED_TabsOnUpdatedSpanning) {
+                       TabsOnUpdatedSpanning) {
   // The spanning test differs from the Split test because it lets the
   // renderer send the URLs once the expected number of onUpdated
   // events have completed. This solves flakiness in the previous
@@ -1944,7 +1939,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
   test_dir.WriteFile(FILE_PATH_LITERAL("worker.js"),
                      kTabsOnUpdatedSpanningScript);
 
-  const Extension* extension = LoadExtensionIncognito(test_dir.UnpackedPath());
+  const Extension* extension =
+      LoadExtension(test_dir.UnpackedPath(), {.allow_in_incognito = true});
   ASSERT_TRUE(extension);
 
   // Wait for the extension's service worker to be ready.
@@ -1976,10 +1972,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
   ExtensionTestMessageListener registration_listener("REGISTRATION_FAILED",
                                                      false);
   registration_listener.set_failure_message("WORKER_STARTED");
-  const Extension* extension = LoadExtensionWithFlags(
-      test_data_dir_.AppendASCII(
-          "service_worker/worker_based_background/script_root_scope"),
-      kFlagNone);
+  const Extension* extension = LoadExtension(test_data_dir_.AppendASCII(
+      "service_worker/worker_based_background/script_root_scope"));
   ASSERT_TRUE(extension);
 
   EXPECT_TRUE(registration_listener.WaitUntilSatisfied());
@@ -2130,10 +2124,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
 IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, WorkerRefCount) {
   ExtensionTestMessageListener worker_start_listener("WORKER STARTED", false);
 
-  const Extension* extension = LoadExtensionWithFlags(
-      test_data_dir_.AppendASCII(
-          "service_worker/worker_based_background/worker_ref_count"),
-      kFlagNone);
+  const Extension* extension = LoadExtension(test_data_dir_.AppendASCII(
+      "service_worker/worker_based_background/worker_ref_count"));
   ASSERT_TRUE(extension);
   ASSERT_TRUE(worker_start_listener.WaitUntilSatisfied());
 
@@ -2212,8 +2204,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
                                  "events_to_stopped_extension"),
       scoped_temp_dir.GetPath().AppendASCII("v1.crx"), pem_path,
       base::FilePath());
-  const Extension* extension =
-      LoadExtensionWithFlags(extension_path, kFlagNone);
+  const Extension* extension = LoadExtension(extension_path);
   ASSERT_TRUE(extension);
   EXPECT_EQ(kTestExtensionId, extension->id());
   ProcessManager* pm = ProcessManager::Get(browser()->profile());
@@ -2243,9 +2234,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, EventsAfterRestart) {
 }
 
 IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, TabsOnCreated) {
-  ASSERT_TRUE(RunExtensionTestWithFlags("tabs/lazy_background_on_created",
-                                        kFlagRunAsServiceWorkerBasedExtension,
-                                        kFlagNone))
+  ASSERT_TRUE(RunExtensionTest({.name = "tabs/lazy_background_on_created"},
+                               {.load_as_service_worker = true}))
       << message_;
 }
 
@@ -2273,12 +2263,10 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
   base::ScopedTempDir scoped_temp_dir;
   ASSERT_TRUE(scoped_temp_dir.CreateUniqueTempDir());
 
-  const Extension* extension = LoadExtensionWithFlags(
-      PackExtensionWithOptions(
-          test_dir.AppendASCII("filtered_events_after_restart"),
-          scoped_temp_dir.GetPath().AppendASCII("test_extension.crx"), pem_path,
-          base::FilePath()),
-      kFlagNone);
+  const Extension* extension = LoadExtension(PackExtensionWithOptions(
+      test_dir.AppendASCII("filtered_events_after_restart"),
+      scoped_temp_dir.GetPath().AppendASCII("test_extension.crx"), pem_path,
+      base::FilePath()));
   ASSERT_TRUE(extension);
   EXPECT_EQ(kTestExtensionId, extension->id());
   ProcessManager* pm = ProcessManager::Get(browser()->profile());

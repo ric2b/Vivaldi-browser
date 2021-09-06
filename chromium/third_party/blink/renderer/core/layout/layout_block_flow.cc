@@ -141,12 +141,8 @@ class MarginInfo {
   void SetDeterminedMarginBeforeQuirk(bool b) {
     determined_margin_before_quirk_ = b;
   }
-  void SetPositiveMargin(LayoutUnit p) {
-    positive_margin_ = p;
-  }
-  void SetNegativeMargin(LayoutUnit n) {
-    negative_margin_ = n;
-  }
+  void SetPositiveMargin(LayoutUnit p) { positive_margin_ = p; }
+  void SetNegativeMargin(LayoutUnit n) { negative_margin_ = n; }
   void SetPositiveMarginIfLarger(LayoutUnit p) {
     if (p > positive_margin_)
       positive_margin_ = p;
@@ -4600,6 +4596,11 @@ void LayoutBlockFlow::RecalcFloatingDescendantsVisualOverflow(
 PositionWithAffinity LayoutBlockFlow::PositionForPoint(
     const PhysicalOffset& point) const {
   NOT_DESTROYED();
+  // NG codepath requires |kPrePaintClean|.
+  // |SelectionModifier| calls this only in legacy codepath.
+  DCHECK(!IsLayoutNGObject() || GetDocument().Lifecycle().GetState() >=
+                                    DocumentLifecycle::kPrePaintClean);
+
   if (IsAtomicInlineLevel()) {
     PositionWithAffinity position =
         PositionForPointIfOutsideAtomicInlineLevel(point);

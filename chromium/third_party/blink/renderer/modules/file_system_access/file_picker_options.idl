@@ -2,11 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-enum CommonDirectory {
+enum WellKnownDirectory {
   "desktop",
   "documents",
   "downloads",
-  "home",
   "music",
   "pictures",
   "videos",
@@ -16,5 +15,6 @@ enum CommonDirectory {
 dictionary FilePickerOptions {
   sequence<FilePickerAcceptType> types;
   boolean excludeAcceptAllOption = false;
-  [RuntimeEnabled=FileSystemAccessAPIExperimental] CommonDirectory? startIn;
+  [RuntimeEnabled=FileSystemAccessAPIExperimental] USVString id;
+  [RuntimeEnabled=FileSystemAccessAPIExperimental] (WellKnownDirectory or FileSystemHandle)? startIn;
 };

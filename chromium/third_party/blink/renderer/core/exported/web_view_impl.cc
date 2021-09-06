@@ -189,6 +189,8 @@
 #undef pow
 #include <cmath>  // for std::pow
 
+#include "build/chromeos_buildflags.h"
+
 // The following constants control parameters for automated scaling of webpages
 // (such as due to a double tap gesture or find in page etc.). These are
 // experimentally determined.
@@ -410,7 +412,9 @@ ui::mojom::blink::WindowOpenDisposition NavigationPolicyToDisposition(
 #if !defined(OS_MAC) && !defined(OS_WIN)
 SkFontHinting RendererPreferencesToSkiaHinting(
     const blink::RendererPreferences& prefs) {
-#if defined(OS_LINUX)
+// TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
+// complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   if (!prefs.should_antialias_text) {
     // When anti-aliasing is off, GTK maps all non-zero hinting settings to
     // 'Normal' hinting so we do the same. Otherwise, folks who have 'Slight'
@@ -638,8 +642,8 @@ void WebViewImpl::EnableFakePageScaleAnimationForTesting(bool enable) {
 }
 
 void WebViewImpl::AcceptLanguagesChanged() {
-  if (web_view_client_)
-    FontCache::AcceptLanguagesChanged(web_view_client_->AcceptLanguages());
+  FontCache::AcceptLanguagesChanged(
+      String::FromUTF8(renderer_preferences_.accept_languages));
 
   if (!GetPage())
     return;
@@ -647,9 +651,9 @@ void WebViewImpl::AcceptLanguagesChanged() {
   GetPage()->AcceptLanguagesChanged();
 }
 
-WebRect WebViewImpl::WidenRectWithinPageBounds(const WebRect& source,
-                                               int target_margin,
-                                               int minimum_margin) {
+gfx::Rect WebViewImpl::WidenRectWithinPageBounds(const gfx::Rect& source,
+                                                 int target_margin,
+                                                 int minimum_margin) {
   // Caller should guarantee that the main frame exists and is local.
   DCHECK(MainFrame());
   DCHECK(MainFrame()->IsWebLocalFrame());
@@ -659,26 +663,26 @@ WebRect WebViewImpl::WidenRectWithinPageBounds(const WebRect& source,
   int left_margin = target_margin;
   int right_margin = target_margin;
 
-  const int absolute_source_x = source.x + scroll_offset.Width();
+  const int absolute_source_x = source.x() + scroll_offset.Width();
   if (left_margin > absolute_source_x) {
     left_margin = absolute_source_x;
     right_margin = std::max(left_margin, minimum_margin);
   }
 
   const int maximum_right_margin =
-      max_size.width - (source.width + absolute_source_x);
+      max_size.width - (source.width() + absolute_source_x);
   if (right_margin > maximum_right_margin) {
     right_margin = maximum_right_margin;
     left_margin = std::min(left_margin, std::max(right_margin, minimum_margin));
   }
 
-  const int new_width = source.width + left_margin + right_margin;
-  const int new_x = source.x - left_margin;
+  const int new_width = source.width() + left_margin + right_margin;
+  const int new_x = source.x() - left_margin;
 
   DCHECK_GE(new_width, 0);
   DCHECK_LE(scroll_offset.Width() + new_x + new_width, max_size.width);
 
-  return WebRect(new_x, source.y, new_width, source.height);
+  return gfx::Rect(new_x, source.y(), new_width, source.height());
 }
 
 float WebViewImpl::MaximumLegiblePageScale() const {
@@ -695,7 +699,7 @@ float WebViewImpl::MaximumLegiblePageScale() const {
 
 void WebViewImpl::ComputeScaleAndScrollForBlockRect(
     const gfx::Point& hit_point_in_root_frame,
-    const WebRect& block_rect_in_root_frame,
+    const gfx::Rect& block_rect_in_root_frame,
     float padding,
     float default_scale_when_already_legible,
     float& scale,
@@ -703,7 +707,7 @@ void WebViewImpl::ComputeScaleAndScrollForBlockRect(
   scale = PageScaleFactor();
   scroll = IntPoint();
 
-  WebRect rect = block_rect_in_root_frame;
+  gfx::Rect rect = block_rect_in_root_frame;
 
   if (!rect.IsEmpty()) {
     float default_margin = doubleTapZoomContentDefaultMargin;
@@ -715,10 +719,10 @@ void WebViewImpl::ComputeScaleAndScrollForBlockRect(
     // correct if we end up fully zooming to it, and won't matter if we
     // don't.
     rect = WidenRectWithinPageBounds(
-        rect, static_cast<int>(default_margin * rect.width / size_.width()),
-        static_cast<int>(minimum_margin * rect.width / size_.width()));
+        rect, static_cast<int>(default_margin * rect.width() / size_.width()),
+        static_cast<int>(minimum_margin * rect.width() / size_.width()));
     // Fit block to screen, respecting limits.
-    scale = static_cast<float>(size_.width()) / rect.width;
+    scale = static_cast<float>(size_.width()) / rect.width();
     scale = std::min(scale, MaximumLegiblePageScale());
     if (PageScaleFactor() < default_scale_when_already_legible)
       scale = std::max(scale, default_scale_when_already_legible);
@@ -736,25 +740,25 @@ void WebViewImpl::ComputeScaleAndScrollForBlockRect(
   float screen_height = size_.height() / scale;
 
   // Scroll to vertically align the block.
-  if (rect.height < screen_height) {
+  if (rect.height() < screen_height) {
     // Vertically center short blocks.
-    rect.y -= 0.5 * (screen_height - rect.height);
+    rect.Offset(0, -0.5 * (screen_height - rect.height()));
   } else {
     // Ensure position we're zooming to (+ padding) isn't off the bottom of
     // the screen.
-    rect.y = std::max<float>(
-        rect.y, hit_point_in_root_frame.y() + padding - screen_height);
+    rect.set_y(std::max<float>(
+        rect.y(), hit_point_in_root_frame.y() + padding - screen_height));
   }  // Otherwise top align the block.
 
   // Do the same thing for horizontal alignment.
-  if (rect.width < screen_width) {
-    rect.x -= 0.5 * (screen_width - rect.width);
+  if (rect.width() < screen_width) {
+    rect.Offset(-0.5 * (screen_width - rect.width()), 0);
   } else {
-    rect.x = std::max<float>(
-        rect.x, hit_point_in_root_frame.x() + padding - screen_width);
+    rect.set_x(std::max<float>(
+        rect.x(), hit_point_in_root_frame.x() + padding - screen_width));
   }
-  scroll.SetX(rect.x);
-  scroll.SetY(rect.y);
+  scroll.SetX(rect.x());
+  scroll.SetY(rect.y());
 
   scale = ClampPageScaleFactorToLimits(scale);
   scroll = MainFrameImpl()->GetFrameView()->RootFrameToDocument(scroll);
@@ -857,7 +861,7 @@ void WebViewImpl::EnableTapHighlightAtPoint(
 }
 
 void WebViewImpl::AnimateDoubleTapZoom(const gfx::Point& point_in_root_frame,
-                                       const WebRect& rect_to_zoom) {
+                                       const gfx::Rect& rect_to_zoom) {
   DCHECK(MainFrameImpl());
 
   float scale;
@@ -901,13 +905,14 @@ void WebViewImpl::AnimateDoubleTapZoom(const gfx::Point& point_in_root_frame,
   }
 }
 
-void WebViewImpl::ZoomToFindInPageRect(const WebRect& rect_in_root_frame) {
+void WebViewImpl::ZoomToFindInPageRect(const gfx::Rect& rect_in_root_frame) {
   DCHECK(MainFrameImpl());
 
-  WebRect block_bounds = MainFrameImpl()->FrameWidgetImpl()->ComputeBlockBound(
-      gfx::Point(rect_in_root_frame.x + rect_in_root_frame.width / 2,
-                 rect_in_root_frame.y + rect_in_root_frame.height / 2),
-      true);
+  gfx::Rect block_bounds =
+      MainFrameImpl()->FrameWidgetImpl()->ComputeBlockBound(
+          gfx::Point(rect_in_root_frame.x() + rect_in_root_frame.width() / 2,
+                     rect_in_root_frame.y() + rect_in_root_frame.height() / 2),
+          true);
 
   if (block_bounds.IsEmpty()) {
     // Keep current scale (no need to scroll as x,y will normally already
@@ -918,9 +923,9 @@ void WebViewImpl::ZoomToFindInPageRect(const WebRect& rect_in_root_frame) {
   float scale;
   IntPoint scroll;
 
-  ComputeScaleAndScrollForBlockRect(
-      gfx::Point(rect_in_root_frame.x, rect_in_root_frame.y), block_bounds,
-      nonUserInitiatedPointPadding, MinimumPageScaleFactor(), scale, scroll);
+  ComputeScaleAndScrollForBlockRect(rect_in_root_frame.origin(), block_bounds,
+                                    nonUserInitiatedPointPadding,
+                                    MinimumPageScaleFactor(), scale, scroll);
 
   StartPageScaleAnimation(scroll, false, scale, kFindInPageAnimationDuration);
 }
@@ -1059,6 +1064,9 @@ void WebViewImpl::Close() {
   // Reset the delegate to prevent notifications being sent as we're being
   // deleted.
   web_view_client_ = nullptr;
+
+  for (auto& observer : observers_)
+    observer.WebViewDestroyed();
 
   Release();  // Balances a reference acquired in WebView::Create
 }
@@ -1406,6 +1414,8 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
   settings->SetSyncXHRInDocumentsEnabled(prefs.sync_xhr_in_documents_enabled);
   settings->SetTargetBlankImpliesNoOpenerEnabledWillBeRemoved(
       prefs.target_blank_implies_no_opener_enabled_will_be_removed);
+  settings->SetAllowNonEmptyNavigatorPlugins(
+      prefs.allow_non_empty_navigator_plugins);
   RuntimeEnabledFeatures::SetDatabaseEnabled(prefs.databases_enabled);
   settings->SetOfflineWebApplicationCacheEnabled(
       prefs.application_cache_enabled);
@@ -1740,6 +1750,7 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
 
   settings->SetTouchDragDropEnabled(prefs.touch_drag_drop_enabled);
   settings->SetTouchDragEndContextMenu(prefs.touch_dragend_context_menu);
+  settings->SetWebXRImmersiveArAllowed(prefs.webxr_immersive_ar_allowed);
 
 #if defined(OS_MAC)
   web_view_impl->SetMaximumLegibleScale(
@@ -1761,7 +1772,7 @@ void WebViewImpl::ThemeChanged() {
     return;
   LocalFrameView* view = GetPage()->DeprecatedLocalMainFrame()->View();
 
-  WebRect damaged_rect(0, 0, size_.width(), size_.height());
+  IntRect damaged_rect(0, 0, size_.width(), size_.height());
   view->InvalidateRect(damaged_rect);
 }
 
@@ -2181,7 +2192,8 @@ double WebViewImpl::SetZoomLevel(double zoom_level) {
   PropagateZoomFactorToLocalFrameRoots(page_->MainFrame(), zoom_factor);
 
   if (old_zoom_level != zoom_level_) {
-    Client()->ZoomLevelChanged();
+    for (auto& observer : observers_)
+      observer.OnZoomLevelChanged();
     CancelPagePopup();
   }
 
@@ -2500,7 +2512,7 @@ void WebViewImpl::DisableAutoResizeForTesting(
 }
 
 void WebViewImpl::SetDefaultPageScaleLimits(float min_scale, float max_scale) {
-  GetPage()->SetDefaultPageScaleLimits(min_scale, max_scale);
+  dev_tools_emulator_->SetDefaultPageScaleLimits(min_scale, max_scale);
 }
 
 void WebViewImpl::SetInitialPageScaleOverride(
@@ -2756,7 +2768,7 @@ void WebViewImpl::TakeFocus(bool reverse) {
   }
 }
 
-void WebViewImpl::Show(const base::UnguessableToken& opener_frame_token,
+void WebViewImpl::Show(const LocalFrameToken& opener_frame_token,
                        NavigationPolicy policy,
                        const gfx::Rect& rect,
                        bool opened_by_user_gesture) {
@@ -3046,13 +3058,14 @@ void WebViewImpl::UpdateFontRenderingFromRendererPrefs() {
 #if defined(OS_WIN)
   // Cache the system font metrics in blink.
   WebFontRendering::SetMenuFontMetrics(
-      renderer_preferences_.menu_font_family_name.c_str(),
+      WebString::FromUTF16(renderer_preferences_.menu_font_family_name),
       renderer_preferences_.menu_font_height);
   WebFontRendering::SetSmallCaptionFontMetrics(
-      renderer_preferences_.small_caption_font_family_name.c_str(),
+      WebString::FromUTF16(
+          renderer_preferences_.small_caption_font_family_name),
       renderer_preferences_.small_caption_font_height);
   WebFontRendering::SetStatusFontMetrics(
-      renderer_preferences_.status_font_family_name.c_str(),
+      WebString::FromUTF16(renderer_preferences_.status_font_family_name),
       renderer_preferences_.status_font_height);
   WebFontRendering::SetAntialiasedTextEnabled(
       renderer_preferences_.should_antialias_text);
@@ -3070,12 +3083,15 @@ void WebViewImpl::UpdateFontRenderingFromRendererPrefs() {
       gfx::FontRenderParams::SUBPIXEL_RENDERING_NONE);
   WebFontRenderStyle::SetSubpixelPositioning(
       renderer_preferences_.use_subpixel_positioning);
-#if defined(OS_LINUX) && !defined(OS_ANDROID)
+// TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
+// complete.
+#if (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) && !defined(OS_ANDROID)
   if (!renderer_preferences_.system_font_family_name.empty()) {
     WebFontRenderStyle::SetSystemFontFamily(blink::WebString::FromUTF8(
         renderer_preferences_.system_font_family_name));
   }
-#endif  // defined(OS_LINUX) && !defined(OS_ANDROID)
+#endif  // (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) &&
+        // !defined(OS_ANDROID)
 #endif  // defined(OS_WIN)
 #endif  // !defined(OS_MAC)
 }
@@ -3174,6 +3190,14 @@ void WebViewImpl::UpdateWebPreferences(
   ApplyCommandLineToSettings(SettingsImpl());
 }
 
+void WebViewImpl::AddObserver(WebViewObserver* observer) {
+  observers_.AddObserver(observer);
+}
+
+void WebViewImpl::RemoveObserver(WebViewObserver* observer) {
+  observers_.RemoveObserver(observer);
+}
+
 void WebViewImpl::SetIsActive(bool active) {
   if (GetPage())
     GetPage()->GetFocusController().SetActive(active);
@@ -3203,6 +3227,11 @@ void WebViewImpl::DidCommitLoad(bool is_new_navigation,
 
   // Give the visual viewport's scroll layer its initial size.
   GetPage()->GetVisualViewport().MainFrameDidChangeSize();
+}
+
+void WebViewImpl::DidCommitCompositorFrameForLocalMainFrame() {
+  for (auto& observer : observers_)
+    observer.DidCommitCompositorFrame();
 }
 
 void WebViewImpl::ResizeAfterLayout() {
@@ -3239,7 +3268,8 @@ void WebViewImpl::MainFrameLayoutUpdated() {
   if (!web_view_client_)
     return;
 
-  web_view_client_->DidUpdateMainFrameLayout();
+  for (auto& observer : observers_)
+    observer.DidUpdateMainFrameLayout();
   needs_preferred_size_update_ = true;
 }
 
@@ -3384,7 +3414,8 @@ void WebViewImpl::DidChangeRootLayer(bool root_layer_exists) {
     return;
   }
   if (root_layer_exists) {
-    UpdateDeviceEmulationTransform();
+    if (!device_emulation_transform_.IsIdentity())
+      UpdateDeviceEmulationTransform();
   } else {
     // When the document in an already-attached main frame is being replaced by
     // a navigation then DidChangeRootLayer(false) will be called. Since we are
@@ -3434,8 +3465,11 @@ void WebViewImpl::ApplyViewportChanges(const ApplyViewportChangesArgs& args) {
                                    args.elastic_overscroll_delta.y());
   UpdateBrowserControlsConstraint(args.browser_controls_constraint);
 
-  if (args.scroll_gesture_did_end)
+  if (args.scroll_gesture_did_end) {
+    // TODO(https://crbug.com/1160652): Figure out if MainFrameImpl is null.
+    CHECK(MainFrameImpl());
     MainFrameImpl()->GetFrame()->GetEventHandler().MarkHoverStateDirty();
+  }
 }
 
 Node* WebViewImpl::FindNodeFromScrollableCompositorElementId(
@@ -3465,13 +3499,18 @@ Node* WebViewImpl::FindNodeFromScrollableCompositorElementId(
 void WebViewImpl::UpdateDeviceEmulationTransform() {
   GetPage()->GetVisualViewport().SetNeedsPaintPropertyUpdate();
 
-  if (MainFrameImpl()) {
+  if (auto* main_frame = MainFrameImpl()) {
     // When the device emulation transform is updated, to avoid incorrect
     // scales and fuzzy raster from the compositor, force all content to
     // pick ideal raster scales.
     // TODO(wjmaclean): This is only done on the main frame's widget currently,
     // it should update all local frames.
-    MainFrameImpl()->FrameWidgetImpl()->SetNeedsRecalculateRasterScales();
+    main_frame->FrameWidgetImpl()->SetNeedsRecalculateRasterScales();
+
+    // Device emulation transform also affects the overriding visible rect
+    // which is used as the overflow rect of the main frame layout view.
+    if (auto* view = main_frame->GetFrameView())
+      view->SetNeedsPaintPropertyUpdate();
   }
 }
 
@@ -3487,6 +3526,8 @@ void WebViewImpl::SetVisibilityState(
   if (!is_initial_state) {
     // Preserve the side effects of visibility change.
     web_view_client_->OnPageVisibilityChanged(visibility_state);
+    for (auto& observer : observers_)
+      observer.OnPageVisibilityChanged(visibility_state);
   }
   GetPage()->SetVisibilityState(visibility_state, is_initial_state);
   GetPage()->GetPageScheduler()->SetPageVisible(

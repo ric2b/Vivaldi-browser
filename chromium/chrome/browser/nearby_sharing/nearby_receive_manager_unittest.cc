@@ -30,9 +30,14 @@ class FakeReceiveObserver : public nearby_share::mojom::ReceiveObserver {
     last_metadata_ = *metadata;
   }
 
+  void OnNearbyProcessStopped() override {
+    on_nearby_process_stopped_called_ = true;
+  }
+
   base::Optional<nearby_share::mojom::TransferMetadata> last_metadata_;
   base::Optional<bool> in_high_visibility_;
   ShareTarget last_share_target_;
+  bool on_nearby_process_stopped_called_ = false;
   mojo::Receiver<nearby_share::mojom::ReceiveObserver> receiver_{this};
 };
 

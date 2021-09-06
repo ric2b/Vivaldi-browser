@@ -324,6 +324,7 @@ void WebAppInstallFinalizer::Shutdown() {
 
 void WebAppInstallFinalizer::UninstallWebApp(const AppId& app_id,
                                              UninstallWebAppCallback callback) {
+
   registrar().NotifyWebAppWillBeUninstalled(app_id);
   os_integration_manager().UninstallAllOsHooks(
       app_id, base::BindOnce(&WebAppInstallFinalizer::OnUninstallOsHooks,

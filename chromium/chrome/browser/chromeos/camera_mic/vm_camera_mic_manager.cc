@@ -7,6 +7,7 @@
 #include <tuple>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/notification_utils.h"
 #include "ash/public/cpp/vm_camera_mic_constants.h"
 #include "base/bind.h"
@@ -19,14 +20,12 @@
 #include "base/timer/timer.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/webui/settings/chromeos/app_management/app_management_uma.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom-forward.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"

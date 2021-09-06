@@ -12,8 +12,11 @@
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "cc/base/switches.h"
 #include "components/captive_portal/core/buildflags.h"
+#include "components/performance_manager/embedder/performance_manager_lifetime.h"
+#include "components/performance_manager/embedder/performance_manager_registry.h"
 #include "components/prefs/pref_service.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #include "components/subresource_filter/content/browser/ruleset_service.h"
@@ -32,8 +35,8 @@
 #include "weblayer/browser/feature_list_creator.h"
 #include "weblayer/browser/host_content_settings_map_factory.h"
 #include "weblayer/browser/i18n_util.h"
-#include "weblayer/browser/no_state_prefetch/prerender_link_manager_factory.h"
-#include "weblayer/browser/no_state_prefetch/prerender_manager_factory.h"
+#include "weblayer/browser/no_state_prefetch/no_state_prefetch_link_manager_factory.h"
+#include "weblayer/browser/no_state_prefetch/no_state_prefetch_manager_factory.h"
 #include "weblayer/browser/permissions/weblayer_permissions_client.h"
 #include "weblayer/browser/stateful_ssl_host_state_delegate_factory.h"
 #include "weblayer/browser/subresource_filter_profile_context_factory.h"
@@ -61,6 +64,7 @@
 #include "weblayer/browser/java/jni/MojoInterfaceRegistrar_jni.h"
 #include "weblayer/browser/media/local_presentation_manager_factory.h"
 #include "weblayer/browser/media/media_router_factory.h"
+#include "weblayer/browser/webapps/weblayer_webapps_client.h"
 #include "weblayer/browser/weblayer_factory_impl_android.h"
 #include "weblayer/common/features.h"
 #endif
@@ -69,7 +73,9 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/events/devices/x11/touch_factory_x11.h"  // nogncheck
 #endif
-#if defined(USE_AURA) && defined(OS_LINUX)
+// TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
+// complete.
+#if defined(USE_AURA) && (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
 #include "ui/base/ime/init/input_method_initializer.h"
 #endif
 
@@ -114,8 +120,8 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   CookieSettingsFactory::GetInstance();
   TranslateAcceptLanguagesFactory::GetInstance();
   TranslateRankerFactory::GetInstance();
-  PrerenderLinkManagerFactory::GetInstance();
-  PrerenderManagerFactory::GetInstance();
+  NoStatePrefetchLinkManagerFactory::GetInstance();
+  NoStatePrefetchManagerFactory::GetInstance();
   SubresourceFilterProfileContextFactory::GetInstance();
 #if defined(OS_ANDROID)
   if (MediaRouterFactory::IsFeatureEnabled()) {
@@ -184,12 +190,16 @@ void BrowserMainPartsImpl::PreMainMessageLoopStart() {
 int BrowserMainPartsImpl::PreEarlyInitialization() {
   browser_process_ = std::make_unique<BrowserProcess>(std::move(local_state_));
 
-#if defined(USE_AURA) && defined(OS_LINUX)
+// TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
+// complete.
+#if defined(USE_AURA) && (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
   ui::InitializeInputMethodForTesting();
 #endif
 #if defined(OS_ANDROID)
   net::NetworkChangeNotifier::SetFactory(
       new net::NetworkChangeNotifierFactoryAndroid());
+
+  WebLayerWebappsClient::Create();
 #endif
 
   translate::TranslateDownloadManager* download_manager =
@@ -199,6 +209,12 @@ int BrowserMainPartsImpl::PreEarlyInitialization() {
   download_manager->set_application_locale(i18n::GetApplicationLocale());
 
   return content::RESULT_CODE_NORMAL_EXIT;
+}
+
+void BrowserMainPartsImpl::PostCreateThreads() {
+  performance_manager_lifetime_ =
+      std::make_unique<performance_manager::PerformanceManagerLifetime>(
+          performance_manager::Decorators::kMinimal, base::DoNothing());
 }
 
 void BrowserMainPartsImpl::PreMainMessageLoopRun() {
@@ -268,11 +284,6 @@ bool BrowserMainPartsImpl::MainMessageLoopRun(int* result_code) {
   return !run_message_loop_;
 }
 
-void BrowserMainPartsImpl::PostMainMessageLoopRun() {
-  params_->delegate->PostMainMessageLoopRun();
-  browser_process_->StartTearDown();
-}
-
 void BrowserMainPartsImpl::PreDefaultMainMessageLoopRun(
     base::OnceClosure quit_closure) {
   // Wrap the method that stops the message loop so we can do other shutdown
@@ -281,4 +292,10 @@ void BrowserMainPartsImpl::PreDefaultMainMessageLoopRun(
       base::BindOnce(StopMessageLoop, std::move(quit_closure)));
 }
 
+void BrowserMainPartsImpl::PostMainMessageLoopRun() {
+  params_->delegate->PostMainMessageLoopRun();
+  browser_process_->StartTearDown();
+
+  performance_manager_lifetime_.reset();
+}
 }  // namespace weblayer

@@ -50,6 +50,7 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/layout_types.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/view_class_properties.h"
 
 // static
@@ -61,16 +62,16 @@ views::Widget* TabGroupEditorBubbleView::Show(
     views::View* anchor_view,
     bool stop_context_menu_propagation) {
   // If |header_view| is not null, use |header_view| as the |anchor_view|.
-  views::Widget* const widget =
-      BubbleDialogDelegateView::CreateBubble(new TabGroupEditorBubbleView(
+  TabGroupEditorBubbleView* tab_group_editor_bubble_view =
+      new TabGroupEditorBubbleView(
           browser, group, header_view ? header_view : anchor_view, anchor_rect,
-          header_view, stop_context_menu_propagation));
+          header_view, stop_context_menu_propagation);
+  views::Widget* const widget =
+      BubbleDialogDelegateView::CreateBubble(tab_group_editor_bubble_view);
+  tab_group_editor_bubble_view->set_adjust_if_offscreen(true);
+  tab_group_editor_bubble_view->SizeToContents();
   widget->Show();
   return widget;
-}
-
-ui::ModalType TabGroupEditorBubbleView::GetModalType() const {
-  return ui::MODAL_TYPE_NONE;
 }
 
 views::View* TabGroupEditorBubbleView::GetInitiallyFocusedView() {
@@ -109,6 +110,7 @@ TabGroupEditorBubbleView::TabGroupEditorBubbleView(
   set_margins(gfx::Insets());
 
   SetButtons(ui::DIALOG_BUTTON_NONE);
+  SetModalType(ui::MODAL_TYPE_NONE);
 
   const base::string16 title = browser_->tab_strip_model()
                                    ->group_model()
@@ -350,6 +352,9 @@ void TabGroupEditorBubbleView::OnBubbleClose() {
   }
 }
 
+BEGIN_METADATA(TabGroupEditorBubbleView, views::BubbleDialogDelegateView)
+END_METADATA
+
 void TabGroupEditorBubbleView::TitleFieldController::ContentsChanged(
     views::Textfield* sender,
     const base::string16& new_contents) {
@@ -395,3 +400,6 @@ void TabGroupEditorBubbleView::TitleField::ShowContextMenu(
   }
   views::Textfield::ShowContextMenu(p, source_type);
 }
+
+BEGIN_METADATA(TabGroupEditorBubbleView, TitleField, views::Textfield)
+END_METADATA

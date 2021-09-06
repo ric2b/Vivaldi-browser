@@ -12,6 +12,7 @@
 
 #include "base/callback_forward.h"
 #include "base/containers/flat_map.h"
+#include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
@@ -80,7 +81,7 @@ class ContextProvider;
 class HostFrameSinkManager;
 class LocalSurfaceId;
 class RasterContextProvider;
-}
+}  // namespace viz
 
 namespace ui {
 class Compositor;
@@ -148,7 +149,8 @@ class COMPOSITOR_EXPORT Compositor : public cc::LayerTreeHostClient,
              scoped_refptr<base::SingleThreadTaskRunner> task_runner,
              bool enable_pixel_canvas,
              bool use_external_begin_frame_control = false,
-             bool force_software_compositor = false);
+             bool force_software_compositor = false,
+             bool enable_compositing_based_throttling = false);
   ~Compositor() override;
 
   ui::ContextFactory* context_factory() { return context_factory_; }
@@ -356,10 +358,13 @@ class COMPOSITOR_EXPORT Compositor : public cc::LayerTreeHostClient,
   void DidSubmitCompositorFrame() override;
   void DidLoseLayerTreeFrameSink() override {}
   void FrameIntervalUpdated(base::TimeDelta interval) override;
+  void FrameSinksToThrottleUpdated(
+      const base::flat_set<viz::FrameSinkId>& ids) override;
 
   // viz::HostFrameSinkClient implementation.
   void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;
-  void OnFrameTokenChanged(uint32_t frame_token) override;
+  void OnFrameTokenChanged(uint32_t frame_token,
+                           base::TimeTicks activation_time) override;
 
   // ThroughputTrackerHost implementation.
   void StartThroughputTracker(

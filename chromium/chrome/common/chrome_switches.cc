@@ -13,9 +13,9 @@ namespace switches {
 
 // -----------------------------------------------------------------------------
 // Can't find the switch you are looking for? Try looking in:
+// ash/constants/ash_switches.cc
 // ash/public/cpp/ash_switches.cc
 // base/base_switches.cc
-// chromeos/constants/chromeos_switches.cc
 // etc.
 //
 // When commenting your switch, please use the same voice as surrounding
@@ -92,12 +92,6 @@ const char kAutoOpenDevToolsForTabs[]       = "auto-open-devtools-for-tabs";
 const char kAutoSelectDesktopCaptureSource[] =
     "auto-select-desktop-capture-source";
 
-// This flag causes the user engagement checks for showing app banners to be
-// bypassed. It is intended to be used by developers who wish to test that their
-// sites otherwise meet the criteria needed to show app banners.
-const char kBypassAppBannerEngagementChecks[] =
-    "bypass-app-banner-engagement-checks";
-
 // How often (in seconds) to check for updates. Should only be used for testing
 // purposes.
 const char kCheckForUpdateIntervalSec[]     = "check-for-update-interval";
@@ -164,9 +158,7 @@ const char kDebugEnableFrameToggle[]        = "debug-enable-frame-toggle";
 // apps.
 const char kDebugPackedApps[]               = "debug-packed-apps";
 
-// Enables attention badging for PWA icons in the shelf and launcher.
-const char kDesktopPWAsAttentionBadgingCrOS[] =
-    "desktop-pwas-attention-badging-cros";
+// Values for the enable-desktop-pwas-attention-badging-cros flag.
 const char kDesktopPWAsAttentionBadgingCrOSApiAndNotifications[] =
     "api-and-notifications";
 const char kDesktopPWAsAttentionBadgingCrOSApiOnly[] = "api-only";
@@ -551,6 +543,11 @@ const char kSupervisedUserId[]              = "managed-user-id";
 // testing purposes.
 const char kSystemLogUploadFrequency[] = "system-log-upload-frequency";
 
+// This flag makes Chrome auto-accept/reject requests to capture the current
+// tab. It should only be used for tests.
+const char kThisTabCaptureAutoAccept[] = "auto-accept-this-tab-capture";
+const char kThisTabCaptureAutoReject[] = "auto-reject-this-tab-capture";
+
 // Passes the name of the current running automated test to Chrome.
 const char kTestName[]                      = "test-name";
 
@@ -565,9 +562,6 @@ const char kTryChromeAgain[]                = "try-chrome-again";
 // Overrides per-origin quota settings to unlimited storage for any
 // apps/origins.  This should be used only for testing purpose.
 const char kUnlimitedStorage[]              = "unlimited-storage";
-
-// A string used to override the default user agent with a custom one.
-const char kUserAgent[]                     = "user-agent";
 
 // Specifies the user data directory, which is where the browser will look for
 // all of its state.

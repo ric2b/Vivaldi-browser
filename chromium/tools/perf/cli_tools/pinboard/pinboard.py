@@ -40,6 +40,7 @@ MEASUREMENTS = set([
     'Optimize-Background:duration',
     'Optimize:duration',
     'RunsPerMinute',
+    'Score',
     'Total-Main-Thread:duration',
     'Total:duration',
     'V8-Only-Main-Thread:duration',
@@ -86,7 +87,7 @@ ACTIVE_STORIES = set([
 
     # v8.browsing_desktop.
     'browse:news:nytimes:2020',
-    'browse:news:flipboard:2018',
+    'browse:news:flipboard:2020',
     'browse:social:facebook_infinite_scroll:2018',
     'browse:tools:sheets:2019',
     'browse:media:tumblr:2018',
@@ -95,15 +96,18 @@ ACTIVE_STORIES = set([
     'browse:tech:discourse_infinite_scroll:2018',
     'browse:social:twitter:2018',
     'browse:social:tumblr_infinite_scroll:2018',
-    'browse:media:googleplaystore:2018',
+    'browse:media:googleplaystore:2021',
     'browse:search:google:2020',
     'browse:news:cnn:2018',
     'browse:news:reddit:2020',
-    'browse:search:google_india:2018',
+    'browse:search:google_india:2021',
     'browse:media:youtubetv:2019',
 
     # Speedometer2.
     'Speedometer2',
+
+    # JetStream2.
+    'JetStream2',
 ])
 
 

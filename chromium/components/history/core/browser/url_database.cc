@@ -424,7 +424,7 @@ bool URLDatabase::GetTextMatchesWithAlgorithm(
   // Vivaldi specific; we want all matches. See VB-5754.
   if(vivaldi::IsVivaldiRunning())
     algorithm =query_parser::MatchingAlgorithm::ALWAYS_PREFIX_SEARCH;
-  query_parser_.ParseQueryNodes(query, algorithm, &query_nodes);
+  query_parser::QueryParser::ParseQueryNodes(query, algorithm, &query_nodes);
 
   results->clear();
   sql::Statement statement(GetDB().GetCachedStatement(SQL_FROM_HERE,
@@ -433,19 +433,19 @@ bool URLDatabase::GetTextMatchesWithAlgorithm(
   while (statement.Step()) {
     query_parser::QueryWordVector query_words;
     base::string16 url = base::i18n::ToLower(statement.ColumnString16(1));
-    query_parser_.ExtractQueryWords(url, &query_words);
+    query_parser::QueryParser::ExtractQueryWords(url, &query_words);
     GURL gurl(url);
     if (gurl.is_valid()) {
       // Decode punycode to match IDN.
       base::string16 ascii = base::ASCIIToUTF16(gurl.host());
       base::string16 utf = url_formatter::IDNToUnicode(gurl.host());
       if (ascii != utf)
-        query_parser_.ExtractQueryWords(utf, &query_words);
+        query_parser::QueryParser::ExtractQueryWords(utf, &query_words);
     }
     base::string16 title = base::i18n::ToLower(statement.ColumnString16(2));
-    query_parser_.ExtractQueryWords(title, &query_words);
+    query_parser::QueryParser::ExtractQueryWords(title, &query_words);
 
-    if (query_parser_.DoesQueryMatch(query_words, query_nodes)) {
+    if (query_parser::QueryParser::DoesQueryMatch(query_words, query_nodes)) {
       URLResult info;
       FillURLRow(statement, &info);
       if (info.url().is_valid())

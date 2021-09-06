@@ -81,6 +81,9 @@ group("gn_all") {
     "//services/service_manager/public/cpp",
     "//skia:skia_unittests",
     "//sql:sql_unittests",
+    "//third_party/angle/src/tests:angle_end2end_tests",
+    "//third_party/angle/src/tests:angle_unittests",
+    "//third_party/angle/src/tests:angle_white_box_tests",
     "//third_party/flatbuffers:flatbuffers_unittests",
     "//third_party/liburlpattern:liburlpattern_unittests",
     "//tools/binary_size:binary_size_trybot_py",
@@ -190,8 +193,6 @@ group("gn_all") {
       "//mojo:mojo_unittests",
       "//net:net_perftests",
       "//storage:storage_unittests",
-      "//third_party/angle/src/tests:angle_end2end_tests",
-      "//third_party/angle/src/tests:angle_unittests",
       "//third_party/blink/common:blink_common_unittests",
       "//third_party/blink/renderer/controller:blink_unittests",
       "//third_party/blink/renderer/platform:blink_platform_unittests",
@@ -216,7 +217,10 @@ group("gn_all") {
       "//weblayer/test:weblayer_unittests",
     ]
     if (is_android) {
-      deps += [ "//weblayer/browser/android/javatests:weblayer_instrumentation_test_apk" ]
+      deps += [
+        "//weblayer/browser/android/javatests:weblayer_instrumentation_test_apk",
+        "//weblayer/browser/java:weblayer_junit_tests",
+      ]
     }
   }
 
@@ -241,7 +245,6 @@ group("gn_all") {
       "//google_apis/gcm:mcs_probe",
       "//media/capture:capture_unittests",
       "//media/cast:cast_unittests",
-      "//third_party/angle/src/tests:angle_white_box_tests",
       "//third_party/catapult/telemetry:bitmaptools($host_toolchain)",
     ]
   } else if (is_ios) {
@@ -335,9 +338,9 @@ group("gn_all") {
       "//base:base_junit_tests",
       "//base/android/jni_generator:jni_generator_tests",
       "//base/android/linker:chromium_android_linker",
-      "//build/android:android_lint_test",
       "//build/android/gyp/test:hello_world",
       "//build/android/stacktrace:java_deobfuscate",
+      "//build/android/test:android_lint_test",
       "//build/config/android/test/proto:test_build_protos",
       "//chrome/android/monochrome:monochrome_public_apk_checker",
       "//chrome/android/webapk/shell_apk:maps_go_webapk",
@@ -353,6 +356,7 @@ group("gn_all") {
       "//services:services_junit_tests",
       "//testing/android/junit:junit_unit_tests",
       "//third_party/catapult/devil",
+      "//third_party/r8:custom_d8_java",
       "//third_party/smhasher:murmurhash3",
       "//tools/android:android_tools",
       "//tools/android:memconsumer",
@@ -714,7 +718,6 @@ group("gn_all") {
       "//chrome/tools/convert_dict",
       "//components/constrained_window:unit_tests",
       "//components/metrics:serialization",
-      "//components/rappor:unit_tests",
       "//components/services/filesystem:filesystem_service_unittests",
       "//components/sessions:unit_tests",
       "//media/blink:media_blink_unittests",
@@ -758,7 +761,7 @@ group("gn_all") {
     deps += [
       "//chrome/services/ipp_parser/public/cpp:fuzzers",
       "//testing/libfuzzer/fuzzers",
-      "//third_party/freetype-testing:freetype_truetype_render_fuzzer",
+      "//third_party/freetype-testing:fuzzers",
       "//third_party/grpc:fuzzers",
       "//third_party/icu/fuzzers",
       "//third_party/qcms:fuzzers",
@@ -854,6 +857,7 @@ if (is_fuchsia) {
   cr_fuchsia_package("d8_fuchsia_pkg") {
     testonly = true
     binary = "//v8:d8"
+    manifest = "//build/config/fuchsia/tests-with-exec.cmx"
     package_name_override = "d8"
   }
 
@@ -929,6 +933,7 @@ if (is_chromeos_ash) {
       "//chrome/test/chromedriver",
       "//components/chromeos_camera:jpeg_decode_accelerator_unittest",
       "//components/exo/wayland:wayland_client_perftests",
+      "//components/exo/wayland:wayland_client_tests",
       "//media:media_unittests",
       "//media/capture:capture_unittests",
       "//ppapi/examples/video_decode",
@@ -951,7 +956,6 @@ if (is_chromeos_ash) {
         "//media/gpu:video_decode_accelerator_tests",
         "//media/gpu:video_encode_accelerator_perf_tests",
         "//media/gpu:video_encode_accelerator_tests",
-        "//media/gpu:video_encode_accelerator_unittest",
       ]
       if (use_vaapi) {
         data_deps += [
@@ -1016,6 +1020,7 @@ if (!is_ios) {
         "//third_party/blink/web_tests/VirtualTestSuites",
         "//third_party/blink/web_tests/WebDriverExpectations",
         "//third_party/pywebsocket3/src/mod_pywebsocket/",
+        "//third_party/wpt_tools/",
       ]
       data_deps = [
         "//chrome:chrome",
@@ -1111,6 +1116,7 @@ if (!is_ios) {
       "//third_party/blink/web_tests/wpt_internal/",
       "//third_party/pywebsocket3/src/mod_pywebsocket/",
       "//third_party/test_fonts/test_fonts/",
+      "//third_party/wpt_tools/",
     ]
 
     if (is_win) {

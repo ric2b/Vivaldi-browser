@@ -17,6 +17,7 @@
 #include "chromecast/browser/webview/webview_navigation_throttle.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browsing_data_remover.h"
+#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
@@ -58,6 +59,14 @@ void UpdateWebkitPreferences(content::WebContents* web_contents,
 }
 
 }  // namespace
+
+WebviewController::WebviewController(
+    std::unique_ptr<content::BrowserContext> browser_context,
+    Client* client,
+    bool enabled_for_dev)
+    : WebviewController(browser_context.get(), client, enabled_for_dev) {
+  owned_context_ = std::move(browser_context);
+}
 
 WebviewController::WebviewController(content::BrowserContext* browser_context,
                                      Client* client,
@@ -127,9 +136,7 @@ void WebviewController::ProcessRequest(const webview::WebviewRequest& request) {
   switch (request.type_case()) {
     case webview::WebviewRequest::kNavigate:
       if (request.has_navigate()) {
-        LOG(INFO) << "Navigate webview to " << request.navigate().url();
-        stopped_ = false;
-        cast_web_contents_->LoadUrl(GURL(request.navigate().url()));
+        HandleLoadUrl(request.navigate());
       } else {
         client_->OnError("navigate() not supplied");
       }
@@ -172,6 +179,16 @@ void WebviewController::ProcessRequest(const webview::WebviewRequest& request) {
       WebContentController::ProcessRequest(request);
       break;
   }
+}
+
+void WebviewController::HandleLoadUrl(const webview::NavigateRequest& request) {
+  LOG(INFO) << "Navigate webview to " << request.url();
+  stopped_ = false;
+
+  content::NavigationController::LoadURLParams params(GURL(request.url()));
+  params.transition_type = ui::PAGE_TRANSITION_TYPED;
+  params.override_user_agent = content::NavigationController::UA_OVERRIDE_TRUE;
+  GetWebContents()->GetController().LoadURLWithParams(params);
 }
 
 void WebviewController::HandleUpdateSettings(
@@ -233,6 +250,12 @@ void WebviewController::SendNavigationEvent(
     content::NavigationHandle* navigation_handle) {
   DCHECK(!current_navigation_throttle_);
   DCHECK(navigation_handle);
+  if (!client_) {
+    DLOG(INFO)
+        << "Attempt to dispatch navigation event after RPC client invalidation";
+    return;
+  }
+
   std::unique_ptr<webview::WebviewResponse> response =
       std::make_unique<webview::WebviewResponse>();
   auto* navigation_event = response->mutable_navigation_event();

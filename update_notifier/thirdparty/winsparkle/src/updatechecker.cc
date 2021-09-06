@@ -38,8 +38,6 @@
 #include <ctime>
 #include <vector>
 
-using namespace std;
-
 namespace winsparkle {
 
 /*--------------------------------------------------------------------------*
@@ -67,13 +65,13 @@ CharType ClassifyChar(char c) {
 // Split version string into individual components. A component is continuous
 // run of characters with the same classification. For example, "1.20rc3" would
 // be split into ["1",".","20","rc","3"].
-vector<string> SplitVersionString(const string& version) {
-  vector<string> list;
+std::vector<std::string> SplitVersionString(const std::string& version) {
+  std::vector<std::string> list;
 
   if (version.empty())
     return list;  // nothing to do here
 
-  string s;
+  std::string s;
   const size_t len = version.length();
 
   s = version[0];
@@ -103,24 +101,17 @@ vector<string> SplitVersionString(const string& version) {
   return list;
 }
 
-void CheckForInsecureURL(const GURL& url, const std::string& purpose) {
-  if (!url.SchemeIs("https")) {
-    LOG(ERROR) << "*** USING INSECURE URL: " << purpose << " from "
-               << url.possibly_invalid_spec() << " ***";
-  }
-}
-
 }  // anonymous namespace
 
-int CompareVersions(const string& verA, const string& verB) {
-  const vector<string> partsA = SplitVersionString(verA);
-  const vector<string> partsB = SplitVersionString(verB);
+int CompareVersions(const std::string& verA, const std::string& verB) {
+  const std::vector<std::string> partsA = SplitVersionString(verA);
+  const std::vector<std::string> partsB = SplitVersionString(verB);
 
   // Compare common length of both version strings.
-  const size_t n = min(partsA.size(), partsB.size());
+  const size_t n = std::min(partsA.size(), partsB.size());
   for (size_t i = 0; i < n; i++) {
-    const string& a = partsA[i];
-    const string& b = partsB[i];
+    const std::string& a = partsA[i];
+    const std::string& b = partsB[i];
 
     const CharType typeA = ClassifyChar(a[0]);
     const CharType typeB = ClassifyChar(b[0]);
@@ -184,24 +175,7 @@ int CompareVersions(const string& verA, const string& verB) {
   }
 }
 
-time_t GetLastUpdateCheckTime() {
-  std::string last_check_str =
-      Settings::ReadConfigValue(ConfigKey::kLastCheckTime);
-  if (!last_check_str.empty()) {
-    char* end;
-    errno = 0;
-    intmax_t last_check = strtoimax(last_check_str.c_str(), &end, 10);
-    if (*end == '\0' && !errno && last_check > 0) {
-      // Check overflow.
-      time_t t = static_cast<time_t>(last_check);
-      if (static_cast<intmax_t>(t) == last_check)
-        return t;
-    }
-  }
-  return 0;
-}
-
-std::unique_ptr<Appcast> CheckForUpdates(bool manual, Error& error) {
+std::unique_ptr<Appcast> CheckForUpdates(int download_flags, Error& error) {
   if (error)
     return nullptr;
 
@@ -210,15 +184,7 @@ std::unique_ptr<Appcast> CheckForUpdates(bool manual, Error& error) {
     error.set(Error::kFormat, "Appcast URL not specified.");
     return nullptr;
   }
-  CheckForInsecureURL(url, "appcast feed");
 
-  int download_flags = 0;
-  if (manual) {
-    // Manual check should always connect to the server and bypass any
-    // caching. This is good for finding updates that are too new to propagate
-    // through caches yet.
-    download_flags = Download_NoCached;
-  }
   LOG(INFO) << "Downloading an appcast from " << url.spec();
   FileDownloader downloader(url, download_flags, error);
   std::string appcast_xml = downloader.FetchAll(error);
@@ -235,31 +201,6 @@ std::unique_ptr<Appcast> CheckForUpdates(bool manual, Error& error) {
   DCHECK(appcast->IsValid());
   if (!appcast->IsValid())
     return nullptr;
-
-  if (appcast->ReleaseNotesURL.is_valid())
-    CheckForInsecureURL(appcast->ReleaseNotesURL, "release notes");
-  if (appcast->DownloadURL.is_valid())
-    CheckForInsecureURL(appcast->DownloadURL, "update file");
-  std::string time_seconds_str = std::to_string(time(nullptr));
-  Settings::WriteConfigValue(ConfigKey::kLastCheckTime, time_seconds_str);
-
-  const std::string currentVersion = base::UTF16ToUTF8(GetConfig().app_version);
-
-  // Check if our version is out of date.
-  if (CompareVersions(currentVersion, appcast->Version) >= 0) {
-    // The same or newer version is already installed.
-    return nullptr;
-  }
-
-  // If the user has previously chosen "Skip version", the following automated
-  // update check should skip it. But a new manual check should still show
-  // this version to allow the user to reconsider. This is the semantics in
-  // Sparkle for Mac.
-  if (!manual) {
-    std::string toSkip = Settings::ReadConfigValue(ConfigKey::kSkipThisVersion);
-    if (toSkip == appcast->Version)
-      return nullptr;
-  }
 
   return appcast;
 }

@@ -2283,8 +2283,9 @@ IN_PROC_BROWSER_TEST_P(SearchPrefetchServiceEnabledBrowserTest,
                           }));
 }
 
-void RunFirstParam(base::RepeatingClosure closure, bool success) {
-  ASSERT_TRUE(success);
+void RunFirstParam(base::RepeatingClosure closure,
+                   blink::ServiceWorkerStatusCode status) {
+  ASSERT_EQ(status, blink::ServiceWorkerStatusCode::kOk);
   closure.Run();
 }
 
@@ -2429,7 +2430,8 @@ class SearchPrefetchServiceBFCacheTest : public SearchPrefetchBaseBrowserTest {
           {{"stream_responses", "true"}, {"cache_size", "1"}}},
          {{kSearchPrefetchService}, {}},
          {{features::kBackForwardCache}, {{"enable_same_site", "true"}}}},
-        {});
+        // Allow BackForwardCache for all devices regardless of their memory.
+        {features::kBackForwardCacheMemoryControls});
   }
 
  private:

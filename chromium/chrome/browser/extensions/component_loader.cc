@@ -51,14 +51,16 @@
 #include "ui/base/resource/resource_bundle.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_features.h"
+#include "ash/constants/ash_pref_names.h"
+#include "ash/constants/ash_switches.h"
 #include "ash/keyboard/ui/grit/keyboard_resources.h"
-#include "chromeos/constants/chromeos_features.h"
-#include "chromeos/constants/chromeos_pref_names.h"
-#include "chromeos/constants/chromeos_switches.h"
+#include "base/system/sys_info.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "extensions/browser/extensions_browser_client.h"
+#include "extensions/common/switches.h"
 #include "storage/browser/file_system/file_system_context.h"
 #include "ui/chromeos/devicetype_utils.h"
 #include "ui/file_manager/grit/file_manager_resources.h"
@@ -400,19 +402,22 @@ void ComponentLoader::AddImageLoaderExtension() {
       base::FilePath(FILE_PATH_LITERAL("image_loader")));
 }
 
+void ComponentLoader::AddGuestModeTestExtension(const base::FilePath& path) {
+  base::SysInfo::CrashIfChromeOSNonTestImage();
+  AddComponentFromDirWithManifestFilename(
+      path, extension_misc::kGuestModeTestExtensionId,
+      extensions::kManifestFilename, extensions::kManifestFilename,
+      base::RepeatingClosure());
+}
+
 void ComponentLoader::AddKeyboardApp() {
   Add(IDR_KEYBOARD_MANIFEST, base::FilePath(FILE_PATH_LITERAL("keyboard")));
 }
 
 void ComponentLoader::AddChromeCameraApp() {
-  // TODO(crbug.com/1135280): Remove all the logic here once CCA is fully
-  // migrated to SWA.
-
-  // If users should use the SWA version of CCA and the status from the platform
-  // app version is already migrated, there is no need to install the platform
-  // version of CCA.
-  if (base::FeatureList::IsEnabled(chromeos::features::kCameraSystemWebApp) &&
-      profile_->GetPrefs()->GetBoolean(
+  // Only adding the Chrome App version of camera app for migration purpose.
+  // We should remove this method totally after a few milestones.
+  if (profile_->GetPrefs()->GetBoolean(
           chromeos::prefs::kHasCameraAppMigratedToSWA)) {
     return;
   }
@@ -565,6 +570,11 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
     }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+    if (command_line->HasSwitch(switches::kLoadGuestModeTestExtension)) {
+      base::FilePath path = base::FilePath(command_line->GetSwitchValueASCII(
+          switches::kLoadGuestModeTestExtension));
+      AddGuestModeTestExtension(path);
+    }
     AddChromeCameraApp();
     AddVideoPlayerExtension();
     AddAudioPlayerExtension();

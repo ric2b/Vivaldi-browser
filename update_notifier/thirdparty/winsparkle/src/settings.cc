@@ -46,8 +46,6 @@ const wchar_t* GetRegistryName(ConfigKey key) {
   switch (key) {
     case ConfigKey::kDeltaPatchFailed:
       return vivaldi::constants::kVivaldiDeltaPatchFailed;
-    case ConfigKey::kLastCheckTime:
-      return L"LastCheckTime";
     case ConfigKey::kSkipThisVersion:
       return L"SkipThisVersion";
   }

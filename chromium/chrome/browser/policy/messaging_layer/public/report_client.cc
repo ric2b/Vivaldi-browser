@@ -9,7 +9,6 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/containers/queue.h"
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
@@ -17,19 +16,12 @@
 #include "base/path_service.h"
 #include "base/strings/strcat.h"
 #include "base/task/post_task.h"
-#include "build/build_config.h"
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/browser_process_platform_part.h"
+#include "base/threading/sequence_bound.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/net/system_network_context_manager.h"
-#include "chrome/browser/policy/messaging_layer/encryption/verification.h"
 #include "chrome/browser/policy/messaging_layer/public/report_queue.h"
 #include "chrome/browser/policy/messaging_layer/public/report_queue_configuration.h"
-#include "chrome/browser/policy/messaging_layer/storage/storage_configuration.h"
-#include "chrome/browser/policy/messaging_layer/storage/storage_module.h"
-#include "chrome/browser/policy/messaging_layer/util/status.h"
-#include "chrome/browser/policy/messaging_layer/util/status_macros.h"
-#include "chrome/browser/policy/messaging_layer/util/statusor.h"
-#include "chrome/browser/policy/messaging_layer/util/task_runner_context.h"
+#include "chrome/browser/policy/messaging_layer/util/get_cloud_policy_client.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/common/chrome_paths.h"
@@ -39,64 +31,22 @@
 #include "components/policy/core/common/cloud/device_management_service.h"
 #include "components/policy/core/common/cloud/machine_level_user_cloud_policy_manager.h"
 #include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
-#include "components/policy/proto/record.pb.h"
+#include "components/reporting/encryption/verification.h"
+#include "components/reporting/proto/record.pb.h"
+#include "components/reporting/storage/storage_configuration.h"
+#include "components/reporting/storage/storage_module.h"
+#include "components/reporting/storage/storage_module_interface.h"
+#include "components/reporting/storage/storage_uploader_interface.h"
+#include "components/reporting/util/status.h"
+#include "components/reporting/util/status_macros.h"
+#include "components/reporting/util/statusor.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "services/network/public/cpp/shared_url_loader_factory.h"
-
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/chromeos/settings/device_settings_service.h"
-#include "components/policy/proto/chrome_device_policy.pb.h"
-#else
-#include "chrome/browser/policy/chrome_browser_policy_connector.h"
-#endif
 
 namespace reporting {
 
 namespace {
-
-// policy::CloudPolicyClient is needed by the UploadClient, but is retrieved in
-// two different ways for ChromeOS and non-ChromeOS browsers.
-// NOT THREAD SAFE - these functions must be called on the main thread.
-// TODO(chromium:1078512) Wrap CloudPolicyClient in a new object so that its
-// methods and retrieval are accessed on the correct thread.
-void GetCloudPolicyClient(
-    base::OnceCallback<void(StatusOr<policy::CloudPolicyClient*>)>
-        get_client_cb) {
-#if defined(OS_CHROMEOS)
-  policy::CloudPolicyManager* cloud_policy_manager =
-      g_browser_process->platform_part()
-          ->browser_policy_connector_chromeos()
-          ->GetDeviceCloudPolicyManager();
-#elif defined(OS_ANDROID)
-  // Android doesn't have access to a device level CloudPolicyClient, so get the
-  // PrimaryUserProfile CloudPolicyClient.
-  policy::CloudPolicyManager* cloud_policy_manager =
-      ProfileManager::GetPrimaryUserProfile()->GetUserCloudPolicyManager();
-#else
-  policy::CloudPolicyManager* cloud_policy_manager =
-      g_browser_process->browser_policy_connector()
-          ->machine_level_user_cloud_policy_manager();
-#endif
-  if (cloud_policy_manager == nullptr) {
-    std::move(get_client_cb)
-        .Run(
-            Status(error::FAILED_PRECONDITION, "This is not a managed device"));
-    return;
-  }
-  auto* cloud_policy_client = cloud_policy_manager->core()->client();
-  if (cloud_policy_client == nullptr) {
-    std::move(get_client_cb)
-        .Run(Status(error::FAILED_PRECONDITION,
-                    "Cloud Policy Client is not available"));
-    return;
-  }
-  std::move(get_client_cb).Run(cloud_policy_client);
-}
 
 const base::FilePath::CharType kReportingDirectory[] =
     FILE_PATH_LITERAL("reporting");
@@ -105,74 +55,80 @@ const base::FilePath::CharType kReportingDirectory[] =
 
 // Uploader is passed to Storage in order to upload messages using the
 // UploadClient.
-class ReportingClient::Uploader : public Storage::UploaderInterface {
+class ReportingClient::Uploader : public UploaderInterface {
  public:
   using UploadCallback =
       base::OnceCallback<Status(std::unique_ptr<std::vector<EncryptedRecord>>)>;
 
   static StatusOr<std::unique_ptr<Uploader>> Create(
-      UploadCallback upload_callback);
+      UploadCallback upload_callback) {
+    auto uploader = base::WrapUnique(new Uploader(std::move(upload_callback)));
+    return uploader;
+  }
 
-  ~Uploader() override;
+  ~Uploader() override = default;
   Uploader(const Uploader& other) = delete;
   Uploader& operator=(const Uploader& other) = delete;
 
   void ProcessRecord(EncryptedRecord data,
-                     base::OnceCallback<void(bool)> processed_cb) override;
+                     base::OnceCallback<void(bool)> processed_cb) override {
+    helper_.AsyncCall(&Helper::ProcessRecord)
+        .WithArgs(std::move(data), std::move(processed_cb));
+  }
   void ProcessGap(SequencingInformation start,
                   uint64_t count,
-                  base::OnceCallback<void(bool)> processed_cb) override;
+                  base::OnceCallback<void(bool)> processed_cb) override {
+    helper_.AsyncCall(&Helper::ProcessGap)
+        .WithArgs(std::move(start), count, std::move(processed_cb));
+  }
 
-  void Completed(bool need_encryption_key, Status final_status) override;
+  void Completed(Status final_status) override {
+    helper_.AsyncCall(&Helper::Completed).WithArgs(final_status);
+  }
 
  private:
-  explicit Uploader(UploadCallback upload_callback_);
+  // Helper class that performs actions, wrapped in SequenceBound by |Uploader|.
+  class Helper {
+   public:
+    explicit Helper(UploadCallback upload_callback);
+    void ProcessRecord(EncryptedRecord data,
+                       base::OnceCallback<void(bool)> processed_cb);
+    void ProcessGap(SequencingInformation start,
+                    uint64_t count,
+                    base::OnceCallback<void(bool)> processed_cb);
+    void Completed(Status final_status);
 
-  static void RunUpload(
-      UploadCallback upload_callback,
-      std::unique_ptr<std::vector<EncryptedRecord>> encrypted_records);
+   private:
+    bool completed_{false};
+    std::unique_ptr<std::vector<EncryptedRecord>> encrypted_records_;
 
-  UploadCallback upload_callback_;
+    UploadCallback upload_callback_;
+  };
 
-  bool completed_{false};
-  std::unique_ptr<std::vector<EncryptedRecord>> encrypted_records_;
-  scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner_;
+  explicit Uploader(UploadCallback upload_callback)
+      : helper_(base::ThreadPool::CreateSequencedTaskRunner({}),
+                std::move(upload_callback)) {}
+
+  base::SequenceBound<Helper> helper_;
 };
 
-ReportingClient::Uploader::Uploader(UploadCallback upload_callback)
-    : upload_callback_(std::move(upload_callback)),
-      encrypted_records_(std::make_unique<std::vector<EncryptedRecord>>()),
-      sequenced_task_runner_(base::ThreadPool::CreateSequencedTaskRunner({})) {}
+ReportingClient::Uploader::Helper::Helper(
+    ReportingClient::Uploader::UploadCallback upload_callback)
+    : encrypted_records_(std::make_unique<std::vector<EncryptedRecord>>()),
+      upload_callback_(std::move(upload_callback)) {}
 
-ReportingClient::Uploader::~Uploader() = default;
-
-StatusOr<std::unique_ptr<ReportingClient::Uploader>>
-ReportingClient::Uploader::Create(UploadCallback upload_callback) {
-  auto uploader = base::WrapUnique(new Uploader(std::move(upload_callback)));
-  return uploader;
-}
-
-void ReportingClient::Uploader::ProcessRecord(
+void ReportingClient::Uploader::Helper::ProcessRecord(
     EncryptedRecord data,
     base::OnceCallback<void(bool)> processed_cb) {
   if (completed_) {
     std::move(processed_cb).Run(false);
     return;
   }
-
-  sequenced_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          [](std::vector<EncryptedRecord>* records, EncryptedRecord record,
-             base::OnceCallback<void(bool)> processed_cb) {
-            records->emplace_back(std::move(record));
-            std::move(processed_cb).Run(true);
-          },
-          base::Unretained(encrypted_records_.get()), std::move(data),
-          std::move(processed_cb)));
+  encrypted_records_->emplace_back(std::move(data));
+  std::move(processed_cb).Run(true);
 }
 
-void ReportingClient::Uploader::ProcessGap(
+void ReportingClient::Uploader::Helper::ProcessGap(
     SequencingInformation start,
     uint64_t count,
     base::OnceCallback<void(bool)> processed_cb) {
@@ -180,60 +136,32 @@ void ReportingClient::Uploader::ProcessGap(
     std::move(processed_cb).Run(false);
     return;
   }
-
-  sequenced_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          [](std::vector<EncryptedRecord>* records, SequencingInformation start,
-             uint64_t count, base::OnceCallback<void(bool)> processed_cb) {
-            EncryptedRecord record;
-            *record.mutable_sequencing_information() = std::move(start);
-            for (uint64_t i = 0; i < count; ++i) {
-              records->emplace_back(record);
-              record.mutable_sequencing_information()->set_sequencing_id(
-                  record.sequencing_information().sequencing_id() + 1);
-            }
-            std::move(processed_cb).Run(true);
-          },
-          base::Unretained(encrypted_records_.get()), std::move(start), count,
-          std::move(processed_cb)));
+  for (uint64_t i = 0; i < count; ++i) {
+    encrypted_records_->emplace_back();
+    *encrypted_records_->rbegin()->mutable_sequencing_information() = start;
+    start.set_sequencing_id(start.sequencing_id() + 1);
+  }
+  std::move(processed_cb).Run(true);
 }
 
-void ReportingClient::Uploader::Completed(bool need_encryption_key,
-                                          Status final_status) {
+void ReportingClient::Uploader::Helper::Completed(Status final_status) {
   if (!final_status.ok()) {
-    // No work to do - something went wrong with storage and it no longer wants
-    // to upload the records. Let the records die with |this|.
+    // No work to do - something went wrong with storage and it no longer
+    // wants to upload the records. Let the records die with |this|.
     return;
   }
-
   if (completed_) {
-    // RunUpload has already been invoked. Return.
+    // Upload has already been invoked. Return.
     return;
   }
   completed_ = true;
-
-  if (need_encryption_key) {
-    // Attach encryption key information.
-  }
-
-  sequenced_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&Uploader::RunUpload, std::move(upload_callback_),
-                     std::move(encrypted_records_)));
-}
-
-// static
-void ReportingClient::Uploader::RunUpload(
-    ReportingClient::Uploader::UploadCallback upload_callback,
-    std::unique_ptr<std::vector<EncryptedRecord>> encrypted_records) {
-  DCHECK(encrypted_records);
-  if (encrypted_records->empty()) {
+  DCHECK(encrypted_records_->empty());
+  if (encrypted_records_->empty()) {
     return;
   }
-
+  DCHECK(upload_callback_);
   Status upload_status =
-      std::move(upload_callback).Run(std::move(encrypted_records));
+      std::move(upload_callback_).Run(std::move(encrypted_records_));
   if (!upload_status.ok()) {
     LOG(ERROR) << "Unable to upload records: " << upload_status;
   }
@@ -243,7 +171,9 @@ ReportingClient::Configuration::Configuration() = default;
 ReportingClient::Configuration::~Configuration() = default;
 
 ReportingClient::InitializationStateTracker::InitializationStateTracker()
-    : sequenced_task_runner_(base::ThreadPool::CreateSequencedTaskRunner({})) {}
+    : sequenced_task_runner_(base::ThreadPool::CreateSequencedTaskRunner({})) {
+  DETACH_FROM_SEQUENCE(sequence_checker_);
+}
 
 ReportingClient::InitializationStateTracker::~InitializationStateTracker() =
     default;
@@ -274,6 +204,7 @@ void ReportingClient::InitializationStateTracker::RequestLeaderPromotion(
 
 void ReportingClient::InitializationStateTracker::OnIsInitializedRequest(
     GetInitStateCallback get_init_state_cb) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   base::ThreadPool::PostTask(
       FROM_HERE,
       base::BindOnce(
@@ -285,6 +216,7 @@ void ReportingClient::InitializationStateTracker::OnIsInitializedRequest(
 
 void ReportingClient::InitializationStateTracker::OnLeaderPromotionRequest(
     LeaderPromotionRequestCallback promo_request_cb) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   StatusOr<ReleaseLeaderCallback> result;
   if (is_initialized_) {
     result = Status(error::FAILED_PRECONDITION,
@@ -317,6 +249,7 @@ void ReportingClient::InitializationStateTracker::ReleaseLeader(
 
 void ReportingClient::InitializationStateTracker::OnLeaderRelease(
     bool initialization_successful) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (initialization_successful) {
     is_initialized_ = true;
   }
@@ -347,26 +280,23 @@ ReportingClient::CreateReportQueueRequest::create_cb() {
 
 ReportingClient::InitializingContext::InitializingContext(
     GetCloudPolicyClientCallback get_client_cb,
-    Storage::StartUploadCb start_upload_cb,
+    UploaderInterface::StartCb start_upload_cb,
     UpdateConfigurationCallback update_config_cb,
     InitCompleteCallback init_complete_cb,
     scoped_refptr<ReportingClient::InitializationStateTracker>
-        init_state_tracker,
-    scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner)
-    : TaskRunnerContext<Status>(std::move(init_complete_cb),
-                                sequenced_task_runner),
-      get_client_cb_(std::move(get_client_cb)),
+        init_state_tracker)
+    : get_client_cb_(std::move(get_client_cb)),
       start_upload_cb_(std::move(start_upload_cb)),
       update_config_cb_(std::move(update_config_cb)),
       init_state_tracker_(init_state_tracker),
-      client_config_(std::make_unique<Configuration>()) {}
+      client_config_(std::make_unique<Configuration>()),
+      init_complete_cb_(std::move(init_complete_cb)) {}
 
 ReportingClient::InitializingContext::~InitializingContext() = default;
 
-void ReportingClient::InitializingContext::OnStart() {
+void ReportingClient::InitializingContext::Start() {
   init_state_tracker_->RequestLeaderPromotion(base::BindOnce(
-      &ReportingClient::InitializingContext::OnLeaderPromotionResult,
-      base::Unretained(this)));
+      &InitializingContext::OnLeaderPromotionResult, base::Unretained(this)));
 }
 
 void ReportingClient::InitializingContext::OnLeaderPromotionResult(
@@ -385,11 +315,7 @@ void ReportingClient::InitializingContext::OnLeaderPromotionResult(
   }
 
   release_leader_cb_ = std::move(promo_result.ValueOrDie());
-  Schedule(&ReportingClient::InitializingContext::ConfigureCloudPolicyClient,
-           base::Unretained(this));
-}
 
-void ReportingClient::InitializingContext::ConfigureCloudPolicyClient() {
   // CloudPolicyClient requires posting to the main UI thread.
   base::PostTask(
       FROM_HERE, {content::BrowserThread::UI},
@@ -400,8 +326,7 @@ void ReportingClient::InitializingContext::ConfigureCloudPolicyClient() {
             std::move(get_client_cb).Run(std::move(on_client_configured));
           },
           std::move(get_client_cb_),
-          base::BindOnce(&ReportingClient::InitializingContext::
-                             OnCloudPolicyClientConfigured,
+          base::BindOnce(&InitializingContext::OnCloudPolicyClientConfigured,
                          base::Unretained(this))));
 }
 
@@ -414,8 +339,9 @@ void ReportingClient::InitializingContext::OnCloudPolicyClientConfigured(
     return;
   }
   client_config_->cloud_policy_client = std::move(client_result.ValueOrDie());
-  Schedule(&ReportingClient::InitializingContext::ConfigureStorageModule,
-           base::Unretained(this));
+  base::ThreadPool::PostTask(
+      FROM_HERE, base::BindOnce(&InitializingContext::ConfigureStorageModule,
+                                base::Unretained(this)));
 }
 
 void ReportingClient::InitializingContext::ConfigureStorageModule() {
@@ -433,13 +359,12 @@ void ReportingClient::InitializingContext::ConfigureStorageModule() {
           .set_signature_verification_public_key(
               SignatureVerifier::VerificationKey()),
       std::move(start_upload_cb_), base::MakeRefCounted<EncryptionModule>(),
-      base::BindOnce(
-          &ReportingClient::InitializingContext::OnStorageModuleConfigured,
-          base::Unretained(this)));
+      base::BindOnce(&InitializingContext::OnStorageModuleConfigured,
+                     base::Unretained(this)));
 }
 
 void ReportingClient::InitializingContext::OnStorageModuleConfigured(
-    StatusOr<scoped_refptr<StorageModule>> storage_result) {
+    StatusOr<scoped_refptr<StorageModuleInterface>> storage_result) {
   if (!storage_result.ok()) {
     Complete(Status(error::FAILED_PRECONDITION,
                     base::StrCat({"Unable to build StorageModule: ",
@@ -448,19 +373,14 @@ void ReportingClient::InitializingContext::OnStorageModuleConfigured(
   }
 
   client_config_->storage = storage_result.ValueOrDie();
-  Schedule(
-      base::BindOnce(&ReportingClient::InitializingContext::CreateUploadClient,
-                     base::Unretained(this)));
-}
 
-void ReportingClient::InitializingContext::CreateUploadClient() {
   ReportingClient* const instance = GetInstance();
   DCHECK(!instance->upload_client_);
   UploadClient::Create(
       std::move(client_config_->cloud_policy_client),
-      base::BindRepeating(&StorageModule::ReportSuccess,
+      base::BindRepeating(&StorageModuleInterface::ReportSuccess,
                           client_config_->storage),
-      base::BindRepeating(&StorageModule::UpdateEncryptionKey,
+      base::BindRepeating(&StorageModuleInterface::UpdateEncryptionKey,
                           client_config_->storage),
       base::BindOnce(&InitializingContext::OnUploadClientCreated,
                      base::Unretained(this)));
@@ -474,9 +394,10 @@ void ReportingClient::InitializingContext::OnUploadClientCreated(
                                   upload_client_result.status().message()})));
     return;
   }
-  Schedule(&ReportingClient::InitializingContext::UpdateConfiguration,
-           base::Unretained(this),
-           std::move(upload_client_result.ValueOrDie()));
+  base::ThreadPool::PostTask(
+      FROM_HERE, base::BindOnce(&InitializingContext::UpdateConfiguration,
+                                base::Unretained(this),
+                                std::move(upload_client_result.ValueOrDie())));
 }
 
 void ReportingClient::InitializingContext::UpdateConfiguration(
@@ -487,21 +408,21 @@ void ReportingClient::InitializingContext::UpdateConfiguration(
 
   std::move(update_config_cb_)
       .Run(std::move(client_config_),
-           base::BindOnce(&ReportingClient::InitializingContext::Complete,
+           base::BindOnce(&InitializingContext::Complete,
                           base::Unretained(this)));
 }
 
 void ReportingClient::InitializingContext::Complete(Status status) {
   std::move(release_leader_cb_).Run(/*initialization_successful=*/status.ok());
-  Schedule(&ReportingClient::InitializingContext::Response,
-           base::Unretained(this), status);
+  std::move(init_complete_cb_).Run(status);
+  delete this;
 }
 
 ReportingClient::ReportingClient()
     : create_request_queue_(SharedQueue<CreateReportQueueRequest>::Create()),
       init_state_tracker_(
           ReportingClient::InitializationStateTracker::Create()),
-      build_cloud_policy_client_cb_(base::BindOnce(&GetCloudPolicyClient)) {}
+      build_cloud_policy_client_cb_(GetCloudPolicyClientCb()) {}
 
 ReportingClient::~ReportingClient() = default;
 
@@ -545,14 +466,17 @@ void ReportingClient::OnPushComplete() {
 void ReportingClient::OnInitState(bool reporting_client_configured) {
   if (!reporting_client_configured) {
     // Schedule an InitializingContext to take care of initialization.
-    Start<ReportingClient::InitializingContext>(
+    InitializingContext* context = new InitializingContext(
         std::move(build_cloud_policy_client_cb_),
         base::BindRepeating(&ReportingClient::BuildUploader),
         base::BindOnce(&ReportingClient::OnConfigResult,
                        base::Unretained(this)),
         base::BindOnce(&ReportingClient::OnInitializationComplete,
                        base::Unretained(this)),
-        init_state_tracker_, base::ThreadPool::CreateSequencedTaskRunner({}));
+        init_state_tracker_);
+    base::ThreadPool::PostTask(
+        FROM_HERE,
+        base::BindOnce(&InitializingContext::Start, base::Unretained(context)));
     return;
   }
 
@@ -617,7 +541,7 @@ void ReportingClient::BuildRequestQueue(
   // general thread.
   base::ThreadPool::PostTask(
       FROM_HERE, base::BindOnce(
-                     [](scoped_refptr<StorageModule> storage_module,
+                     [](scoped_refptr<StorageModuleInterface> storage_module,
                         CreateReportQueueRequest report_queue_request) {
                        std::move(report_queue_request.create_cb())
                            .Run(ReportQueue::Create(
@@ -631,14 +555,14 @@ void ReportingClient::BuildRequestQueue(
 }
 
 // static
-StatusOr<std::unique_ptr<Storage::UploaderInterface>>
-ReportingClient::BuildUploader(Priority priority) {
+StatusOr<std::unique_ptr<UploaderInterface>> ReportingClient::BuildUploader(
+    Priority priority,
+    bool need_encryption_key) {
   ReportingClient* const instance = GetInstance();
   DCHECK(instance->upload_client_);
-  return Uploader::Create(
-      base::BindOnce(&UploadClient::EnqueueUpload,
-                     base::Unretained(instance->upload_client_.get()),
-                     !instance->config_->storage->has_encryption_key()));
+  return Uploader::Create(base::BindOnce(
+      &UploadClient::EnqueueUpload,
+      base::Unretained(instance->upload_client_.get()), need_encryption_key));
 }
 
 ReportingClient::TestEnvironment::TestEnvironment(

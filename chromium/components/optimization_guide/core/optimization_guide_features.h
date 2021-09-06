@@ -28,11 +28,11 @@ extern const base::Feature kOptimizationTargetPrediction;
 extern const base::Feature kOptimizationGuideModelDownloading;
 
 // The maximum number of hosts that can be stored in the
-// |kHintsFetcherTopHostBlacklist| dictionary pref when initialized. The top
+// |kHintsFetcherTopHostBlocklist| dictionary pref when initialized. The top
 // hosts will also be returned in order of most engaged. This prevents the most
 // engaged hosts in a user's history before DataSaver being enabled from being
 // requested until the user navigates to the host again.
-size_t MaxHintsFetcherTopHostBlacklistSize();
+size_t MaxHintsFetcherTopHostBlocklistSize();
 
 // Whether hints for top hosts should be batch updated.
 bool ShouldBatchUpdateHintsForTopHosts();
@@ -57,8 +57,8 @@ double MinTopHostEngagementScoreThreshold();
 // to be used and remain in the OptimizationGuideStore.
 base::TimeDelta StoredFetchedHintsFreshnessDuration();
 
-// The duration of time after the blacklist initialization for which the low
-// engagement score threshold needs to be applied. If the blacklist was
+// The duration of time after the blocklist initialization for which the low
+// engagement score threshold needs to be applied. If the blocklist was
 // initialized more than DurationApplyLowEngagementScoreThreshold() ago, then
 // the low engagement score threshold need not be applied.
 base::TimeDelta DurationApplyLowEngagementScoreThreshold();
@@ -113,6 +113,10 @@ size_t MaxConcurrentPageNavigationFetches();
 // to be used and remain in the OptimizationGuideStore.
 base::TimeDelta StoredHostModelFeaturesFreshnessDuration();
 
+// The maximum duration for which models can remain in the
+// OptimizationGuideStore without being loaded.
+base::TimeDelta StoredModelsInactiveDuration();
+
 // The amount of time URL-keyed hints within the hint cache will be
 // allowed to be used and not be purged.
 base::TimeDelta URLKeyedHintValidCacheDuration();
@@ -166,6 +170,12 @@ bool IsModelDownloadingEnabled();
 // Returns whether unrestricted model downloading is enabled. If true, the
 // client should download models using highest priority.
 bool IsUnrestrictedModelDownloadingEnabled();
+
+// Returns whether the feature to annotate page content is enabled.
+bool IsPageContentAnnotationEnabled();
+
+// Returns the max size that should be requested for a page content text dump.
+uint64_t MaxSizeForPageContentTextDump();
 
 }  // namespace features
 }  // namespace optimization_guide

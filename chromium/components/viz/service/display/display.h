@@ -178,11 +178,16 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   bool has_scheduler() const { return !!scheduler_; }
   DirectRenderer* renderer_for_testing() const { return renderer_.get(); }
 
+  bool resize_based_on_root_surface() const {
+    return output_surface_->capabilities().resize_based_on_root_surface;
+  }
+
   void ForceImmediateDrawAndSwapIfPossible();
   void SetNeedsOneBeginFrame();
   void RemoveOverdrawQuads(AggregatedFrame* frame);
 
   void SetSupportedFrameIntervals(std::vector<base::TimeDelta> intervals);
+  void PreserveChildSurfaceControls();
 
   base::ScopedClosureRunner GetCacheBackBufferCb();
 

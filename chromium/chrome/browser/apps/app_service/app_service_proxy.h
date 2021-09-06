@@ -8,15 +8,16 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/containers/unique_ptr_adapters.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/browser_app_launcher.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/services/app_service/public/cpp/app_capability_access_cache.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/icon_cache.h"
 #include "components/services/app_service/public/cpp/icon_coalescer.h"
@@ -84,12 +85,15 @@ class AppServiceProxy : public KeyedService,
 #endif
 
   explicit AppServiceProxy(Profile* profile);
+  AppServiceProxy(const AppServiceProxy&) = delete;
+  AppServiceProxy& operator=(const AppServiceProxy&) = delete;
   ~AppServiceProxy() override;
 
   void ReInitializeForTesting(Profile* profile);
 
   mojo::Remote<apps::mojom::AppService>& AppService();
   apps::AppRegistryCache& AppRegistryCache();
+  apps::AppCapabilityAccessCache& AppCapabilityAccessCache();
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   apps::InstanceRegistry& InstanceRegistry();
@@ -113,14 +117,12 @@ class AppServiceProxy : public KeyedService,
   // Launches the app for the given |app_id|. |event_flags| provides additional
   // context about the action which launches the app (e.g. a middle click
   // indicating opening a background tab). |launch_source| is the possible app
-  // launch sources, e.g. from Shelf, from the search box, etc. |display_id| is
-  // the id of the display from which the app is launched.
-  // display::kInvalidDisplayId means that the display does not exist or is not
-  // set.
+  // launch sources, e.g. from Shelf, from the search box, etc. |window_info| is
+  // the window information to launch an app, e.g. display_id, window bounds.
   void Launch(const std::string& app_id,
               int32_t event_flags,
               apps::mojom::LaunchSource launch_source,
-              int64_t display_id);
+              apps::mojom::WindowInfoPtr window_info = nullptr);
 
   // Launches the app for the given |app_id| with files from |file_paths|.
   // |event_flags| provides additional context about the action which launches
@@ -148,24 +150,24 @@ class AppServiceProxy : public KeyedService,
   // Launches an app for the given |app_id|, passing |intent| to the app.
   // |event_flags| provides additional context about the action which launch the
   // app (e.g. a middle click indicating opening a background tab).
-  // |launch_source| is the possible app launch sources. |display_id| is the id
-  // of the display from which the app is launched.
+  // |launch_source| is the possible app launch sources. |window_info| is the
+  // window information to launch an app, e.g. display_id, window bounds.
   void LaunchAppWithIntent(const std::string& app_id,
                            int32_t event_flags,
                            apps::mojom::IntentPtr intent,
                            apps::mojom::LaunchSource launch_source,
-                           int64_t display_id);
+                           apps::mojom::WindowInfoPtr window_info = nullptr);
 
   // Launches an app for the given |app_id|, passing |url| to the app.
   // |event_flags| provides additional context about the action which launch the
   // app (e.g. a middle click indicating opening a background tab).
-  // |launch_source| is the possible app launch sources. |display_id| is the id
-  // of the display from which the app is launched.
+  // |launch_source| is the possible app launch sources. |window_info| is the
+  // window information to launch an app, e.g. display_id, window bounds.
   void LaunchAppWithUrl(const std::string& app_id,
                         int32_t event_flags,
                         GURL url,
                         apps::mojom::LaunchSource launch_source,
-                        int64_t display_id);
+                        apps::mojom::WindowInfoPtr window_info = nullptr);
 
   // Sets |permission| for the app identified by |app_id|.
   void SetPermission(const std::string& app_id,
@@ -337,7 +339,11 @@ class AppServiceProxy : public KeyedService,
   void Shutdown() override;
 
   // apps::mojom::Subscriber overrides.
-  void OnApps(std::vector<apps::mojom::AppPtr> deltas) override;
+  void OnApps(std::vector<apps::mojom::AppPtr> deltas,
+              apps::mojom::AppType app_type,
+              bool should_notify_initialized) override;
+  void OnCapabilityAccesses(
+      std::vector<apps::mojom::CapabilityAccessPtr> deltas) override;
   void Clone(mojo::PendingReceiver<apps::mojom::Subscriber> receiver) override;
   void OnPreferredAppSet(const std::string& app_id,
                          apps::mojom::IntentFilterPtr intent_filter) override;
@@ -405,7 +411,8 @@ class AppServiceProxy : public KeyedService,
   std::unique_ptr<apps::AppServiceImpl> app_service_impl_;
 
   mojo::Remote<apps::mojom::AppService> app_service_;
-  apps::AppRegistryCache cache_;
+  apps::AppRegistryCache app_registry_cache_;
+  apps::AppCapabilityAccessCache app_capability_access_cache_;
 
   mojo::ReceiverSet<apps::mojom::Subscriber> receivers_;
 
@@ -459,8 +466,6 @@ class AppServiceProxy : public KeyedService,
   base::OnceClosure dialog_created_callback_;
 
   base::WeakPtrFactory<AppServiceProxy> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(AppServiceProxy);
 };
 
 class ScopedOmitBuiltInAppsForTesting {

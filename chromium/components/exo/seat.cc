@@ -16,6 +16,7 @@
 #include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/feature_list.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
@@ -35,6 +36,7 @@
 #include "ui/base/clipboard/clipboard_monitor.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/platform/platform_event_source.h"
 
@@ -152,10 +154,11 @@ void Seat::SetSelection(DataSource* source) {
     selection_source_->get()->Cancelled();
   }
   selection_source_ = std::make_unique<ScopedDataSource>(source, this);
+  ui::EndpointType endpoint_type =
+      data_exchange_delegate_->GetDataTransferEndpointType(
+          focused_surface->window());
   scoped_refptr<RefCountedScopedClipboardWriter> writer =
-      base::MakeRefCounted<RefCountedScopedClipboardWriter>(
-          data_exchange_delegate_->GetDataTransferEndpointType(
-              focused_surface->window()));
+      base::MakeRefCounted<RefCountedScopedClipboardWriter>(endpoint_type);
 
   base::RepeatingClosure data_read_callback = base::BarrierClosure(
       kMaxClipboardDataTypes,
@@ -172,7 +175,7 @@ void Seat::SetSelection(DataSource* source) {
       base::BindOnce(&Seat::OnImageRead, weak_ptr_factory_.GetWeakPtr(), writer,
                      data_read_callback),
       base::BindOnce(&Seat::OnFilenamesRead, weak_ptr_factory_.GetWeakPtr(),
-                     writer, data_read_callback),
+                     endpoint_type, writer, data_read_callback),
       data_read_callback);
 }
 
@@ -241,10 +244,23 @@ void Seat::OnImageDecoded(base::OnceClosure callback,
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 void Seat::OnFilenamesRead(
+    ui::EndpointType source,
     scoped_refptr<RefCountedScopedClipboardWriter> writer,
     base::OnceClosure callback,
     const std::string& mime_type,
     const std::vector<uint8_t>& data) {
+  if (base::FeatureList::IsEnabled(features::kClipboardFilenames)) {
+    std::vector<ui::FileInfo> filenames =
+        data_exchange_delegate_->GetFilenames(source, data);
+    writer->WriteFilenames(ui::FileInfosToURIList(filenames));
+  } else {
+    // There is no need for CreateClipboardFilenamesPickle() once
+    // chrome://flags#clipboard-filenames is permanently enabled.
+    base::Pickle pickle =
+        data_exchange_delegate_->CreateClipboardFilenamesPickle(source, data);
+    writer->WritePickledData(pickle,
+                             ui::ClipboardFormatType::GetWebCustomDataType());
+  }
   std::move(callback).Run();
 }
 
@@ -349,6 +365,11 @@ void Seat::OnClipboardDataChanged() {
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+
+UILockController* Seat::GetUILockControllerForTesting() {
+  return ui_lock_controller_.get();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // ash::ImeControllerImpl::Observer overrides:
 

@@ -2183,11 +2183,8 @@ class FuchsiaSecurityOwnerTest(unittest.TestCase):
 
 
 class SecurityChangeTest(unittest.TestCase):
-  class _MockOwnersDB(object):
-    def __init__(self):
-      self.email_regexp = '.*'
-
-    def owners_rooted_at_file(self, f):
+  class _MockOwnersClient(object):
+    def ListOwners(self, f):
       return ['apple@chromium.org', 'orange@chromium.org']
 
   def _mockChangeOwnerAndReviewers(self, input_api, owner, reviewers):
@@ -2245,7 +2242,7 @@ class SecurityChangeTest(unittest.TestCase):
 
   def testChangeOwnersMissing(self):
     mock_input_api = MockInputApi()
-    mock_input_api.owners_db = self._MockOwnersDB()
+    mock_input_api.owners_client = self._MockOwnersClient()
     mock_input_api.is_committing = False
     mock_input_api.files = [
         MockAffectedFile('file.cc', ['GetServiceSandboxType<Goat>(Sandbox)'])
@@ -2264,7 +2261,7 @@ class SecurityChangeTest(unittest.TestCase):
 
   def testChangeOwnersMissingAtCommit(self):
     mock_input_api = MockInputApi()
-    mock_input_api.owners_db = self._MockOwnersDB()
+    mock_input_api.owners_client = self._MockOwnersClient()
     mock_input_api.is_committing = True
     mock_input_api.files = [
         MockAffectedFile('file.cc', ['GetServiceSandboxType<mojom::Goat>()'])
@@ -2283,7 +2280,7 @@ class SecurityChangeTest(unittest.TestCase):
 
   def testChangeOwnersPresent(self):
     mock_input_api = MockInputApi()
-    mock_input_api.owners_db = self._MockOwnersDB()
+    mock_input_api.owners_client = self._MockOwnersClient()
     mock_input_api.files = [
         MockAffectedFile('file.cc', ['WithSandboxType(Sandbox)'])
     ]
@@ -2296,7 +2293,7 @@ class SecurityChangeTest(unittest.TestCase):
 
   def testChangeOwnerIsSecurityOwner(self):
     mock_input_api = MockInputApi()
-    mock_input_api.owners_db = self._MockOwnersDB()
+    mock_input_api.owners_client = self._MockOwnersClient()
     mock_input_api.files = [
         MockAffectedFile('file.cc', ['GetServiceSandboxType<T>(Sandbox)'])
     ]
@@ -2368,14 +2365,8 @@ class BannedTypeCheckTest(unittest.TestCase):
   def testBannedMojoFunctions(self):
     input_api = MockInputApi()
     input_api.files = [
-      MockFile('some/cpp/problematic/file.cc',
-               ['mojo::DataPipe();']),
       MockFile('some/cpp/problematic/file2.cc',
                ['mojo::ConvertTo<>']),
-      MockFile('some/cpp/ok/file.cc',
-               ['CreateDataPipe();']),
-      MockFile('some/cpp/ok/file2.cc',
-               ['mojo::DataPipeDrainer();']),
       MockFile('third_party/blink/ok/file3.cc',
                ['mojo::ConvertTo<>']),
       MockFile('content/renderer/ok/file3.cc',
@@ -2385,11 +2376,8 @@ class BannedTypeCheckTest(unittest.TestCase):
     results = PRESUBMIT.CheckNoBannedFunctions(input_api, MockOutputApi())
 
     # warnings are results[0], errors are results[1]
-    self.assertEqual(2, len(results))
-    self.assertTrue('some/cpp/problematic/file.cc' in results[1].message)
+    self.assertEqual(1, len(results))
     self.assertTrue('some/cpp/problematic/file2.cc' in results[0].message)
-    self.assertTrue('some/cpp/ok/file.cc' not in results[1].message)
-    self.assertTrue('some/cpp/ok/file2.cc' not in results[1].message)
     self.assertTrue('third_party/blink/ok/file3.cc' not in results[0].message)
     self.assertTrue('content/renderer/ok/file3.cc' not in results[0].message)
 
@@ -3511,7 +3499,7 @@ class BuildtoolsRevisionsAreInSyncTest(unittest.TestCase):
 
   def testOneFileChangedButNotTheOther(self):
     results = self._check({
-        "DEPS": "'libunwind_revision': 'onerev'",
+        "DEPS": "'libcxx_revision': 'onerev'",
     })
     self.assertNotEqual(results, [])
 
@@ -3523,15 +3511,15 @@ class BuildtoolsRevisionsAreInSyncTest(unittest.TestCase):
 
   def testBothFilesChangedAndMatch(self):
     results = self._check({
-        "DEPS": "'libunwind_revision': 'onerev'",
-        "buildtools/DEPS": "'libunwind_revision': 'onerev'",
+        "DEPS": "'libcxx_revision': 'onerev'",
+        os.path.join("buildtools", "DEPS"): "'libcxx_revision': 'onerev'",
     })
     self.assertEqual(results, [])
 
   def testBothFilesWereChangedAndDontMatch(self):
     results = self._check({
-        "DEPS": "'libunwind_revision': 'onerev'",
-        "buildtools/DEPS": "'libunwind_revision': 'anotherrev'",
+        "DEPS": "'libcxx_revision': 'rev1'",
+        os.path.join("buildtools", "DEPS"): "'libcxx_revision': 'rev2'",
     })
     self.assertNotEqual(results, [])
 
@@ -3575,10 +3563,23 @@ class CheckFuzzTargetsTest(unittest.TestCase):
 
 
 class SetNoParentTest(unittest.TestCase):
-  def testSetNoParentMissing(self):
+  def testSetNoParentTopLevelAllowed(self):
     mock_input_api = MockInputApi()
     mock_input_api.files = [
       MockAffectedFile('goat/OWNERS',
+                       [
+                         'set noparent',
+                         'jochen@chromium.org',
+                       ])
+    ]
+    mock_output_api = MockOutputApi()
+    errors = PRESUBMIT.CheckSetNoParent(mock_input_api, mock_output_api)
+    self.assertEqual([], errors)
+
+  def testSetNoParentMissing(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockAffectedFile('services/goat/OWNERS',
                        [
                          'set noparent',
                          'jochen@chromium.org',
@@ -3592,11 +3593,10 @@ class SetNoParentTest(unittest.TestCase):
     self.assertTrue('goat/OWNERS:1' in errors[0].long_text)
     self.assertTrue('goat/OWNERS:3' in errors[0].long_text)
 
-
   def testSetNoParentWithCorrectRule(self):
     mock_input_api = MockInputApi()
     mock_input_api.files = [
-      MockAffectedFile('goat/OWNERS',
+      MockAffectedFile('services/goat/OWNERS',
                        [
                          'set noparent',
                          'file://ipc/SECURITY_OWNERS',

@@ -8,6 +8,7 @@
 #include <map>
 #include <string>
 
+#include "base/files/file_path.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/accessibility/soda_installer.h"
@@ -31,10 +32,17 @@ class SodaInstallerImpl : public SodaInstaller,
   SodaInstallerImpl(const SodaInstallerImpl&) = delete;
   SodaInstallerImpl& operator=(const SodaInstallerImpl&) = delete;
 
+  // Currently only implemented in the chromeos-specific subclass.
+  base::FilePath GetSodaBinaryPath() const override;
+
+  // Currently only implemented in the chromeos-specific subclass.
+  base::FilePath GetLanguagePath() const override;
+
   // SodaInstaller:
   void InstallSoda(PrefService* prefs) override;
   void InstallLanguage(PrefService* prefs) override;
-  bool IsSodaRegistered() override;
+  bool IsSodaInstalled() const override;
+  void UninstallSoda(PrefService* global_prefs) override;
 
  private:
   // component_updater::ServiceObserver:
@@ -42,9 +50,6 @@ class SodaInstallerImpl : public SodaInstaller,
 
   void OnSodaBinaryInstalled();
   void OnSodaLanguagePackInstalled();
-
-  bool has_soda_ = false;
-  bool has_language_pack_ = false;
 
   std::map<std::string, update_client::CrxUpdateItem> downloading_components_;
 

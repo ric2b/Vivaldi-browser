@@ -61,7 +61,7 @@ import org.chromium.chrome.browser.tasks.pseudotab.TabAttributeCache;
 import org.chromium.chrome.browser.tasks.tab_groups.EmptyTabGroupModelFilterObserver;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupUtils;
-import org.chromium.chrome.browser.tasks.tab_management.PriceWelcomeMessageService.PriceTabData;
+import org.chromium.chrome.browser.tasks.tab_management.PriceMessageService.PriceTabData;
 import org.chromium.chrome.browser.tasks.tab_management.TabListCoordinator.TabListMode;
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.UiType;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcherMediator.PriceWelcomeMessageController;
@@ -206,14 +206,18 @@ class TabListMediator {
         @VisibleForTesting
         void maybeShowPriceWelcomeMessage(
                 @Nullable ShoppingPersistedTabData shoppingPersistedTabData) {
+            // TODO(crbug.com/1166702): Use another method to check if we already have the price
+            // welcome message in tab switcher instead of using
+            // mModel.lastIndexForMessageItemFromType(MessageService.MessageType.PRICE_MESSAGE),
+            // because we may have other price message types.
             // Avoid inserting message while RecyclerView is computing a layout.
             new Handler().post(() -> {
-                if (PriceTrackingUtilities.isPriceWelcomeMessageCardDisabled() || (mModel == null)
+                if (!PriceTrackingUtilities.isPriceWelcomeMessageCardEnabled() || (mModel == null)
                         || (mPriceWelcomeMessageController == null)
                         || (shoppingPersistedTabData == null)
                         || (shoppingPersistedTabData.getPriceDrop() == null)
                         || (mModel.lastIndexForMessageItemFromType(
-                                    MessageService.MessageType.PRICE_WELCOME)
+                                    MessageService.MessageType.PRICE_MESSAGE)
                                 != TabModel.INVALID_TAB_INDEX)) {
                     return;
                 }
@@ -1234,7 +1238,7 @@ class TabListMediator {
                 int itemType = mModel.get(position).type;
 
                 if (itemType == TabProperties.UiType.MESSAGE
-                        || itemType == TabProperties.UiType.PRICE_WELCOME) {
+                        || itemType == TabProperties.UiType.LARGE_MESSAGE) {
                     return manager.getSpanCount();
                 }
                 return 1;
@@ -1664,7 +1668,7 @@ class TabListMediator {
      */
     void removeSpecialItemFromModel(@UiType int uiType, int itemIdentifier) {
         int index = TabModel.INVALID_TAB_INDEX;
-        if (uiType == UiType.MESSAGE || uiType == UiType.PRICE_WELCOME) {
+        if (uiType == UiType.MESSAGE || uiType == UiType.LARGE_MESSAGE) {
             if (itemIdentifier == MessageService.MessageType.ALL) {
                 while (mModel.lastIndexForMessageItem() != TabModel.INVALID_TAB_INDEX) {
                     index = mModel.lastIndexForMessageItem();
@@ -1684,7 +1688,7 @@ class TabListMediator {
     }
 
     private boolean validateItemAt(int index, @UiType int uiType, int itemIdentifier) {
-        if (uiType == UiType.MESSAGE || uiType == UiType.PRICE_WELCOME) {
+        if (uiType == UiType.MESSAGE || uiType == UiType.LARGE_MESSAGE) {
             return mModel.get(index).type == uiType
                     && mModel.get(index).model.get(MESSAGE_TYPE) == itemIdentifier;
         } else if (uiType == UiType.NEW_TAB_TILE) {
@@ -1713,7 +1717,7 @@ class TabListMediator {
 
     /**
      * Update the layout of tab switcher to make it compact. Because now we have messages within the
-     * tabs like PriceWelcomeMessage and these messages take up the entire row, some operations like
+     * tabs like PriceMessage and these messages take up the entire row, some operations like
      * closing a tab above the message card will leave a blank grid, so we need to update the
      * layout.
      */
@@ -1721,7 +1725,7 @@ class TabListMediator {
     void updateLayout() {
         // Right now we need to update layout only if there is a price welcome message card in tab
         // switcher.
-        if (PriceTrackingUtilities.isPriceWelcomeMessageCardDisabled()) return;
+        if (!PriceTrackingUtilities.isPriceWelcomeMessageCardEnabled()) return;
         assert mGridLayoutManager != null;
         int spanCount = mGridLayoutManager.getSpanCount();
         GridLayoutManager.SpanSizeLookup spanSizeLookup = mGridLayoutManager.getSpanSizeLookup();
@@ -1734,7 +1738,7 @@ class TabListMediator {
                 spanSizeSumForCurrentRow = 0;
             } else if (spanSizeSumForCurrentRow > spanCount) {
                 // Find a blank grid and break.
-                if (mModel.get(index).type == TabProperties.UiType.PRICE_WELCOME) break;
+                if (mModel.get(index).type == TabProperties.UiType.LARGE_MESSAGE) break;
                 spanSizeSumForCurrentRow = 0;
             }
         }

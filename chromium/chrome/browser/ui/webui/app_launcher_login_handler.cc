@@ -111,9 +111,10 @@ void AppLauncherLoginHandler::HandleShowSyncLoginUI(
   if (!signin::ShouldShowPromo(profile))
     return;
 
-  std::string username = IdentityManagerFactory::GetForProfile(profile)
-                             ->GetPrimaryAccountInfo()
-                             .email;
+  std::string username =
+      IdentityManagerFactory::GetForProfile(profile)
+          ->GetPrimaryAccountInfo(signin::ConsentLevel::kSync)
+          .email;
   if (!username.empty())
     return;
 
@@ -147,8 +148,9 @@ void AppLauncherLoginHandler::UpdateLogin() {
   if (!username.empty()) {
     ProfileAttributesStorage& storage =
         g_browser_process->profile_manager()->GetProfileAttributesStorage();
-    ProfileAttributesEntry* entry;
-    if (storage.GetProfileAttributesWithPath(profile->GetPath(), &entry)) {
+    ProfileAttributesEntry* entry =
+        storage.GetProfileAttributesWithPath(profile->GetPath());
+    if (entry) {
       // Only show the profile picture and full name for the single profile
       // case. In the multi-profile case the profile picture is visible in the
       // title bar and the full name can be ambiguous.
@@ -171,7 +173,7 @@ void AppLauncherLoginHandler::UpdateLogin() {
     bool is_signin_allowed =
         profile->GetOriginalProfile()->GetPrefs()->GetBoolean(
             prefs::kSigninAllowed);
-    if (!profile->IsLegacySupervised() && is_signin_allowed) {
+    if (is_signin_allowed) {
       base::string16 signed_in_link = l10n_util::GetStringUTF16(
           IDS_SYNC_PROMO_NOT_SIGNED_IN_STATUS_LINK);
       signed_in_link =

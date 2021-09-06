@@ -344,8 +344,7 @@ ArcInputMethodManagerService::ArcInputMethodManagerService(
 
   ash::TabletMode::Get()->AddObserver(tablet_mode_observer_.get());
 
-  chromeos::AccessibilityManager* accessibility_manager =
-      chromeos::AccessibilityManager::Get();
+  auto* accessibility_manager = ash::AccessibilityManager::Get();
   if (accessibility_manager) {
     // accessibility_status_subscription_ ensures the callback is removed when
     // ArcInputMethodManagerService is destroyed, so it's safe to use
@@ -596,9 +595,9 @@ void ArcInputMethodManagerService::OnInputContextHandlerChanged() {
 }
 
 void ArcInputMethodManagerService::OnAccessibilityStatusChanged(
-    const chromeos::AccessibilityStatusEventDetails& event_details) {
+    const ash::AccessibilityStatusEventDetails& event_details) {
   if (event_details.notification_type !=
-      chromeos::ACCESSIBILITY_TOGGLE_VIRTUAL_KEYBOARD) {
+      ash::AccessibilityNotificationType::kToggleVirtualKeyboard) {
     // This class is not interested in a11y events except toggling virtual
     // keyboard event.
     return;

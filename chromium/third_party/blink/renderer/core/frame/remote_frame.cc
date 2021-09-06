@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/frame/remote_frame.h"
 
+#include "base/stl_util.h"
 #include "cc/layers/surface_layer.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
@@ -77,16 +78,10 @@ FloatRect DeNormalizeRect(const gfx::RectF& normalized, const IntRect& base) {
 }  // namespace
 
 // static
-RemoteFrame* RemoteFrame::FromFrameToken(
-    const base::UnguessableToken& frame_token) {
-  RemoteFramesByTokenMap& remote_frames_map = GetRemoteFramesMap();
-  auto it = remote_frames_map.find(base::UnguessableTokenHash()(frame_token));
-  return it == remote_frames_map.end() ? nullptr : it->value.Get();
-}
-
-// static
 RemoteFrame* RemoteFrame::FromFrameToken(const RemoteFrameToken& frame_token) {
-  return FromFrameToken(frame_token.value());
+  RemoteFramesByTokenMap& remote_frames_map = GetRemoteFramesMap();
+  auto it = remote_frames_map.find(RemoteFrameToken::Hasher()(frame_token));
+  return it == remote_frames_map.end() ? nullptr : it->value.Get();
 }
 
 RemoteFrame::RemoteFrame(
@@ -96,7 +91,7 @@ RemoteFrame::RemoteFrame(
     Frame* parent,
     Frame* previous_sibling,
     FrameInsertType insert_type,
-    const base::UnguessableToken& frame_token,
+    const RemoteFrameToken& frame_token,
     WindowAgentFactory* inheriting_agent_factory,
     InterfaceRegistry* interface_registry,
     AssociatedInterfaceProvider* associated_interface_provider)
@@ -109,6 +104,10 @@ RemoteFrame::RemoteFrame(
             frame_token,
             MakeGarbageCollected<RemoteWindowProxyManager>(*this),
             inheriting_agent_factory),
+      // TODO(samans): Investigate if it is safe to delay creation of this
+      // object until a FrameSinkId is provided.
+      parent_local_surface_id_allocator_(
+          std::make_unique<viz::ParentLocalSurfaceIdAllocator>()),
       interface_registry_(interface_registry
                               ? interface_registry
                               : InterfaceRegistry::GetEmptyInterfaceRegistry()),
@@ -118,9 +117,9 @@ RemoteFrame::RemoteFrame(
   // TODO(crbug.com/1094850): Remove this check once the renderer is correctly
   // handling errors during the creation of HTML portal elements, which would
   // otherwise cause RemoteFrame() being created with empty frame tokens.
-  if (!frame_token.is_empty()) {
+  if (!frame_token.value().is_empty()) {
     auto frame_tracking_result = GetRemoteFramesMap().insert(
-        base::UnguessableTokenHash()(frame_token), this);
+        RemoteFrameToken::Hasher()(frame_token), this);
     CHECK(frame_tracking_result.stored_value) << "Inserting a duplicate item.";
   }
 
@@ -173,6 +172,11 @@ void RemoteFrame::Navigate(FrameLoadRequest& frame_request,
 
   const KURL& url = frame_request.GetResourceRequest().Url();
   auto* window = frame_request.GetOriginWindow();
+
+  // Note that even if |window| is not null, it could have just been detached
+  // (so window->GetFrame() is null). This can happen for a form submission, if
+  // the frame containing the form has been deleted in between.
+
   if (!frame_request.CanDisplay(url)) {
     if (window) {
       window->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
@@ -194,7 +198,9 @@ void RemoteFrame::Navigate(FrameLoadRequest& frame_request,
   MixedContentChecker::UpgradeInsecureRequest(
       frame_request.GetResourceRequest(), fetch_client_settings_object, window,
       frame_request.GetFrameType(),
-      window ? window->GetFrame()->GetContentSettingsClient() : nullptr);
+      (window && window->GetFrame())
+          ? window->GetFrame()->GetContentSettingsClient()
+          : nullptr);
 
   // Navigations in portal contexts do not create back/forward entries.
   if (GetPage()->InsidePortal() &&
@@ -202,31 +208,54 @@ void RemoteFrame::Navigate(FrameLoadRequest& frame_request,
     frame_load_type = WebFrameLoadType::kReplaceCurrentItem;
   }
 
-  WebLocalFrame* initiator_frame =
-      window ? window->GetFrame()->Client()->GetWebFrame() : nullptr;
-
   bool is_opener_navigation = false;
   bool initiator_frame_has_download_sandbox_flag = false;
   bool initiator_frame_is_ad = false;
 
+  base::Optional<LocalFrameToken> initiator_frame_token =
+      base::OptionalFromPtr(frame_request.GetInitiatorFrameToken());
+  mojo::PendingRemote<mojom::blink::PolicyContainerHostKeepAliveHandle>
+      initiator_policy_container_keep_alive_handle =
+          frame_request.TakeInitiatorPolicyContainerKeepAliveHandle();
+
+  // |initiator_frame_token| and |initiator_policy_container_keep_alive_handle|
+  // should either be both specified or both null.
+  DCHECK(!initiator_frame_token ==
+         !initiator_policy_container_keep_alive_handle);
+
   if (window) {
-    is_opener_navigation = window->GetFrame()->Opener() == this;
     initiator_frame_has_download_sandbox_flag =
         window->IsSandboxed(network::mojom::blink::WebSandboxFlags::kDownloads);
-    initiator_frame_is_ad = window->GetFrame()->IsAdSubframe();
-    if (frame_request.ClientRedirectReason() != ClientNavigationReason::kNone) {
-      probe::FrameRequestedNavigation(window->GetFrame(), this, url,
-                                      frame_request.ClientRedirectReason(),
-                                      kNavigationPolicyCurrentTab);
+    if (window->GetFrame()) {
+      is_opener_navigation = window->GetFrame()->Opener() == this;
+      initiator_frame_is_ad = window->GetFrame()->IsAdSubframe();
+      if (frame_request.ClientRedirectReason() !=
+          ClientNavigationReason::kNone) {
+        probe::FrameRequestedNavigation(window->GetFrame(), this, url,
+                                        frame_request.ClientRedirectReason(),
+                                        kNavigationPolicyCurrentTab);
+      }
+
+      if (!initiator_frame_token) {
+        initiator_frame_token = window->GetFrame()->GetLocalFrameToken();
+        initiator_policy_container_keep_alive_handle =
+            window->GetFrame()->GetPolicyContainer()->IssueKeepAliveHandle();
+      }
     }
   }
 
-  Client()->Navigate(frame_request.GetResourceRequest(), initiator_frame,
+  // TODO(https://crbug.com/1173409 and https://crbug.com/1059959): Check that
+  // we always have valid |initiator_frame_token| and
+  // |initiator_policy_container_keep_alive_handle|.
+
+  Client()->Navigate(frame_request.GetResourceRequest(),
                      frame_load_type == WebFrameLoadType::kReplaceCurrentItem,
                      is_opener_navigation,
                      initiator_frame_has_download_sandbox_flag,
                      initiator_frame_is_ad, frame_request.GetBlobURLToken(),
-                     frame_request.Impression());
+                     frame_request.Impression(),
+                     base::OptionalOrNullptr(initiator_frame_token),
+                     std::move(initiator_policy_container_keep_alive_handle));
 }
 
 bool RemoteFrame::DetachImpl(FrameDetachType type) {
@@ -363,9 +392,9 @@ void RemoteFrame::ForwardPostMessage(
     base::Optional<base::UnguessableToken> cluster_id,
     scoped_refptr<const SecurityOrigin> target_security_origin,
     LocalFrame* source_frame) {
-  base::Optional<base::UnguessableToken> source_token;
+  base::Optional<blink::LocalFrameToken> source_token;
   if (source_frame)
-    source_token = source_frame->GetFrameToken();
+    source_token = source_frame->GetLocalFrameToken();
 
   String source_origin = message_event->origin();
   String target_origin = g_empty_string;
@@ -457,12 +486,9 @@ void RemoteFrame::WillEnterFullscreen(
 }
 
 void RemoteFrame::AddReplicatedContentSecurityPolicies(
-    WTF::Vector<network::mojom::blink::ContentSecurityPolicyHeaderPtr>
-        headers) {
-  for (auto& header : headers) {
-    GetSecurityContext()->GetContentSecurityPolicy()->AddPolicyFromHeaderValue(
-        header->header_value, header->type, header->source);
-  }
+    WTF::Vector<network::mojom::blink::ContentSecurityPolicyPtr> csps) {
+  GetSecurityContext()->GetContentSecurityPolicy()->AddPolicies(
+      std::move(csps));
 }
 
 void RemoteFrame::ResetReplicatedContentSecurityPolicy() {
@@ -710,7 +736,7 @@ void RemoteFrame::DidUpdateFramePolicy(const FramePolicy& frame_policy) {
 }
 
 void RemoteFrame::UpdateOpener(
-    const base::Optional<base::UnguessableToken>& opener_frame_token) {
+    const base::Optional<blink::FrameToken>& opener_frame_token) {
   if (auto* web_frame = WebFrame::FromCoreFrame(this)) {
     Frame* opener_frame = nullptr;
     if (opener_frame_token)
@@ -747,9 +773,10 @@ void RemoteFrame::SetOpener(Frame* opener_frame) {
       // update another frame's opener.
       DCHECK(opener_frame->IsLocalFrame());
       GetRemoteFrameHostRemote().DidChangeOpener(
-          opener_frame ? base::Optional<base::UnguessableToken>(
-                             opener_frame->GetFrameToken())
-                       : base::nullopt);
+          opener_frame
+              ? base::Optional<blink::LocalFrameToken>(
+                    opener_frame->GetFrameToken().GetAs<LocalFrameToken>())
+              : base::nullopt);
     }
   }
   SetOpenerDoNotNotify(opener_frame);
@@ -773,8 +800,30 @@ void RemoteFrame::WasAttachedAsRemoteMainFrame() {
       &RemoteFrame::BindToMainFrameReceiver, WrapWeakPersistent(this)));
 }
 
+const viz::LocalSurfaceId& RemoteFrame::GetLocalSurfaceId() const {
+  return parent_local_surface_id_allocator_->GetCurrentLocalSurfaceId();
+}
+
 viz::FrameSinkId RemoteFrame::GetFrameSinkId() {
-  return Client()->GetFrameSinkId();
+  return frame_sink_id_;
+}
+
+void RemoteFrame::SetFrameSinkId(const viz::FrameSinkId& frame_sink_id) {
+  // This is a temporary workaround for https://crbug.com/1166729.
+  // TODO(https://crbug.com/1166722): Remove this once the migration is done.
+  Client()->DidSetFrameSinkId();
+
+  // The same ParentLocalSurfaceIdAllocator cannot provide LocalSurfaceIds for
+  // two different frame sinks, so recreate it here.
+  if (frame_sink_id_ != frame_sink_id) {
+    parent_local_surface_id_allocator_ =
+        std::make_unique<viz::ParentLocalSurfaceIdAllocator>();
+  }
+  frame_sink_id_ = frame_sink_id;
+
+  // Resend the FrameRects and allocate a new viz::LocalSurfaceId when the view
+  // changes.
+  ResendVisualProperties();
 }
 
 bool RemoteFrame::IsIgnoredForHitTest() const {
@@ -816,7 +865,7 @@ void RemoteFrame::SetCcLayer(cc::Layer* cc_layer, bool is_surface_layer) {
 
 void RemoteFrame::AdvanceFocus(mojom::blink::FocusType type,
                                LocalFrame* source) {
-  GetRemoteFrameHostRemote().AdvanceFocus(type, source->GetFrameToken());
+  GetRemoteFrameHostRemote().AdvanceFocus(type, source->GetLocalFrameToken());
 }
 
 bool RemoteFrame::DetachChildren() {
@@ -845,9 +894,9 @@ void RemoteFrame::ApplyReplicatedFeaturePolicyHeader() {
       feature_policy_header_, container_policy, parent_feature_policy);
 }
 
-void RemoteFrame::SynchronizeVisualProperties() {
+bool RemoteFrame::SynchronizeVisualProperties(bool propagate) {
   if (!GetFrameSinkId().is_valid() || Client()->RemoteProcessGone())
-    return;
+    return false;
 
   bool capture_sequence_number_changed =
       sent_visual_properties_ &&
@@ -892,10 +941,15 @@ void RemoteFrame::SynchronizeVisualProperties() {
       sent_visual_properties_->capture_sequence_number !=
           pending_visual_properties_.capture_sequence_number;
 
+  if (synchronized_props_changed)
+    parent_local_surface_id_allocator_->GenerateId();
+  pending_visual_properties_.local_surface_id = GetLocalSurfaceId();
+
+  viz::SurfaceId surface_id(frame_sink_id_,
+                            pending_visual_properties_.local_surface_id);
   Client()->WillSynchronizeVisualProperties(
-      synchronized_props_changed, capture_sequence_number_changed,
+      capture_sequence_number_changed, surface_id,
       pending_visual_properties_.compositor_viewport.size());
-  pending_visual_properties_.local_surface_id = Client()->GetLocalSurfaceId();
 
   bool rect_changed = !sent_visual_properties_ ||
                       sent_visual_properties_->screen_space_rect !=
@@ -903,14 +957,19 @@ void RemoteFrame::SynchronizeVisualProperties() {
   bool visual_properties_changed = synchronized_props_changed || rect_changed;
 
   if (!visual_properties_changed)
-    return;
+    return false;
 
-  // Let the browser know about the updated view rect.
-  GetRemoteFrameHostRemote().SynchronizeVisualProperties(
-      pending_visual_properties_);
+  if (propagate) {
+    GetRemoteFrameHostRemote().SynchronizeVisualProperties(
+        pending_visual_properties_);
+    RecordSentVisualProperties();
+  }
 
+  return true;
+}
+
+void RemoteFrame::RecordSentVisualProperties() {
   sent_visual_properties_ = pending_visual_properties_;
-
   TRACE_EVENT_WITH_FLOW2(
       TRACE_DISABLED_BY_DEFAULT("viz.surface_id_flow"),
       "RenderFrameProxy::SynchronizeVisualProperties Send Message",
@@ -924,6 +983,29 @@ void RemoteFrame::SynchronizeVisualProperties() {
 void RemoteFrame::ResendVisualProperties() {
   sent_visual_properties_ = base::nullopt;
   SynchronizeVisualProperties();
+}
+
+void RemoteFrame::DidUpdateVisualProperties(
+    const cc::RenderFrameMetadata& metadata) {
+  if (!parent_local_surface_id_allocator_->UpdateFromChild(
+          metadata.local_surface_id.value_or(viz::LocalSurfaceId()))) {
+    return;
+  }
+
+  // The viz::LocalSurfaceId has changed so we call SynchronizeVisualProperties
+  // here to embed it.
+  SynchronizeVisualProperties();
+}
+
+void RemoteFrame::SetViewportIntersection(
+    const mojom::blink::ViewportIntersectionState& intersection_state) {
+  base::Optional<FrameVisualProperties> visual_properties;
+  if (SynchronizeVisualProperties(/*propagate=*/false)) {
+    visual_properties.emplace(pending_visual_properties_);
+    RecordSentVisualProperties();
+  }
+  GetRemoteFrameHostRemote().UpdateViewportIntersection(
+      intersection_state.Clone(), visual_properties);
 }
 
 void RemoteFrame::DidChangeScreenInfo(const ScreenInfo& screen_info) {

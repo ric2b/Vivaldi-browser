@@ -21,6 +21,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/win/registry.h"
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
 #include "base/win/wmi.h"
@@ -30,17 +31,36 @@
 #include "chrome/installer/util/util_constants.h"
 
 #include "app/vivaldi_constants.h"
+#include "base/vivaldi_switches.h"
 #include "update_notifier/update_notifier_switches.h"
 
 using base::PathService;
 
 namespace vivaldi {
 
+namespace {
+
+// base::PathExists() asserts on non-blocking call, but we may need to check for
+// file existence on UI thread, so provide own implementation.
+bool DoesPathExist(const base::FilePath& path) {
+  return (::GetFileAttributes(path.value().c_str()) != INVALID_FILE_ATTRIBUTES);
+}
+
+InstallType GetBrowserInstallType() {
+  // Cache the value on the first call.
+  static InstallType browser_install_type =
+      FindInstallType(GetDirectoryOfCurrentExe().DirName())
+          .value_or(InstallType::kForCurrentUser);
+  return browser_install_type;
+}
+
+}  // namespace
+
 bool IsVivaldiInstalled(const base::FilePath& install_top_dir) {
   base::FilePath exe_dir = install_top_dir.Append(installer::kInstallBinaryDir);
   base::FilePath vivaldi_exe_path = exe_dir.Append(installer::kChromeExe);
 
-  bool is_installed = base::PathExists(vivaldi_exe_path);
+  bool is_installed = DoesPathExist(vivaldi_exe_path);
   return is_installed;
 }
 
@@ -50,20 +70,35 @@ base::Optional<InstallType> FindInstallType(
     return base::nullopt;
 
   base::FilePath exe_dir = install_top_dir.Append(installer::kInstallBinaryDir);
-  base::FilePath sa_file_path =
-      exe_dir.Append(constants::kStandaloneMarkerFile);
-  if (base::PathExists(sa_file_path))
+  if (DoesPathExist(exe_dir.Append(constants::kStandaloneMarkerFile)))
     return InstallType::kStandalone;
+  if (DoesPathExist(exe_dir.Append(constants::kSystemMarkerFile)))
+    return InstallType::kForAllUsers;
 
+  // Support older installations without the marker files for system
+  // installations. We check both for 32 and 64 paths irrespective of the
+  // current architecture as the user may have installed a 64 bit version over
+  // 32 installation or vise-versa, see VB-79028.
+  //
+  // TODO(igor@vivaldi.com): Do this check only in setup.exe, not for the
+  // browser or update_notifier.exe as those should see kSystemMarkerFile that
+  // the installer has added.
   base::FilePath program_files_path;
-  PathService::Get(base::DIR_PROGRAM_FILES, &program_files_path);
-
-  // TODO(igor@vivaldi.com): Consider using a special marker file similar to
-  // kStandaloneMarkerFile to support system installs outside Program Files.
+  PathService::Get(base::DIR_PROGRAM_FILES6432, &program_files_path);
   if (program_files_path.IsParent(install_top_dir)) {
     return InstallType::kForAllUsers;
   }
+  program_files_path.clear();
+  PathService::Get(base::DIR_PROGRAM_FILESX86, &program_files_path);
+  if (program_files_path.IsParent(install_top_dir)) {
+    return InstallType::kForAllUsers;
+  }
+
   return InstallType::kForCurrentUser;
+}
+
+bool IsStandaloneBrowser() {
+  return GetBrowserInstallType() == InstallType::kStandalone;
 }
 
 base::FilePath GetDefaultInstallTopDir(InstallType install_type) {
@@ -231,8 +266,7 @@ bool ShellExecuteFromExplorer(const base::FilePath& application_path,
 }
 
 std::vector<base::win::ScopedHandle> GetRunningProcessesForPath(
-    const base::FilePath& path,
-    const base::FilePath* path2) {
+    const base::FilePath& path) {
   std::vector<base::win::ScopedHandle> processes;
 
   if (path.empty())
@@ -242,13 +276,13 @@ std::vector<base::win::ScopedHandle> GetRunningProcessesForPath(
       CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
   if (!snapshot.IsValid() || Process32First(snapshot.Get(), &entry) == FALSE)
     return processes;
+  DWORD current_process = GetCurrentProcessId();
   do {
+    if (entry.th32ProcessID == current_process)
+      continue;
     if (!base::FilePath::CompareEqualIgnoreCase(entry.szExeFile,
                                                 path.BaseName().value())) {
-      if (!path2 || !base::FilePath::CompareEqualIgnoreCase(
-                        entry.szExeFile, path2->BaseName().value())) {
-        continue;
-      }
+      continue;
     }
     base::win::ScopedHandle process(OpenProcess(
         PROCESS_QUERY_LIMITED_INFORMATION, FALSE, entry.th32ProcessID));
@@ -268,10 +302,7 @@ std::vector<base::win::ScopedHandle> GetRunningProcessesForPath(
             << process_image_name;
     if (!base::FilePath::CompareEqualIgnoreCase(path.value(),
                                                 process_image_name)) {
-      if (!path2 || !base::FilePath::CompareEqualIgnoreCase(
-                        path2->value(), process_image_name)) {
-        continue;
-      }
+      continue;
     }
 
     processes.push_back(std::move(process));
@@ -300,10 +331,10 @@ void KillProcesses(std::vector<base::win::ScopedHandle> processes) {
   }
 }
 
-const base::FilePath& GetDirectoryOfCurrentExe() {
+const base::FilePath& GetPathOfCurrentExe() {
   // This cannot use base::PathService::Get(base::DIR_EXE) as that calls
   // GetModuleFileName() and that does not normalize the exe path.
-  static base::NoDestructor<base::FilePath> exe_dir([] {
+  static base::NoDestructor<base::FilePath> exe_path([] {
     wchar_t path[MAX_PATH];
     path[0] = L'\0';
     DWORD size = base::size(path);
@@ -314,18 +345,22 @@ const base::FilePath& GetDirectoryOfCurrentExe() {
         return base::FilePath();
       }
     }
-    return base::FilePath(path).DirName();
+    return base::FilePath(path);
   }());
-  return *exe_dir;
+  return *exe_path;
 }
 
-namespace {
+const base::FilePath& GetDirectoryOfCurrentExe() {
+  static base::NoDestructor<base::FilePath> exe_dir(
+      [] { return GetPathOfCurrentExe().DirName(); }());
+  return *exe_dir;
+}
 
 void SendQuitUpdateNotifier(const base::FilePath* exe_dir, bool global) {
   DCHECK(!exe_dir || !exe_dir->empty());
   base::string16 event_name = GetUpdateNotifierEventName(
-      global ? vivaldi_update_notifier::kGlobalQuitEventName
-             : vivaldi_update_notifier::kQuitEventName,
+      global ? vivaldi_update_notifier::kGlobalQuitEventPrefix
+             : vivaldi_update_notifier::kQuitEventPrefix,
       exe_dir);
 
   DLOG(INFO) << "Sending quit event " << event_name;
@@ -338,6 +373,8 @@ void SendQuitUpdateNotifier(const base::FilePath* exe_dir, bool global) {
 
   ::SetEvent(quit_event.Get());
 }
+
+namespace {
 
 base::string16 GetUpdateNotifierAutorunCommand() {
   base::string16 command;
@@ -356,6 +393,30 @@ base::FilePath GetUpdateNotifierPath(const base::FilePath* exe_dir) {
     exe_dir = &GetDirectoryOfCurrentExe();
   }
   return exe_dir->Append(vivaldi::constants::kVivaldiUpdateNotifierExe);
+}
+
+base::CommandLine GetCommonUpdateNotifierCommand(
+    const base::FilePath* exe_dir) {
+  // This must be thread-safe and non-blocking so it can be called from any
+  // thread including UI thread.
+  base::CommandLine command(GetUpdateNotifierPath(exe_dir));
+  const base::CommandLine* vivaldi_cmd_line =
+      base::CommandLine::ForCurrentProcess();
+  if (vivaldi_cmd_line->HasSwitch(switches::kVivaldiUpdateURL)) {
+    command.AppendSwitchNative(
+        switches::kVivaldiUpdateURL,
+        vivaldi_cmd_line->GetSwitchValueNative(switches::kVivaldiUpdateURL));
+  }
+  if (vivaldi_cmd_line->HasSwitch(installer::switches::kEnableLogging) ||
+      vivaldi_cmd_line->HasSwitch(installer::switches::kVerboseLogging)) {
+    // We do not copy the value here as we do not want to log to the browser log
+    // file but rather always to the separated install log.
+    command.AppendSwitch(installer::switches::kEnableLogging);
+  }
+  if (vivaldi_cmd_line->HasSwitch(switches::kVivaldiSilentUpdate)) {
+    command.AppendSwitch(switches::kVivaldiSilentUpdate);
+  }
+  return command;
 }
 
 bool IsUpdateNotifierEnabled(const base::FilePath* exe_dir,
@@ -388,7 +449,7 @@ bool IsUpdateNotifierEnabledForAnyPath() {
   return !command.empty();
 }
 
-void EnableUpdateNotifier(const base::CommandLine& cmdline) {
+bool EnableUpdateNotifier(const base::CommandLine& cmdline) {
   DCHECK(base::FilePath::CompareEqualIgnoreCase(
       cmdline.GetProgram().BaseName().value(),
       vivaldi::constants::kVivaldiUpdateNotifierExe));
@@ -410,21 +471,25 @@ void EnableUpdateNotifier(const base::CommandLine& cmdline) {
                                       ::vivaldi::kUpdateNotifierAutorunName,
                                       autocommand)) {
     LOG(ERROR) << "Failed base::win::AddCommandToAutoRun() for " << autocommand;
+    return false;
   }
+  return true;
 }
 
-void DisableUpdateNotifier(const base::FilePath* exe_dir) {
+bool DisableUpdateNotifier(const base::FilePath* exe_dir) {
   // Remove autorun only if it is enabled for the given exe_dir.
   if (IsUpdateNotifierEnabled(exe_dir)) {
     if (!base::win::RemoveCommandFromAutoRun(
             HKEY_CURRENT_USER, ::vivaldi::kUpdateNotifierAutorunName)) {
       LOG(ERROR) << "base::win::RemoveCommandFromAutoRun failed";
+      return false;
     }
   }
   SendQuitUpdateNotifier(exe_dir, /*global=*/false);
+  return true;
 }
 
-void LaunchNotifierProcess(const base::CommandLine& cmdline) {
+bool LaunchNotifierProcess(const base::CommandLine& cmdline) {
   DCHECK(base::FilePath::CompareEqualIgnoreCase(
       cmdline.GetProgram().BaseName().value(),
       vivaldi::constants::kVivaldiUpdateNotifierExe));
@@ -434,9 +499,36 @@ void LaunchNotifierProcess(const base::CommandLine& cmdline) {
   if (!process.IsValid()) {
     LOG(ERROR) << "Failed to launch process - "
                << cmdline.GetCommandLineString();
-  } else {
-    LOG(INFO) << "Launching " << cmdline.GetCommandLineString();
+    return false;
   }
+  return true;
+}
+
+int RunNotifierSubaction(const base::CommandLine& cmdline) {
+  DCHECK(base::FilePath::CompareEqualIgnoreCase(
+      cmdline.GetProgram().BaseName().value(),
+      vivaldi::constants::kVivaldiUpdateNotifierExe));
+  base::LaunchOptions options;
+  options.current_directory = cmdline.GetProgram().DirName();
+  base::Process process = base::LaunchProcess(cmdline, options);
+  if (!process.IsValid()) {
+    LOG(ERROR) << "Failed to launch process - "
+               << cmdline.GetCommandLineString();
+    return -1;
+  }
+
+  // Typically an update notifier action finishes within milliseconds. So if it
+  // takes 10 seconds, this is definitely a bug. Kill then the process.
+  base::TimeDelta max_wait = base::TimeDelta::FromSeconds(10);
+  int exit_code = 0;
+  if (!process.WaitForExitWithTimeout(max_wait, &exit_code)) {
+    LOG(ERROR)
+        << "Timed out while waiting for the notifier process to finish - "
+        << cmdline.GetCommandLineString();
+    process.Terminate(1, false);
+    return -1;
+  }
+  return exit_code;
 }
 
 base::string16 GetUpdateNotifierEventName(base::StringPiece16 event_prefix,
@@ -465,44 +557,21 @@ base::FilePath NormalizeInstallExeDirectory(const base::FilePath& exe_dir) {
   return exe_path.DirName();
 }
 
-void EnableUpdateNotifierFromInstaller(
-    const base::FilePath& installer_exe_dir) {
-  base::FilePath exe_dir = NormalizeInstallExeDirectory(installer_exe_dir);
-  base::FilePath exe_path = GetUpdateNotifierPath(&exe_dir);
-  base::CommandLine cmdline(exe_path);
-  EnableUpdateNotifier(cmdline);
-}
-
-void RestartUpdateNotifier(const base::FilePath& installer_exe_dir) {
-  base::FilePath exe_dir = NormalizeInstallExeDirectory(installer_exe_dir);
-  QuitAllUpdateNotifiers(exe_dir);
-  base::CommandLine update_notifier_command(base::CommandLine::NO_PROGRAM);
-  if (IsUpdateNotifierEnabled(&exe_dir, &update_notifier_command)) {
-    // We must not use LaunchNotifierProcess() as the installer may be a
-    // privileged process and we must start a normal process here.
-    VLOG(1) << "Launching: " << update_notifier_command.GetCommandLineString();
-    ShellExecuteFromExplorer(update_notifier_command.GetProgram(),
-                             update_notifier_command.GetArgumentsString(),
-                             exe_dir);
-  }
-}
-
-void QuitAllUpdateNotifiers(const base::FilePath& installer_exe_dir) {
+void QuitAllUpdateNotifiers(const base::FilePath& installer_exe_dir,
+                            bool quit_old) {
   base::FilePath exe_dir = NormalizeInstallExeDirectory(installer_exe_dir);
   SendQuitUpdateNotifier(&exe_dir, /*global=*/false);
   SendQuitUpdateNotifier(&exe_dir, /*global=*/true);
 
   // Give up to 1 second for the notifiers to do a clean exit before terminating
   // the processes.
-  base::FilePath exe_path = GetUpdateNotifierPath(&exe_dir);
+  base::FilePath exe_path =
+      exe_dir.Append(quit_old ? vivaldi::constants::kVivaldiUpdateNotifierOldExe
+                              : vivaldi::constants::kVivaldiUpdateNotifierExe);
   std::vector<base::win::ScopedHandle> update_notifier_processes;
   for (int i = 0; i < 10; ++i) {
     ::Sleep(100);
-    // During the installation the running notifier may already be renamed to
-    // the old name so it is important to kill that as well.
-    base::FilePath old_exe(
-        exe_dir.Append(vivaldi::constants::kVivaldiUpdateNotifierOldExe));
-    update_notifier_processes = GetRunningProcessesForPath(exe_path, &old_exe);
+    update_notifier_processes = GetRunningProcessesForPath(exe_path);
     if (update_notifier_processes.empty())
       return;
   }
@@ -511,10 +580,48 @@ void QuitAllUpdateNotifiers(const base::FilePath& installer_exe_dir) {
   KillProcesses(std::move(update_notifier_processes));
 }
 
-void ShowInstallerResultMessage(int string_resource_id) {
-  base::string16 msg = installer::GetLocalizedString(string_resource_id);
-  ::MessageBox(nullptr, msg.c_str(), nullptr,
-               MB_ICONINFORMATION | MB_SETFOREGROUND);
+std::wstring ReadRegistryString(const wchar_t* name, base::win::RegKey& key) {
+  std::wstring value;
+  LSTATUS status = key.ReadValue(name, &value);
+  if (status != ERROR_SUCCESS) {
+    if (status != ERROR_FILE_NOT_FOUND) {
+      LOG(ERROR) << base::StringPrintf(
+          "Failed to read registry key %ls status==0x%lx", name, status);
+    }
+    return std::wstring();
+  }
+  if (value.empty()) {
+    LOG(ERROR) << "Invalid empty string value for the registry key " << name;
+    return std::wstring();
+  }
+  return value;
+}
+
+base::Optional<DWORD> ReadRegistryDW(const wchar_t* name,
+                                     base::win::RegKey& key) {
+  DWORD value = 0;
+  LSTATUS status = key.ReadValueDW(name, &value);
+  if (status != ERROR_SUCCESS) {
+    if (status != ERROR_FILE_NOT_FOUND) {
+      LOG(ERROR) << base::StringPrintf(
+          "Failed to read registry key %ls status==0x%lx", name, status);
+    }
+    return base::nullopt;
+  }
+  return value;
+}
+
+base::Optional<bool> ReadRegistryBool(const wchar_t* name,
+                                      base::win::RegKey& key) {
+  base::Optional<DWORD> value_word = ReadRegistryDW(name, key);
+  if (!value_word)
+    return base::nullopt;
+  if (*value_word > 1) {
+    LOG(ERROR) << "Invalid boolean registry value in " << name << ": "
+               << *value_word;
+    return base::nullopt;
+  }
+  return *value_word != 0;
 }
 
 }  // namespace vivaldi

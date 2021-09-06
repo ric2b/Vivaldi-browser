@@ -30,6 +30,7 @@
 #include <utility>
 
 #include "base/metrics/histogram_macros.h"
+#include "build/build_config.h"
 #include "cc/input/snap_selection_strategy.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -179,7 +180,7 @@ LocalDOMWindow::LocalDOMWindow(LocalFrame& frame, WindowAgent* agent)
       isolated_world_csp_map_(
           MakeGarbageCollected<
               HeapHashMap<int, Member<ContentSecurityPolicy>>>()),
-      token_(LocalFrameToken(frame.GetFrameToken())) {}
+      token_(frame.GetLocalFrameToken()) {}
 
 void LocalDOMWindow::BindContentSecurityPolicy() {
   DCHECK(!GetContentSecurityPolicy()->IsBound());
@@ -657,6 +658,13 @@ Document* LocalDOMWindow::InstallNewDocument(const DocumentInit& init) {
       GetFrame()->IsCrossOriginToMainFrame());
 
   GetFrame()->GetPage()->GetChromeClient().InstallSupplements(*GetFrame());
+
+#if !defined(OS_ANDROID)
+  // Enable SharedArrayBuffer for the reverse Origin Trial.
+  if (RuntimeEnabledFeatures::UnrestrictedSharedArrayBufferEnabled(this)) {
+    v8::V8::SetIsCrossOriginIsolated();
+  }
+#endif
 
   return document_;
 }
@@ -1421,7 +1429,7 @@ HeapVector<Member<DOMRect>> LocalDOMWindow::getWindowSegments() const {
   if (!page)
     return window_segments;
 
-  WebVector<WebRect> web_segments =
+  WebVector<gfx::Rect> web_segments =
       frame->GetWidgetForLocalRoot()->WindowSegments();
 
   // The rect passed to us from content is in DIP, relative to the main
@@ -1437,7 +1445,7 @@ HeapVector<Member<DOMRect>> LocalDOMWindow::getWindowSegments() const {
   const float page_zoom_factor = frame->PageZoomFactor();
   const float scale_factor = window_to_viewport_factor / page_zoom_factor;
   for (auto const& web_segment : web_segments) {
-    blink::FloatQuad quad = blink::FloatQuad(web_segment);
+    blink::FloatQuad quad = blink::FloatQuad(IntRect(web_segment));
     quad.Scale(scale_factor, scale_factor);
     window_segments.push_back(DOMRect::FromFloatRect(quad.BoundingBox()));
   }

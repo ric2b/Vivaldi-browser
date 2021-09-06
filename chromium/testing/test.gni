@@ -16,8 +16,10 @@ if (is_android) {
   import("//build/config/sanitizers/sanitizers.gni")
 } else if (is_fuchsia) {
   import("//build/config/chromecast_build.gni")
+  import("//build/config/coverage/coverage.gni")
   import("//build/config/fuchsia/generate_runner_scripts.gni")
   import("//build/config/fuchsia/package.gni")
+  import("//third_party/fuchsia-sdk/sdk/build/cmc.gni")
 } else if (is_chromeos_ash) {
   import("//build/config/chromeos/rules.gni")
   import("//build/config/sanitizers/sanitizers.gni")
@@ -41,20 +43,6 @@ if (is_android) {
 #      Similar to the GN arg 'enable_run_ios_unittests_with_xctest' but
 #      for build targets.
 template("test") {
-  # RTS
-  if (rts_exclude_file != "" && defined(invoker.sources) &&
-      invoker.sources != []) {
-    # Normalize paths
-    abs_paths = get_path_info(invoker.sources, "abspath")
-
-    # Filter
-    filtered_sources = filter_exclude(abs_paths, rts_exclusions)
-
-    # Do the replacement
-    invoker.sources = []
-    invoker.sources = filtered_sources
-  }
-
   testonly = true
   if (!is_ios) {
     assert(!defined(invoker.is_xctest) || !invoker.is_xctest,
@@ -245,6 +233,26 @@ template("test") {
     _pkg_target = "${_output_name}_pkg"
     _exec_target = "${_output_name}__exec"
 
+    # TODO(1019938): switch the default to tests.cmx which doesn't request
+    # the deprecated-ambient-replace-as-executable feature.
+    if (!defined(invoker.manifest)) {
+      manifest = "//build/config/fuchsia/tests-with-exec.cmx"
+    } else {
+      manifest = invoker.manifest
+    }
+
+    if (use_clang_coverage) {
+      component_with_coverage_manifest = "${target_name}-coverage.test-cmx"
+      cmc_merge(component_with_coverage_manifest) {
+        sources = [
+          "//build/config/fuchsia/add_DebugData_service.test-cmx",
+          manifest,
+        ]
+        output_name = target_name
+      }
+      manifest = "${target_out_dir}/${component_with_coverage_manifest}"
+    }
+
     fuchsia_package_runner(target_name) {
       is_test_exe = true
       forward_variables_from(invoker,
@@ -261,9 +269,11 @@ template("test") {
     }
 
     cr_fuchsia_package(_pkg_target) {
-      forward_variables_from(invoker, [ "manifest" ])
       binary = ":$_exec_target"
       package_name_override = _output_name
+      if (use_clang_coverage) {
+        deps = [ ":$component_with_coverage_manifest" ]
+      }
     }
 
     executable(_exec_target) {

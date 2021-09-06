@@ -23,6 +23,7 @@
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_request_handler_base.h"
 #include "device/fido/fido_transport_protocol.h"
+#include "device/fido/fido_types.h"
 #include "device/fido/pin.h"
 
 namespace device {
@@ -46,6 +47,10 @@ class AuthenticatorRequestDialogModel {
   enum class Step {
     // The UX flow has not started yet, the dialog should still be hidden.
     kNotStarted,
+
+    // A more subtle version of the dialog is being shown as an icon or bubble
+    // on the omnibox, prompting the user to tap their security key.
+    kSubtleUI,
 
     kTransportSelection,
 
@@ -78,6 +83,7 @@ class AuthenticatorRequestDialogModel {
 
     // Phone as a security key.
     kCableActivate,
+    kAndroidAccessory,
     kCableV2Activate,
     kCableV2QRCode,
 
@@ -102,8 +108,9 @@ class AuthenticatorRequestDialogModel {
     // Account selection,
     kSelectAccount,
 
-    // Attestation permission request.
+    // Attestation permission requests.
     kAttestationPermissionRequest,
+    kEnterpriseAttestationPermissionRequest,
   };
 
   // Implemented by the dialog to observe this model and show the UI panels
@@ -114,7 +121,7 @@ class AuthenticatorRequestDialogModel {
     virtual void OnStartOver() {}
 
     // Called just before the model is destructed.
-    virtual void OnModelDestroyed() = 0;
+    virtual void OnModelDestroyed(AuthenticatorRequestDialogModel* model) = 0;
 
     // Called when the UX flow has navigated to a different step, so the UI
     // should update.
@@ -156,7 +163,8 @@ class AuthenticatorRequestDialogModel {
     return current_step() == Step::kClosed;
   }
   bool should_dialog_be_hidden() const {
-    return current_step() == Step::kNotStarted;
+    return current_step() == Step::kNotStarted ||
+           current_step() == Step::kSubtleUI;
   }
 
   const TransportAvailabilityInfo* transport_availability() const {
@@ -177,7 +185,8 @@ class AuthenticatorRequestDialogModel {
   // Valid action when at step: kNotStarted.
   void StartFlow(
       TransportAvailabilityInfo transport_availability,
-      base::Optional<device::FidoTransportProtocol> last_used_transport);
+      base::Optional<device::FidoTransportProtocol> last_used_transport,
+      bool is_conditional);
 
   // Restarts the UX flow.
   void StartOver();
@@ -249,6 +258,12 @@ class AuthenticatorRequestDialogModel {
   //
   // Valid action when at all steps.
   void HideDialogAndDispatchToPlatformAuthenticator();
+
+  // Show guidance about caBLE USB fallback.
+  void ShowCableUsbFallback();
+
+  // Show caBLE activation sheet.
+  void ShowCable();
 
   // Cancels the flow as a result of the user clicking `Cancel` on the UI.
   //
@@ -367,6 +382,10 @@ class AuthenticatorRequestDialogModel {
 
   const std::string& cable_qr_string() const { return *cable_qr_string_; }
 
+  // cable_should_suggest_usb returns true if the caBLE "v1" UI was triggered by
+  // a caBLEv2 server-linked request and attaching a USB cable is an option.
+  bool cable_should_suggest_usb() const;
+
   void CollectPIN(device::pin::PINEntryReason reason,
                   device::pin::PINEntryError error,
                   uint32_t min_pin_length,
@@ -384,18 +403,15 @@ class AuthenticatorRequestDialogModel {
 
   base::Optional<int> uv_attempts() const { return uv_attempts_; }
 
-  void RequestAttestationPermission(base::OnceCallback<void(bool)> callback);
+  void RequestAttestationPermission(bool is_enterprise_attestation,
+                                    base::OnceCallback<void(bool)> callback);
 
   const std::vector<device::AuthenticatorGetAssertionResponse>& responses() {
     return ephemeral_state_.responses_;
   }
 
-  bool might_create_resident_credential() const {
-    return might_create_resident_credential_;
-  }
-
-  void set_might_create_resident_credential(bool v) {
-    might_create_resident_credential_ = v;
+  device::ResidentKeyRequirement resident_key_requirement() const {
+    return transport_availability_.resident_key_requirement;
   }
 
   void set_cable_transport_info(
@@ -474,12 +490,6 @@ class AuthenticatorRequestDialogModel {
   base::Optional<int> uv_attempts_;
 
   base::OnceCallback<void(bool)> attestation_callback_;
-
-  // might_create_resident_credential_ records whether activating an
-  // authenticator may cause a resident credential to be created. A resident
-  // credential may be discovered by someone with physical access to the
-  // authenticator and thus has privacy implications.
-  bool might_create_resident_credential_ = false;
 
   base::OnceCallback<void(device::AuthenticatorGetAssertionResponse)>
       selection_callback_;

@@ -62,6 +62,7 @@
     "contexts": [ "blessed_extension" ]
   },
   "editcommand": {
+    "vivaldi": true,
     "dependencies": [ "permission:editcommand" ],
     "contexts": [ "blessed_extension" ]
   },

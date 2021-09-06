@@ -83,6 +83,8 @@ class MenubarMenuShowFunction : public ExtensionFunction,
     public ::vivaldi::MenubarMenuParams::Delegate,
     public ::vivaldi::BookmarkMenuContainer::Delegate {
  public:
+  using Element = extensions::vivaldi::menubar_menu::Element;
+  using Item = extensions::vivaldi::menubar_menu::Item;
   DECLARE_EXTENSION_FUNCTION(
         "menubarMenu.show", MENUBARMENU_SHOW)
   MenubarMenuShowFunction();
@@ -91,8 +93,7 @@ class MenubarMenuShowFunction : public ExtensionFunction,
   typedef std::map<int, bool> IdToBoolMap;
   typedef std::map<int, ui::Accelerator> IdToAcceleratorMap;
   typedef std::map<int, std::string> IdToUrlMap;
-  typedef std::map<int, const std::vector<vivaldi::menubar_menu::Element>*>
-      IdToElementVectorMap;
+  typedef std::map<int, const std::vector<Element>*> IdToElementVectorMap;
 
   ~MenubarMenuShowFunction() override;
 
@@ -103,7 +104,7 @@ class MenubarMenuShowFunction : public ExtensionFunction,
       vivaldi::menubar_menu::Show::Params* params,
       int menu_id,
       bool dark_text_color,
-      const std::vector<vivaldi::menubar_menu::Element>& list,
+      const std::vector<Element>& list,
       ui::SimpleMenuModel* menu_model);
   void SanitizeModel(ui::SimpleMenuModel* menu_model);
   std::string Open(int id);

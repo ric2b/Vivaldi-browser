@@ -3,10 +3,10 @@
 #include "update_notifier/update_notifier_manager.h"
 
 #include <Windows.h>
-#include <shellscalingapi.h>
 
 #include <AclAPI.h>
 #include <Psapi.h>
+#include <shellscalingapi.h>
 
 #include <algorithm>
 #include <string>
@@ -19,6 +19,7 @@
 #include "base/files/file_util.h"
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
+#include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
@@ -32,23 +33,24 @@
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
 #include "chrome/common/chrome_paths.h"
+#include "chrome/installer/util/util_constants.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_filter.h"
 #include "components/version_info/version_info_values.h"
-#include "ui/base/l10n/l10n_util_win.h"
-#include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
 
 #include "app/vivaldi_constants.h"
 #include "base/vivaldi_switches.h"
 #include "browser/init_sparkle.h"
 #include "update_notifier/thirdparty/winsparkle/src/config.h"
+#include "update_notifier/thirdparty/winsparkle/src/download.h"
+#include "update_notifier/thirdparty/winsparkle/src/settings.h"
 #include "update_notifier/thirdparty/winsparkle/src/threads.h"
 #include "update_notifier/thirdparty/winsparkle/src/ui.h"
 #include "update_notifier/thirdparty/winsparkle/src/updatechecker.h"
 #include "update_notifier/thirdparty/winsparkle/src/updatedownloader.h"
-#include "update_notifier/update_notifier_switches.h"
+#include "update_notifier/update_notifier_utils.h"
 #include "update_notifier/update_notifier_window.h"
 
 namespace vivaldi_update_notifier {
@@ -60,9 +62,6 @@ const wchar_t kVivaldiProductVersion[] = L"" VIVALDI_VERSION;
 
 const wchar_t kUpdateRegPath[] = L"Software\\Vivaldi\\AutoUpdate";
 
-constexpr base::TimeDelta kFirstAutomaticCheckDelay =
-    base::TimeDelta::FromSeconds(20);
-
 constexpr base::TimeDelta kPeriodicAutomaticCheckInterval =
     base::TimeDelta::FromDays(1);
 
@@ -72,103 +71,7 @@ constexpr base::TimeDelta kPeriodicAutomaticCheckInterval =
 constexpr base::TimeDelta kOldDownloadsCleanupDelay =
     base::TimeDelta::FromSeconds(30);
 
-UpdateNotifierManager* g_manager = nullptr;
-
 constexpr bool g_silent_download = true;
-
-void InitLog(const base::CommandLine& command_line) {
-  bool enabled = false;
-  std::wstring log_file;
-  if (command_line.HasSwitch(kEnableLogging)) {
-    enabled = true;
-    log_file = command_line.GetSwitchValueNative(kEnableLogging);
-  } else if (command_line.HasSwitch(switches::kVivaldiUpdateURL)) {
-    // For convenience activate logging with --vuu to the default file.
-    enabled = true;
-  }
-
-  if (!enabled)
-    return;
-
-  if (log_file.empty()) {
-    base::FilePath temp_dir;
-    if (base::GetTempDir(&temp_dir)) {
-      log_file = temp_dir.value();
-      log_file += L"\\vivaldi_installer.log";
-    }
-  }
-  base::RouteStdioToConsole(false);
-
-  logging::LoggingSettings settings;
-  settings.logging_dest = logging::LOG_NONE;
-  if (DCHECK_IS_ON()) {
-    settings.logging_dest |= logging::LOG_TO_SYSTEM_DEBUG_LOG;
-  }
-  settings.logging_dest |= logging::LOG_TO_STDERR;
-  if (!log_file.empty()) {
-    settings.logging_dest |= logging::LOG_TO_FILE;
-    settings.log_file_path = log_file.c_str();
-  }
-  logging::InitLogging(settings);
-}
-
-base::FilePath AddVersionToPathIfNeeded(const base::FilePath& path,
-                                        const base::FilePath& exe_dir) {
-  if (base::PathExists(path))
-    return path;
-
-  base::FilePath version_path = exe_dir.Append(kVivaldiProductVersion);
-  if (exe_dir.AppendRelativePath(path, &version_path)) {
-    return version_path;
-  } else {
-    return path;
-  }
-}
-
-class ResourceBundleDelegate : public ui::ResourceBundle::Delegate {
- public:
-  ResourceBundleDelegate(const base::FilePath& exe_dir) : exe_dir_(exe_dir) {}
-  ~ResourceBundleDelegate() override {}
-
-  base::FilePath GetPathForResourcePack(const base::FilePath& pack_path,
-                                        ui::ScaleFactor scale_factor) override {
-    return AddVersionToPathIfNeeded(pack_path, exe_dir_);
-  }
-
-  base::FilePath GetPathForLocalePack(const base::FilePath& pack_path,
-                                      const std::string& locale) override {
-    return AddVersionToPathIfNeeded(pack_path, exe_dir_);
-  }
-
-  gfx::Image GetImageNamed(int resource_id) override { return gfx::Image(); }
-  gfx::Image GetNativeImageNamed(int resource_id) override {
-    return gfx::Image();
-  }
-
-  base::RefCountedMemory* LoadDataResourceBytes(
-      int resource_id,
-      ui::ScaleFactor scale_factor) override {
-    return nullptr;
-  }
-
-  bool GetRawDataResource(int resource_id,
-                          ui::ScaleFactor scale_factor,
-                          base::StringPiece* value) const override {
-    return false;
-  }
-
-  bool GetLocalizedString(int message_id,
-                          base::string16* value) const override {
-    return false;
-  }
-
-  base::Optional<std::string> LoadDataResourceString(int resource_id) override {
-    return base::Optional<std::string>();
-  }
-
- private:
-  base::FilePath exe_dir_;
-};
 
 bool SafeGetTokenInformation(HANDLE token,
                              TOKEN_INFORMATION_CLASS token_information_class,
@@ -176,7 +79,7 @@ bool SafeGetTokenInformation(HANDLE token,
   DWORD size;
   information->clear();
 
-  if (GetTokenInformation(token, token_information_class, NULL, 0, &size) ==
+  if (GetTokenInformation(token, token_information_class, nullptr, 0, &size) ==
           FALSE &&
       GetLastError() != ERROR_INSUFFICIENT_BUFFER)
     return false;
@@ -211,13 +114,13 @@ bool MakeEventSecurityDescriptor(std::vector<uint8_t>* owner_buffer,
 
   uint8_t system_sid[SECURITY_MAX_SID_SIZE];
   DWORD sid_size = sizeof(system_sid);
-  CreateWellKnownSid(WinLocalSystemSid, NULL, system_sid, &sid_size);
+  CreateWellKnownSid(WinLocalSystemSid, nullptr, system_sid, &sid_size);
   uint8_t local_sid[SECURITY_MAX_SID_SIZE];
   sid_size = sizeof(local_sid);
-  CreateWellKnownSid(WinLocalSid, NULL, local_sid, &sid_size);
+  CreateWellKnownSid(WinLocalSid, nullptr, local_sid, &sid_size);
   uint8_t administrators_sid[SECURITY_MAX_SID_SIZE];
   sid_size = sizeof(administrators_sid);
-  CreateWellKnownSid(WinBuiltinAdministratorsSid, NULL, administrators_sid,
+  CreateWellKnownSid(WinBuiltinAdministratorsSid, nullptr, administrators_sid,
                      &sid_size);
 
   EXPLICIT_ACCESS explicit_access[3];
@@ -253,7 +156,7 @@ bool MakeEventSecurityDescriptor(std::vector<uint8_t>* owner_buffer,
       reinterpret_cast<wchar_t*>(administrators_sid);
 
   ACL* dacl_out;
-  SetEntriesInAcl(3, explicit_access, NULL, &dacl_out);
+  SetEntriesInAcl(3, explicit_access, nullptr, &dacl_out);
   dacl->reset(dacl_out);
 
   if (InitializeSecurityDescriptor(security_descriptor,
@@ -278,9 +181,7 @@ bool MakeEventSecurityDescriptor(std::vector<uint8_t>* owner_buffer,
   return true;
 }
 
-std::unique_ptr<base::WaitableEvent> MakeGlobalEvent(
-    base::StringPiece16 event_name_base,
-    const base::FilePath& exe_dir) {
+base::win::ScopedHandle MakeGlobalEvent(const std::wstring& event_name) {
   SECURITY_ATTRIBUTES security_attributes;
   security_attributes.bInheritHandle = FALSE;
   security_attributes.nLength = sizeof(security_attributes);
@@ -294,40 +195,28 @@ std::unique_ptr<base::WaitableEvent> MakeGlobalEvent(
   std::unique_ptr<ACL, ACLDeleter> dacl;
   SECURITY_DESCRIPTOR security_descriptor;
 
-  if (winsparkle::g_install_type == vivaldi::InstallType::kForAllUsers) {
-    // ----System-wide installation----
-    if (MakeEventSecurityDescriptor(&owner_buffer, &primary_group_buffer, &dacl,
-                                    &security_descriptor)) {
-      security_attributes.lpSecurityDescriptor = &security_descriptor;
-    } else {
-      // Fallback to using the default descriptor if we failed constructing one.
-      security_attributes.lpSecurityDescriptor = NULL;
-    }
+  if (MakeEventSecurityDescriptor(&owner_buffer, &primary_group_buffer, &dacl,
+                                  &security_descriptor)) {
+    security_attributes.lpSecurityDescriptor = &security_descriptor;
   } else {
-    // On non-system-wide installations, we only need the running user to
-    // be able to restart the notifier, so the default descriptor is fine
-    security_attributes.lpSecurityDescriptor = NULL;
+    // Fallback to using the default descriptor if we failed constructing one.
+    security_attributes.lpSecurityDescriptor = nullptr;
   }
-
-  base::string16 event_name =
-      vivaldi::GetUpdateNotifierEventName(event_name_base, &exe_dir);
 
   base::win::ScopedHandle event_handle;
   for (int i = 0; i < 3; i++) {
-    if (event_handle.IsValid())
-      break;
     event_handle.Set(
         CreateEvent(&security_attributes, TRUE, FALSE, event_name.c_str()));
     if (event_handle.IsValid())
       break;
     event_handle.Set(OpenEvent(SYNCHRONIZE, FALSE, event_name.c_str()));
+    if (event_handle.IsValid())
+      break;
   }
 
-  if (!event_handle.IsValid())
-    return nullptr;
-
-  DLOG(INFO) << "Listening for " << event_name;
-  return std::make_unique<base::WaitableEvent>(std::move(event_handle));
+  LOG_IF(ERROR, !event_handle.IsValid())
+      << "Failed to listen for " << event_name;
+  return event_handle;
 }
 
 bool PathProvider(int key, base::FilePath* result) {
@@ -382,20 +271,20 @@ void EnableHighDPISupport() {
 
 void InitWinsparkle(const base::CommandLine& command_line,
                     const base::FilePath& exe_dir,
+                    const std::string& language,
                     winsparkle::UIDelegate& ui_delegate) {
   init_sparkle::Config init_config = init_sparkle::GetConfig(command_line);
   winsparkle::Config config;
   config.appcast_url = init_config.appcast_url;
   config.registry_path = kUpdateRegPath;
-  config.locale = base::i18n::GetConfiguredLocale();
+  config.language = language;
   config.app_name = kVivaldiProductName;
   config.app_version = kVivaldiProductVersion;
   config.exe_dir = exe_dir;
 #if !defined(OFFICIAL_BUILD)
-  base::string16 debug_version =
-      command_line.GetSwitchValueNative(kDebugVersion);
+  std::wstring debug_version = command_line.GetSwitchValueNative(kDebugVersion);
   if (!debug_version.empty()) {
-    config.app_version = debug_version;
+    config.app_version = std::move(debug_version);
   }
 #endif
   winsparkle::InitConfig(std::move(config));
@@ -407,22 +296,22 @@ void InitWinsparkle(const base::CommandLine& command_line,
 class UpdateNotifierManager::UpdateCheckThread
     : public winsparkle::DetachedThread {
  public:
-  UpdateCheckThread(bool manual) : manual_(manual) {}
+  UpdateCheckThread(int download_flags) : download_flags_(download_flags) {}
 
   void Run() override {
     winsparkle::Error error;
     std::unique_ptr<winsparkle::Appcast> appcast =
-        winsparkle::CheckForUpdates(manual_, error);
+        winsparkle::CheckForUpdates(download_flags_, error);
     if (error) {
       LOG(ERROR) << error.log_message();
     }
-    g_manager->main_thread_runner_->PostTask(
+    GetInstance().main_thread_runner_->PostTask(
         FROM_HERE, base::BindOnce(&UpdateNotifierManager::OnUpdateCheckResult,
-                                  base::Unretained(g_manager),
+                                  base::Unretained(&GetInstance()),
                                   std::move(appcast), std::move(error)));
   }
 
-  bool manual_ = false;
+  bool download_flags_ = 0;
 };
 
 class UpdateNotifierManager::UpdateDownloadThread
@@ -441,10 +330,10 @@ class UpdateNotifierManager::UpdateDownloadThread
     if (error) {
       LOG(ERROR) << error.log_message();
     }
-    g_manager->main_thread_runner_->PostTask(
+    GetInstance().main_thread_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&UpdateNotifierManager::OnUpdateDownloadResult,
-                       base::Unretained(g_manager), job_id_,
+                       base::Unretained(&GetInstance()), job_id_,
                        std::move(launch_data), std::move(error)));
   }
 
@@ -453,7 +342,7 @@ class UpdateNotifierManager::UpdateDownloadThread
                   winsparkle::Error& error) override {
     if (error)
       return;
-    if (job_id_ != g_manager->download_job_id_.load()) {
+    if (job_id_ != GetInstance().download_job_id_.load()) {
       error.set(winsparkle::Error::kCancelled);
       return;
     }
@@ -469,10 +358,10 @@ class UpdateNotifierManager::UpdateDownloadThread
       // Force sending the next kMoreData report.
       last_more_data_time_ = 0;
     }
-    g_manager->main_thread_runner_->PostTask(
+    GetInstance().main_thread_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&UpdateNotifierManager::OnUpdateDownloadReport,
-                       base::Unretained(g_manager), job_id_,
+                       base::Unretained(&GetInstance()), job_id_,
                        std::move(report)));
   }
 
@@ -482,215 +371,170 @@ class UpdateNotifierManager::UpdateDownloadThread
   clock_t last_more_data_time_ = 0;
 };
 
-UpdateNotifierManager::UpdateNotifierManager() {
-  DCHECK(!g_manager);
-  g_manager = this;
-}
-
-void UpdateNotifierManager::InitEvents() {
-  global_quit_event_ = MakeGlobalEvent(kGlobalQuitEventName, exe_dir_);
-  if (global_quit_event_.get()) {
-    global_quit_event_watch_.StartWatching(
-        global_quit_event_.get(),
-        base::Bind(&UpdateNotifierManager::OnEventTriggered,
-                   base::Unretained(this)),
-        base::ThreadTaskRunnerHandle::Get());
-  }
-
-  base::win::ScopedHandle quit_event_handle;
-  std::wstring quit_event_name =
-      vivaldi::GetUpdateNotifierEventName(kQuitEventName, &exe_dir_);
-  quit_event_handle.Set(
-      CreateEvent(nullptr, TRUE, FALSE, quit_event_name.c_str()));
-  if (quit_event_handle.IsValid()) {
-    quit_event_.reset(new base::WaitableEvent(std::move(quit_event_handle)));
-
-    DLOG(INFO) << "Listening " << quit_event_name;
-    quit_event_watch_.StartWatching(
-        quit_event_.get(),
-        base::Bind(&UpdateNotifierManager::OnEventTriggered,
-                   base::Unretained(this)),
-        base::ThreadTaskRunnerHandle::Get());
-  }
-
-  base::win::ScopedHandle check_for_updates_event_handle;
-  std::wstring check_for_updates_event_name =
-      vivaldi::GetUpdateNotifierEventName(kCheckForUpdatesEventName, &exe_dir_);
-  check_for_updates_event_handle.Set(
-      CreateEvent(nullptr, TRUE, FALSE, check_for_updates_event_name.c_str()));
-  if (check_for_updates_event_handle.IsValid()) {
-    check_for_updates_event_.reset(
-        new base::WaitableEvent(std::move(check_for_updates_event_handle)));
-
-    DLOG(INFO) << "Listening " << check_for_updates_event_name;
-    check_for_updates_event_watch_.StartWatching(
-        check_for_updates_event_.get(),
-        base::Bind(&UpdateNotifierManager::OnEventTriggered,
-                   base::Unretained(this)),
-        base::ThreadTaskRunnerHandle::Get());
-  }
-}
+UpdateNotifierManager::UpdateNotifierManager() {}
 
 UpdateNotifierManager::~UpdateNotifierManager() {
   // We should not be destructed ever.
   NOTREACHED();
 }
 
-bool UpdateNotifierManager::SendCheckUpdatesEvent() {
-  base::string16 event_name =
-      vivaldi::GetUpdateNotifierEventName(kCheckForUpdatesEventName, &exe_dir_);
-  base::win::ScopedHandle event(
-      OpenEvent(EVENT_MODIFY_STATE, FALSE, event_name.c_str()));
-  if (!event.IsValid())
-    return false;
-
-  ::SetEvent(event.Get());
-  return true;
+// static
+UpdateNotifierManager& UpdateNotifierManager::GetInstance() {
+  static base::NoDestructor<UpdateNotifierManager> instance;
+  return *instance;
 }
 
-bool UpdateNotifierManager::RunNotifier() {
-  DCHECK(g_manager == this);
+void UpdateNotifierManager::InitEvents(bool& already_runs) {
+  DCHECK(!already_runs);
+  main_thread_runner_ = base::ThreadTaskRunnerHandle::Get();
+
+  // Create the check for updates event first as we use it both to ensure
+  // uniqueness and to ask the initial process to do the check from another
+  // instance upgrading if necessary an automatic gui-less check to manual form
+  // with GUI.
+  //
+  // We use a local event even for system installs as it should be OK for
+  // different users to run the notifiers at the same time, for example, to
+  // manually check for a new version. In the worst case different users will
+  // download the vivaldi update twice, but then the installer ensures that only
+  // its single instance can run globally.
+  std::wstring check_for_updates_event_name;
+  if (winsparkle::g_install_mode) {
+    // Only obe instance of the network installer per user.
+    check_for_updates_event_name = kNetworkInstallerUniquenessEventName;
+  } else {
+    check_for_updates_event_name = vivaldi::GetUpdateNotifierEventName(
+        kCheckForUpdatesEventPrefix, &exe_dir_);
+  }
+  base::win::ScopedHandle check_for_updates_event_handle(
+      CreateEvent(nullptr, TRUE, FALSE, check_for_updates_event_name.c_str()));
+  DWORD create_event_error = ::GetLastError();
+  PCHECK(check_for_updates_event_handle.IsValid());
+  check_for_updates_event_.emplace(std::move(check_for_updates_event_handle));
+  if (create_event_error == ERROR_ALREADY_EXISTS) {
+    // The proces instance that checks for updates already runs.
+    already_runs = true;
+    return;
+  }
+  check_for_updates_event_watch_.StartWatching(
+      &check_for_updates_event_.value(),
+      base::BindOnce(&UpdateNotifierManager::OnCheckForUpdatesEvent,
+                     base::Unretained(this)),
+      main_thread_runner_);
+  DLOG(INFO) << "Listening " << check_for_updates_event_name;
+
+  if (!winsparkle::g_install_mode) {
+    // Update listen for quit events from the installer.
+    std::wstring quit_event_name =
+        vivaldi::GetUpdateNotifierEventName(kQuitEventPrefix, &exe_dir_);
+    base::win::ScopedHandle quit_event_handle(
+        CreateEvent(nullptr, TRUE, FALSE, quit_event_name.c_str()));
+    PCHECK(quit_event_handle.IsValid());
+    quit_event_.emplace(std::move(quit_event_handle));
+    quit_event_watch_.StartWatching(
+        &quit_event_.value(),
+        base::BindOnce(&UpdateNotifierManager::OnQuitEvent,
+                       base::Unretained(this)),
+        main_thread_runner_);
+    DLOG(INFO) << "Listening " << quit_event_name;
+
+    if (winsparkle::g_install_type == vivaldi::InstallType::kForAllUsers) {
+      // For system-wide installations listen to the global event to exit the
+      // notifier for any user during update or uninstall.
+      std::wstring global_quit_event_name = vivaldi::GetUpdateNotifierEventName(
+          kGlobalQuitEventPrefix, &exe_dir_);
+      base::win::ScopedHandle global_quit_handle =
+          MakeGlobalEvent(global_quit_event_name);
+      if (global_quit_handle.IsValid()) {
+        global_quit_event_.emplace(std::move(global_quit_handle));
+        global_quit_event_watch_.StartWatching(
+            &global_quit_event_.value(),
+            base::BindOnce(&UpdateNotifierManager::OnQuitEvent,
+                           base::Unretained(this)),
+            main_thread_runner_);
+        DLOG(INFO) << "Listening " << global_quit_event_name;
+      }
+    }
+  }
+}
+
+ExitCode UpdateNotifierManager::RunNotifier(base::FilePath exe_dir) {
+  if (winsparkle::g_install_mode) {
+    DCHECK(exe_dir.empty());
+  } else {
+    DCHECK(!exe_dir.empty());
+    exe_dir_ = std::move(exe_dir);
+  }
 
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
-  InitLog(command_line);
 
-  // Make the first log entry for the new process visibly separated.
-  LOG(INFO) << "\n\n"
-            << "*** " << kVivaldiProductVersion << " ***";
-  LOG(INFO) << command_line.GetCommandLineString();
-
-  exe_dir_ = vivaldi::GetDirectoryOfCurrentExe();
-#if !defined(OFFICIAL_BUILD)
-  base::string16 debug_exe_dir =
-      command_line.GetSwitchValueNative(kDebugExeDir);
-  if (!debug_exe_dir.empty()) {
-    exe_dir_ =
-        vivaldi::NormalizeInstallExeDirectory(base::FilePath(debug_exe_dir));
-  }
-#endif
-
-  // Make sure to use a working directory not pointing to the version-specific
-  // sub-directory of the installation. This way if the installer cannot kill
-  // the notifier for some reason during the update, at least it will still be
-  // possible to delete the old version-specific directory.
-  base::SetCurrentDirectory(exe_dir_);
-
-  base::Optional<vivaldi::InstallType> existing_install_type =
-      vivaldi::FindInstallType(exe_dir_.DirName());
-  if (existing_install_type) {
-    winsparkle::g_install_type = *existing_install_type;
-  }
-  if (command_line.HasSwitch(switches::kVivaldiSilentUpdate)) {
-    if (winsparkle::g_install_type != vivaldi::InstallType::kForCurrentUser) {
-      LOG(INFO)
-          << "Ignoring --" << switches::kVivaldiSilentUpdate
-          << " as it is not supported for stanalone or system installations";
-    } else {
-      winsparkle::g_silent_update = true;
-    }
-  }
-
-  bool check_for_updates_with_ui = command_line.HasSwitch(kCheckForUpdates);
-
-  if (IsNotifierAlreadyRunning()) {
+  bool already_runs = false;
+  InitEvents(already_runs);
+  if (already_runs) {
     LOG(INFO) << "Notifier already runs, will quit";
-    // NOTE(jarle@vivaldi.com): These events will be sent to another running
-    // instance of the update notifier, then our process will exit.
-    //
-    // TODO(igor@vivaldi.com): Properly deal with multiple users logged at the
-    // same time and system-wide installs. As we use a global event to ensure
-    // unique instance of the process, if one user has it enabled, another
-    // cannot run the notifier even for manual checks for updates.
-    if (check_for_updates_with_ui) {
-      if (!SendCheckUpdatesEvent()) {
-        // It can be that the the original notifier initialized the event to
-        // check for uniqueness, but has not yet created the event for update
-        // check. Try again after a pause before giving up.
-        ::Sleep(1000);
-        if (!SendCheckUpdatesEvent()) {
-          LOG(ERROR) << "Failed to send check for updates event";
-        }
+    DCHECK(!winsparkle::g_install_mode || winsparkle::g_manual_check);
+    if (winsparkle::g_manual_check) {
+      // NOTE(jarle@vivaldi.com): These events will be sent to another running
+      // instance of the update notifier, then our process will exit.
+      if (!::SetEvent(check_for_updates_event_->handle())) {
+        PLOG(ERROR) << "Failed SetEvent()";
+        return ExitCode::kError;
       }
     }
-    return true;
+    return ExitCode::kAlreadyRuns;
   }
 
-  InitEvents();
   EnableHighDPISupport();
-
-  main_thread_runner_ = base::ThreadTaskRunnerHandle::Get();
 
   base::PathService::RegisterProvider(PathProvider, ui::PATH_START,
                                       ui::PATH_END);
   chrome::RegisterPathProvider();
 
-  l10n_util::OverrideLocaleWithUILanguageList();
-
-  base::FilePath local_state_path;
-  CHECK(base::PathService::Get(chrome::FILE_LOCAL_STATE, &local_state_path));
-  scoped_refptr<JsonPrefStore> local_state =
-      new JsonPrefStore(local_state_path, nullptr, main_thread_runner_);
-  local_state->ReadPrefs();
-
-  const base::Value* locale_value = nullptr;
-  std::string locale;
-  if (local_state->GetValue(language::prefs::kApplicationLocale, &locale_value))
-    locale_value->GetAsString(&locale);
-
-  ResourceBundleDelegate resource_bundle_delegate(
-      vivaldi::GetDirectoryOfCurrentExe());
-
-  const std::string loaded_locale =
-      ui::ResourceBundle::InitSharedInstanceWithLocale(
-          locale, &resource_bundle_delegate,
-          ui::ResourceBundle::LOAD_COMMON_RESOURCES);
-  if (loaded_locale.empty())
-    return false;
-
-  InitWinsparkle(command_line, exe_dir_, *this);
-  main_thread_runner_->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(&UpdateNotifierManager::EnsureOldDownloadsDeleted,
-                     base::Unretained(this)),
-      kOldDownloadsCleanupDelay);
-
-  update_notifier_window_.reset(new UpdateNotifierWindow());
-  if (!update_notifier_window_->Init())
-    return false;
-
-  bool force_startup_automated_check = false;
-  if (check_for_updates_with_ui) {
-    StartUpdateCheck(check_for_updates_with_ui);
-  } else {
-    // We are started to periodically check for updates in the background with
-    // the default appcast URL. This happens either after the installer starts
-    // us at the of the installation, or when the user selected the automated
-    // check in the options, or Windows's autostart launched the notifier upon
-    // the user login. We want in such cases to run the background check shortly
-    // even if it was already run very recently.
-    force_startup_automated_check = true;
-  }
-
-  // Schedule periodic background update checks.
-  base::TimeDelta first_check_delay = kFirstAutomaticCheckDelay;
-#if !defined(OFFICIAL_BUILD)
-  base::string16 debug_first_check_delay =
-      command_line.GetSwitchValueNative(kDebugFirstDelay);
-  if (!debug_first_check_delay.empty()) {
-    double seconds = 0.0;
-    if (base::StringToDouble(debug_first_check_delay, &seconds) &&
-        seconds >= 0.0) {
-      first_check_delay = base::TimeDelta::FromSeconds(seconds);
+  std::string language;
+  if (!winsparkle::g_install_mode) {
+    base::FilePath local_state_path;
+    CHECK(base::PathService::Get(chrome::FILE_LOCAL_STATE, &local_state_path));
+    scoped_refptr<JsonPrefStore> local_state =
+        new JsonPrefStore(local_state_path, nullptr, main_thread_runner_);
+    local_state->ReadPrefs();
+    const base::Value* language_value = nullptr;
+    if (local_state->GetValue(language::prefs::kApplicationLocale,
+                              &language_value)) {
+      language_value->GetAsString(&language);
     }
   }
+#if !defined(OFFICIAL_BUILD)
+  if (command_line.HasSwitch(kDebugLanguage)) {
+    language = command_line.GetSwitchValueASCII(kDebugLanguage);
+  }
 #endif
-  LOG(INFO) << "Scheduling periodic update in " << kFirstAutomaticCheckDelay;
-  main_thread_runner_->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(&UpdateNotifierManager::CheckForUpdatesPeriodically,
-                     base::Unretained(this), force_startup_automated_check),
-      first_check_delay);
+  language = InitTranslations(std::move(language));
+  LOG(INFO) << "Language to use: " << language;
+
+  InitWinsparkle(command_line, exe_dir_, language, *this);
+
+  if (kUseTaskScheduler) {
+    // When we run the first time after been enabled from the installer, this
+    // may fail as the installer may still be running preventing to remove its
+    // setup.exe file. But then we will remove the leftovers the next time we
+    // run in 24 hours. This is not an issue on subsequent updates when the
+    // notifier was already enabled as then the notifier will check for updates
+    // either 24 hours or on the browser startup. In both cases the installer
+    // will exit at that point.
+    //
+    // TODO(igor@vivaldi.com): Consider waiting for the installer process to
+    // finish and delete the leftovers then.
+    winsparkle::CleanDownloadLeftovers();
+  } else {
+    main_thread_runner_->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&UpdateNotifierManager::EnsureOldDownloadsDeleted,
+                       base::Unretained(this)),
+        kOldDownloadsCleanupDelay);
+  }
+
+  StartUpdateCheck();
 
   run_loop_.Run();
 
@@ -700,20 +544,7 @@ bool UpdateNotifierManager::RunNotifier() {
   // run destructors on exit.
   launch_data_.reset();
 
-  return true;
-}
-
-bool UpdateNotifierManager::IsNotifierAlreadyRunning() {
-  DCHECK(!uniqueness_check_event_.IsValid());
-
-  base::string16 event_name = vivaldi::GetUpdateNotifierEventName(
-      kGlobalUniquenessCheckEventName, &exe_dir_);
-  uniqueness_check_event_.Set(
-      ::CreateEvent(NULL, TRUE, FALSE, event_name.c_str()));
-  int error = ::GetLastError();
-  bool already_running =
-      (error == ERROR_ALREADY_EXISTS || error == ERROR_ACCESS_DENIED);
-  return already_running;
+  return ExitCode::kOk;
 }
 
 void UpdateNotifierManager::WinsparkleStartDownload() {
@@ -734,35 +565,17 @@ void UpdateNotifierManager::WinsparkleOnUIClose() {
                                 base::Unretained(this)));
 }
 
-void UpdateNotifierManager::CheckForUpdatesPeriodically(bool force_check) {
-  const base::Time last_check_time =
-      base::Time::FromTimeT(winsparkle::GetLastUpdateCheckTime());
-  const base::Time current_time = base::Time::Now();
-
-  // Only check for updates in reasonable intervals.
-  if (force_check ||
-      current_time - last_check_time >= kPeriodicAutomaticCheckInterval) {
-    StartUpdateCheck(/*with_ui=*/false);
-  }
-
-  LOG(INFO) << "Scheduling periodic update in "
-            << kPeriodicAutomaticCheckInterval;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(&UpdateNotifierManager::CheckForUpdatesPeriodically,
-                     base::Unretained(this), false),
-      kPeriodicAutomaticCheckInterval);
-}
-
-void UpdateNotifierManager::StartUpdateCheck(bool with_ui) {
+void UpdateNotifierManager::StartUpdateCheck() {
   DCHECK(main_thread_runner_->RunsTasksInCurrentSequence());
 
-  LOG(INFO) << "Starting a new update check, with_ui=" << with_ui;
+  check_start_time_ = base::Time::Now();
+  LOG(INFO) << "Starting a new update check, manual_check="
+            << winsparkle::g_manual_check;
   if (active_winsparkle_ui_) {
     winsparkle::UI::BringToFocus();
     return;
   }
-  if (with_ui) {
+  if (winsparkle::g_manual_check) {
     // If active_version_check_ is true, we upgrade the automated check to a
     // manual form.
     active_winsparkle_ui_ = true;
@@ -787,14 +600,46 @@ void UpdateNotifierManager::StartUpdateCheck(bool with_ui) {
     return;
 
   active_version_check_ = true;
+
+  int download_flags = 0;
+  if (winsparkle::g_manual_check) {
+    // Manual check should always connect to the server and bypass any
+    // caching. This is good for finding updates that are too new to propagate
+    // through caches yet.
+    download_flags = winsparkle::Download_NoCached;
+  }
   winsparkle::DetachedThread::Start(
-      std::make_unique<UpdateCheckThread>(with_ui));
+      std::make_unique<UpdateCheckThread>(download_flags));
 }
 
 void UpdateNotifierManager::OnUpdateCheckResult(
     std::unique_ptr<winsparkle::Appcast> appcast,
     winsparkle::Error error) {
   DCHECK(main_thread_runner_->RunsTasksInCurrentSequence());
+
+  // If the user has previously chosen "Skip version", the following automated
+  // update check should skip it. But a new manual check should still show
+  // this version to allow the user to reconsider. This is the semantics in
+  // Sparkle for Mac.
+  if (appcast && !winsparkle::g_manual_check) {
+    std::string toSkip = winsparkle::Settings::ReadConfigValue(
+        winsparkle::ConfigKey::kSkipThisVersion);
+    if (toSkip == appcast->Version) {
+      appcast.reset();
+    }
+  }
+
+  if (appcast && !winsparkle::g_install_mode) {
+    const std::string current_version =
+        base::WideToUTF8(winsparkle::GetConfig().app_version);
+
+    // Check if our version is out of date.
+    if (winsparkle::CompareVersions(current_version, appcast->Version) >= 0) {
+      // The same or newer version is already installed.
+      appcast.reset();
+    }
+  }
+
   if (!active_version_check_) {
     // This is possible if the user closed UI while the check was in progress.
     return;
@@ -812,19 +657,23 @@ void UpdateNotifierManager::OnUpdateCheckResult(
   }
   if (active_winsparkle_ui_) {
     winsparkle::UI::NotifyUpdateCheckDone(appcast_.get(), error);
+    if (appcast_ && winsparkle::g_install_mode) {
+      // For the network installer start the download immediately.
+      StartDownload();
+    }
   } else if (!appcast_) {
     FinishCheck();
   } else if (!g_silent_download && !winsparkle::g_silent_update) {
-    update_notifier_window_->ShowNotification(appcast_->Version);
+    ShowUpdateNotification(appcast_->Version);
   } else if (launch_data_ && launch_data_->version == appcast_->Version) {
     // We can be here if we downloaded data, presented the install
     // notification to the user but it was ignored and we run the next
     // periodic check. Re-use already downloaded data and ask the user to
     // confirm the installation again.
     if (winsparkle::g_silent_update) {
-      g_manager->LaunchInstaller();
+      GetInstance().LaunchInstaller();
     } else {
-      update_notifier_window_->ShowNotification(launch_data_->version);
+      ShowUpdateNotification(launch_data_->version);
     }
   } else {
     StartDownload();
@@ -838,7 +687,7 @@ bool UpdateNotifierManager::IsSilentDownload() {
 
 /* static */
 void UpdateNotifierManager::OnNotificationAcceptance() {
-  if (g_manager->active_winsparkle_ui_) {
+  if (GetInstance().active_winsparkle_ui_) {
     // This can happen when the automated check detected an update and
     // notified the user. The user ignored that and rather triggered a manual
     // check. Then, when the manual UI runs, the user went back to the
@@ -849,24 +698,26 @@ void UpdateNotifierManager::OnNotificationAcceptance() {
   }
 
   if (!winsparkle::g_silent_update) {
-    if (!g_manager->appcast_)
+    if (!GetInstance().appcast_)
       return;
 
     // Activate the UI and jump into the show update info section.
-    g_manager->active_winsparkle_ui_ = true;
-    winsparkle::UI::NotifyUpdateCheckDone(g_manager->appcast_.get(),
+    GetInstance().active_winsparkle_ui_ = true;
+    winsparkle::UI::NotifyUpdateCheckDone(GetInstance().appcast_.get(),
                                           winsparkle::Error());
     return;
   }
-  g_manager->LaunchInstaller();
+  GetInstance().LaunchInstaller();
 }
 
 void UpdateNotifierManager::StartDownload() {
   DCHECK(main_thread_runner_->RunsTasksInCurrentSequence());
 
-  // Make sure that at this point no downloads from the previous invocation of
-  // the notifier process exists.
-  EnsureOldDownloadsDeleted();
+  if (!kUseTaskScheduler) {
+    // Make sure that at this point no downloads from the previous invocation of
+    // the notifier process exists.
+    EnsureOldDownloadsDeleted();
+  }
   if (!appcast_)
     return;
   if (active_download_)
@@ -933,13 +784,18 @@ void UpdateNotifierManager::OnUpdateDownloadResult(
     error = winsparkle::Error();
   }
   if (active_winsparkle_ui_) {
-    winsparkle::UI::NotifyDownloadResult(error);
+    if (!winsparkle::g_install_mode || error) {
+      winsparkle::UI::NotifyDownloadResult(error);
+    } else {
+      // The network installer launches the installer immediately.
+      LaunchInstaller();
+    }
   } else if ((g_silent_download || winsparkle::g_silent_update) &&
              launch_data_) {
     if (winsparkle::g_silent_update) {
       LaunchInstaller();
     } else {
-      update_notifier_window_->ShowNotification(launch_data_->version);
+      ShowUpdateNotification(launch_data_->version);
     }
   } else {
     FinishCheck();
@@ -952,8 +808,10 @@ void UpdateNotifierManager::LaunchInstaller() {
     return;
 
   winsparkle::Error error;
-  winsparkle::RunInstaller(std::move(launch_data_), error);
+  base::Process process =
+      winsparkle::RunInstaller(std::move(launch_data_), error);
   if (active_winsparkle_ui_) {
+    // Close Winsparkle UI.
     winsparkle::UI::NotifyStartedInstaller(error);
   } else if (g_silent_download && !winsparkle::g_silent_update && error) {
     // Notify the user about the launch error.
@@ -961,6 +819,21 @@ void UpdateNotifierManager::LaunchInstaller() {
     winsparkle::UI::NotifyStartedInstaller(error);
   } else {
     FinishCheck();
+  }
+
+  // For the update case we cleanup the download when the installer starts the
+  // update notifier from the same exe path again. But for the network installer
+  // there will be no new invocation from the same exe path. So wait for the
+  // process to finish and remove the main installer then.
+  if (winsparkle::g_install_mode && !error) {
+    int exit_code = 0;
+    bool success = process.WaitForExit(&exit_code);
+    if (!success) {
+      LOG(ERROR) << "Failed to wait for the installer to finish";
+    } else if (exit_code != 0) {
+      LOG(ERROR) << "Installer exit with non-zero exit_code " << exit_code;
+    }
+    winsparkle::CleanDownloadLeftovers();
   }
 }
 
@@ -976,39 +849,71 @@ void UpdateNotifierManager::FinishCheck() {
     ++download_job_id_;
     active_download_ = false;
   }
+  base::TimeDelta check_duration = base::Time::Now() - check_start_time_;
+  LOG(INFO) << "Update check finished in " << check_duration;
 
-  bool keep_running = vivaldi::IsUpdateNotifierEnabled(&exe_dir_);
+  if (!kUseTaskScheduler && !winsparkle::g_install_mode &&
+      winsparkle::g_install_type != vivaldi::InstallType::kStandalone) {
+    bool keep_running = vivaldi::IsUpdateNotifierEnabled(&exe_dir_);
 #if !defined(OFFICIAL_BUILD)
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(kDebugKeepRunning)) {
-    keep_running = true;
-  }
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(kDebugKeepRunning)) {
+      keep_running = true;
+    }
 #endif
-  if (!keep_running) {
-    LOG(INFO) << "Exit after a manual check";
-    run_loop_.Quit();
+    if (keep_running) {
+      base::TimeDelta next_check_delay;
+      if (kPeriodicAutomaticCheckInterval > check_duration) {
+        next_check_delay = kPeriodicAutomaticCheckInterval - check_duration;
+      }
+      LOG(INFO) << "Scheduling the next check in " << next_check_delay;
+
+      // Switch to automatic update check.
+      winsparkle::g_manual_check = false;
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+          FROM_HERE,
+          base::BindOnce(&UpdateNotifierManager::StartUpdateCheck,
+                         base::Unretained(this)),
+          next_check_delay);
+      return;
+    }
   }
+
+  run_loop_.Quit();
 }
 
-void UpdateNotifierManager::OnEventTriggered(
+void UpdateNotifierManager::OnQuitEvent(base::WaitableEvent* waitable_event) {
+  DCHECK(quit_event_);
+  DCHECK(waitable_event == &quit_event_.value() ||
+         (global_quit_event_ && waitable_event == &global_quit_event_.value()));
+
+  // Do not reset the event. We want to keep this event on until all event
+  // instances are destroyed either implicitly due to the process exit or
+  // explicitly when the process that triggered it closes the event handle.
+  LOG(INFO) << "Exit due to a quit event";
+  run_loop_.Quit();
+}
+
+void UpdateNotifierManager::OnCheckForUpdatesEvent(
     base::WaitableEvent* waitable_event) {
-  if (waitable_event == quit_event_.get() ||
-      waitable_event == global_quit_event_.get()) {
-    // Do not reset the event. We want to keep this event on until all event
-    // instances are destroyed either implicitly due to the process exit or
-    // explicitly when the process that triggered it closes the event handle.
-    LOG(INFO) << "Exit due to a quit event";
-    run_loop_.Quit();
-  } else if (waitable_event == check_for_updates_event_.get()) {
-    check_for_updates_event_->Reset();
-    check_for_updates_event_watch_.StartWatching(
-        check_for_updates_event_.get(),
-        base::Bind(&UpdateNotifierManager::OnEventTriggered,
-                   base::Unretained(this)),
-        base::ThreadTaskRunnerHandle::Get());
-    StartUpdateCheck(true);
-  } else {
-    NOTREACHED();
+  DCHECK_EQ(waitable_event, &check_for_updates_event_.value());
+  check_for_updates_event_->Reset();
+  check_for_updates_event_watch_.StartWatching(
+      &check_for_updates_event_.value(),
+      base::BindOnce(&UpdateNotifierManager::OnCheckForUpdatesEvent,
+                     base::Unretained(this)),
+      main_thread_runner_);
+
+  // Make sure if we run an automatic update check it will be switched to the
+  // manual mode.
+  winsparkle::g_manual_check = true;
+  StartUpdateCheck();
+}
+
+void UpdateNotifierManager::ShowUpdateNotification(const std::string& version) {
+  if (!update_notifier_window_) {
+    update_notifier_window_ = std::make_unique<UpdateNotifierWindow>();
   }
+  update_notifier_window_->ShowNotification(base::UTF8ToWide(version));
 }
 
 }  // namespace vivaldi_update_notifier

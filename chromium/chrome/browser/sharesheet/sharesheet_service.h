@@ -12,6 +12,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/sharesheet/sharesheet_action_cache.h"
+#include "chrome/browser/sharesheet/sharesheet_metrics.h"
 #include "chrome/browser/sharesheet/sharesheet_types.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
@@ -56,11 +57,13 @@ class SharesheetService : public KeyedService {
   // Drive hosted document, only drive share action will be shown.
   void ShowBubble(content::WebContents* web_contents,
                   apps::mojom::IntentPtr intent,
-                  sharesheet::CloseCallback close_callback);
+                  SharesheetMetrics::LaunchSource source,
+                  CloseCallback close_callback);
   void ShowBubble(content::WebContents* web_contents,
                   apps::mojom::IntentPtr intent,
                   bool contains_hosted_document,
-                  sharesheet::CloseCallback close_callback);
+                  SharesheetMetrics::LaunchSource source,
+                  CloseCallback close_callback);
   void OnBubbleClosed(gfx::NativeWindow native_window,
                       const base::string16& active_action);
   void OnTargetSelected(gfx::NativeWindow native_window,
@@ -79,6 +82,8 @@ class SharesheetService : public KeyedService {
   Profile* GetProfile();
   const gfx::VectorIcon* GetVectorIcon(const base::string16& display_name);
 
+  static void SetSelectedAppForTesting(const base::string16& target_name);
+
  private:
   using SharesheetServiceIconLoaderCallback =
       base::OnceCallback<void(std::vector<TargetInfo> targets)>;
@@ -88,6 +93,9 @@ class SharesheetService : public KeyedService {
                     size_t index,
                     SharesheetServiceIconLoaderCallback callback);
 
+  void LaunchApp(const base::string16& target_name,
+                 apps::mojom::IntentPtr intent);
+
   void OnIconLoaded(std::vector<apps::IntentLaunchInfo> intent_launch_info,
                     std::vector<TargetInfo> targets,
                     size_t index,
@@ -96,15 +104,17 @@ class SharesheetService : public KeyedService {
 
   void OnAppIconsLoaded(SharesheetServiceDelegate* delegate,
                         apps::mojom::IntentPtr intent,
-                        sharesheet::CloseCallback close_callback,
+                        CloseCallback close_callback,
                         std::vector<TargetInfo> targets);
 
   void ShowBubbleWithDelegate(SharesheetServiceDelegate* delegate,
                               apps::mojom::IntentPtr intent,
                               bool contains_hosted_document,
-                              sharesheet::CloseCallback close_callback);
+                              CloseCallback close_callback);
 
-  void RecordActionMetrics(const base::string16& target_name);
+  void RecordUserActionMetrics(const base::string16& target_name);
+  void RecordTargetCountMetrics(const std::vector<TargetInfo>& targets);
+  void RecordShareActionMetrics(const base::string16& target_name);
 
   Profile* profile_;
   std::unique_ptr<SharesheetActionCache> sharesheet_action_cache_;

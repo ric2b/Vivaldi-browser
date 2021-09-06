@@ -23,6 +23,7 @@
 #include "extensions/renderer/native_renderer_messaging_service.h"
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/script_context_set.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/web/web_console_message.h"
 #include "third_party/blink/public/web/web_document.h"
@@ -118,9 +119,10 @@ ExtensionFrameHelper::ExtensionFrameHelper(content::RenderFrame* render_frame,
     // Manages its own lifetime.
     new AutomationApiHelper(render_frame);
   }
-  // The RenderFrame comes with the initial empty document already created, and
-  // we want to act on it in the same way as a new document.
-  DidCreateDocumentElement();
+
+  render_frame->GetAssociatedInterfaceRegistry()->AddInterface(
+      base::BindRepeating(&ExtensionFrameHelper::BindLocalFrame,
+                          weak_ptr_factory_.GetWeakPtr()));
 }
 
 ExtensionFrameHelper::~ExtensionFrameHelper() {
@@ -244,6 +246,11 @@ bool ExtensionFrameHelper::IsContextForEventPage(const ScriptContext* context) {
          BackgroundInfo::HasLazyBackgroundPage(context->extension()) &&
          ExtensionFrameHelper::Get(render_frame)->view_type() ==
               VIEW_TYPE_EXTENSION_BACKGROUND_PAGE;
+}
+
+void ExtensionFrameHelper::BindLocalFrame(
+    mojo::PendingAssociatedReceiver<mojom::LocalFrame> pending_receiver) {
+  local_frame_receivers_.Add(this, std::move(pending_receiver));
 }
 
 void ExtensionFrameHelper::DidCreateDocumentElement() {
@@ -376,17 +383,12 @@ bool ExtensionFrameHelper::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(ExtensionMsg_DeliverMessage, OnExtensionDeliverMessage)
     IPC_MESSAGE_HANDLER(ExtensionMsg_DispatchOnDisconnect,
                         OnExtensionDispatchOnDisconnect)
-    IPC_MESSAGE_HANDLER(ExtensionMsg_SetTabId, OnExtensionSetTabId)
     IPC_MESSAGE_HANDLER(ExtensionMsg_UpdateBrowserWindowId,
                         OnUpdateBrowserWindowId)
     IPC_MESSAGE_HANDLER(ExtensionMsg_NotifyRenderViewType,
                         OnNotifyRendererViewType)
     IPC_MESSAGE_HANDLER(ExtensionMsg_Response, OnExtensionResponse)
     IPC_MESSAGE_HANDLER(ExtensionMsg_MessageInvoke, OnExtensionMessageInvoke)
-    IPC_MESSAGE_HANDLER(ExtensionMsg_SetFrameName, OnSetFrameName)
-    IPC_MESSAGE_HANDLER(ExtensionMsg_AppWindowClosed, OnAppWindowClosed)
-    IPC_MESSAGE_HANDLER(ExtensionMsg_SetSpatialNavigationEnabled,
-                        OnSetSpatialNavigationEnabled)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -437,7 +439,7 @@ void ExtensionFrameHelper::OnExtensionDispatchOnDisconnect(
           error_message, render_frame());
 }
 
-void ExtensionFrameHelper::OnExtensionSetTabId(int tab_id) {
+void ExtensionFrameHelper::SetTabId(int32_t tab_id) {
   CHECK_EQ(tab_id_, -1);
   CHECK_GE(tab_id, 0);
   tab_id_ = tab_id;
@@ -472,11 +474,11 @@ void ExtensionFrameHelper::OnExtensionMessageInvoke(
       render_frame(), extension_id, module_name, function_name, args);
 }
 
-void ExtensionFrameHelper::OnSetFrameName(const std::string& name) {
+void ExtensionFrameHelper::SetFrameName(const std::string& name) {
   render_frame()->GetWebFrame()->SetName(blink::WebString::FromUTF8(name));
 }
 
-void ExtensionFrameHelper::OnAppWindowClosed(bool send_onclosed) {
+void ExtensionFrameHelper::AppWindowClosed(bool send_onclosed) {
   DCHECK(render_frame()->IsMainFrame());
 
   if (!send_onclosed)
@@ -493,7 +495,7 @@ void ExtensionFrameHelper::OnAppWindowClosed(bool send_onclosed) {
                                                         "onAppWindowClosed");
 }
 
-void ExtensionFrameHelper::OnSetSpatialNavigationEnabled(bool enabled) {
+void ExtensionFrameHelper::SetSpatialNavigationEnabled(bool enabled) {
   render_frame()
       ->GetRenderView()
       ->GetWebView()

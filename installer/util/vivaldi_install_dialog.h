@@ -10,12 +10,42 @@
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "chrome/installer/util/l10n_string_util.h"
 #include "chrome/installer/util/util_constants.h"
 
 #include "installer/util/vivaldi_install_util.h"
 
 namespace installer {
+
+struct VivaldiInstallUIOptions {
+  VivaldiInstallUIOptions();
+  ~VivaldiInstallUIOptions();
+
+  // This is a move-only struct.
+  VivaldiInstallUIOptions(VivaldiInstallUIOptions&&);
+  VivaldiInstallUIOptions& operator=(VivaldiInstallUIOptions&&);
+
+  std::wstring language;
+  base::FilePath install_dir;
+  vivaldi::InstallType install_type = vivaldi::InstallType::kForCurrentUser;
+
+  // On Windows 8 and later this applies only to a standalone installation and
+  // skips the registration with Windows as a browser application. Under Windows
+  // 7 for a non-standalone install this makes the browser the default
+  // automatically after always regisring it. For standalone installs on Windows
+  // 7 this both registers the browser and sets it as the default automatically.
+  // The case of just registering a standalone browser without making it the
+  // default on Windows 7 is not supported.
+  bool register_browser = false;
+
+  // Flags indicating that the values above are explicitly set via a command
+  // option and any value from the registry should be ignored.
+  bool given_install_type = false;
+  bool given_register_browser = false;
+};
+
+VivaldiInstallUIOptions ReadRegistryPreferences();
 
 class VivaldiInstallDialog {
   class VivaldiTranslationDelegate : public installer::TranslationDelegate {
@@ -42,33 +72,22 @@ class VivaldiInstallDialog {
     DPI_XXL      // 250%
   };
 
-  VivaldiInstallDialog(HINSTANCE instance,
-                       bool set_as_default_browser,
-                       vivaldi::InstallType default_install_type,
-                       const base::FilePath& destination_folder);
+  VivaldiInstallDialog(HINSTANCE instance, VivaldiInstallUIOptions options);
 
   virtual ~VivaldiInstallDialog();
 
   DlgResult ShowModal();
 
-  const base::FilePath& GetDestinationFolder() const {
-    return destination_folder_;
-  }
-  vivaldi::InstallType GetInstallType() const { return install_type_; }
-  bool GetSetAsDefaultBrowser() const { return set_as_default_browser_; }
-  std::wstring GetLanguageCode() const { return language_code_; }
-  bool GetRegisterBrowser() const;
+  VivaldiInstallUIOptions ExtractOptions() { return std::move(options_); }
 
  private:
   void InitDialog();
   void TranslateDialog();
   void ShowBrowseFolderDialog();
   void DoDialog();
-  void SetDefaultDestinationFolder();
-  bool GetLastInstallValues();
+  void ReadLastInstallValues();
   void SaveInstallValues();
   bool InternalSelectLanguage(const std::wstring& code);
-  std::wstring GetCurrentTranslation();
 
   void OnInstallTypeSelection();
   void OnLanguageSelection();
@@ -76,21 +95,22 @@ class VivaldiInstallDialog {
   installer::InstallStatus ShowEULADialog();
   std::wstring GetInnerFrameEULAResource();
 
-  void ShowOptions(HWND hwnd_dlg, bool show = true);
-  void UpdateRegisterCheckboxVisibility();
-  bool IsRegisterBrowserValid() const;
+  void ShowOptions();
+  void UpdateTypeSpecificOptionsVisibility();
+  void EnableAndShowControl(int id, bool show);
+  void ShowControl(int id, bool show);
 
-  void InitBkgnd(HWND hdlg);
-  void InitCtlBrushes(HWND hdlg);
+  void InitBkgnd();
+  void InitCtlBrushes();
   void ClearAll();
-  void Resize(HWND hdlg);
-  void Center(HWND hdlg);
+  void Resize();
+  void Center();
 
   BOOL OnEraseBkgnd(HDC hdc);
   HBRUSH OnCtlColor(HWND hwnd_ctl, HDC hdc);
 
   HBRUSH CreateDIBrush(int x, int y, int cx, int cy);
-  HBRUSH GetCtlBrush(HWND hdlg, int id_dlg_item);
+  HBRUSH GetCtlBrush(int id_dlg_item);
 
   static INT_PTR CALLBACK DlgProc(HWND hdlg,
                                   UINT msg,
@@ -99,7 +119,9 @@ class VivaldiInstallDialog {
 
  private:
   VivaldiTranslationDelegate translation_delegate_;
-  std::wstring language_code_;
+  VivaldiInstallUIOptions options_;
+  bool disable_standalone_autoupdates_ = false;
+
   std::wstring txt_tos_accept_install_str_;
   std::wstring btn_tos_accept_install_str_;
   std::wstring txt_tos_accept_update_str_;
@@ -107,33 +129,20 @@ class VivaldiInstallDialog {
   std::wstring btn_simple_mode_str_;
   std::wstring btn_advanced_mode_str_;
 
-  base::FilePath destination_folder_;
   base::FilePath last_standalone_folder_;
-  vivaldi::InstallType install_type_ = vivaldi::InstallType::kForCurrentUser;
-  bool set_as_default_browser_ = false;
-  bool register_browser_ = false;
   bool is_upgrade_ = false;
   bool dialog_ended_ = false;
   bool advanced_mode_ = false;
   HWND hdlg_ = NULL;
   HINSTANCE instance_ = NULL;
   DlgResult dlg_result_ = INSTALL_DLG_ERROR;
-  bool enable_set_as_default_checkbox_ = false;
-  bool enable_register_browser_checkbox_ = false;
   Scaling dpi_scale_ = DPI_NORMAL;
   HBITMAP hbitmap_bkgnd_ = NULL;
   HBITMAP back_bmp_ = NULL;
   LPVOID back_bits_ = NULL;
   LONG back_bmp_width_ = 0;
   LONG back_bmp_height_ = 0;
-  HBRUSH syslink_tos_brush_ = NULL;
-  HBRUSH button_browse_brush_ = NULL;
-  HBRUSH button_ok_brush_ = NULL;
-  HBRUSH button_cancel_brush_ = NULL;
-  HBRUSH checkbox_default_brush_ = NULL;
-  HBRUSH checkbox_register_brush_ = NULL;
-  HBRUSH button_options_brush_ = NULL;
-  HBRUSH syslink_privacy_brush_ = NULL;
+  std::vector<std::pair<int, HBRUSH>> brushes_;
   std::vector<HGLOBAL> dibs_;
 
   static VivaldiInstallDialog* this_;

@@ -20,7 +20,6 @@
 #include "content/browser/cache_storage/cache_storage_manager.h"
 #include "content/browser/cache_storage/cache_storage_trace_utils.h"
 #include "content/common/background_fetch/background_fetch_types.h"
-#include "content/public/common/content_features.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "net/http/http_response_headers.h"
@@ -94,7 +93,7 @@ blink::mojom::MatchResultPtr EagerlyReadResponseBody(
 
   mojo::ScopedDataPipeProducerHandle producer_handle;
   mojo::ScopedDataPipeConsumerHandle consumer_handle;
-  MojoResult rv = CreateDataPipe(&options, &producer_handle, &consumer_handle);
+  MojoResult rv = CreateDataPipe(&options, producer_handle, consumer_handle);
   if (rv != MOJO_RESULT_OK)
     return blink::mojom::MatchResult::NewResponse(std::move(response));
 
@@ -958,15 +957,14 @@ class CacheStorageDispatcherHost::CacheStorageImpl final
   DISALLOW_COPY_AND_ASSIGN(CacheStorageImpl);
 };
 
-CacheStorageDispatcherHost::CacheStorageDispatcherHost() = default;
-
-CacheStorageDispatcherHost::~CacheStorageDispatcherHost() {
+CacheStorageDispatcherHost::CacheStorageDispatcherHost(
+    CacheStorageContextImpl* context)
+    : context_(context) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
-void CacheStorageDispatcherHost::Init(CacheStorageContextImpl* context) {
+CacheStorageDispatcherHost::~CacheStorageDispatcherHost() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  context_ = context;
 }
 
 void CacheStorageDispatcherHost::AddReceiver(
@@ -984,11 +982,6 @@ void CacheStorageDispatcherHost::AddReceiver(
   receivers_.Add(std::move(impl), std::move(receiver));
 }
 
-void CacheStorageDispatcherHost::Shutdown() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  context_ = nullptr;
-}
-
 void CacheStorageDispatcherHost::AddCacheReceiver(
     std::unique_ptr<CacheImpl> cache_impl,
     mojo::PendingAssociatedReceiver<blink::mojom::CacheStorageCache> receiver) {
@@ -1003,7 +996,7 @@ CacheStorageHandle CacheStorageDispatcherHost::OpenCacheStorage(
   if (!context_ || !OriginCanAccessCacheStorage(origin))
     return CacheStorageHandle();
 
-  scoped_refptr<CacheStorageManager> manager = context_->CacheManager();
+  scoped_refptr<CacheStorageManager> manager = context_->cache_manager();
   if (!manager)
     return CacheStorageHandle();
 

@@ -145,6 +145,10 @@ const char* const kDefaultSupportedLanguages[] = {
     "yi",     // Yiddish
     "yo",     // Yoruba
     "zh-CN",  // Chinese (Simplified)
+#if defined(VIVALDI_BUILD)
+    "zh-Hans",  // Chinese (Simplified)
+    "zh-Hant",  // Chinese (Traditional)
+#endif
     "zh-TW",  // Chinese (Traditional)
     "zu",     // Zulu
 };
@@ -357,6 +361,15 @@ bool TranslateLanguageList::SetSupportedLanguages(
 
   NotifyEvent(__LINE__, base::JoinString(supported_languages_, ", "));
   return true;
+}
+
+void TranslateLanguageList::SetLanguageList(std::vector<std::string> list) {
+  supported_languages_.swap(list);
+
+  NotifyEvent(__LINE__, "Language list set by Vivaldi: " +
+                            base::JoinString(supported_languages_, ", "));
+
+  last_updated_ = base::Time::Now();
 }
 
 }  // namespace translate

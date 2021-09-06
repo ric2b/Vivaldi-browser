@@ -25,8 +25,6 @@
 <translation id="1966382378801805537">‏Chromium نمی‌تواند مرورگر پیش‌فرض را تعیین یا تنظیم کند</translation>
 <translation id="2008474315282236005">‏این کار یک مورد را از این دستگاه حذف می‌کند. برای بازیابی داده‌هایتان در فرصتی دیگر، با <ph name="USER_EMAIL" /> به سیستم Chromium وارد شوید.</translation>
 <translation id="2020032459870799438">‏برای بررسی اینکه از دیگر گذرواژه‌هایتان دربرابر نقض داده یا دیگر مشکلات امنیتی محافظت می‌شود، <ph name="BEGIN_LINK" />به سیستم Chromium وارد شوید<ph name="END_LINK" />.</translation>
-<translation id="2179192076895113433">‏در <ph name="LINK_BEGIN" />تنظیمات<ph name="LINK_END" /> می‌توانید این حساب و «حساب‌های Google» دیگری را که برای <ph name="USER_NAME" /> اضافه کرده‌اید از یک‌جا مدیریت کنید.
-          اجازه‌هایی را که در مرورگر Chromium به وب‌سایت‌ها، و به برنامه‌های نصب‌شده از Google Play اعطا کرده‌اید ممکن است برای همه حساب‌ها اعمال شود.</translation>
 <translation id="2185166961232948079">‏Chromium - ورود به سیستم شبکه - <ph name="PAGE_TITLE" /></translation>
 <translation id="2225696941839557119">‏سیستم‌عامل Chromium نتوانست گذرواژه‌هایتان را همگام‌سازی کند.</translation>
 <translation id="2241627712206172106">‏اگر رایانه‌ای را به صورت مشترک استفاده می‌کنید، دوستان و خانواده می‌توانند به صورت جداگانه مرور کنند و Chromium را به صورتی که مایلند تنظیم کنند.</translation>
@@ -36,7 +34,6 @@
 <translation id="2396765026452590966">‏افزونه «<ph name="EXTENSION_NAME" />»، صفحه‌ای را تغییر داده است که هنگام راه‌اندازی Chromium نشان داده می‌شود.</translation>
 <translation id="2483889755041906834">‏در Chromium</translation>
 <translation id="2485422356828889247">حذف نصب</translation>
-<translation id="2527042973354814951">‏برای فعال کردن <ph name="PLUGIN_NAME" />، ‏Chromium را راه‌اندازی مجدد کنید</translation>
 <translation id="2535480412977113886">‏سیستم‌عامل Chromium قادر به همگام‌سازی داده‌های شما نبود زیرا جزئیات ورود به حساب شما به‌روز نیست.</translation>
 <translation id="2560420686485554789">‏Chromium برای بارگیری فایل‌ها باید به حافظه دسترسی داشته باشد</translation>
 <translation id="2572494885440352020">Chromium Helper</translation>
@@ -52,6 +49,7 @@
 <translation id="2770231113462710648">تغییر مرورگر پیش‌فرض به:</translation>
 <translation id="2799223571221894425">راه‌اندازی مجدد</translation>
 <translation id="2816712596130903444">‏نمایه Chromium جدا شود؟</translation>
+<translation id="2837693172913560447">‏با این کار، نمایه Chromium جدیدی برای <ph name="USER_EMAIL_ADDRESS" /> ایجاد خواهد شد</translation>
 <translation id="2847479871509788944">‏حذف از Chromium...</translation>
 <translation id="2885378588091291677">مدیر فعالیت‌ها</translation>
 <translation id="2910007522516064972">‏درباره &amp;Chromium</translation>
@@ -106,6 +104,7 @@
 <translation id="4407044323746248786">‏درهرصورت از Chromium خارج می‌شوید؟</translation>
 <translation id="4415566066719264597">‏اجازه به Chromium برای اجرا در پس‌زمینه</translation>
 <translation id="4423735387467980091">‏سفارشی کردن و کنترل Chromium</translation>
+<translation id="4491398312037323794">‏این صفحه به شما امکان می‌دهد حساب‌های Google خودتان را که به سیستم آن‌ها وارد شده‌اید مدیریت کنید. این حساب‌ها در مرورگر Chromium و برنامه‌های «فروشگاه Play»، و همچنین سرویس‌هایی مثل Gmail،‏ Drive، و YouTube دردسترس خواهند بود. <ph name="LINK_BEGIN" />بیشتر بدانید<ph name="LINK_END" /></translation>
 <translation id="452711251841752011">‏به Chromium خوش‌آمدید؛ پنجره مرورگر جدید راه‌اندازی شد</translation>
 <translation id="4544142686420020088">‏Chromium به‌روزرسانی نشد؛ مشکلی پیش آمد. <ph name="BEGIN_LINK" />مشکلات به‌روزرسانی Chromium و به‌روزرسانی‌های ناموفق را برطرف کنید.<ph name="END_LINK" /></translation>
 <translation id="454579500955453258">‏در نمایه جدید Chromium ادامه می‌دهید؟</translation>
@@ -119,12 +118,12 @@
 <translation id="4750035648288509542">‏تقریباً به‌روزرسانی شده است! برای اتمام به‌روزرسانی، Chromium را راه‌اندازی مجدد کنید. پنجره‌های ناشناس دوباره باز نخواهند شد.</translation>
 <translation id="4788777615168560705">‏Chromium نمی‌تواند گذرواژه‌هایتان را بررسی کند. بعد از ۲۴ ساعت دوباره امتحان کنید یا <ph name="BEGIN_LINK" />گذرواژه‌ها را در «حساب Google» خود بررسی کنید<ph name="END_LINK" />.</translation>
 <translation id="479167709087336770">‏از همان غلط‌گیر املایی استفاده می‌کند که در جستجوی Google استفاده می‌شود. نوشتاری که در مرورگر تایپ کرده‌اید برای Google ارسال می‌شود. هروقت بخواهید می‌توانید این رفتار را در تنظیمات تغییر دهید.</translation>
-<translation id="4814736265800133385">‏استفاده از Chromium بدون حساب</translation>
 <translation id="4888717733111232871">‏قانون ترافیک ورودی برای Chromium جهت اجازه به ترافیک mDNS.</translation>
 <translation id="4943838377383847465">‏Chromium در حالت پس‌زمینه است.</translation>
 <translation id="4987820182225656817">‏مهمان‌ها می توانند از Chromium استفاده کنند بدون این‌که اثری از خود به جا بگذارند.</translation>
 <translation id="4994636714258228724">‏افرودن خودتان به Chromium</translation>
 <translation id="5224391634244552924">‏گذرواژه ذخیره‌شده‌ای وجود ندارد. Chromium زمانی می‌تواند گذرواژه‌هایتان را بررسی کند که آن‌ها را ذخیره کرده باشید.</translation>
+<translation id="5252179775517634216">‏<ph name="EXISTING_USER" /> قبلاً به سیستم این نمایه Chromium وارد شده است. با این کار، نمایه Chromium جدیدی برای <ph name="USER_EMAIL_ADDRESS" /> ایجاد خواهد شد</translation>
 <translation id="5277894862589591112">‏برای اعمال تغییراتتان، Chromium را راه‌اندازی مجدد کنید</translation>
 <translation id="5358375970380395591">‏شما با حساب مدیریت‌شده وارد سیستم می‌شوید و به سرپرست آن اجازه کنترل بر نمایه Chromium خود را می‌دهید. داده‌های Chromium شما شامل برنامه‌ها، نشانک‌ها، سابقه، گذرواژه‌ها و سایر تنظیمات برای همیشه به <ph name="USER_NAME" /> مرتبط خواهد شد. می‌توانید این داده‌ها را از طریق داشبورد حساب‌های Google حذف کنید اما نمی‌توانید این داده‌ها را به حساب دیگری مرتبط سازید. <ph name="LEARN_MORE" /></translation>
 <translation id="5386450000063123300">‏درحال به‌روزرسانی Chromium (<ph name="PROGRESS_PERCENT" />)</translation>
@@ -138,7 +137,6 @@
 <translation id="549669000822060376">‏وقتی Chromium جدیدترین به‌روزرسانی‌های سیستم را نصب می‌کند، لطفاً صبر کنید.</translation>
 <translation id="5496810170689441661">‏Chromium می‌خواهد گذرواژه‌ها را ویرایش کند. برای اینکه اجازه دهید این کار انجام شود، گذرواژه Windows خود را تایپ کنید.</translation>
 <translation id="5623402015214259806">{0,plural, =0{‏به‌روزرسانی Chromium دردسترس است}=1{‏به‌روزرسانی Chromium دردسترس است}one{‏به‌روزرسانی Chromium از # روز پیش دردسترس است}other{‏به‌روزرسانی Chromium از # روز پیش دردسترس است}}</translation>
-<translation id="5631814766731275228">‏نام و تصویر Chromium</translation>
 <translation id="5634636535844844681">‏Chromium به Windows 7 یا بالاتر نیاز دارد.</translation>
 <translation id="5653831366781983928">‏لطفاً اکنون Chromium را بازراه‌اندازی کنید</translation>
 <translation id="5698481217667032250">‏نمایش Chromium به این زبان</translation>
@@ -166,6 +164,7 @@
 <translation id="6266342355635466082">‏Chromium نمی‌تواند به‌روزرسانی‌ها را بررسی کند. اتصال اینترنت را بررسی کنید.</translation>
 <translation id="6268381023930128611">‏از Chromium خارج می‌شوید؟</translation>
 <translation id="6281746429495226318">‏سفارشی کردن نمایه Chromium</translation>
+<translation id="6290827346642914212">‏نام‌گذاری نمایه Chromium</translation>
 <translation id="6295779123002464101">‏<ph name="FILE_NAME" /> ممکن است خطرناک باشد، بنابراین Chromium آن را مسدود کرده است.</translation>
 <translation id="6309712487085796862">‏Chromium درحال استفاده از دوربین شما است.</translation>
 <translation id="6333502561965082103">‏عملیات دیگری در Chromium درحال انجام است. لطفاً بعداً دوباره امتحان کنید.</translation>
@@ -194,6 +193,8 @@
 <translation id="6863361426438995919">‏Google Pay (در Chromium کپی شد)</translation>
 <translation id="6893813176749746474">‏Chromium به‌روز شده است اما حداقل ۳۰ روز از آن استفاده نکرده‌اید.</translation>
 <translation id="6897548120660295439">‏Rosetta به Chromium امکان می‌دهد رسانه محافظت‌شده را در این صفحه پخش کند.</translation>
+<translation id="691026815377248078">‏Chromium باید برای ادامه مرتبط‌سازی به بلوتوث
+دسترسی داشته باشد. <ph name="IDS_BLUETOOTH_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK" /></translation>
 <translation id="6964305034639999644">‏باز کردن پیوند در پنجره &amp;ناشناس Chromium</translation>
 <translation id="6978145336957848883">‏گذرواژه‌های ضعیف را می‌توان به‌راحتی حدس زد. به Chromium اجازه دهید <ph name="BEGIN_LINK" />گذرواژه‌هایی قوی برایتان ایجاد کند و آن‌ها را به‌خاطر بسپارد<ph name="END_LINK" />.</translation>
 <translation id="6990124437352146030">‏Chromium برای این سایت به مجوز دسترسی به میکروفون نیاز دارد</translation>
@@ -232,6 +233,7 @@ Chromium قادر به بازیابی تنظیمات شما نیست.</translati
 <translation id="7773960292263897147">‏هشدار: Chromium نمی‌تواند مانع از ثبت سابقه مرورتان توسط افزونه‌ها شود. برای غیرفعال کردن این افزونه در حالت ناشناس، این گزینه را لغو انتخاب کنید.</translation>
 <translation id="7790626492778995050"><ph name="PAGE_TITLE" /> - Chromium Canary</translation>
 <translation id="7827169012280634081">‏هنگام خروج از Chromium، کوکی‌ها و داده‌های سایت را پاک کنید</translation>
+<translation id="7828947555739565424">‏درحال‌حاضر یک نمایه Chromium با این حساب در این دستگاه وجود دارد</translation>
 <translation id="7857220146454061152">‏برای دریافت به‌روزرسانی‌های آتی Chromium، باید OS X نسخه ۱۰.۱۱ یا بالاتر داشته باشید. این رایانه از OS X نسخه ۱۰.۱۰ استفاده می‌کند.</translation>
 <translation id="7867198900892795913">‏Chromium به جدیدترین نسخه به‌روزرسانی نشد، بنابراین قابلیت‌های جدید و رفع اشکال‌های امنیتی را ندارید.</translation>
 <translation id="7898472181347242998">‏برای اینکه ببینید دستگاهتان به‌روز است یا نه، به <ph name="LINK_BEGIN" />تنظیمات سیستم‌عامل Chromium<ph name="LINK_END" /> بروید</translation>
@@ -272,12 +274,12 @@ Chromium قادر به بازیابی تنظیمات شما نیست.</translati
 <translation id="9047197236183657400">‏حساب به نمایه جدیدی از Chromium منتقل شود؟</translation>
 <translation id="9089354809943900324">‏نسخه Chromium قدیمی است</translation>
 <translation id="9093206154853821181">{0,plural, =1{‏Chromium یک ساعت دیگر راه‌اندازی مجدد می‌شود}one{‏Chromium # ساعت دیگر راه‌اندازی مجدد می‌شود}other{‏Chromium # ساعت دیگر راه‌اندازی مجدد می‌شود}}</translation>
-<translation id="9107750757953039239">‏اگر چند «حساب Google» دارید، می‌توانید آن‌ها را به <ph name="DEVICE_TYPE" /> اضافه کنید. حساب‌هایتان در مرورگر Chromium و «فروشگاه Play» و همچنین سرویس‌هایی مثل Gmail،‏ Drive، و YouTube دردسترس خواهند بود. <ph name="LINK_BEGIN" />بیشتر بدانید<ph name="LINK_END" /></translation>
 <translation id="91086099826398415">‏باز کردن پیوند در &amp;برگه جدید Chromium</translation>
 <translation id="911206726377975832">داده‌های مرور شما نیز حذف شود؟</translation>
 <translation id="9158494823179993217">‏سرپرست سیستم شما برای باز شدن مرورگر جایگزین برای دسترسی به <ph name="TARGET_URL_HOSTNAME" />، Chromium را پیکربندی کرده است.</translation>
 <translation id="9190841055450128916">‏Chromium‏ (mDNS ورودی)</translation>
 <translation id="9214764063801632699">‏سیستم Chromium OS</translation>
 <translation id="93478295209880648">‏Chromium ممکن است درست کار نکند زیرا دیگر در Windows XP یا Windows Vista پشتیبانی نمی‌شود</translation>
+<translation id="965162752251293939">‏چه‌کسی از Chromium استفاده می‌کند؟</translation>
 <translation id="985602178874221306">Chromium Authors</translation>
 </translationbundle>

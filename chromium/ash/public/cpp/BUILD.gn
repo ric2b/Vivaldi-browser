@@ -224,6 +224,9 @@ component("cpp") {
     "presentation_time_recorder.h",
     "privacy_screen_dlp_helper.cc",
     "privacy_screen_dlp_helper.h",
+    "projector/projector_client.h",
+    "projector/projector_controller.cc",
+    "projector/projector_controller.h",
     "quick_answers/controller/quick_answers_browser_client.cc",
     "quick_answers/controller/quick_answers_browser_client.h",
     "quick_answers/controller/quick_answers_controller.cc",
@@ -269,6 +272,7 @@ component("cpp") {
     "shell_window_ids.h",
     "shutdown_controller.cc",
     "shutdown_controller.h",
+    "style/color_mode_observer.h",
     "style/color_provider.cc",
     "style/color_provider.h",
     "stylus_utils.cc",
@@ -316,8 +320,8 @@ component("cpp") {
   ]
 
   deps = [
+    "//ash/constants",
     "//base/util/values:values_util",
-    "//chromeos/constants",
     "//chromeos/dbus/power:power_manager_proto",
     "//chromeos/services/assistant/public/cpp",
     "//chromeos/services/cellular_setup:in_process_esim_manager",
@@ -327,7 +331,7 @@ component("cpp") {
     "//chromeos/ui/vector_icons",
     "//components/pref_registry",
     "//components/prefs",
-    "//components/sync:rest_of_sync",
+    "//components/sync/model",
     "//mojo/public/cpp/bindings",
     "//net/traffic_annotation",
     "//services/network/public/cpp:cpp",

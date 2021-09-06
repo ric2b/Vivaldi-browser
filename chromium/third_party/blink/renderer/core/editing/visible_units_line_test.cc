@@ -897,6 +897,29 @@ TEST_P(ParameterizedVisibleUnitsLineTest, EndOfLineWithSoftLineWrap4) {
             TestEndOfLine("<div contenteditable>abc |def ghi</div>"));
 }
 
+// http://crbug.com/1169583
+TEST_P(ParameterizedVisibleUnitsLineTest, EndOfLineWithWhiteSpacePre) {
+  LoadAhem();
+  InsertStyleElement("p { font: 10px/1 Ahem; white-space: pre; }");
+
+  EXPECT_EQ("<p dir=\"ltr\"><bdo dir=\"ltr\">ABC DEF|\nGHI JKL</bdo></p>",
+            TestEndOfLine(
+                "<p dir=\"ltr\"><bdo dir=\"ltr\">ABC| DEF\nGHI JKL</bdo></p>"))
+      << "LTR LTR";
+  EXPECT_EQ("<p dir=\"ltr\"><bdo dir=\"rtl\">ABC DEF|\nGHI JKL</bdo></p>",
+            TestEndOfLine(
+                "<p dir=\"ltr\"><bdo dir=\"rtl\">ABC| DEF\nGHI JKL</bdo></p>"))
+      << "LTR RTL";
+  EXPECT_EQ("<p dir=\"rtl\"><bdo dir=\"ltr\">ABC DEF|\nGHI JKL</bdo></p>",
+            TestEndOfLine(
+                "<p dir=\"rtl\"><bdo dir=\"ltr\">ABC| DEF\nGHI JKL</bdo></p>"))
+      << "RTL LTR";
+  EXPECT_EQ("<p dir=\"rtl\"><bdo dir=\"rtl\">ABC DEF|\nGHI JKL</bdo></p>",
+            TestEndOfLine(
+                "<p dir=\"rtl\"><bdo dir=\"rtl\">ABC| DEF\nGHI JKL</bdo></p>"))
+      << "RTL RTL";
+}
+
 TEST_P(ParameterizedVisibleUnitsLineTest, LogicalEndOfLineWithSoftLineWrap3) {
   LoadAhem();
   InsertStyleElement(
@@ -1005,6 +1028,22 @@ TEST_P(ParameterizedVisibleUnitsLineTest,
       EndOfLine(after_zws_down));
   EXPECT_EQ(after_zws_up, EndOfLine(after_zws_up));
   EXPECT_FALSE(InSameLine(after_zws_up, after_zws_down));
+}
+
+// http://crbug.com/1183269
+TEST_P(ParameterizedVisibleUnitsLineTest, InSameLineWithSoftLineWrap) {
+  LoadAhem();
+  InsertStyleElement(
+      "p { font: 10px/1 Ahem; }"
+      "p { width: 3ch; }");
+  // Note: "contenteditable" adds
+  //    line-break: after-white-space;
+  //    overflow-wrap: break-word;
+  const SelectionInDOMTree& selection =
+      SetSelectionTextToBody("<p contenteditable id=t>abc |xyz</p>");
+  EXPECT_FALSE(InSameLine(
+      PositionWithAffinity(selection.Base(), TextAffinity::kUpstream),
+      PositionWithAffinity(selection.Base(), TextAffinity::kDownstream)));
 }
 
 TEST_P(ParameterizedVisibleUnitsLineTest, InSameLineWithZeroWidthSpace) {

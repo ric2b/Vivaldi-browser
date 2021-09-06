@@ -32,7 +32,7 @@ namespace {
 // The integer type used to represent N-grams.
 using NGram = uint64_t;
 // The hasher used for hashing N-grams.
-using NGramHasher = url_pattern_index::Uint64Hasher;
+using NGramHasher = url_pattern_index::Uint64ToUint32Hasher;
 // The hash table probe sequence used both by UrlPatternIndex and its builder.
 using NGramHashTableProber =
     url_pattern_index::DefaultProber<NGram, NGramHasher>;

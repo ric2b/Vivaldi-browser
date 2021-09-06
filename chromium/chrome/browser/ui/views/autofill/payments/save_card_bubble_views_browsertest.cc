@@ -95,7 +95,6 @@
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/web_applications/system_web_app_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
-#include "chromeos/constants/chromeos_features.h"
 #endif
 
 using base::Bucket;
@@ -185,7 +184,7 @@ class SaveCardBubbleViewsFullFormBrowserTest
     // stub account |user_manager::kStubUserEmail|.
     CoreAccountInfo info =
         IdentityManagerFactory::GetForProfile(browser()->profile())
-            ->GetPrimaryAccountInfo();
+            ->GetPrimaryAccountInfo(signin::ConsentLevel::kSync);
     username = info.email;
 
     // Install the Settings App.
@@ -211,6 +210,10 @@ class SaveCardBubbleViewsFullFormBrowserTest
         ->client()
         ->GetPaymentsClient()
         ->set_url_loader_factory_for_testing(test_shared_loader_factory_);
+
+    // Wait for Personal Data Manager to be fully loaded to prevent that
+    // spurious notifications deceive the tests.
+    WaitForPersonalDataManagerToBeLoaded(browser()->profile());
 
     // Set up this class as the ObserverForTest implementation.
     credit_card_save_manager_ = ContentAutofillDriver::GetForRenderFrameHost(
@@ -705,7 +708,7 @@ class SaveCardBubbleViewsFullFormBrowserTest
         SaveCardBubbleController::Get(GetActiveWebContents());
     if (!save_card_bubble_controller)
       return nullptr;
-    SaveCardBubbleView* save_card_bubble_view =
+    AutofillBubbleBase* save_card_bubble_view =
         save_card_bubble_controller->GetSaveCardBubbleView();
     if (!save_card_bubble_view)
       return nullptr;
@@ -851,8 +854,8 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTest,
 
   // UMA should have recorded bubble rejection.
   histogram_tester.ExpectUniqueSample(
-      "Autofill.SaveCreditCardPrompt.Local.FirstShow",
-      AutofillMetrics::SAVE_CARD_PROMPT_END_DENIED, 1);
+      "Autofill.SaveCreditCardPromptResult.Local.FirstShow",
+      AutofillMetrics::SAVE_CARD_PROMPT_CANCELLED, 1);
 }
 
 class SaveCardBubbleViewsFullFormBrowserTestWithAutofillUpstream
@@ -958,8 +961,8 @@ IN_PROC_BROWSER_TEST_F(
   ClickOnDialogViewWithIdAndWait(DialogViewId::OK_BUTTON);
   // UMA should have recorded bubble acceptance.
   histogram_tester.ExpectUniqueSample(
-      "Autofill.SaveCreditCardPrompt.Upload.FirstShow",
-      AutofillMetrics::SAVE_CARD_PROMPT_END_ACCEPTED, 1);
+      "Autofill.SaveCreditCardPromptResult.Upload.FirstShow",
+      AutofillMetrics::SAVE_CARD_PROMPT_ACCEPTED, 1);
 }
 
 // On Chrome OS, the test profile starts with a primary account already set, so
@@ -1030,8 +1033,8 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsSyncTransportFullFormBrowserTest,
   ClickOnDialogViewWithIdAndWait(DialogViewId::OK_BUTTON);
   // UMA should have recorded bubble acceptance.
   histogram_tester.ExpectUniqueSample(
-      "Autofill.SaveCreditCardPrompt.Upload.FirstShow",
-      AutofillMetrics::SAVE_CARD_PROMPT_END_ACCEPTED, 1);
+      "Autofill.SaveCreditCardPromptResult.Upload.FirstShow",
+      AutofillMetrics::SAVE_CARD_PROMPT_ACCEPTED, 1);
 }
 
 // Tests the implicit sync state. Ensures that the (i) info icon appears for
@@ -1140,8 +1143,8 @@ IN_PROC_BROWSER_TEST_F(
 
   // UMA should have recorded bubble rejection.
   histogram_tester.ExpectUniqueSample(
-      "Autofill.SaveCreditCardPrompt.Upload.FirstShow",
-      AutofillMetrics::SAVE_CARD_PROMPT_END_DENIED, 1);
+      "Autofill.SaveCreditCardPromptResult.Upload.FirstShow",
+      AutofillMetrics::SAVE_CARD_PROMPT_CANCELLED, 1);
 }
 
 // Tests the upload save bubble. Ensures that clicking the top-right [X] close
@@ -1264,11 +1267,12 @@ IN_PROC_BROWSER_TEST_F(
   // UMA should have recorded bubble acceptance for both regular save UMA and
   // the ".RequestingCardholderName" subhistogram.
   histogram_tester.ExpectUniqueSample(
-      "Autofill.SaveCreditCardPrompt.Upload.FirstShow",
-      AutofillMetrics::SAVE_CARD_PROMPT_END_ACCEPTED, 1);
+      "Autofill.SaveCreditCardPromptResult.Upload.FirstShow",
+      AutofillMetrics::SAVE_CARD_PROMPT_ACCEPTED, 1);
   histogram_tester.ExpectUniqueSample(
-      "Autofill.SaveCreditCardPrompt.Upload.FirstShow.RequestingCardholderName",
-      AutofillMetrics::SAVE_CARD_PROMPT_END_ACCEPTED, 1);
+      "Autofill.SaveCreditCardPromptResult.Upload.FirstShow."
+      "RequestingCardholderName",
+      AutofillMetrics::SAVE_CARD_PROMPT_ACCEPTED, 1);
 }
 
 // Tests the upload save bubble. Ensures that if cardholder name is explicitly
@@ -1941,8 +1945,8 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTest,
 
   // UMA should have recorded bubble rejection.
   histogram_tester.ExpectUniqueSample(
-      "Autofill.SaveCreditCardPrompt.Local.FirstShow",
-      AutofillMetrics::SAVE_CARD_ICON_SHOWN_WITHOUT_PROMPT, 1);
+      "Autofill.SaveCreditCardPromptOffer.Local.FirstShow",
+      AutofillMetrics::SAVE_CARD_PROMPT_NOT_SHOWN_MAX_STRIKES_REACHED, 1);
 }
 
 // Tests overall StrikeDatabase interaction with the upload save bubble. Runs an
@@ -2014,8 +2018,8 @@ IN_PROC_BROWSER_TEST_F(
 
   // UMA should have recorded bubble rejection.
   histogram_tester.ExpectUniqueSample(
-      "Autofill.SaveCreditCardPrompt.Upload.FirstShow",
-      AutofillMetrics::SAVE_CARD_ICON_SHOWN_WITHOUT_PROMPT, 1);
+      "Autofill.SaveCreditCardPromptOffer.Upload.FirstShow",
+      AutofillMetrics::SAVE_CARD_PROMPT_NOT_SHOWN_MAX_STRIKES_REACHED, 1);
 }
 
 // Tests to ensure the card nickname is shown correctly in the Upstream bubble.
@@ -2164,7 +2168,7 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTestForStatusChip,
   // Ensures icon is visible and animation is not.
   EXPECT_TRUE(GetSaveCardIconView()->GetVisible());
   EXPECT_FALSE(
-      GetSaveCardIconView()->loading_indicator_for_testing()->IsAnimating());
+      GetSaveCardIconView()->loading_indicator_for_testing()->GetAnimating());
 
   ResetEventWaiterForSequence({DialogEvent::SENT_UPLOAD_CARD_REQUEST});
   ClickOnDialogViewWithIdAndWait(DialogViewId::OK_BUTTON);
@@ -2173,7 +2177,7 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTestForStatusChip,
   // Ensures icon and the animation are visible.
   EXPECT_TRUE(GetSaveCardIconView()->GetVisible());
   EXPECT_TRUE(
-      GetSaveCardIconView()->loading_indicator_for_testing()->IsAnimating());
+      GetSaveCardIconView()->loading_indicator_for_testing()->GetAnimating());
 
   SetUploadCardRpcPaymentsSucceeds();
   ResetEventWaiterForSequence({DialogEvent::RECEIVED_UPLOAD_CARD_RESPONSE,
@@ -2211,7 +2215,7 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTestForStatusChip,
   // Ensures icon is visible and animation is not.
   EXPECT_TRUE(GetSaveCardIconView()->GetVisible());
   EXPECT_FALSE(
-      GetSaveCardIconView()->loading_indicator_for_testing()->IsAnimating());
+      GetSaveCardIconView()->loading_indicator_for_testing()->GetAnimating());
 
   ResetEventWaiterForSequence({DialogEvent::SENT_UPLOAD_CARD_REQUEST});
   ClickOnDialogViewWithIdAndWait(DialogViewId::OK_BUTTON);
@@ -2220,7 +2224,7 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTestForStatusChip,
   // Ensures icon and the animation are visible.
   EXPECT_TRUE(GetSaveCardIconView()->GetVisible());
   EXPECT_TRUE(
-      GetSaveCardIconView()->loading_indicator_for_testing()->IsAnimating());
+      GetSaveCardIconView()->loading_indicator_for_testing()->GetAnimating());
 
   SetUploadCardRpcPaymentsFails();
   ResetEventWaiterForSequence({DialogEvent::RECEIVED_UPLOAD_CARD_RESPONSE,
@@ -2232,7 +2236,7 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTestForStatusChip,
   // Ensures icon is visible and the animation is not animating.
   EXPECT_TRUE(GetSaveCardIconView()->GetVisible());
   EXPECT_FALSE(
-      GetSaveCardIconView()->loading_indicator_for_testing()->IsAnimating());
+      GetSaveCardIconView()->loading_indicator_for_testing()->GetAnimating());
 
   // UMA should have been logged.
   histogram_tester.ExpectTotalCount("Autofill.CreditCardUploadFeedback", 2);
@@ -2300,8 +2304,8 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTestForManageCard,
   ClickOnDialogViewWithIdAndWait(DialogViewId::OK_BUTTON);
   // UMA should have recorded bubble acceptance.
   histogram_tester.ExpectUniqueSample(
-      "Autofill.SaveCreditCardPrompt.Local.FirstShow",
-      AutofillMetrics::SAVE_CARD_PROMPT_END_ACCEPTED, 1);
+      "Autofill.SaveCreditCardPromptResult.Local.FirstShow",
+      AutofillMetrics::SAVE_CARD_PROMPT_ACCEPTED, 1);
 
   // The local save bubble should not be visible, but the card icon should
   // remain visible for the clickable [Manage cards] option.
@@ -2369,104 +2373,6 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTestForManageCard,
       histogram_tester.GetAllSamples("Autofill.ManageCardsPrompt.Local"),
       ElementsAre(Bucket(AutofillMetrics::MANAGE_CARDS_SHOWN, 1),
                   Bucket(AutofillMetrics::MANAGE_CARDS_DONE, 1)));
-}
-
-// TODO(crbug.com/1070799): Remove the following two tests when the sticky
-// bubble feature is launched.
-class SaveCardBubbleViewsFullFormBrowserTestWithoutStickyBubble
-    : public SaveCardBubbleViewsFullFormBrowserTest {
- public:
-  SaveCardBubbleViewsFullFormBrowserTestWithoutStickyBubble() {
-    feature_list_.InitWithFeatures(
-        /*enabled_features=*/{},
-        /*disabled_features=*/{
-            features::kAutofillUpstream,
-            features::kAutofillEnableStickyPaymentsBubble,
-            features::kAutofillEnableFixedPaymentsBubbleLogging});
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-// Tests StrikeDatabase interaction with the local save bubble. Ensures that a
-// strike is added if the bubble is ignored.
-IN_PROC_BROWSER_TEST_F(
-    SaveCardBubbleViewsFullFormBrowserTestWithoutStickyBubble,
-    StrikeDatabase_Local_AddStrikeIfBubbleIgnored) {
-  TestAutofillClock test_clock;
-  test_clock.SetNow(base::Time::Now());
-
-  // Set up the Payments RPC.
-  SetUploadDetailsRpcPaymentsDeclines();
-
-  FillForm();
-  SubmitFormAndWaitForCardLocalSaveBubble();
-
-  // Clicking the [X] close button should dismiss the bubble.
-  ClickOnCloseButton();
-
-  base::HistogramTester histogram_tester;
-
-  // Wait long enough to avoid bubble stickiness, then navigate away from the
-  // page.
-  test_clock.Advance(kCardBubbleSurviveNavigationTime);
-  ResetEventWaiterForSequence({DialogEvent::STRIKE_CHANGE_COMPLETE});
-  NavigateTo(kCreditCardAndAddressUploadForm);
-  WaitForObservedEvent();
-
-  // Ensure that a strike was added due to the bubble being ignored.
-  histogram_tester.ExpectUniqueSample(
-      "Autofill.StrikeDatabase.NthStrikeAdded.CreditCardSave",
-      /*sample=*/1, /*count=*/1);
-}
-
-class
-    SaveCardBubbleViewsFullFormBrowserTestWithoutStickyBubbleWithAutofillUpstream
-    : public SaveCardBubbleViewsFullFormBrowserTest {
- public:
-  SaveCardBubbleViewsFullFormBrowserTestWithoutStickyBubbleWithAutofillUpstream() {
-    feature_list_.InitWithFeatures(
-        /*enabled_features=*/{features::kAutofillUpstream},
-        /*disabled_features=*/{
-            features::kAutofillEnableStickyPaymentsBubble,
-            features::kAutofillEnableFixedPaymentsBubbleLogging});
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-// Tests StrikeDatabase interaction with the upload save bubble. Ensures that a
-// strike is added if the bubble is ignored.
-IN_PROC_BROWSER_TEST_F(
-    SaveCardBubbleViewsFullFormBrowserTestWithoutStickyBubbleWithAutofillUpstream,
-    StrikeDatabase_Upload_AddStrikeIfBubbleIgnored) {
-  TestAutofillClock test_clock;
-  test_clock.SetNow(base::Time::Now());
-
-  // Start sync.
-  harness_->SetupSync();
-
-  FillForm();
-  SubmitFormAndWaitForCardUploadSaveBubble();
-
-  // Clicking the [X] close button should dismiss the bubble.
-  ClickOnCloseButton();
-
-  base::HistogramTester histogram_tester;
-
-  // Wait long enough to avoid bubble stickiness, then navigate away from the
-  // page.
-  test_clock.Advance(kCardBubbleSurviveNavigationTime);
-  ResetEventWaiterForSequence({DialogEvent::STRIKE_CHANGE_COMPLETE});
-  NavigateTo(kCreditCardAndAddressUploadForm);
-  WaitForObservedEvent();
-
-  // Ensure that a strike was added due to the bubble being ignored.
-  histogram_tester.ExpectUniqueSample(
-      "Autofill.StrikeDatabase.NthStrikeAdded.CreditCardSave",
-      /*sample=*/1, /*count=*/1);
 }
 
 }  // namespace autofill

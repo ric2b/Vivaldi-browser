@@ -29,26 +29,20 @@ namespace chromeos {
 
 namespace {
 
-constexpr char kGeneratedPath[] =
-    "@out_folder@/gen/chromeos/components/scanning/resources/";
-
 // TODO(jschettler): Replace with webui::SetUpWebUIDataSource() once it no
 // longer requires a dependency on //chrome/browser.
 void SetUpWebUIDataSource(content::WebUIDataSource* source,
-                          base::span<const GritResourceMap> resources,
-                          const std::string& generated_path,
+                          base::span<const webui::ResourcePath> resources,
                           int default_resource) {
   for (const auto& resource : resources) {
-    std::string path = resource.name;
-    if (path.rfind(generated_path, 0) == 0)
-      path = path.substr(generated_path.size());
-
-    source->AddResourcePath(path, resource.value);
+    source->AddResourcePath(resource.path, resource.id);
   }
 
   source->SetDefaultResource(default_resource);
   source->AddResourcePath("test_loader.html", IDR_WEBUI_HTML_TEST_LOADER_HTML);
   source->AddResourcePath("test_loader.js", IDR_WEBUI_JS_TEST_LOADER_JS);
+  source->AddResourcePath("test_loader_util.js",
+                          IDR_WEBUI_JS_TEST_LOADER_UTIL_JS);
 }
 
 void AddScanningAppStrings(content::WebUIDataSource* html_source) {
@@ -71,12 +65,12 @@ void AddScanningAppStrings(content::WebUIDataSource* html_source) {
       {"getHelpLinkText", IDS_SCANNING_APP_GET_HELP_LINK_TEXT},
       {"grayscaleOptionText", IDS_SCANNING_APP_GRAYSCALE_OPTION_TEXT},
       {"jpgOptionText", IDS_SCANNING_APP_JPG_OPTION_TEXT},
+      {"learnMoreButtonLabel", IDS_SCANNING_APP_LEARN_MORE_BUTTON_LABEL},
       {"letterOptionText", IDS_SCANNING_APP_LETTER_OPTION_TEXT},
       {"moreSettings", IDS_SCANNING_APP_MORE_SETTINGS},
       {"myFilesSelectOption", IDS_SCANNING_APP_MY_FILES_SELECT_OPTION},
-      {"noScannersHelpLinkLabel", IDS_SCANNING_APP_NO_SCANNERS_HELP_LINK_LABEL},
-      {"noScannersHelpText", IDS_SCANNING_APP_NO_SCANNERS_HELP_TEXT},
       {"noScannersText", IDS_SCANNING_APP_NO_SCANNERS_TEXT},
+      {"noScannersSubtext", IDS_SCANNING_APP_NO_SCANNERS_SUBTEXT},
       {"okButtonLabel", IDS_SCANNING_APP_OK_BUTTON_LABEL},
       {"oneSidedDocFeederOptionText",
        IDS_SCANNING_APP_ONE_SIDED_DOC_FEEDER_OPTION_TEXT},
@@ -85,6 +79,7 @@ void AddScanningAppStrings(content::WebUIDataSource* html_source) {
       {"pageSizeDropdownLabel", IDS_SCANNING_APP_PAGE_SIZE_DROPDOWN_LABEL},
       {"resolutionDropdownLabel", IDS_SCANNING_APP_RESOLUTION_DROPDOWN_LABEL},
       {"resolutionOptionText", IDS_SCANNING_APP_RESOLUTION_OPTION_TEXT},
+      {"retryButtonLabel", IDS_SCANNING_APP_RETRY_BUTTON_LABEL},
       {"scanButtonText", IDS_SCANNING_APP_SCAN_BUTTON_TEXT},
       {"scanCanceledToastText", IDS_SCANNING_APP_SCAN_CANCELED_TOAST_TEXT},
       {"scanFailedDialogBodyText",
@@ -95,6 +90,7 @@ void AddScanningAppStrings(content::WebUIDataSource* html_source) {
       {"scanPreviewProgressText", IDS_SCANNING_APP_SCAN_PREVIEW_PROGRESS_TEXT},
       {"scanToDropdownLabel", IDS_SCANNING_APP_SCAN_TO_DROPDOWN_LABEL},
       {"scannerDropdownLabel", IDS_SCANNING_APP_SCANNER_DROPDOWN_LABEL},
+      {"scannersLoadingText", IDS_SCANNING_APP_SCANNERS_LOADING_TEXT},
       {"scanningImagesAriaLabel", IDS_SCANNING_APP_SCANNING_IMAGES_ARIA_LABEL},
       {"selectFolderOption", IDS_SCANNING_APP_SELECT_FOLDER_OPTION},
       {"sourceDropdownLabel", IDS_SCANNING_APP_SOURCE_DROPDOWN_LABEL},
@@ -102,9 +98,7 @@ void AddScanningAppStrings(content::WebUIDataSource* html_source) {
       {"twoSidedDocFeederOptionText",
        IDS_SCANNING_APP_TWO_SIDED_DOC_FEEDER_OPTION_TEXT}};
 
-  for (const auto& str : kLocalizedStrings)
-    html_source->AddLocalizedString(str.name, str.id);
-
+  html_source->AddLocalizedStrings(kLocalizedStrings);
   html_source->UseStringsJs();
 }
 
@@ -136,7 +130,7 @@ ScanningUI::ScanningUI(
 
   const auto resources = base::make_span(kChromeosScanningAppResources,
                                          kChromeosScanningAppResourcesSize);
-  SetUpWebUIDataSource(html_source.get(), resources, kGeneratedPath,
+  SetUpWebUIDataSource(html_source.get(), resources,
                        IDR_SCANNING_APP_INDEX_HTML);
 
   html_source->AddResourcePath("scanning.mojom-lite.js",

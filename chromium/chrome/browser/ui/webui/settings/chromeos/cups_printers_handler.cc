@@ -7,6 +7,7 @@
 #include <set>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/containers/flat_map.h"
@@ -44,7 +45,6 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/components/scanning/scanning_uma.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/debug_daemon/debug_daemon_client.h"
 #include "chromeos/printing/ppd_line_reader.h"
@@ -351,13 +351,10 @@ void CupsPrintersHandler::RegisterMessages() {
       "queryPrintServer",
       base::BindRepeating(&CupsPrintersHandler::HandleQueryPrintServer,
                           base::Unretained(this)));
-  if (base::FeatureList::IsEnabled(
-          chromeos::features::kPrintJobManagementApp)) {
-    web_ui()->RegisterMessageCallback(
-        "openPrintManagementApp",
-        base::BindRepeating(&CupsPrintersHandler::HandleOpenPrintManagementApp,
-                            base::Unretained(this)));
-  }
+  web_ui()->RegisterMessageCallback(
+      "openPrintManagementApp",
+      base::BindRepeating(&CupsPrintersHandler::HandleOpenPrintManagementApp,
+                          base::Unretained(this)));
   if (base::FeatureList::IsEnabled(chromeos::features::kScanningUI)) {
     web_ui()->RegisterMessageCallback(
         "openScanningApp",
@@ -1316,8 +1313,6 @@ void CupsPrintersHandler::OnQueryPrintServerCompleted(
 void CupsPrintersHandler::HandleOpenPrintManagementApp(
     const base::ListValue* args) {
   DCHECK(args->empty());
-  DCHECK(
-      base::FeatureList::IsEnabled(chromeos::features::kPrintJobManagementApp));
   chrome::ShowPrintManagementApp(profile_,
                                  PrintManagementAppEntryPoint::kSettings);
 }

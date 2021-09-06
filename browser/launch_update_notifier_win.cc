@@ -5,13 +5,22 @@
 #include "base/command_line.h"
 #include "base/environment.h"
 #include "base/files/file_path.h"
+#include "base/logging.h"
+#include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
+#include "base/timer/timer.h"
+#include "base/win/registry.h"
 #include "base/win/win_util.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/env_vars.h"
 #include "chrome/installer/util/util_constants.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
 
 #include "app/vivaldi_apptools.h"
@@ -21,8 +30,87 @@
 #include "installer/util/vivaldi_install_util.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "update_notifier/update_notifier_switches.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace vivaldi {
+
+namespace {
+
+// Do not start the update checker immediately at the browser startup to present
+// the user with an update notification if any after some delay. This also runs
+// the check when the browser should be mostly idle.
+constexpr base::TimeDelta kLaunchUpdateCheckDelay =
+    base::TimeDelta::FromSeconds(15);
+
+constexpr base::TimeDelta kStandaloneCheckPeriod = base::TimeDelta::FromDays(1);
+
+void StartUpdateNotifierIfEnabled(bool force_enable) {
+  if (force_enable) {
+    base::CommandLine cmdline =
+        ::vivaldi::GetCommonUpdateNotifierCommand(nullptr);
+    cmdline.AppendSwitch(vivaldi_update_notifier::kEnable);
+    int exit_code = vivaldi::RunNotifierSubaction(cmdline);
+    if (exit_code != 0) {
+      LOG(ERROR) << "Failed to enable update notifier";
+      return;
+    }
+  }
+
+  // We want to run the notifier with the current flags even if those are
+  // different from the autostart registry. This way one can kill the notifier
+  // and try with a new value of --vuu.
+  base::CommandLine cmdline =
+      ::vivaldi::GetCommonUpdateNotifierCommand(nullptr);
+  cmdline.AppendSwitch(vivaldi_update_notifier::kLaunchIfEnabled);
+  LaunchNotifierProcess(cmdline);
+}
+
+base::RepeatingTimer& GetStandaloneAutoUpdateTimer() {
+  static base::NoDestructor<base::RepeatingTimer> instance;
+  return *instance;
+}
+
+// Activities related to standalone update  management run UI thread, but we
+// need to ensure that they are stopped on shutdown. So use an explicit
+// sequence.
+scoped_refptr<base::SingleThreadTaskRunner> GetStandaloneAutoUpdateSequence() {
+  return content::GetUIThreadTaskRunner(
+      {base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
+}
+
+void LaunchStandaloneAutoUpdateCheck() {
+  DLOG(INFO) << "Starting standalone update check";
+  base::CommandLine cmdline =
+      ::vivaldi::GetCommonUpdateNotifierCommand(nullptr);
+
+  // Pretend that we are called from a scheduler to run the background check.
+  cmdline.AppendSwitch(vivaldi_update_notifier::kFromScheduler);
+  LaunchNotifierProcess(cmdline);
+}
+
+void DoStartStandaloneAutoUpdateCheck() {
+  base::RepeatingTimer& timer = GetStandaloneAutoUpdateTimer();
+  timer.Stop();
+  timer.Start(FROM_HERE, kStandaloneCheckPeriod,
+              base::BindRepeating(&LaunchStandaloneAutoUpdateCheck));
+  LaunchStandaloneAutoUpdateCheck();
+}
+
+void DoStopStandaloneUpdateCheck() {
+  base::RepeatingTimer& timer = GetStandaloneAutoUpdateTimer();
+  timer.Stop();
+
+  // Ask a running process if any to quit.
+  SendQuitUpdateNotifier(nullptr, /*global=*/false);
+}
+
+void StartStandaloneAutoUpdateCheck(base::TimeDelta initial_delay) {
+  GetStandaloneAutoUpdateSequence()->PostDelayedTask(
+      FROM_HERE, base::BindOnce(&DoStartStandaloneAutoUpdateCheck),
+      initial_delay);
+}
+
+}  // namespace
 
 void LaunchUpdateNotifier(Profile* profile) {
   // Don't launch the update notifier if we are not running as Vivaldi.
@@ -43,43 +131,78 @@ void LaunchUpdateNotifier(Profile* profile) {
   if (env->HasVar(env_vars::kHeadless))
     return;
 
-  bool enabled = IsUpdateNotifierEnabled(nullptr);
-  if (!enabled) {
-    // If the auto-run command is not set, check the obsolete auto update pref.
-    // This hack fixes VB-30912.
-    PrefService* prefs = profile->GetPrefs();
-    if (prefs->GetBoolean(vivaldiprefs::kAutoUpdateEnabled)) {
-      // Make sure we don't consider the pref on next launch.
-      prefs->SetBoolean(vivaldiprefs::kAutoUpdateEnabled, false);
-      EnableUpdateNotifier(GetCommonUpdateNotifierCommand(profile));
-      enabled = true;
+  if (IsStandaloneBrowser()) {
+    if (IsStandaloneAutoUpdateEnabled()) {
+      StartStandaloneAutoUpdateCheck(kLaunchUpdateCheckDelay);
     }
+    return;
   }
-  if (enabled) {
-    // We want to run the notifier with the current flags even if those are
-    // different from the autostart registry. This way one can kill the notifier
-    // and try with a new value of --vuu.
-    LaunchNotifierProcess(GetCommonUpdateNotifierCommand(profile));
+
+  // Check the obsolete auto update pref. This hack fixes VB-30912.
+  bool force_enable = false;
+  PrefService* prefs = profile->GetPrefs();
+  if (prefs->GetBoolean(vivaldiprefs::kAutoUpdateEnabled)) {
+    // Make sure we don't consider the pref on next launch.
+    prefs->SetBoolean(vivaldiprefs::kAutoUpdateEnabled, false);
+    force_enable = true;
   }
+
+  base::ThreadPool::PostDelayedTask(
+      FROM_HERE,
+      {base::WithBaseSyncPrimitives(),
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+      base::BindOnce(&StartUpdateNotifierIfEnabled, force_enable),
+      kLaunchUpdateCheckDelay);
 }
 
-base::CommandLine GetCommonUpdateNotifierCommand(Profile* profile) {
-  base::CommandLine command(GetUpdateNotifierPath(nullptr));
-  base::CommandLine* vivaldi_cmd_line = base::CommandLine::ForCurrentProcess();
-  if (vivaldi_cmd_line->HasSwitch(switches::kVivaldiUpdateURL)) {
-    command.AppendSwitchNative(
-        switches::kVivaldiUpdateURL,
-        vivaldi_cmd_line->GetSwitchValueNative(switches::kVivaldiUpdateURL));
+void DisableStandaloneAutoUpdate() {
+  DCHECK(IsStandaloneBrowser());
+  PrefService* prefs = g_browser_process->local_state();
+  prefs->SetBoolean(vivaldiprefs::kVivaldiAutoUpdateStandalone, false);
+  GetStandaloneAutoUpdateSequence()->PostTask(
+      FROM_HERE, base::BindOnce(&DoStopStandaloneUpdateCheck));
+  DLOG(INFO) << "Disabled standalone update notifier";
+}
+
+void EnableStandaloneAutoUpdate() {
+  DCHECK(IsStandaloneBrowser());
+  PrefService* prefs = g_browser_process->local_state();
+  prefs->SetBoolean(vivaldiprefs::kVivaldiAutoUpdateStandalone, true);
+  StartStandaloneAutoUpdateCheck(base::TimeDelta());
+  DLOG(INFO) << "Enabled standalone update notifier";
+}
+
+bool IsStandaloneAutoUpdateEnabled() {
+  DCHECK(IsStandaloneBrowser());
+  PrefService* prefs = g_browser_process->local_state();
+
+  // Read the real default from the registry. We do it here and not in
+  // RegisterLocalState to avoid reading the registry if the user has already
+  // set the value.
+  const base::Value* value =
+      prefs->GetUserPrefValue(vivaldiprefs::kVivaldiAutoUpdateStandalone);
+  if (value) {
+    DCHECK(value->is_bool());
+    return !value->is_bool() || value->GetBool();
   }
-  if (vivaldi_cmd_line->HasSwitch(switches::kEnableLogging)) {
-    // We do not copy the value here as we do not want to log to the browser log
-    // file but rather always to the separated install log.
-    command.AppendSwitch(vivaldi_update_notifier::kEnableLogging);
-  }
-  if (vivaldi_cmd_line->HasSwitch(switches::kVivaldiSilentUpdate)) {
-    command.AppendSwitch(switches::kVivaldiSilentUpdate);
-  }
-  return command;
+
+  // Cache the registry value to avoid de-synchronization between running the
+  // update check and the value reported to settings dialog in case the registry
+  // changes.
+  static bool registry_enabled = []() -> bool {
+    base::win::RegKey key(HKEY_CURRENT_USER, vivaldi::constants::kVivaldiKey,
+                          KEY_QUERY_VALUE);
+    if (key.Valid()) {
+      if (base::Optional<bool> bool_value = ReadRegistryBool(
+              vivaldi::constants::kVivaldiInstallerDisableStandaloneAutoupdate,
+              key)) {
+        // The meaning in the registry is reversed.
+        return !*bool_value;
+      }
+    }
+    return true;
+  }();
+  return registry_enabled;
 }
 
 }  // namespace vivaldi

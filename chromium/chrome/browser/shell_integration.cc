@@ -29,7 +29,7 @@
 #include "content/public/browser/browser_thread.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chromeos/constants/chromeos_switches.h"
+#include "ash/constants/ash_switches.h"
 #endif
 
 #if defined(OS_WIN)
@@ -266,7 +266,7 @@ void DefaultBrowserWorker::SetAsDefaultImpl(
     base::OnceClosure on_finished_callback) {
   switch (GetDefaultWebClientSetPermission()) {
     case SET_DEFAULT_NOT_ALLOWED:
-      NOTREACHED();
+      DCHECK(false);  // Only fatal in debug builds
       break;
     case SET_DEFAULT_UNATTENDED:
       SetAsDefaultBrowser();

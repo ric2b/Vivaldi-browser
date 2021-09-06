@@ -335,7 +335,7 @@ RootInlineBox* LayoutBlockFlow::ConstructLine(BidiRunList<BidiRun>& bidi_runs,
 
     if (box->IsInlineTextBox()) {
       if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache())
-        cache->InlineTextBoxesUpdated(r->line_layout_item_);
+        cache->InlineTextBoxesUpdated(r->line_layout_item_.GetLayoutObject());
     }
   }
 
@@ -2197,6 +2197,10 @@ RootInlineBox* LayoutBlockFlow::DetermineStartPosition(
 
     // If we have no dirty lines, then last is just the last root box.
     last = curr ? curr->PrevRootBox() : LastRootBox();
+#if DCHECK_IS_ON()
+    if (last && last->LineBreakObj().GetLayoutObject())
+      last->LineBreakObj().GetLayoutObject()->CheckIsNotDestroyed();
+#endif
   }
 
   unsigned num_clean_floats = 0;

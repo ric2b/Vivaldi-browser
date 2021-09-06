@@ -22,7 +22,6 @@ Vector<LayoutUnit> DistributeInlineSizeToComputedInlineSizeAuto(
   unsigned percent_columns_count = 0;
   unsigned fixed_columns_count = 0;
   unsigned auto_columns_count = 0;
-
   // What guesses mean is described in table specification.
   // https://www.w3.org/TR/css-tables-3/#width-distribution-algorithm
   enum { kMinGuess, kPercentageGuess, kSpecifiedGuess, kMaxGuess, kAboveMax };
@@ -38,7 +37,10 @@ Vector<LayoutUnit> DistributeInlineSizeToComputedInlineSizeAuto(
     all_columns_count++;
     DCHECK(column->min_inline_size);
     DCHECK(column->max_inline_size);
-    if (column->percent) {
+
+    if (column->is_mergeable) {
+      ;  // Mergeable columns are ignored.
+    } else if (column->percent) {
       percent_columns_count++;
       total_percent += *column->percent;
       LayoutUnit percent_inline_size =
@@ -92,6 +94,8 @@ Vector<LayoutUnit> DistributeInlineSizeToComputedInlineSizeAuto(
       LayoutUnit* computed_size = computed_sizes.begin();
       for (const NGTableTypes::Column* column = start_column;
            column != end_column; ++column, ++computed_size) {
+        if (column->is_mergeable)
+          continue;
         *computed_size = column->min_inline_size.value_or(LayoutUnit());
       }
     } break;
@@ -106,6 +110,8 @@ Vector<LayoutUnit> DistributeInlineSizeToComputedInlineSizeAuto(
       LayoutUnit* last_computed_size = nullptr;
       for (const NGTableTypes::Column* column = start_column;
            column != end_column; ++column, ++computed_size) {
+        if (column->is_mergeable)
+          continue;
         if (column->percent) {
           last_computed_size = computed_size;
           LayoutUnit percent_inline_size =
@@ -144,6 +150,8 @@ Vector<LayoutUnit> DistributeInlineSizeToComputedInlineSizeAuto(
       LayoutUnit* computed_size = computed_sizes.begin();
       for (const NGTableTypes::Column* column = start_column;
            column != end_column; ++column, ++computed_size) {
+        if (column->is_mergeable)
+          continue;
         if (column->percent) {
           *computed_size = column->ResolvePercentInlineSize(target_inline_size);
         } else if (column->is_constrained) {
@@ -190,6 +198,8 @@ Vector<LayoutUnit> DistributeInlineSizeToComputedInlineSizeAuto(
       LayoutUnit* computed_size = computed_sizes.begin();
       for (const NGTableTypes::Column* column = start_column;
            column != end_column; ++column, ++computed_size) {
+        if (column->is_mergeable)
+          continue;
         if (column->percent) {
           *computed_size = column->ResolvePercentInlineSize(target_inline_size);
         } else if (column->is_constrained || is_exact_match) {
@@ -226,6 +236,8 @@ Vector<LayoutUnit> DistributeInlineSizeToComputedInlineSizeAuto(
         LayoutUnit* computed_size = computed_sizes.begin();
         for (const NGTableTypes::Column* column = start_column;
              column != end_column; ++column, ++computed_size) {
+          if (column->is_mergeable)
+            continue;
           if (column->percent) {
             *computed_size =
                 column->ResolvePercentInlineSize(target_inline_size);
@@ -256,6 +268,8 @@ Vector<LayoutUnit> DistributeInlineSizeToComputedInlineSizeAuto(
         LayoutUnit* computed_size = computed_sizes.begin();
         for (const NGTableTypes::Column* column = start_column;
              column != end_column; ++column, ++computed_size) {
+          if (column->is_mergeable)
+            continue;
           if (column->percent) {
             *computed_size =
                 column->ResolvePercentInlineSize(target_inline_size);
@@ -286,6 +300,8 @@ Vector<LayoutUnit> DistributeInlineSizeToComputedInlineSizeAuto(
         LayoutUnit* computed_size = computed_sizes.begin();
         for (const NGTableTypes::Column* column = start_column;
              column != end_column; ++column, ++computed_size) {
+          if (column->is_mergeable)
+            continue;
           DCHECK(column->percent);
           last_computed_size = computed_size;
           if (total_percent > 0.0f) {
@@ -447,18 +463,32 @@ void DistributeColspanCellToColumnsFixed(
   NGTableTypes::Column* end_column = start_column + colspan_cell.span;
   DCHECK_NE(start_column, end_column);
 
+  // Inline sizes for redistribution exclude border spacing.
+  LayoutUnit total_inner_border_spacing;
+  unsigned effective_span = 0;
+  bool is_first_column = true;
+  for (NGTableTypes::Column* column = start_column; column != end_column;
+       ++column) {
+    if (column->is_mergeable)
+      continue;
+    ++effective_span;
+    if (!is_first_column)
+      total_inner_border_spacing += inline_border_spacing;
+    else
+      is_first_column = false;
+  }
   LayoutUnit colspan_cell_min_inline_size;
   LayoutUnit colspan_cell_max_inline_size;
   // Colspanned cells only distribute min inline size if constrained.
   if (colspan_cell.cell_inline_constraint.is_constrained) {
     colspan_cell_min_inline_size =
         (colspan_cell.cell_inline_constraint.min_inline_size -
-         (colspan_cell.span - 1) * inline_border_spacing)
+         total_inner_border_spacing)
             .ClampNegativeToZero();
   }
   colspan_cell_max_inline_size =
       (colspan_cell.cell_inline_constraint.max_inline_size -
-       (colspan_cell.span - 1) * inline_border_spacing)
+       total_inner_border_spacing)
           .ClampNegativeToZero();
 
   // Distribute min/max/percentage evenly between all cells.
@@ -468,18 +498,19 @@ void DistributeColspanCellToColumnsFixed(
       colspan_cell.cell_inline_constraint.percent.value_or(0.0f);
 
   LayoutUnit new_min_size = LayoutUnit(colspan_cell_min_inline_size /
-                                       static_cast<float>(colspan_cell.span));
+                                       static_cast<float>(effective_span));
   LayoutUnit new_max_size = LayoutUnit(colspan_cell_max_inline_size /
-                                       static_cast<float>(colspan_cell.span));
+                                       static_cast<float>(effective_span));
   base::Optional<float> new_percent;
   if (colspan_cell.cell_inline_constraint.percent) {
-    new_percent =
-        *colspan_cell.cell_inline_constraint.percent / colspan_cell.span;
+    new_percent = *colspan_cell.cell_inline_constraint.percent / effective_span;
   }
 
   NGTableTypes::Column* last_column;
   for (NGTableTypes::Column* column = start_column; column < end_column;
        ++column) {
+    if (column->is_mergeable)
+      continue;
     last_column = column;
     rounding_error_min_inline_size -= new_min_size;
     rounding_error_max_inline_size -= new_max_size;
@@ -521,13 +552,25 @@ void DistributeColspanCellToColumnsAuto(
   NGTableTypes::Column* end_column = start_column + effective_span;
 
   // Inline sizes for redistribution exclude border spacing.
+  LayoutUnit total_inner_border_spacing;
+  bool is_first_column = true;
+  for (NGTableTypes::Column* column = start_column; column != end_column;
+       ++column) {
+    if (!column->is_mergeable) {
+      if (!is_first_column)
+        total_inner_border_spacing += inline_border_spacing;
+      else
+        is_first_column = false;
+    }
+  }
+
   LayoutUnit colspan_cell_min_inline_size =
       (colspan_cell.cell_inline_constraint.min_inline_size -
-       (effective_span - 1) * inline_border_spacing)
+       total_inner_border_spacing)
           .ClampNegativeToZero();
   LayoutUnit colspan_cell_max_inline_size =
       (colspan_cell.cell_inline_constraint.max_inline_size -
-       (effective_span - 1) * inline_border_spacing)
+       total_inner_border_spacing)
           .ClampNegativeToZero();
   base::Optional<float> colspan_cell_percent =
       colspan_cell.cell_inline_constraint.percent;
@@ -544,6 +587,8 @@ void DistributeColspanCellToColumnsAuto(
         column->max_inline_size = LayoutUnit();
       if (!column->min_inline_size)
         column->min_inline_size = LayoutUnit();
+      if (column->is_mergeable)
+        continue;
       all_columns_count++;
       if (column->percent) {
         percent_columns_count++;
@@ -559,7 +604,7 @@ void DistributeColspanCellToColumnsAuto(
       // max_inline_size.
       for (NGTableTypes::Column* column = start_column; column != end_column;
            ++column) {
-        if (column->percent)
+        if (column->percent || column->is_mergeable)
           continue;
         float column_percent;
         if (nonpercent_columns_max_inline_size != LayoutUnit()) {
@@ -609,6 +654,10 @@ void DistributeColspanCellToColumnsAuto(
   }
 }
 
+// Handles distribution of excess block size from: table, sections,
+// rows, and rowspanned cells, to rows.
+// Rowspanned cells distribute with slight differences from
+// general distribution algorithm.
 void DistributeExcessBlockSizeToRows(
     const wtf_size_t start_row_index,
     const wtf_size_t row_count,
@@ -664,6 +713,7 @@ void DistributeExcessBlockSizeToRows(
   unsigned unconstrained_non_empty_row_count = 0;
   unsigned constrained_non_empty_row_count = 0;
   unsigned empty_row_count = 0;
+  unsigned unconstrained_empty_row_count = 0;
 
   LayoutUnit total_block_size;
   LayoutUnit percentage_block_size_deficit;
@@ -687,8 +737,11 @@ void DistributeExcessBlockSizeToRows(
     } else if (row->is_constrained && !IsEmptyRow(row)) {
       constrained_non_empty_row_count++;
     }
-    if (IsEmptyRow(row))
+    if (IsEmptyRow(row)) {
       empty_row_count++;
+      if (!row->is_constrained)
+        unconstrained_empty_row_count++;
+    }
   }
 
   LayoutUnit distributable_block_size =
@@ -760,14 +813,14 @@ void DistributeExcessBlockSizeToRows(
   }
 
   // Step 4: Empty row distribution
-  // Table distributes evenly between all rows.
-  // If there are any empty rows except start row, last row takes all the
-  // excess block size.
+  // At this point all rows are empty and/or constrained.
   if (empty_row_count > 0) {
     if (desired_block_size_is_rowspan) {
       NGTableTypes::Row* last_row = nullptr;
       NGTableTypes::Row* row = start_row;
-      if (empty_row_count != row_count)  // skip initial row.
+      // Rowspan distribution skips initial empty row if possible,
+      // and distributes everything to the last empty row.
+      if (empty_row_count != row_count)
         ++row;
       for (; row != end_row; ++row) {
         if (row->block_size != LayoutUnit())
@@ -781,20 +834,25 @@ void DistributeExcessBlockSizeToRows(
     } else if (empty_row_count == row_count ||
                (empty_row_count + constrained_non_empty_row_count ==
                 row_count)) {
-      // Grow empty rows if one of these is true:
+      // Grow empty rows if either of these is true:
       // - all rows are empty.
       // - non-empty rows are all constrained.
-      // Different browsers disagree on when to grow empty rows.
       NGTableTypes::Row* last_row = nullptr;
       LayoutUnit remaining_deficit = distributable_block_size;
+      // If there are constrained and unconstrained empty rows,
+      // only unconstrained rows grow.
+      bool grow_only_unconstrained = unconstrained_empty_row_count > 0;
+      unsigned growing_rows_count = grow_only_unconstrained
+                                        ? unconstrained_empty_row_count
+                                        : empty_row_count;
       for (NGTableTypes::Row* row = start_row; row != end_row; ++row) {
         if (row->block_size != LayoutUnit())
           continue;
+        if (grow_only_unconstrained && row->is_constrained)
+          continue;
         last_row = row;
-        // Table block size distributes equally, while rowspan distributes to
-        // last row.
         LayoutUnit delta =
-            LayoutUnit(distributable_block_size.ToFloat() / empty_row_count);
+            LayoutUnit(distributable_block_size.ToFloat() / growing_rows_count);
         row->block_size = delta;
         remaining_deficit -= delta;
       }
@@ -828,7 +886,7 @@ MinMaxSizes NGTableAlgorithmHelpers::ComputeGridInlineMinMax(
     const NGTableTypes::Columns& column_constraints,
     LayoutUnit undistributable_space,
     bool is_fixed_layout,
-    bool allow_column_percentages,
+    bool is_layout_pass,
     bool skip_collapsed_columns) {
   MinMaxSizes min_max;
   // https://www.w3.org/TR/css-tables-3/#computing-the-table-width
@@ -885,8 +943,7 @@ MinMaxSizes NGTableAlgorithmHelpers::ComputeGridInlineMinMax(
 
   // Table max inline size constraint can be computed from the total column
   // percentage combined with max_inline_size of non-percent columns.
-  if (percent_sum > 0 &&
-      (allow_column_percentages || node.AllowColumnPercentages())) {
+  if (percent_sum > 0 && node.AllowColumnPercentages(is_layout_pass)) {
     LayoutUnit size_from_percent_and_fixed;
     DCHECK_GE(percent_sum, 0.0f);
     if (non_percent_max_size_sum != LayoutUnit()) {
@@ -1110,7 +1167,7 @@ void NGTableAlgorithmHelpers::DistributeTableBlockSizeToSections(
       group_index = 0;
 
     LayoutUnit remaining_deficit = excess_block_size;
-    NGTableTypes::Section* last_section;
+    NGTableTypes::Section* last_section = nullptr;
     for (NGTableTypes::Section& section : *sections) {
       if (group_index == 2 && !is_group_2(section))
         continue;

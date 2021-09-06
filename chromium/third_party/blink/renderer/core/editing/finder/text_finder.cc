@@ -56,6 +56,7 @@
 #include "third_party/blink/renderer/core/frame/find_in_page.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
+#include "third_party/blink/renderer/core/frame/web_frame_widget_impl.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_shift_tracker.h"
@@ -601,6 +602,21 @@ void TextFinder::ClearFindMatchesCache() {
   find_match_rects_are_valid_ = false;
 }
 
+void TextFinder::InvalidateFindMatchRects() {
+  // Increase version number is required to trigger FindMatchRects update when
+  // next find.
+  if (!find_matches_cache_.IsEmpty())
+    ++find_match_markers_version_;
+
+  // For subframes, we need to recalculate the FindMatchRects when the
+  // document size of mainframe changed even if the document size of current
+  // frame has not changed because Find-in-page coordinates are represented as
+  // normalized fractions of the main frame document. So we need to force the
+  // FindMatchRects to be updated instead of changing according to the current
+  // document size.
+  find_match_rects_are_valid_ = false;
+}
+
 void TextFinder::UpdateFindMatchRects() {
   IntSize current_document_size = OwnerFrame().DocumentSize();
   if (document_size_for_current_find_match_rects_ != current_document_size) {
@@ -747,7 +763,7 @@ int TextFinder::SelectFindMatch(unsigned index, gfx::Rect* selection_rect) {
     // Zoom to the active match.
     active_match_rect = OwnerFrame().GetFrameView()->ConvertToRootFrame(
         active_match_bounding_box);
-    OwnerFrame().LocalRoot()->FrameWidget()->ZoomToFindInPageRect(
+    OwnerFrame().LocalRoot()->FrameWidgetImpl()->ZoomToFindInPageRect(
         active_match_rect);
   }
 
@@ -920,7 +936,7 @@ void TextFinder::Scroll(std::unique_ptr<AsyncScrollContext> context) {
   // column where the next hit has been found. Doing this when autosizing is
   // not set will result in a zoom reset on small devices.
   if (GetFrame()->GetDocument()->GetTextAutosizer()->PageNeedsAutosizing()) {
-    OwnerFrame().LocalRoot()->FrameWidget()->ZoomToFindInPageRect(
+    OwnerFrame().LocalRoot()->FrameWidgetImpl()->ZoomToFindInPageRect(
         OwnerFrame().GetFrameView()->ConvertToRootFrame(
             ComputeTextRect(EphemeralRange(context->range))));
   }
@@ -938,6 +954,30 @@ void TextFinder::Scroll(std::unique_ptr<AsyncScrollContext> context) {
     marker_controller.AddTextMatchMarker(ephemeral_range,
                                          TextMatchMarker::MatchStatus::kActive);
     SetMarkerActive(context->range, true);
+  }
+}
+
+void TextFinder::IncreaseMarkerVersion() {
+  ++find_match_markers_version_;
+
+  // This is called when the size of the content changes. Normally, the check
+  // for the document size changed at the beginning of UpdateFindMatchRects()
+  // would be responsible for invalidating the cached matches as well.
+  // However, a subframe might not change size but its match rects may still be
+  // affected because Find-in-page coordinates are represented as normalized
+  // fractions of the main frame document, so invalidate the cached matches of
+  // subframes as well.
+  for (Frame* frame = GetFrame()->Tree().TraverseNext(GetFrame()); frame;
+       frame = frame->Tree().TraverseNext(GetFrame())) {
+    // TODO(https://crbug.com/1147796) In OOPIFs mode, the text finder
+    // corresponding to the remote frame also needs to be notified, the
+    // match rects are invalid and need to be recalculated.
+    auto* web_local_frame_impl =
+        WebLocalFrameImpl::FromFrame(DynamicTo<LocalFrame>(frame));
+    if (web_local_frame_impl && web_local_frame_impl->GetTextFinder() &&
+        web_local_frame_impl->GetTextFinder()->TotalMatchCount() > 0) {
+      web_local_frame_impl->GetTextFinder()->InvalidateFindMatchRects();
+    }
   }
 }
 

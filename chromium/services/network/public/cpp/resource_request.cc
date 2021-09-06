@@ -24,6 +24,19 @@ mojo::PendingRemote<mojom::CookieAccessObserver> Clone(
   return new_remote;
 }
 
+mojo::PendingRemote<mojom::AuthenticationAndCertificateObserver> Clone(
+    mojo::PendingRemote<mojom::AuthenticationAndCertificateObserver>*
+        observer) {
+  if (!*observer)
+    return mojo::NullRemote();
+  mojo::Remote<mojom::AuthenticationAndCertificateObserver> remote(
+      std::move(*observer));
+  mojo::PendingRemote<mojom::AuthenticationAndCertificateObserver> new_remote;
+  remote->Clone(new_remote.InitWithNewPipeAndPassReceiver());
+  *observer = remote.Unbind();
+  return new_remote;
+}
+
 // Returns true iff either holds true:
 //
 //  - both |lhs| and |rhs| are nullopt, or
@@ -59,6 +72,10 @@ ResourceRequest::TrustedParams& ResourceRequest::TrustedParams::operator=(
   cookie_observer =
       Clone(&const_cast<mojo::PendingRemote<mojom::CookieAccessObserver>&>(
           other.cookie_observer));
+  auth_cert_observer =
+      Clone(&const_cast<
+            mojo::PendingRemote<mojom::AuthenticationAndCertificateObserver>&>(
+          other.auth_cert_observer));
   client_security_state = other.client_security_state.Clone();
   return *this;
 }
@@ -82,20 +99,32 @@ ResourceRequest::WebBundleTokenParams::WebBundleTokenParams(
 ResourceRequest::WebBundleTokenParams&
 ResourceRequest::WebBundleTokenParams::operator=(
     const WebBundleTokenParams& other) {
+  bundle_url = other.bundle_url;
   token = other.token;
   handle = other.CloneHandle();
+  render_process_id = other.render_process_id;
   return *this;
 }
 
 ResourceRequest::WebBundleTokenParams::WebBundleTokenParams(
+    const GURL& bundle_url,
     const base::UnguessableToken& token,
     mojo::PendingRemote<mojom::WebBundleHandle> handle)
-    : token(token), handle(std::move(handle)) {}
+    : bundle_url(bundle_url), token(token), handle(std::move(handle)) {}
+
+ResourceRequest::WebBundleTokenParams::WebBundleTokenParams(
+    const GURL& bundle_url,
+    const base::UnguessableToken& token,
+    int32_t render_process_id)
+    : bundle_url(bundle_url),
+      token(token),
+      render_process_id(render_process_id) {}
 
 bool ResourceRequest::WebBundleTokenParams::EqualsForTesting(
     const WebBundleTokenParams& other) const {
-  return token == other.token &&
-         ((handle && other.handle) || (!handle && !other.handle));
+  return bundle_url == other.bundle_url && token == other.token &&
+         ((handle && other.handle) || (!handle && !other.handle)) &&
+         render_process_id == other.render_process_id;
 }
 
 mojo::PendingRemote<mojom::WebBundleHandle>
@@ -166,6 +195,7 @@ bool ResourceRequest::EqualsForTesting(const ResourceRequest& request) const {
          is_signed_exchange_prefetch_cache_enabled ==
              request.is_signed_exchange_prefetch_cache_enabled &&
          is_fetch_like_api == request.is_fetch_like_api &&
+         is_favicon == request.is_favicon &&
          obey_origin_policy == request.obey_origin_policy &&
          recursive_prefetch_token == request.recursive_prefetch_token &&
          OptionalTrustedParamsEqualsForTesting(trusted_params,

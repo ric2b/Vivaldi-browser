@@ -652,8 +652,8 @@ OverviewWindowDragController::CompleteNormalDrag(
 
   // Snap a window if appropriate.
   if (should_allow_split_view_ && snap_position_ != SplitViewController::NONE) {
+    // Overview grid will be updated after window is snapped in splitview.
     SnapWindow(SplitViewController::Get(target_root), snap_position_);
-    overview_session_->PositionWindows(/*animate=*/true);
     RecordNormalDrag(kToSnap, is_dragged_to_other_display);
     return DragResult::kSnap;
   }
@@ -774,9 +774,8 @@ void OverviewWindowDragController::SnapWindow(
               ->IsDividerAnimating());
   aura::Window* window = item_->GetWindow();
   split_view_controller->SnapWindow(window, snap_position,
-                                    /*use_divider_spawn_animation=*/true);
+                                    /*activate_window=*/true);
   item_ = nullptr;
-  wm::ActivateWindow(window);
 }
 
 OverviewGrid* OverviewWindowDragController::GetCurrentGrid() const {

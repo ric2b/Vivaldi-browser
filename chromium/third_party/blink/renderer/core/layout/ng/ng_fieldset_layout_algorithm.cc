@@ -95,10 +95,10 @@ scoped_refptr<const NGLayoutResult> NGFieldsetLayoutAlgorithm::Layout() {
       intrinsic_block_size_ + borders_.block_end);
 
   // Recompute the block-axis size now that we know our content size.
-  border_box_size_.block_size =
-      ComputeBlockSizeForFragment(ConstraintSpace(), Style(), BorderPadding(),
-                                  intrinsic_block_size_ + consumed_block_size_,
-                                  border_box_size_.inline_size);
+  border_box_size_.block_size = ComputeBlockSizeForFragment(
+      ConstraintSpace(), Style(), BorderPadding(),
+      intrinsic_block_size_ + consumed_block_size_,
+      border_box_size_.inline_size, Node().ShouldBeConsideredAsReplaced());
 
   // The above computation utility knows nothing about fieldset weirdness. The
   // legend may eat from the available content box block size. Make room for
@@ -106,7 +106,7 @@ scoped_refptr<const NGLayoutResult> NGFieldsetLayoutAlgorithm::Layout() {
   // Note that in size containment, we have to consider sizing as if we have no
   // contents, with the conjecture being that legend is part of the contents.
   // Thus, only do this adjustment if we do not contain size.
-  if (!Node().ShouldApplySizeContainment()) {
+  if (!Node().ShouldApplyBlockSizeContainment()) {
     // Similar to how we add the consumed block size to the intrinsic
     // block size when calculating border_box_size_.block_size, we also need to
     // do so when the fieldset is adjusted to encompass the legend.
@@ -174,7 +174,7 @@ NGBreakStatus NGFieldsetLayoutAlgorithm::LayoutChildren() {
       LayoutLegend(legend);
     // The legend may eat from the available content box block size. Calculate
     // the minimum block size needed to encompass the legend.
-    if (!Node().ShouldApplySizeContainment() &&
+    if (!Node().ShouldApplyBlockSizeContainment() &&
         !IsResumingLayout(content_break_token.get())) {
       minimum_border_box_block_size_ =
           intrinsic_block_size_ + padding_.BlockSum() + borders_.block_end;
@@ -328,9 +328,9 @@ NGBreakStatus NGFieldsetLayoutAlgorithm::LayoutFieldsetContent(
   // - The intrinsic block-size of the content is larger than the
   //   max-block-size.
   if (adjusted_padding_box_size.block_size == kIndefiniteSize) {
-    LayoutUnit max_content_block_size = ResolveMaxBlockLength(
-        ConstraintSpace(), Style(), BorderPadding(), Style().LogicalMaxHeight(),
-        LengthResolvePhase::kLayout);
+    LayoutUnit max_content_block_size =
+        ResolveMaxBlockLength(ConstraintSpace(), Style(), BorderPadding(),
+                              Style().LogicalMaxHeight());
     if (max_content_block_size != LayoutUnit::Max()) {
       max_content_block_size -= BorderPadding().BlockSum();
 
@@ -386,8 +386,8 @@ MinMaxSizesResult NGFieldsetLayoutAlgorithm::ComputeMinMaxSizes(
     const MinMaxSizesInput& input) const {
   MinMaxSizesResult result;
 
-  bool apply_size_containment = Node().ShouldApplySizeContainment();
-  if (apply_size_containment) {
+  bool has_inline_size_containment = Node().ShouldApplyInlineSizeContainment();
+  if (has_inline_size_containment) {
     // Size containment does not consider the legend for sizing.
     base::Optional<MinMaxSizesResult> result_without_children =
         CalculateMinMaxSizesIgnoringChildren(Node(), BorderScrollbarPadding());
@@ -406,7 +406,7 @@ MinMaxSizesResult NGFieldsetLayoutAlgorithm::ComputeMinMaxSizes(
   result.sizes += ComputePadding(ConstraintSpace(), Style()).InlineSum();
 
   // Size containment does not consider the content for sizing.
-  if (!apply_size_containment) {
+  if (!has_inline_size_containment) {
     if (NGBlockNode content = Node().GetFieldsetContent()) {
       MinMaxSizesResult content_result =
           ComputeMinAndMaxContentContribution(Style(), content, input);

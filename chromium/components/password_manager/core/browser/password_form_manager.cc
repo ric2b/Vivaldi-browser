@@ -13,6 +13,7 @@
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -268,9 +269,9 @@ base::span<const InteractionsStats> PasswordFormManager::GetInteractionsStats()
   return base::make_span(form_fetcher_->GetInteractionsStats());
 }
 
-base::span<const CompromisedCredentials>
-PasswordFormManager::GetCompromisedCredentials() const {
-  return form_fetcher_->GetCompromisedCredentials();
+base::span<const InsecureCredential>
+PasswordFormManager::GetInsecureCredentials() const {
+  return form_fetcher_->GetInsecureCredentials();
 }
 
 bool PasswordFormManager::IsBlocklisted() const {
@@ -334,18 +335,23 @@ void PasswordFormManager::OnUpdateUsernameFromPrompt(
 
   metrics_recorder_->set_username_updated_in_bubble(true);
 
-  // |has_username_edited_vote_| is true iff |new_username| was typed in another
-  // field. Otherwise, |has_username_edited_vote_| is false and no vote will be
-  // uploaded.
-  votes_uploader_.set_has_username_edited_vote(false);
   if (!new_username.empty()) {
-    for (const auto& possible_username :
-         parsed_submitted_form_->all_possible_usernames) {
-      if (possible_username.first == new_username) {
-        parsed_submitted_form_->username_element = possible_username.second;
-        votes_uploader_.set_has_username_edited_vote(true);
-        break;
-      }
+    // Try to find `new_username` in the usernames `parsed_submitted_form_`
+    // knows about. Set `votes_uploader_`'s UsernameChangeState depending on
+    // whether the username is present or not. Also set `username_element` if it
+    // is a known username.
+    const auto& possible_usernames =
+        parsed_submitted_form_->all_possible_usernames;
+    auto possible_username_it = base::ranges::find(
+        possible_usernames, new_username, &ValueElementPair::first);
+
+    if (possible_username_it != possible_usernames.end()) {
+      parsed_submitted_form_->username_element = possible_username_it->second;
+      votes_uploader_.set_username_change_state(
+          VotesUploader::UsernameChangeState::kChangedToKnownValue);
+    } else {
+      votes_uploader_.set_username_change_state(
+          VotesUploader::UsernameChangeState::kChangedToUnknownValue);
     }
   }
 
@@ -579,7 +585,7 @@ void PasswordFormManager::UpdateObservedFormDataWithFieldDataManagerInfo(
     FieldRendererId field_id = field.unique_renderer_id;
     if (!field_data_manager->HasFieldData(field_id))
       continue;
-    field.typed_value = field_data_manager->GetUserTypedValue(field_id);
+    field.user_input = field_data_manager->GetUserInput(field_id);
     field.properties_mask =
         field_data_manager->GetFieldPropertiesMask(field_id);
   }
@@ -901,6 +907,9 @@ PasswordFormManager::PasswordFormManager(
   }
   password_save_manager_->Init(client_, form_fetcher_, metrics_recorder_,
                                &votes_uploader_);
+  // TODO(https://crbug.com/1167475): Add test for this metric.
+  base::UmaHistogramEnumeration("PasswordManager.FormVisited.PerProfileType",
+                                client_->GetProfileType());
 }
 
 void PasswordFormManager::RecordMetricOnReadonly(

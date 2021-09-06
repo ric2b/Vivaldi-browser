@@ -51,7 +51,7 @@
 #include "chrome/browser/lite_video/lite_video_keyed_service_factory.h"
 #include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
-#include "chrome/browser/permissions/adaptive_quiet_notification_permission_ui_enabler.h"
+#include "chrome/browser/permissions/permission_actions_history.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker_factory.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/spellchecker/spellcheck_custom_dictionary.h"
@@ -101,7 +101,9 @@
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_decision_auto_blocker.h"
+#include "components/permissions/permission_request_enums.h"
 #include "components/permissions/permission_util.h"
+#include "components/permissions/request_type.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/safe_browsing/core/verdict_cache_manager.h"
 #include "components/security_interstitials/content/stateful_ssl_host_state_delegate.h"
@@ -126,6 +128,7 @@
 #include "net/net_buildflags.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_test_util.h"
+#include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom.h"
 #include "services/network/network_context.h"
 #include "services/network/network_service.h"
 #include "services/network/public/cpp/features.h"
@@ -479,14 +482,14 @@ class RemoveFaviconTester {
   void SaveResultAndQuit(const favicon_base::FaviconRawBitmapResult& result) {
     got_favicon_ = result.is_valid();
     got_expired_favicon_ = result.is_valid() && result.expired;
-    quit_closure_.Run();
+    std::move(quit_closure_).Run();
   }
 
   // For favicon requests.
   base::CancelableTaskTracker tracker_;
   bool got_favicon_ = false;
   bool got_expired_favicon_ = false;
-  base::Closure quit_closure_;
+  base::OnceClosure quit_closure_;
 
   // Owned by TestingProfile.
   history::HistoryService* history_service_ = nullptr;
@@ -1075,7 +1078,7 @@ class ChromeBrowsingDataRemoverDelegateTest : public testing::Test {
     auto network_context_params = network::mojom::NetworkContextParams::New();
     network_context_params->cert_verifier_params =
         content::GetCertVerifierParams(
-            network::mojom::CertVerifierCreationParams::New());
+            cert_verifier::mojom::CertVerifierCreationParams::New());
     mojo::PendingRemote<network::mojom::NetworkContext> network_context_remote;
     network_context_ = std::make_unique<network::NetworkContext>(
         network::NetworkService::GetNetworkServiceForTesting(),
@@ -1104,6 +1107,13 @@ class ChromeBrowsingDataRemoverDelegateTest : public testing::Test {
   }
 
   void TearDown() override {
+    // Destroying the profile triggers a call to leveldb_proto::
+    // ProtoDatabaseProvider::SetSharedDBDeleteObsoleteDelayForTesting, which
+    // can race with leveldb_proto::SharedProtoDatabase::OnDatabaseInit
+    // on another thread.  Allowing those tasks to complete before we destroy
+    // the profile should fix the race.
+    content::RunAllTasksUntilIdle();
+
     // TestingProfile contains a DOMStorageContext.  BrowserContext's destructor
     // posts a message to the WEBKIT thread to delete some of its member
     // variables. We need to ensure that the profile is destroyed, and that
@@ -1176,11 +1186,22 @@ class ChromeBrowsingDataRemoverDelegateTest : public testing::Test {
         mask, url::Origin::Create(origin), policy);
   }
 
+  content::BrowserTaskEnvironment* task_environment() {
+    return &task_environment_;
+  }
+
+ protected:
+  // |feature_list_| needs to be destroyed after |task_environment_|, to avoid
+  // tsan flakes caused by other tasks running while |feature_list_| is
+  // destroyed.
+  base::test::ScopedFeatureList feature_list_;
+
  private:
   // Cached pointer to BrowsingDataRemover for access to testing methods.
   content::BrowsingDataRemover* remover_;
 
-  content::BrowserTaskEnvironment task_environment_;
+  content::BrowserTaskEnvironment task_environment_{
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   std::unique_ptr<network::NetworkContext> network_context_;
   std::unique_ptr<TestingProfile> profile_;
 
@@ -1590,10 +1611,12 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, AutofillRemovalOlderThan30Days) {
   // gets initialized:
   ProfileSyncServiceFactory::GetForProfile(GetProfile());
 
-  const base::Time kNow = base::Time::Now();
-  const base::Time k30DaysOld = kNow - base::TimeDelta::FromDays(30);
-  const base::Time k31DaysOld = kNow - base::TimeDelta::FromDays(31);
-  const base::Time k32DaysOld = kNow - base::TimeDelta::FromDays(32);
+  const base::Time k32DaysOld = base::Time::Now();
+  task_environment()->AdvanceClock(base::TimeDelta::FromDays(1));
+  const base::Time k31DaysOld = base::Time::Now();
+  task_environment()->AdvanceClock(base::TimeDelta::FromDays(1));
+  const base::Time k30DaysOld = base::Time::Now();
+  task_environment()->AdvanceClock(base::TimeDelta::FromDays(30));
 
   // Add profiles and cards with modification date as 31 days old from now.
   autofill::TestAutofillClock test_clock;
@@ -1893,76 +1916,6 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemovePasswordsByTimeOnly) {
 
   BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
                                 constants::DATA_TYPE_PASSWORDS, false);
-}
-
-TEST_F(ChromeBrowsingDataRemoverDelegateTest,
-       RemovePasswordsByTimeOnly_WithAccountStore) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      password_manager::features::kEnablePasswordsAccountStorage);
-
-  RemovePasswordsTester tester(GetProfile());
-
-  EXPECT_CALL(*tester.profile_store(), RemoveLoginsByURLAndTimeImpl(_, _, _))
-      .WillOnce(Return(password_manager::PasswordStoreChangeList()));
-
-  // Only DATA_TYPE_PASSWORDS is cleared. Accounts passwords are not affected.
-  EXPECT_CALL(*tester.account_store(), RemoveLoginsByURLAndTimeImpl(_, _, _))
-      .Times(0);
-
-  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
-                                constants::DATA_TYPE_PASSWORDS, false);
-}
-
-TEST_F(ChromeBrowsingDataRemoverDelegateTest,
-       RemoveAccountPasswordsByTimeOnly_WithAccountStore) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      password_manager::features::kEnablePasswordsAccountStorage);
-
-  RemovePasswordsTester tester(GetProfile());
-
-  EXPECT_CALL(*tester.profile_store(), RemoveLoginsByURLAndTimeImpl(_, _, _))
-      .Times(0);
-
-  EXPECT_CALL(*tester.account_store(), RemoveLoginsByURLAndTimeImpl(_, _, _))
-      .WillOnce(Return(password_manager::PasswordStoreChangeList()));
-  // For the account store, the remover delegate also waits until all the
-  // deletions have propagated to the Sync server. Pretend that happens
-  // immediately.
-  EXPECT_CALL(*tester.account_metadata_store(), HasUnsyncedDeletions())
-      .WillRepeatedly(Return(false));
-
-  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
-                                constants::DATA_TYPE_ACCOUNT_PASSWORDS, false);
-}
-
-TEST_F(ChromeBrowsingDataRemoverDelegateTest,
-       RemoveAccountPasswordsByTimeOnly_WithAccountStore_Failure) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      password_manager::features::kEnablePasswordsAccountStorage);
-
-  RemovePasswordsTester tester(GetProfile());
-
-  EXPECT_CALL(*tester.profile_store(), RemoveLoginsByURLAndTimeImpl(_, _, _))
-      .Times(0);
-
-  EXPECT_CALL(*tester.account_store(), RemoveLoginsByURLAndTimeImpl(_, _, _))
-      .WillOnce(Return(password_manager::PasswordStoreChangeList()));
-  // For the account store, the remover delegate also waits until all the
-  // deletions have propagated to the Sync server. In this test, that never
-  // happens.
-  EXPECT_CALL(*tester.account_metadata_store(), HasUnsyncedDeletions())
-      .WillRepeatedly(Return(true));
-  // Bypass the (usually 30-second) timeout until the PasswordStore reports
-  // failure.
-  tester.account_store()->SetSyncTaskTimeoutForTest(base::TimeDelta());
-
-  uint64_t failed_data_types = BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(), constants::DATA_TYPE_ACCOUNT_PASSWORDS,
-      false);
-  EXPECT_EQ(failed_data_types, constants::DATA_TYPE_ACCOUNT_PASSWORDS);
 }
 
 // Disabled, since passwords are not yet marked as a filterable datatype.
@@ -2355,7 +2308,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveTranslateBlocklist) {
   auto translate_prefs =
       ChromeTranslateClient::CreateTranslatePrefs(GetProfile()->GetPrefs());
   translate_prefs->AddSiteToNeverPromptList("google.com");
-  base::PlatformThread::Sleep(TestTimeouts::tiny_timeout());
+  task_environment()->AdvanceClock(base::TimeDelta::FromDays(1));
   base::Time t = base::Time::Now();
   translate_prefs->AddSiteToNeverPromptList("maps.google.com");
 
@@ -2956,55 +2909,117 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, WipeCustomDictionaryData) {
 TEST_F(ChromeBrowsingDataRemoverDelegateTest,
        WipeNotificationPermissionPromptOutcomesData) {
   PrefService* prefs = GetProfile()->GetPrefs();
-  auto* permission_ui_enabler =
-      AdaptiveQuietNotificationPermissionUiEnabler::GetForProfile(GetProfile());
-  base::SimpleTestClock clock_;
-  clock_.SetNow(base::Time::Now());
-  base::Time first_recorded_time = clock_.Now();
+  base::Time first_recorded_time = base::Time::Now();
 
-  permission_ui_enabler->set_clock_for_testing(&clock_);
-  permission_ui_enabler->RecordPermissionPromptOutcome(
-      permissions::PermissionAction::DENIED);
-  clock_.Advance(base::TimeDelta::FromDays(1));
-  permission_ui_enabler->set_clock_for_testing(&clock_);
-  permission_ui_enabler->RecordPermissionPromptOutcome(
-      permissions::PermissionAction::DENIED);
-  clock_.Advance(base::TimeDelta::FromDays(1));
-  base::Time third_recorded_time = clock_.Now();
-  permission_ui_enabler->set_clock_for_testing(&clock_);
-  permission_ui_enabler->RecordPermissionPromptOutcome(
-      permissions::PermissionAction::DENIED);
+  auto* action_history = PermissionActionsHistory::GetForProfile(GetProfile());
+  action_history->RecordAction(permissions::PermissionAction::DENIED,
+                               permissions::RequestType::kNotifications);
+  task_environment()->AdvanceClock(base::TimeDelta::FromDays(1));
+  action_history->RecordAction(permissions::PermissionAction::DENIED,
+                               permissions::RequestType::kNotifications);
+  task_environment()->AdvanceClock(base::TimeDelta::FromDays(1));
+  base::Time third_recorded_time = base::Time::Now();
+  action_history->RecordAction(permissions::PermissionAction::DENIED,
+                               permissions::RequestType::kNotifications);
 
-  constexpr char kNotificationPermissionActionsPrefPath[] =
-      "profile.content_settings.permission_actions.notifications";
+  constexpr char kPermissionActionsPrefPath[] =
+      "profile.content_settings.permission_actions";
 
-  EXPECT_EQ(3u,
-            prefs->GetList(kNotificationPermissionActionsPrefPath)->GetSize());
+  EXPECT_EQ(3u, prefs->GetDictionary(kPermissionActionsPrefPath)
+                    ->FindKey("notifications")
+                    ->GetList()
+                    .size());
   // Remove the first and the second element.
   BlockUntilBrowsingDataRemoved(first_recorded_time, third_recorded_time,
                                 constants::DATA_TYPE_SITE_USAGE_DATA, false);
   // There is only one element left.
-  EXPECT_EQ(1u,
-            prefs->GetList(kNotificationPermissionActionsPrefPath)->GetSize());
-  EXPECT_EQ(
-      (util::ValueToTime(prefs->GetList(kNotificationPermissionActionsPrefPath)
-                             ->begin()
-                             ->FindKey("time")))
-          .value_or(base::Time()),
-      third_recorded_time);
+  EXPECT_EQ(1u, prefs->GetDictionary(kPermissionActionsPrefPath)
+                    ->FindKey("notifications")
+                    ->GetList()
+                    .size());
+  EXPECT_EQ((util::ValueToTime(prefs->GetDictionary(kPermissionActionsPrefPath)
+                                   ->FindKey("notifications")
+                                   ->GetList()
+                                   .begin()
+                                   ->FindKey("time")))
+                .value_or(base::Time()),
+            third_recorded_time);
 
   // Test we wiped all the elements left.
   BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
                                 constants::DATA_TYPE_SITE_USAGE_DATA, false);
-  EXPECT_TRUE(prefs->GetList(kNotificationPermissionActionsPrefPath)->empty());
+  EXPECT_TRUE(prefs->GetDictionary(kPermissionActionsPrefPath)->empty());
 }
 
-TEST_F(ChromeBrowsingDataRemoverDelegateTest,
-       GetDomainsForDeferredCookieDeletion) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      password_manager::features::kEnablePasswordsAccountStorage);
+class ChromeBrowsingDataRemoverDelegateEnabledPasswordsTest
+    : public ChromeBrowsingDataRemoverDelegateTest {
+ public:
+  ChromeBrowsingDataRemoverDelegateEnabledPasswordsTest() {
+    feature_list_.InitAndEnableFeature(
+        password_manager::features::kEnablePasswordsAccountStorage);
+  }
+};
 
+TEST_F(ChromeBrowsingDataRemoverDelegateEnabledPasswordsTest,
+       RemovePasswordsByTimeOnly_WithAccountStore) {
+  RemovePasswordsTester tester(GetProfile());
+
+  EXPECT_CALL(*tester.profile_store(), RemoveLoginsByURLAndTimeImpl(_, _, _))
+      .WillOnce(Return(password_manager::PasswordStoreChangeList()));
+
+  // Only DATA_TYPE_PASSWORDS is cleared. Accounts passwords are not affected.
+  EXPECT_CALL(*tester.account_store(), RemoveLoginsByURLAndTimeImpl(_, _, _))
+      .Times(0);
+
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_PASSWORDS, false);
+}
+
+TEST_F(ChromeBrowsingDataRemoverDelegateEnabledPasswordsTest,
+       RemoveAccountPasswordsByTimeOnly_WithAccountStore) {
+  RemovePasswordsTester tester(GetProfile());
+
+  EXPECT_CALL(*tester.profile_store(), RemoveLoginsByURLAndTimeImpl(_, _, _))
+      .Times(0);
+
+  EXPECT_CALL(*tester.account_store(), RemoveLoginsByURLAndTimeImpl(_, _, _))
+      .WillOnce(Return(password_manager::PasswordStoreChangeList()));
+  // For the account store, the remover delegate also waits until all the
+  // deletions have propagated to the Sync server. Pretend that happens
+  // immediately.
+  EXPECT_CALL(*tester.account_metadata_store(), HasUnsyncedDeletions())
+      .WillRepeatedly(Return(false));
+
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_ACCOUNT_PASSWORDS, false);
+}
+
+TEST_F(ChromeBrowsingDataRemoverDelegateEnabledPasswordsTest,
+       RemoveAccountPasswordsByTimeOnly_WithAccountStore_Failure) {
+  RemovePasswordsTester tester(GetProfile());
+
+  EXPECT_CALL(*tester.profile_store(), RemoveLoginsByURLAndTimeImpl(_, _, _))
+      .Times(0);
+
+  EXPECT_CALL(*tester.account_store(), RemoveLoginsByURLAndTimeImpl(_, _, _))
+      .WillOnce(Return(password_manager::PasswordStoreChangeList()));
+  // For the account store, the remover delegate also waits until all the
+  // deletions have propagated to the Sync server. In this test, that never
+  // happens.
+  EXPECT_CALL(*tester.account_metadata_store(), HasUnsyncedDeletions())
+      .WillRepeatedly(Return(true));
+  // Bypass the (usually 30-second) timeout until the PasswordStore reports
+  // failure.
+  tester.account_store()->SetSyncTaskTimeoutForTest(base::TimeDelta());
+
+  uint64_t failed_data_types = BlockUntilBrowsingDataRemoved(
+      base::Time(), base::Time::Max(), constants::DATA_TYPE_ACCOUNT_PASSWORDS,
+      false);
+  EXPECT_EQ(failed_data_types, constants::DATA_TYPE_ACCOUNT_PASSWORDS);
+}
+
+TEST_F(ChromeBrowsingDataRemoverDelegateEnabledPasswordsTest,
+       GetDomainsForDeferredCookieDeletion) {
   auto* delegate = GetProfile()->GetBrowsingDataRemoverDelegate();
 
   auto domains = delegate->GetDomainsForDeferredCookieDeletion(
@@ -3021,12 +3036,18 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   EXPECT_EQ(domains.size(), 0u);
 }
 
-TEST_F(ChromeBrowsingDataRemoverDelegateTest, LiteVideoClearHistoryData) {
+class ChromeBrowsingDataRemoverDelegateLiteVideoTest
+    : public ChromeBrowsingDataRemoverDelegateTest {
+ public:
+  ChromeBrowsingDataRemoverDelegateLiteVideoTest() {
+    // Both LiteVideo and Lite mode must be enabled for the
+    // LiteVideoKeyedService to be created.
+    feature_list_.InitAndEnableFeature(features::kLiteVideo);
+  }
+};
+TEST_F(ChromeBrowsingDataRemoverDelegateLiteVideoTest,
+       LiteVideoClearHistoryData) {
   base::HistogramTester histogram_tester;
-  base::test::ScopedFeatureList feature_list;
-  // Both LiteVideo and Lite mode must be enabled for the
-  // LiteVideoKeyedService to be created.
-  feature_list.InitAndEnableFeature(features::kLiteVideo);
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       "enable-spdy-proxy-auth");
 

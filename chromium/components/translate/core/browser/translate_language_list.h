@@ -74,6 +74,9 @@ class TranslateLanguageList {
   // static const values shared with our browser tests.
   static const char kTargetLanguagesKey[];
 
+  // Vivaldi:
+  void SetLanguageList(std::vector<std::string> list);
+
  private:
   FRIEND_TEST_ALL_PREFIXES(TranslateLanguageListTest, IsSupportedLanguage);
   FRIEND_TEST_ALL_PREFIXES(TranslateLanguageListTest, SetSupportedLanguages);

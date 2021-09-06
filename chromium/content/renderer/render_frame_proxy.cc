@@ -12,10 +12,8 @@
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
-#include "components/viz/common/surfaces/local_surface_id.h"
+#include "base/stl_util.h"
 #include "content/common/content_switches_internal.h"
-#include "content/common/frame_replication_state.h"
-#include "content/common/input_messages.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/use_zoom_for_dsf_policy.h"
@@ -36,7 +34,6 @@
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom.h"
 #include "third_party/blink/public/platform/impression_conversions.h"
 #include "third_party/blink/public/platform/url_conversion.h"
-#include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url_request_util.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
@@ -68,7 +65,7 @@ RenderFrameProxy* RenderFrameProxy::CreateProxyToReplaceFrame(
     RenderFrameImpl* frame_to_replace,
     int routing_id,
     blink::mojom::TreeScopeType scope,
-    const base::UnguessableToken& proxy_frame_token) {
+    const blink::RemoteFrameToken& proxy_frame_token) {
   CHECK_NE(routing_id, MSG_ROUTING_NONE);
 
   std::unique_ptr<RenderFrameProxy> proxy(
@@ -111,12 +108,12 @@ RenderFrameProxy* RenderFrameProxy::CreateProxyToReplaceFrame(
 // static
 RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
     AgentSchedulingGroup& agent_scheduling_group,
+    const blink::RemoteFrameToken& frame_token,
     int routing_id,
+    const base::Optional<blink::FrameToken>& opener_frame_token,
     int render_view_routing_id,
-    const base::Optional<base::UnguessableToken>& opener_frame_token,
     int parent_routing_id,
-    const FrameReplicationState& replicated_state,
-    const base::UnguessableToken& frame_token,
+    mojom::FrameReplicationStatePtr replicated_state,
     const base::UnguessableToken& devtools_frame_token) {
   RenderFrameProxy* parent = nullptr;
   if (parent_routing_id != MSG_ROUTING_NONE) {
@@ -155,10 +152,10 @@ RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
     // to be a RenderFrameProxy, because navigations initiated by local frames
     // should not wind up here.
     web_frame = parent->web_frame()->CreateRemoteChild(
-        replicated_state.scope,
-        blink::WebString::FromUTF8(replicated_state.name),
-        replicated_state.frame_policy,
-        replicated_state.frame_owner_element_type, proxy.get(),
+        replicated_state->scope,
+        blink::WebString::FromUTF8(replicated_state->name),
+        replicated_state->frame_policy,
+        replicated_state->frame_owner_element_type, proxy.get(),
         proxy->blink_interface_registry_.get(),
         proxy->GetRemoteAssociatedInterfaces(), frame_token, opener);
     render_view = parent->render_view();
@@ -174,7 +171,7 @@ RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
   // createLocalChild(). We should update the Blink interface so it also takes
   // the origin. Then it will be clear that the replication call is only needed
   // for the case of setting up a main frame proxy.
-  proxy->SetReplicatedState(replicated_state);
+  proxy->SetReplicatedState(std::move(replicated_state));
 
   return proxy.release();
 }
@@ -183,7 +180,7 @@ RenderFrameProxy* RenderFrameProxy::CreateProxyForPortal(
     AgentSchedulingGroup& agent_scheduling_group,
     RenderFrameImpl* parent,
     int proxy_routing_id,
-    const base::UnguessableToken& frame_token,
+    const blink::RemoteFrameToken& frame_token,
     const base::UnguessableToken& devtools_frame_token,
     const blink::WebElement& portal_element) {
   auto proxy = base::WrapUnique(
@@ -227,11 +224,7 @@ RenderFrameProxy* RenderFrameProxy::FromWebFrame(
 RenderFrameProxy::RenderFrameProxy(AgentSchedulingGroup& agent_scheduling_group,
                                    int routing_id)
     : agent_scheduling_group_(agent_scheduling_group),
-      routing_id_(routing_id),
-      // TODO(samans): Investigate if it is safe to delay creation of this
-      // object until a FrameSinkId is provided.
-      parent_local_surface_id_allocator_(
-          std::make_unique<viz::ParentLocalSurfaceIdAllocator>()) {
+      routing_id_(routing_id) {
   std::pair<RoutingIDProxyMap::iterator, bool> result =
       g_routing_id_proxy_map.Get().insert(std::make_pair(routing_id_, this));
   CHECK(result.second) << "Inserting a duplicate item.";
@@ -265,48 +258,46 @@ void RenderFrameProxy::Init(blink::WebRemoteFrame* web_frame,
     compositing_helper_ = std::make_unique<ChildFrameCompositingHelper>(this);
 }
 
-viz::FrameSinkId RenderFrameProxy::GetFrameSinkId() const {
-  return frame_sink_id_;
-}
-
-void RenderFrameProxy::SetReplicatedState(const FrameReplicationState& state) {
+void RenderFrameProxy::SetReplicatedState(
+    mojom::FrameReplicationStatePtr state) {
   DCHECK(web_frame_);
 
   web_frame_->SetReplicatedOrigin(
-      state.origin, state.has_potentially_trustworthy_unique_origin);
+      state->origin, state->has_potentially_trustworthy_unique_origin);
 
 #if DCHECK_IS_ON()
   blink::WebSecurityOrigin security_origin_before_sandbox_flags =
       web_frame_->GetSecurityOrigin();
 #endif
 
-  web_frame_->SetReplicatedSandboxFlags(state.active_sandbox_flags);
+  web_frame_->SetReplicatedSandboxFlags(state->active_sandbox_flags);
 
 #if DCHECK_IS_ON()
-  // If |state.has_potentially_trustworthy_unique_origin| is set,
-  // - |state.origin| should be unique (this is checked in
+  // If |state->has_potentially_trustworthy_unique_origin| is set,
+  // - |state->origin| should be unique (this is checked in
   //   blink::SecurityOrigin::SetUniqueOriginIsPotentiallyTrustworthy() in
   //   SetReplicatedOrigin()), and thus
   // - The security origin is not updated by SetReplicatedSandboxFlags() and
   //   thus we don't have to apply |has_potentially_trustworthy_unique_origin|
   //   flag after SetReplicatedSandboxFlags().
-  if (state.has_potentially_trustworthy_unique_origin)
+  if (state->has_potentially_trustworthy_unique_origin)
     DCHECK(security_origin_before_sandbox_flags ==
            web_frame_->GetSecurityOrigin());
 #endif
 
-  web_frame_->SetReplicatedName(blink::WebString::FromUTF8(state.name),
-                                blink::WebString::FromUTF8(state.unique_name));
-  web_frame_->SetReplicatedInsecureRequestPolicy(state.insecure_request_policy);
+  web_frame_->SetReplicatedName(blink::WebString::FromUTF8(state->name),
+                                blink::WebString::FromUTF8(state->unique_name));
+  web_frame_->SetReplicatedInsecureRequestPolicy(
+      state->insecure_request_policy);
   web_frame_->SetReplicatedInsecureNavigationsSet(
-      state.insecure_navigations_set);
-  web_frame_->SetReplicatedAdFrameType(state.ad_frame_type);
-  web_frame_->SetReplicatedFeaturePolicyHeader(state.feature_policy_header);
+      state->insecure_navigations_set);
+  web_frame_->SetReplicatedAdFrameType(state->ad_frame_type);
+  web_frame_->SetReplicatedFeaturePolicyHeader(state->feature_policy_header);
 
   // NOTE(andre@vivaldi.com) : We have to skip this as the frame will inherit
   // our UIs activation state breaking autoplay logic, and other.
   if (!vivaldi::IsVivaldiRunning()) {
-  if (state.has_active_user_gesture) {
+  if (state->has_active_user_gesture) {
     // TODO(crbug.com/1087963): This should be hearing about sticky activations
     // and setting those (as well as the active one?). But the call to
     // UpdateUserActivationState sets the transient activation.
@@ -316,14 +307,11 @@ void RenderFrameProxy::SetReplicatedState(const FrameReplicationState& state) {
   }
   } // vivaldi::IsVivaldiRunning()
   web_frame_->SetHadStickyUserActivationBeforeNavigation(
-      state.has_received_user_gesture_before_nav);
+      state->has_received_user_gesture_before_nav);
 
   web_frame_->ResetReplicatedContentSecurityPolicy();
-  for (const auto& header : state.accumulated_csp_headers) {
-    web_frame_->AddReplicatedContentSecurityPolicyHeader(
-        blink::WebString::FromUTF8(header.header_value), header.type,
-        header.source);
-  }
+  web_frame_->AddReplicatedContentSecurityPolicies(
+      ToWebContentSecurityPolicies(std::move(state->accumulated_csps)));
 }
 
 std::string RenderFrameProxy::unique_name() const {
@@ -363,50 +351,19 @@ void RenderFrameProxy::DidStartLoading() {
   web_frame_->DidStartLoading();
 }
 
-void RenderFrameProxy::DidUpdateVisualProperties(
-    const cc::RenderFrameMetadata& metadata) {
-  if (!parent_local_surface_id_allocator_->UpdateFromChild(
-          metadata.local_surface_id.value_or(viz::LocalSurfaceId()))) {
-    return;
-  }
-
-  // The viz::LocalSurfaceId has changed so we call SynchronizeVisualProperties
-  // here to embed it.
-  web_frame_->SynchronizeVisualProperties();
-}
-
-void RenderFrameProxy::EnableAutoResize(const gfx::Size& min_size,
-                                        const gfx::Size& max_size) {
-  DCHECK(ancestor_web_frame_widget_);
-  web_frame_->EnableAutoResize(min_size, max_size);
-}
-
-void RenderFrameProxy::DisableAutoResize() {
-  DCHECK(ancestor_web_frame_widget_);
-  web_frame_->DisableAutoResize();
-}
-
-void RenderFrameProxy::SetFrameSinkId(const viz::FrameSinkId& frame_sink_id) {
-  FrameSinkIdChanged(frame_sink_id);
-}
-
 void RenderFrameProxy::WillSynchronizeVisualProperties(
-    bool synchronized_props_changed,
     bool capture_sequence_number_changed,
+    const viz::SurfaceId& surface_id,
     const gfx::Size& compositor_viewport_size) {
   DCHECK(ancestor_web_frame_widget_);
-  DCHECK(frame_sink_id_.is_valid());
+  DCHECK(surface_id.is_valid());
   DCHECK(!remote_process_gone_);
-
-  if (synchronized_props_changed)
-    parent_local_surface_id_allocator_->GenerateId();
 
   // If we're synchronizing surfaces, then use an infinite deadline to ensure
   // everything is synchronized.
   cc::DeadlinePolicy deadline = capture_sequence_number_changed
                                     ? cc::DeadlinePolicy::UseInfiniteDeadline()
                                     : cc::DeadlinePolicy::UseDefaultDeadline();
-  viz::SurfaceId surface_id(frame_sink_id_, GetLocalSurfaceId());
   compositing_helper_->SetSurfaceId(surface_id, compositor_viewport_size,
                                     deadline);
 }
@@ -428,7 +385,6 @@ void RenderFrameProxy::FrameDetached(DetachType type) {
 
 void RenderFrameProxy::Navigate(
     const blink::WebURLRequest& request,
-    blink::WebLocalFrame* initiator_frame,
     bool should_replace_current_entry,
     bool is_opener_navigation,
     bool initiator_frame_has_download_sandbox_flag,
@@ -436,7 +392,11 @@ void RenderFrameProxy::Navigate(
     bool initiator_frame_is_ad,
     blink::CrossVariantMojoRemote<blink::mojom::BlobURLTokenInterfaceBase>
         blob_url_token,
-    const base::Optional<blink::WebImpression>& impression) {
+    const base::Optional<blink::WebImpression>& impression,
+    const blink::LocalFrameToken* initiator_frame_token,
+    blink::CrossVariantMojoRemote<
+        blink::mojom::PolicyContainerHostKeepAliveHandleInterfaceBase>
+        initiator_policy_container_keep_alive_handle) {
   // The request must always have a valid initiator origin.
   DCHECK(!request.RequestorOrigin().IsNull());
 
@@ -455,10 +415,9 @@ void RenderFrameProxy::Navigate(
   params->user_gesture = request.HasUserGesture();
   params->triggering_event_info = blink::mojom::TriggeringEventInfo::kUnknown;
   params->blob_url_token = std::move(blob_url_token);
-
-  params->initiator_frame_token =
-      initiator_frame ? base::make_optional(initiator_frame->GetFrameToken())
-                      : base::nullopt;
+  params->initiator_policy_container_keep_alive_handle =
+      std::move(initiator_policy_container_keep_alive_handle);
+  params->initiator_frame_token = base::OptionalFromPtr(initiator_frame_token);
 
   if (impression)
     params->impression = blink::ConvertWebImpressionToImpression(*impression);
@@ -500,12 +459,12 @@ SkBitmap* RenderFrameProxy::GetSadPageBitmap() {
   return GetContentClient()->renderer()->GetSadWebViewBitmap();
 }
 
-const viz::LocalSurfaceId& RenderFrameProxy::GetLocalSurfaceId() const {
-  return parent_local_surface_id_allocator_->GetCurrentLocalSurfaceId();
-}
-
 bool RenderFrameProxy::RemoteProcessGone() const {
   return remote_process_gone_;
+}
+
+void RenderFrameProxy::DidSetFrameSinkId() {
+  remote_process_gone_ = false;
 }
 
 mojom::RenderFrameProxyHost* RenderFrameProxy::GetFrameProxyHost() {
@@ -528,28 +487,6 @@ RenderFrameProxy::GetRemoteAssociatedInterfaces() {
                 .DefaultTaskRunner());
   }
   return remote_associated_interfaces_.get();
-}
-
-void RenderFrameProxy::WasEvicted() {
-  // On eviction, the last SurfaceId is invalidated. We need to allocate a new
-  // id.
-  web_frame_->ResendVisualProperties();
-}
-
-void RenderFrameProxy::FrameSinkIdChanged(
-    const viz::FrameSinkId& frame_sink_id) {
-  remote_process_gone_ = false;
-  // The same ParentLocalSurfaceIdAllocator cannot provide LocalSurfaceIds for
-  // two different frame sinks, so recreate it here.
-  if (frame_sink_id_ != frame_sink_id) {
-    parent_local_surface_id_allocator_ =
-        std::make_unique<viz::ParentLocalSurfaceIdAllocator>();
-  }
-  frame_sink_id_ = frame_sink_id;
-
-  // Resend the FrameRects and allocate a new viz::LocalSurfaceId when the view
-  // changes.
-  web_frame_->ResendVisualProperties();
 }
 
 }  // namespace content

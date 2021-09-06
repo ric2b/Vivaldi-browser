@@ -18,7 +18,8 @@ class AppListColorProviderImpl : public AppListColorProvider {
   // AppListColorProvider:
   SkColor GetExpandArrowIconBaseColor() const override;
   SkColor GetExpandArrowIconBackgroundColor() const override;
-  SkColor GetAppListBackgroundColor(bool is_tablet_mode) const override;
+  SkColor GetAppListBackgroundColor(bool is_tablet_mode,
+                                    SkColor default_color) const override;
   SkColor GetSearchBoxBackgroundColor() const override;
   SkColor GetSearchBoxSecondaryTextColor(SkColor default_color) const override;
   SkColor GetSearchBoxTextColor(SkColor default_color) const override;
@@ -38,7 +39,6 @@ class AppListColorProviderImpl : public AppListColorProvider {
   SkColor GetContentsBackgroundColor() const override;
   SkColor GetSeparatorColor() const override;
   SkColor GetFocusRingColor() const override;
-  SkColor GetFolderItemFocusRingColor() const override;
   SkColor GetPrimaryIconColor(SkColor default_color) const override;
   float GetFolderBackgrounBlurSigma() const override;
   SkColor GetRippleAttributesBaseColor(

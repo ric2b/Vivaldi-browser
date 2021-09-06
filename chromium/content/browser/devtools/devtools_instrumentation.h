@@ -155,7 +155,16 @@ void OnResponseReceivedExtraInfo(
     const std::string& devtools_request_id,
     const net::CookieAndLineAccessResultList& response_cookie_list,
     const std::vector<network::mojom::HttpRawHeaderPairPtr>& response_headers,
-    const base::Optional<std::string>& response_headers_text);
+    const base::Optional<std::string>& response_headers_text,
+    network::mojom::IPAddressSpace resource_address_space);
+void OnPrivateNetworkRequest(
+    int32_t process_id,
+    int32_t routing_id,
+    const base::Optional<std::string>& devtools_request_id,
+    const GURL& url,
+    bool is_warning,
+    network::mojom::IPAddressSpace resource_address_space,
+    const network::mojom::ClientSecurityStatePtr client_security_state);
 void OnCorsPreflightRequest(int32_t process_id,
                             int32_t render_frame_id,
                             const base::UnguessableToken& devtools_request_id,
@@ -215,6 +224,13 @@ void ReportSameSiteCookieIssue(
 void CONTENT_EXPORT
 ReportBrowserInitiatedIssue(RenderFrameHostImpl* frame,
                             protocol::Audits::InspectorIssue* issue);
+
+// Produces an inspector issue and sends it to the client with
+// |ReportBrowserInitiatedIssue|.
+// This only support TrustedWebActivityIssue for now.
+void BuildAndReportBrowserInitiatedIssue(
+    RenderFrameHostImpl* frame,
+    blink::mojom::InspectorIssueInfoPtr info);
 
 // Produces a Heavy Ad Issue based on the parameters passed in.
 std::unique_ptr<protocol::Audits::InspectorIssue> GetHeavyAdIssue(

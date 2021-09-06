@@ -58,10 +58,10 @@ import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabObserver;
-import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.browser.ui.TabObscuringHandler;
@@ -793,6 +793,15 @@ public class CompositorViewHolder extends FrameLayout
                 setSize(tab.getWebContents(), tab.getContentView(), viewportSize.x, viewportSize.y);
             }
         }
+        // Note(david@vivaldi.com): During orientation changes we need to make sure that offsets are
+        // updated correctly when controls are visible. showAndroidControls() will trigger a
+        // onControlsOffsetChanged event and makes sure that overlays like TopToolbarOverlay
+        // get updated properly. It's only required when toolbar is at the bottom. This is the best
+        // place to add this code as onSizeChanged() will be called right after orientation has
+        // changed where the compositor view has already a final size applied.
+        if (!mBrowserControlsManager.areBrowserControlsAtMinHeight()
+                && !VivaldiUtils.isTopToolbarOn())
+            mBrowserControlsManager.showAndroidControls(true);
     }
 
     /**
@@ -1353,7 +1362,7 @@ public class CompositorViewHolder extends FrameLayout
                 mCompositorView.getResourceManager().getDynamicResourceLoader());
 
         mTabModelSelector = tabModelSelector;
-        tabModelSelector.addObserver(new EmptyTabModelSelectorObserver() {
+        tabModelSelector.addObserver(new TabModelSelectorObserver() {
             @Override
             public void onChange() {
                 onContentChanged();

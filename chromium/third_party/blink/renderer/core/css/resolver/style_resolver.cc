@@ -522,6 +522,22 @@ void StyleResolver::MatchUserRules(ElementRuleCollector& collector) {
   collector.FinishAddingUserRules();
 }
 
+namespace {
+
+bool IsInMediaUAShadow(const Element& element) {
+  ShadowRoot* root = element.ContainingShadowRoot();
+  if (!root || !root->IsUserAgent())
+    return false;
+  ShadowRoot* outer_root;
+  do {
+    outer_root = root;
+    root = root->host().ContainingShadowRoot();
+  } while (root && root->IsUserAgent());
+  return outer_root->host().IsMediaElement();
+}
+
+}  // namespace
+
 void StyleResolver::MatchUARules(const Element& element,
                                  ElementRuleCollector& collector) {
   collector.SetMatchingUARules(true);
@@ -529,12 +545,17 @@ void StyleResolver::MatchUARules(const Element& element,
   CSSDefaultStyleSheets& default_style_sheets =
       CSSDefaultStyleSheets::Instance();
   if (!print_media_type_) {
-    if (LIKELY(element.IsHTMLElement() || element.IsVTTElement()))
+    if (LIKELY(element.IsHTMLElement() || element.IsVTTElement())) {
       MatchRuleSet(collector, default_style_sheets.DefaultStyle());
-    else if (element.IsSVGElement())
+      if (UNLIKELY(IsInMediaUAShadow(element))) {
+        MatchRuleSet(collector,
+                     default_style_sheets.DefaultMediaControlsStyle());
+      }
+    } else if (element.IsSVGElement()) {
       MatchRuleSet(collector, default_style_sheets.DefaultSVGStyle());
-    else if (element.namespaceURI() == mathml_names::kNamespaceURI)
+    } else if (element.namespaceURI() == mathml_names::kNamespaceURI) {
       MatchRuleSet(collector, default_style_sheets.DefaultMathMLStyle());
+    }
   } else {
     MatchRuleSet(collector, default_style_sheets.DefaultPrintStyle());
   }
@@ -591,14 +612,11 @@ void StyleResolver::MatchAllRules(StyleResolverState& state,
         element.AdditionalPresentationAttributeStyle());
 
     if (auto* html_element = DynamicTo<HTMLElement>(element)) {
-      bool is_auto;
-      TextDirection text_direction =
-          html_element->DirectionalityIfhasDirAutoAttribute(is_auto);
-      if (is_auto) {
-        state.SetHasDirAutoAttribute(true);
+      if (html_element->HasDirectionAuto()) {
         collector.AddElementStyleProperties(
-            text_direction == TextDirection::kLtr ? LeftToRightDeclaration()
-                                                  : RightToLeftDeclaration());
+            html_element->CachedDirectionality() == TextDirection::kLtr
+                ? LeftToRightDeclaration()
+                : RightToLeftDeclaration());
       }
     }
   }
@@ -875,10 +893,10 @@ void StyleResolver::ApplyBaseStyle(
           element->GetComputedStyle()->TextAutosizingMultiplier());
     }
 
-    if (state.HasDirAutoAttribute())
-      state.Style()->SetSelfOrAncestorHasDirAutoAttribute(true);
-
     CascadeAndApplyMatchedProperties(state, cascade);
+
+    if (collector.MatchedResult().DependsOnContainerQueries())
+      state.Style()->SetDependsOnContainerQueries(true);
 
     ApplyCallbackSelectors(state);
 
@@ -934,6 +952,7 @@ CompositorKeyframeValue* StyleResolver::CreateCompositorKeyframeValueSnapshot(
 
 scoped_refptr<ComputedStyle> StyleResolver::PseudoStyleForElement(
     Element* element,
+    const StyleRecalcContext& style_recalc_context,
     const PseudoElementStyleRequest& pseudo_style_request,
     const ComputedStyle* parent_style,
     const ComputedStyle* parent_layout_object_style) {
@@ -975,8 +994,6 @@ scoped_refptr<ComputedStyle> StyleResolver::PseudoStyleForElement(
     }
     state.Style()->SetStyleType(pseudo_style_request.pseudo_id);
 
-    // TODO(crbug.com/1145970): Use actual StyleRecalcContext.
-    StyleRecalcContext style_recalc_context;
     // Check UA, user and author rules.
     ElementRuleCollector collector(state.ElementContext(), style_recalc_context,
                                    selector_filter_,
@@ -1004,6 +1021,9 @@ scoped_refptr<ComputedStyle> StyleResolver::PseudoStyleForElement(
     }
 
     CascadeAndApplyMatchedProperties(state, cascade);
+
+    if (collector.MatchedResult().DependsOnContainerQueries())
+      state.Style()->SetDependsOnContainerQueries(true);
 
     ApplyCallbackSelectors(state);
 
@@ -1433,7 +1453,7 @@ void StyleResolver::MaybeAddToMatchedPropertiesCache(
     INCREMENT_STYLE_STATS_COUNTER(GetDocument().GetStyleEngine(),
                                   matched_property_cache_added, 1);
     matched_properties_cache_.Add(cache_success.key, *state.Style(),
-                                  *state.ParentStyle(), state.Dependencies());
+                                  *state.ParentStyle());
   }
 }
 
@@ -1452,6 +1472,10 @@ void StyleResolver::CalculateAnimationUpdate(StyleResolverState& state) {
 }
 
 bool StyleResolver::CanReuseBaseComputedStyle(const StyleResolverState& state) {
+  // TODO(crbug.com/1180159): @container and transitions properly.
+  if (RuntimeEnabledFeatures::CSSContainerQueriesEnabled())
+    return false;
+
   ElementAnimations* element_animations = GetElementAnimations(state);
   if (!element_animations || !element_animations->BaseComputedStyle())
     return false;

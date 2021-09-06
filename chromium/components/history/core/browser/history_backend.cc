@@ -46,7 +46,7 @@
 #include "components/history/core/browser/page_usage_data.h"
 #include "components/history/core/browser/sync/typed_url_sync_bridge.h"
 #include "components/history/core/browser/url_utils.h"
-#include "components/sync/model_impl/client_tag_based_model_type_processor.h"
+#include "components/sync/model/client_tag_based_model_type_processor.h"
 #include "components/url_formatter/url_formatter.h"
 #include "net/base/escape.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
@@ -684,6 +684,14 @@ void HistoryBackend::AddPage(const HistoryAddPageArgs& request) {
           FormatUrlForRedirectComparison(redirects[0]) ==
               FormatUrlForRedirectComparison(redirects[1])) {
         transfer_typed_credit_from_first_to_second_url = true;
+      } else if (ui::PageTransitionCoreTypeIs(
+                     request_transition, ui::PAGE_TRANSITION_FORM_SUBMIT)) {
+        // If this is a form submission, the user was on the previous page and
+        // we should have saved the title and favicon already. Don't overwrite
+        // it with the redirected page. For example, a page titled "Create X"
+        // should not be updated to "Newly Created Item" on a successful POST
+        // when the new page is titled "Newly Created Item".
+        redirects.erase(redirects.begin());
       }
     }
 

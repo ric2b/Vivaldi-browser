@@ -18,11 +18,10 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
-#include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/arc/enterprise/cert_store/cert_store_service.h"
 #include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
 #include "chrome/browser/chromeos/platform_keys/key_permissions/extension_key_permissions_service.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/policy/developer_tools_policy_handler.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
@@ -31,6 +30,7 @@
 #include "chromeos/network/onc/onc_utils.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "components/arc/arc_prefs.h"
+#include "components/arc/enterprise/arc_data_snapshotd_manager.h"
 #include "components/arc/session/arc_bridge_service.h"
 #include "components/onc/onc_constants.h"
 #include "components/policy/core/common/policy_map.h"
@@ -291,9 +291,29 @@ std::string GetFilteredJSONPolicies(policy::PolicyService* const policy_service,
     }
   }
 
+  // Disable all required/force-installed apps when ARC data snapshot update is
+  // in progress.
+  if (arc::data_snapshotd::ArcDataSnapshotdManager::Get() &&
+      arc::data_snapshotd::ArcDataSnapshotdManager::Get()
+          ->IsSnapshotInProgress()) {
+    base::Value* applications_value =
+        filtered_policies.FindListKey("applications");
+    if (applications_value) {
+      base::Value::ListView list_view = applications_value->GetList();
+      for (base::Value& entry : list_view) {
+        auto* installType = entry.FindStringKey("installType");
+        if (installType &&
+            (*installType == "REQUIRED" || *installType == "FORCE_INSTALLED")) {
+          entry.SetBoolKey("disabled", true);
+        }
+      }
+    }
+    // Always reset android_id if ARC data snapshot update is in progress.
+    filtered_policies.SetBoolKey("resetAndroidIdEnabled", true);
+  }
+
   if (profile->IsSupervised() &&
-      chromeos::ProfileHelper::Get()->IsPrimaryProfile(profile) &&
-      arc::IsSecondaryAccountForChildEnabled()) {
+      chromeos::ProfileHelper::Get()->IsPrimaryProfile(profile)) {
     // Adds "playStoreMode" policy. The policy value is used to restrict the
     // user from being able to toggle between different accounts in ARC++.
     filtered_policies.SetStringKey("playStoreMode", "SUPERVISED");

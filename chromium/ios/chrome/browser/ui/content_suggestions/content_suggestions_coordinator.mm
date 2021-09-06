@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_coordinator.h"
 
+#import "base/ios/ios_util.h"
 #include "base/mac/foundation_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -18,6 +19,7 @@
 #include "components/prefs/pref_service.h"
 #import "components/search_engines/template_url.h"
 #import "components/search_engines/template_url_service.h"
+#include "ios/chrome/app/tests_hook.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/discover_feed/discover_feed_service.h"
 #include "ios/chrome/browser/discover_feed/discover_feed_service_factory.h"
@@ -29,6 +31,7 @@
 #import "ios/chrome/browser/main/browser.h"
 #include "ios/chrome/browser/ntp_snippets/ios_chrome_content_suggestions_service_factory.h"
 #include "ios/chrome/browser/ntp_tiles/ios_most_visited_sites_factory.h"
+#import "ios/chrome/browser/policy/policy_util.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
@@ -71,7 +74,6 @@
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_controller.h"
 #import "ios/chrome/browser/ui/settings/utils/pref_backed_boolean.h"
 #import "ios/chrome/browser/ui/sharing/sharing_coordinator.h"
-#import "ios/chrome/browser/ui/util/multi_window_support.h"
 #import "ios/chrome/browser/ui/util/named_guide.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
@@ -238,8 +240,10 @@
       isGoogleDefaultSearchProvider:isGoogleDefaultSearchProvider];
   self.contentSuggestionsMediator.commandHandler = self.ntpMediator;
   self.contentSuggestionsMediator.headerProvider = self.headerController;
-  self.contentSuggestionsMediator.contentArticlesExpanded =
-      self.contentSuggestionsExpanded;
+  if (!IsRefactoredNTP()) {
+    self.contentSuggestionsMediator.contentArticlesExpanded =
+        self.contentSuggestionsExpanded;
+  }
   self.contentSuggestionsMediator.discoverFeedDelegate = self;
 
   self.headerController.promoCanShow =
@@ -345,7 +349,7 @@
   [self.sharingCoordinator stop];
   self.sharingCoordinator = nil;
   self.headerController = nil;
-  if (IsDiscoverFeedEnabled()) {
+  if (IsDiscoverFeedEnabled() && !IsRefactoredNTP()) {
     ios::GetChromeBrowserProvider()
         ->GetDiscoverFeedProvider()
         ->RemoveFeedViewController(self.discoverFeedViewController);
@@ -580,6 +584,11 @@
   [self.ntpMediator dismissModals];
 }
 
+- (void)stopScrolling {
+  UIScrollView* scrollView = self.suggestionsViewController.collectionView;
+  [scrollView setContentOffset:scrollView.contentOffset animated:NO];
+}
+
 - (UIEdgeInsets)contentInset {
   return self.suggestionsViewController.collectionView.contentInset;
 }
@@ -610,11 +619,6 @@
 
 - (void)locationBarDidResignFirstResponder {
   [self.ntpMediator locationBarDidResignFirstResponder];
-}
-
-- (BOOL)isDiscoverFeedVisible {
-  return self.contentSuggestionsEnabled &&
-         [self.contentSuggestionsExpanded value];
 }
 
 #pragma mark - ContentSuggestionsMenuProvider
@@ -655,15 +659,24 @@
                                                   atIndex:indexPath.item];
                       }]];
 
-        [menuElements
-            addObject:[actionFactory actionToOpenInNewIncognitoTabWithBlock:^{
+        UIAction* incognitoAction =
+            [actionFactory actionToOpenInNewIncognitoTabWithBlock:^{
               [weakSelf.ntpMediator
                   openNewTabWithMostVisitedItem:item
                                       incognito:YES
                                         atIndex:indexPath.item];
-            }]];
+            }];
 
-        if (IsMultipleScenesSupported()) {
+        if (IsIncognitoModeDisabled(
+                self.browser->GetBrowserState()->GetPrefs())) {
+          // Disable the "Open in Incognito" option if the incognito mode is
+          // disabled.
+          incognitoAction.attributes = UIMenuElementAttributesDisabled;
+        }
+
+        [menuElements addObject:incognitoAction];
+
+        if (base::ios::IsMultipleScenesSupported()) {
           UIAction* newWindowAction = [actionFactory
               actionToOpenInNewWindowWithURL:item.URL
                               activityOrigin:
@@ -695,7 +708,8 @@
 
 // Creates, configures and returns a DiscoverFeed ViewController.
 - (UIViewController*)discoverFeed {
-  if (!IsDiscoverFeedEnabled() || IsRefactoredNTP())
+  if (!IsDiscoverFeedEnabled() || IsRefactoredNTP() ||
+      tests_hook::DisableContentSuggestions())
     return nil;
 
   UIViewController* discoverFeed = ios::GetChromeBrowserProvider()
@@ -738,6 +752,14 @@
   [self.contentSuggestionsMediator reloadAllData];
   [self.discoverFeedMetricsRecorder
       recordDiscoverFeedVisibilityChanged:visible];
+}
+
+// YES if the Discover feed is currently visible.
+// TODO(crbug.com/1173610): Move this to the NTPCoordinator so all of the
+// visibility logic lives in there.
+- (BOOL)isDiscoverFeedVisible {
+  return self.contentSuggestionsEnabled &&
+         [self.contentSuggestionsExpanded value];
 }
 
 @end

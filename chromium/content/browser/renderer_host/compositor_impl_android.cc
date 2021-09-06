@@ -487,8 +487,11 @@ void CompositorImpl::TearDownDisplayAndUnregisterRootFrameSink() {
     // execution of this call.
     display_private_->ForceImmediateDrawAndSwapIfPossible();
   }
-  GetHostFrameSinkManager()->InvalidateFrameSinkId(frame_sink_id_);
+  // Reset |display_private_| first since InvalidateFrameSinkId() will send a
+  // sync IPC. This guards against reentrant code using |display_private_|
+  // before it can be reset.
   display_private_.reset();
+  GetHostFrameSinkManager()->InvalidateFrameSinkId(frame_sink_id_);
 }
 
 void CompositorImpl::RegisterRootFrameSink() {
@@ -915,6 +918,11 @@ void CompositorImpl::CacheBackBufferForCurrentSurface() {
 
 void CompositorImpl::EvictCachedBackBuffer() {
   cached_back_buffer_.reset();
+}
+
+void CompositorImpl::PreserveChildSurfaceControls() {
+  if (display_private_)
+    display_private_->PreserveChildSurfaceControls();
 }
 
 void CompositorImpl::RequestPresentationTimeForNextFrame(

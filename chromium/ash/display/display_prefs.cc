@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
@@ -17,7 +18,6 @@
 #include "base/strings/string_util.h"
 #include "base/system/sys_info.h"
 #include "base/values.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -178,17 +178,21 @@ display::DisplayManager* GetDisplayManager() {
   return Shell::Get()->display_manager();
 }
 
-// Returns true id the current user can write display preferences to
+// Returns true if the current user can write display preferences to
 // Local State.
 bool UserCanSaveDisplayPreference() {
   SessionControllerImpl* controller = Shell::Get()->session_controller();
   auto user_type = controller->GetUserType();
   if (!user_type)
     return false;
+
   return *user_type == user_manager::USER_TYPE_REGULAR ||
          *user_type == user_manager::USER_TYPE_CHILD ||
          *user_type == user_manager::USER_TYPE_SUPERVISED_DEPRECATED ||
-         *user_type == user_manager::USER_TYPE_KIOSK_APP;
+         *user_type == user_manager::USER_TYPE_KIOSK_APP ||
+         (*user_type == user_manager::USER_TYPE_PUBLIC_ACCOUNT &&
+          Shell::Get()->local_state()->GetBoolean(
+              prefs::kAllowMGSToStoreDisplayProperties));
 }
 
 void LoadDisplayLayouts(PrefService* local_state) {
@@ -760,6 +764,8 @@ void DisplayPrefs::RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(prefs::kDisplayTouchPortAssociations);
   registry->RegisterListPref(prefs::kExternalDisplayMirrorInfo);
   registry->RegisterDictionaryPref(prefs::kDisplayMixedMirrorModeParams);
+  registry->RegisterBooleanPref(prefs::kAllowMGSToStoreDisplayProperties,
+                                false);
 }
 
 DisplayPrefs::DisplayPrefs(PrefService* local_state)

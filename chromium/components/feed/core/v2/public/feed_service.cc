@@ -16,6 +16,7 @@
 #include "components/feed/core/v2/image_fetcher.h"
 #include "components/feed/core/v2/metrics_reporter.h"
 #include "components/feed/core/v2/persistent_key_value_store_impl.h"
+#include "components/feed/core/v2/prefs.h"
 #include "components/feed/core/v2/refresh_task_scheduler.h"
 #include "components/feed/feed_feature_list.h"
 #include "components/history/core/browser/history_service.h"
@@ -70,8 +71,9 @@ class FeedService::HistoryObserverImpl
   // history::HistoryServiceObserver.
   void OnURLsDeleted(history::HistoryService* history_service,
                      const history::DeletionInfo& deletion_info) override {
-    if (internal::ShouldClearFeed(identity_manager_->HasPrimaryAccount(),
-                                  deletion_info))
+    if (internal::ShouldClearFeed(
+            identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSync),
+            deletion_info))
       feed_stream_->OnAllHistoryDeleted();
   }
 
@@ -132,7 +134,12 @@ class FeedService::StreamDelegateImpl : public FeedStream::Delegate {
   void PrefetchImage(const GURL& url) override {
     service_delegate_->PrefetchImage(url);
   }
-  bool IsSignedIn() override { return identity_manager_->HasPrimaryAccount(); }
+  bool IsSignedIn() override {
+    return identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSync);
+  }
+  void RegisterExperiments(const Experiments& experiments) override {
+    service_delegate_->RegisterExperiments(experiments);
+  }
 
  private:
   FeedService::Delegate* service_delegate_;
@@ -221,6 +228,8 @@ FeedService::FeedService(
       identity_manager, stream_.get());
   identity_manager->AddObserver(identity_manager_observer_.get());
 
+  delegate_->RegisterExperiments(prefs::GetExperiments(*profile_prefs));
+
 #if defined(OS_ANDROID)
   application_status_listener_ =
       base::android::ApplicationStatusListener::New(base::BindRepeating(
@@ -240,8 +249,7 @@ void FeedService::ClearCachedData() {
 
 // static
 bool FeedService::IsEnabled(const PrefService& pref_service) {
-  return feed::IsV2Enabled() &&
-         pref_service.GetBoolean(feed::prefs::kEnableSnippets);
+  return pref_service.GetBoolean(feed::prefs::kEnableSnippets);
 }
 
 #if defined(OS_ANDROID)

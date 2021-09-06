@@ -6,9 +6,7 @@
 
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
 #include "chrome/browser/subresource_filter/subresource_filter_test_harness.h"
-#include "chrome/test/base/testing_browser_process.h"
 #include "components/safe_browsing/core/db/util.h"
 #include "components/safe_browsing/core/db/v4_protocol_manager_util.h"
 #include "components/subresource_filter/content/browser/content_activation_list_utils.h"
@@ -24,6 +22,7 @@
 #include "components/subresource_filter/core/common/load_policy.h"
 #include "components/subresource_filter/core/mojom/subresource_filter.mojom.h"
 #include "content/public/browser/devtools_agent_host.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -133,7 +132,7 @@ TEST_F(SubresourceFilterTest, SimpleAllowedLoad_WithObserver) {
   SimulateNavigateAndCommit(GURL(allowed_url), subframe);
   EXPECT_EQ(subresource_filter::LoadPolicy::ALLOW,
             *observer.GetSubframeLoadPolicy(allowed_url));
-  EXPECT_FALSE(*observer.GetIsAdSubframe(subframe->GetFrameTreeNodeId()));
+  EXPECT_FALSE(observer.GetIsAdSubframe(subframe->GetFrameTreeNodeId()));
 }
 
 TEST_F(SubresourceFilterTest, SimpleDisallowedLoad_WithObserver) {
@@ -149,11 +148,17 @@ TEST_F(SubresourceFilterTest, SimpleDisallowedLoad_WithObserver) {
   GURL disallowed_url(SubresourceFilterTest::kDefaultDisallowedUrl);
   auto* subframe =
       content::RenderFrameHostTester::For(main_rfh())->AppendChild("subframe");
+
+  content::TestNavigationObserver navigation_observer(
+      web_contents(), content::MessageLoopRunner::QuitMode::IMMEDIATE,
+      false /* ignore_uncommitted_navigations */);
   EXPECT_FALSE(
       SimulateNavigateAndCommit(GURL(kDefaultDisallowedUrl), subframe));
+  navigation_observer.WaitForNavigationFinished();
+
   EXPECT_EQ(subresource_filter::LoadPolicy::DISALLOW,
             *observer.GetSubframeLoadPolicy(disallowed_url));
-  EXPECT_TRUE(*observer.GetIsAdSubframe(subframe->GetFrameTreeNodeId()));
+  EXPECT_TRUE(observer.GetIsAdSubframe(subframe->GetFrameTreeNodeId()));
 }
 
 TEST_F(SubresourceFilterTest, RefreshMetadataOnActivation) {

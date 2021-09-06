@@ -5,15 +5,15 @@
 #ifndef ASH_SYSTEM_AUDIO_UNIFIED_VOLUME_VIEW_H_
 #define ASH_SYSTEM_AUDIO_UNIFIED_VOLUME_VIEW_H_
 
+#include "ash/components/audio/cras_audio_handler.h"
 #include "ash/system/audio/unified_volume_slider_controller.h"
 #include "ash/system/unified/unified_slider_view.h"
-#include "chromeos/audio/cras_audio_handler.h"
 
 namespace ash {
 
 // View of a slider that can change audio volume.
 class UnifiedVolumeView : public UnifiedSliderView,
-                          public chromeos::CrasAudioHandler::AudioObserver {
+                          public CrasAudioHandler::AudioObserver {
  public:
   UnifiedVolumeView(UnifiedVolumeSliderController* controller,
                     UnifiedVolumeSliderController::Delegate* delegate,

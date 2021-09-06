@@ -7,21 +7,21 @@
 #include "ash/public/cpp/notification_utils.h"
 #include "base/strings/string_util.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/full_restore/app_launch_handler.h"
 #include "chrome/browser/chromeos/full_restore/full_restore_data_handler.h"
 #include "chrome/browser/chromeos/full_restore/full_restore_prefs.h"
 #include "chrome/browser/chromeos/full_restore/full_restore_service_factory.h"
 #include "chrome/browser/chromeos/full_restore/new_user_restore_pref_handler.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/account_id/account_id.h"
 #include "components/full_restore/full_restore_info.h"
+#include "components/full_restore/full_restore_save_handler.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -50,13 +50,33 @@ FullRestoreService::FullRestoreService(Profile* profile)
       app_launch_handler_(std::make_unique<AppLaunchHandler>(profile_)),
       restore_data_handler_(
           std::make_unique<FullRestoreDataHandler>(profile_)) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(&FullRestoreService::Init,
+                                weak_ptr_factory_.GetWeakPtr()));
+}
+
+FullRestoreService::~FullRestoreService() = default;
+
+void FullRestoreService::LaunchBrowserWhenReady() {
+  app_launch_handler_->LaunchBrowserWhenReady();
+}
+
+void FullRestoreService::RestoreForTesting() {
+  // If there is no browser launch info, the browser won't be launched. So call
+  // SetForceLaunchBrowserForTesting to launch the browser for testing.
+  app_launch_handler_->SetForceLaunchBrowserForTesting();
+
+  Restore();
+}
+
+void FullRestoreService::Init() {
   // If the system crashed before reboot, show the restore notification.
-  if (profile->GetLastSessionExitType() == Profile::EXIT_CRASHED) {
+  if (profile_->GetLastSessionExitType() == Profile::EXIT_CRASHED) {
     ShowRestoreNotification(kRestoreForCrashNotificationId);
     return;
   }
 
-  PrefService* prefs = profile->GetPrefs();
+  PrefService* prefs = profile_->GetPrefs();
   DCHECK(prefs);
 
   // If it is the first time to run Chrome OS, we don't have restore data, so we
@@ -86,12 +106,6 @@ FullRestoreService::FullRestoreService(Profile* profile)
     case RestoreOption::kDoNotRestore:
       return;
   }
-}
-
-FullRestoreService::~FullRestoreService() = default;
-
-void FullRestoreService::LauncherBrowserWhenReady() {
-  app_launch_handler_->LauncherBrowserWhenReady();
 }
 
 void FullRestoreService::Shutdown() {

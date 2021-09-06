@@ -24,8 +24,7 @@ class CourierRendererFactory : public RendererFactory {
       AudioRendererSink* audio_renderer_sink,
       VideoRendererSink* video_renderer_sink,
       RequestOverlayInfoCB request_overlay_info_cb,
-      const gfx::ColorSpace& target_color_space,
-      bool use_platform_media_pipeline = false) override;
+      const gfx::ColorSpace& target_color_space) override;
 
   // Returns whether remote rendering has started, based off of |controller_|.
   // Called by RendererFactorySelector to determine when to create a

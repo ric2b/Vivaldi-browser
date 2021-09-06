@@ -12,17 +12,11 @@ ContentInjectionRuleCore::ContentInjectionRuleCore(
     ContentInjectionRuleCore&& other) = default;
 ContentInjectionRuleCore& ContentInjectionRuleCore::operator=(
     ContentInjectionRuleCore&& other) = default;
-ContentInjectionRuleCore::ContentInjectionRuleCore(
-    ContentInjectionRuleCore& other) = default;
 bool ContentInjectionRuleCore::operator==(
     const ContentInjectionRuleCore& other) const {
   return is_allow_rule == other.is_allow_rule &&
          excluded_domains == other.excluded_domains &&
          included_domains == other.included_domains;
-}
-
-ContentInjectionRuleCore ContentInjectionRuleCore::Clone() {
-  return ContentInjectionRuleCore(*this);
 }
 
 std::ostream& operator<<(std::ostream& os,

@@ -158,6 +158,8 @@ bool StructTraits<network::mojom::TrustedUrlRequestParamsDataView,
   out->has_user_activation = data.has_user_activation();
   out->cookie_observer = data.TakeCookieObserver<
       mojo::PendingRemote<network::mojom::CookieAccessObserver>>();
+  out->auth_cert_observer = data.TakeAuthCertObserver<mojo::PendingRemote<
+      network::mojom::AuthenticationAndCertificateObserver>>();
   if (!data.ReadClientSecurityState(&out->client_security_state)) {
     return false;
   }
@@ -168,11 +170,15 @@ bool StructTraits<network::mojom::WebBundleTokenParamsDataView,
                   network::ResourceRequest::WebBundleTokenParams>::
     Read(network::mojom::WebBundleTokenParamsDataView data,
          network::ResourceRequest::WebBundleTokenParams* out) {
+  if (!data.ReadBundleUrl(&out->bundle_url)) {
+    return false;
+  }
   if (!data.ReadToken(&out->token)) {
     return false;
   }
   out->handle = data.TakeWebBundleHandle<
       mojo::PendingRemote<network::mojom::WebBundleHandle>>();
+  out->render_process_id = data.render_process_id();
   return true;
 }
 
@@ -256,6 +262,7 @@ bool StructTraits<
   out->is_signed_exchange_prefetch_cache_enabled =
       data.is_signed_exchange_prefetch_cache_enabled();
   out->is_fetch_like_api = data.is_fetch_like_api();
+  out->is_favicon = data.is_favicon();
   out->obey_origin_policy = data.obey_origin_policy();
   return true;
 }

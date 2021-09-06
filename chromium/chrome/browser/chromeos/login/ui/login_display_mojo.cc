@@ -8,17 +8,16 @@
 #include "ash/public/cpp/login_screen_model.h"
 #include "ash/public/cpp/login_types.h"
 #include "base/bind.h"
+#include "chrome/browser/ash/accessibility/accessibility_manager.h"
+#include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
+#include "chrome/browser/ash/login/quick_unlock/pin_backend.h"
+#include "chrome/browser/ash/login/screens/chrome_user_selection_screen.h"
+#include "chrome/browser/ash/login/screens/user_selection_screen.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
-#include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/login/challenge_response_auth_keys_loader.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
-#include "chrome/browser/chromeos/login/quick_unlock/pin_backend.h"
-#include "chrome/browser/chromeos/login/screens/chrome_user_selection_screen.h"
-#include "chrome/browser/chromeos/login/screens/user_selection_screen.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_mojo.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/ui/ash/login_screen_client.h"
 #include "chrome/browser/ui/webui/chromeos/login/enable_adb_sideloading_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/enable_debugging_screen_handler.h"
@@ -238,16 +237,6 @@ void LoginDisplayMojo::SetWebUIHandler(
   webui_handler_ = webui_handler;
 }
 
-bool LoginDisplayMojo::IsShowUsers() const {
-  NOTIMPLEMENTED();
-  return false;
-}
-
-bool LoginDisplayMojo::ShowUsersHasChanged() const {
-  NOTIMPLEMENTED();
-  return false;
-}
-
 bool LoginDisplayMojo::AllowNewUserChanged() const {
   NOTIMPLEMENTED();
   return false;
@@ -255,14 +244,6 @@ bool LoginDisplayMojo::AllowNewUserChanged() const {
 
 bool LoginDisplayMojo::IsUserSigninCompleted() const {
   return is_signin_completed();
-}
-
-void LoginDisplayMojo::HandleGetUsers() {
-  NOTIMPLEMENTED();
-}
-
-void LoginDisplayMojo::CheckUserStatus(const AccountId& account_id) {
-  NOTIMPLEMENTED();
 }
 
 void LoginDisplayMojo::OnUserImageChanged(const user_manager::User& user) {

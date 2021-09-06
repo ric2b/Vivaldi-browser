@@ -55,6 +55,10 @@ void BuildBookmarkContextMenu(Profile* profile,
       IDS_VIV_BOOKMARK_BAR_NEW_BOOKMARK);
   menu_model->AddItemWithStringId(IDC_BOOKMARK_BAR_NEW_FOLDER,
       IDS_VIV_BOOKMARK_BAR_NEW_FOLDER);
+  if (Container->sort_field == BookmarkSorter::FIELD_NONE) {
+    menu_model->AddItemWithStringId(IDC_VIV_BOOKMARK_BAR_NEW_SEPARATOR,
+        IDS_VIV_BOOKMARK_BAR_NEW_SEPARATOR);
+  }
   menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
   menu_model->AddItemWithStringId(IDC_BOOKMARK_BAR_EDIT,
       IDS_VIV_BOOKMARK_BAR_EDIT);
@@ -91,6 +95,7 @@ void ExecuteBookmarkContextMenuCommand(Browser* browser,
     case IDC_VIV_BOOKMARK_BAR_ADD_ACTIVE_TAB:
     case IDC_BOOKMARK_BAR_ADD_NEW_BOOKMARK:
     case IDC_BOOKMARK_BAR_NEW_FOLDER:
+    case IDC_VIV_BOOKMARK_BAR_NEW_SEPARATOR:
     case IDC_BOOKMARK_BAR_EDIT:
     case IDC_CUT:
     case IDC_COPY:

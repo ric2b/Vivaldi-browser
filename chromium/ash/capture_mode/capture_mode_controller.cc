@@ -68,8 +68,9 @@ constexpr char kScreenCaptureNotificationId[] = "capture_mode_notification";
 constexpr char kScreenCaptureStoppedNotificationId[] =
     "capture_mode_stopped_notification";
 constexpr char kScreenCaptureNotifierId[] = "ash.capture_mode_controller";
-constexpr char kScreenCaptureNotificationType[] =
-    "capture_mode_notification_type";
+constexpr char kScreenShotNotificationType[] = "screen_shot_notification_type";
+constexpr char kScreenRecordingNotificationType[] =
+    "screen_recording_notification_type";
 
 // The format strings of the file names of captured images.
 // TODO(afakhry): Discuss with UX localizing "Screenshot" and "Screen
@@ -162,6 +163,8 @@ void DeleteFileAsync(scoped_refptr<base::SequencedTaskRunner> task_runner,
 }
 
 // Shows a Capture Mode related notification with the given parameters.
+// |for_video_thumbnail| will be considered only if |optional_fields| contain
+// an image to show in the notification as a thumbnail for what was captured.
 void ShowNotification(
     const std::string& notification_id,
     int title_id,
@@ -170,7 +173,8 @@ void ShowNotification(
     scoped_refptr<message_center::NotificationDelegate> delegate,
     message_center::SystemNotificationWarningLevel warning_level =
         message_center::SystemNotificationWarningLevel::NORMAL,
-    const gfx::VectorIcon& notification_icon = kCaptureModeIcon) {
+    const gfx::VectorIcon& notification_icon = kCaptureModeIcon,
+    bool for_video_thumbnail = false) {
   const auto type = optional_fields.image.IsEmpty()
                         ? message_center::NOTIFICATION_TYPE_SIMPLE
                         : message_center::NOTIFICATION_TYPE_CUSTOM;
@@ -184,8 +188,11 @@ void ShowNotification(
               message_center::NotifierType::SYSTEM_COMPONENT,
               kScreenCaptureNotifierId),
           optional_fields, delegate, notification_icon, warning_level);
-  if (type == message_center::NOTIFICATION_TYPE_CUSTOM)
-    notification->set_custom_view_type(kScreenCaptureNotificationType);
+  if (type == message_center::NOTIFICATION_TYPE_CUSTOM) {
+    notification->set_custom_view_type(for_video_thumbnail
+                                           ? kScreenRecordingNotificationType
+                                           : kScreenShotNotificationType);
+  }
 
   // Remove the previous notification before showing the new one if there is
   // any.
@@ -204,13 +211,49 @@ void ShowFailureNotification() {
                    /*optional_fields=*/{}, /*delegate=*/nullptr);
 }
 
+// Returns the ID of the message or the title for the notification based on
+// |allowance| and |for_title|.
+int GetDisabledNotificationMessageId(CaptureAllowance allowance,
+                                     bool for_title) {
+  switch (allowance) {
+    case CaptureAllowance::kDisallowedByPolicy:
+      return for_title ? IDS_ASH_SCREEN_CAPTURE_POLICY_DISABLED_TITLE
+                       : IDS_ASH_SCREEN_CAPTURE_POLICY_DISABLED_MESSAGE;
+    case CaptureAllowance::kDisallowedByDlp:
+      return for_title ? IDS_ASH_SCREEN_CAPTURE_DLP_DISABLED_TITLE
+                       : IDS_ASH_SCREEN_CAPTURE_DLP_DISABLED_MESSAGE;
+    case CaptureAllowance::kDisallowedByHdcp:
+      return for_title ? IDS_ASH_SCREEN_CAPTURE_HDCP_STOPPED_TITLE
+                       : IDS_ASH_SCREEN_CAPTURE_HDCP_BLOCKED_MESSAGE;
+    case CaptureAllowance::kAllowed:
+      NOTREACHED();
+      return IDS_ASH_SCREEN_CAPTURE_POLICY_DISABLED_MESSAGE;
+  }
+}
+
+// Shows a notification informing the user that Capture Mode operations are
+// currently disabled. |allowance| identifies the reason why the operation is
+// currently disabled.
+void ShowDisabledNotification(CaptureAllowance allowance) {
+  DCHECK(allowance != CaptureAllowance::kAllowed);
+  ShowNotification(
+      kScreenCaptureNotificationId,
+      GetDisabledNotificationMessageId(allowance, /*for_title=*/true),
+      GetDisabledNotificationMessageId(allowance, /*for_title=*/false),
+      /*optional_fields=*/{}, /*delegate=*/nullptr,
+      message_center::SystemNotificationWarningLevel::CRITICAL_WARNING,
+      allowance == CaptureAllowance::kDisallowedByHdcp
+          ? kCaptureModeIcon
+          : vector_icons::kBusinessIcon);
+}
+
 // Shows a notification informing the user that video recording was stopped. If
 // |for_hdcp| is true, then this was due to a content-enforced protection,
 // otherwise it was due to DLP which is admin enforced.
 void ShowVideoRecordingStoppedNotification(bool for_hdcp) {
   ShowNotification(
       kScreenCaptureStoppedNotificationId,
-      for_hdcp ? IDS_ASH_SCREEN_CAPTURE_STOPPED_TITLE
+      for_hdcp ? IDS_ASH_SCREEN_CAPTURE_HDCP_STOPPED_TITLE
                : IDS_ASH_SCREEN_CAPTURE_DLP_STOPPED_TITLE,
       for_hdcp ? IDS_ASH_SCREEN_CAPTURE_HDCP_BLOCKED_MESSAGE
                : IDS_ASH_SCREEN_CAPTURE_DLP_STOPPED_MESSAGE,
@@ -268,10 +311,15 @@ CaptureModeController::CaptureModeController(
           weak_ptr_factory_.GetWeakPtr()));
 
   DCHECK(!message_center::MessageViewFactory::HasCustomNotificationViewFactory(
-      kScreenCaptureNotificationType));
+      kScreenShotNotificationType));
+  DCHECK(!message_center::MessageViewFactory::HasCustomNotificationViewFactory(
+      kScreenRecordingNotificationType));
   message_center::MessageViewFactory::SetCustomNotificationViewFactory(
-      kScreenCaptureNotificationType,
-      base::BindRepeating(&CaptureModeNotificationView::Create));
+      kScreenShotNotificationType,
+      base::BindRepeating(&CaptureModeNotificationView::CreateForImage));
+  message_center::MessageViewFactory::SetCustomNotificationViewFactory(
+      kScreenRecordingNotificationType,
+      base::BindRepeating(&CaptureModeNotificationView::CreateForVideo));
 
   Shell::Get()->session_controller()->AddObserver(this);
   chromeos::PowerManagerClient::Get()->AddObserver(this);
@@ -280,9 +328,11 @@ CaptureModeController::CaptureModeController(
 CaptureModeController::~CaptureModeController() {
   chromeos::PowerManagerClient::Get()->RemoveObserver(this);
   Shell::Get()->session_controller()->RemoveObserver(this);
-  // Remove the custom notification view factory.
+  // Remove the custom notification view factories.
   message_center::MessageViewFactory::ClearCustomNotificationViewFactory(
-      kScreenCaptureNotificationType);
+      kScreenShotNotificationType);
+  message_center::MessageViewFactory::ClearCustomNotificationViewFactory(
+      kScreenRecordingNotificationType);
 
   DCHECK_EQ(g_instance, this);
   g_instance = nullptr;
@@ -292,6 +342,10 @@ CaptureModeController::~CaptureModeController() {
 CaptureModeController* CaptureModeController::Get() {
   DCHECK(g_instance);
   return g_instance;
+}
+
+bool CaptureModeController::IsActive() const {
+  return capture_mode_session_ && !capture_mode_session_->is_shutting_down();
 }
 
 void CaptureModeController::SetSource(CaptureModeSource source) {
@@ -359,11 +413,13 @@ void CaptureModeController::Start(CaptureModeEntryType entry_type) {
   delegate_->OnSessionStateChanged(/*started=*/true);
 
   capture_mode_session_ = std::make_unique<CaptureModeSession>(this);
+  capture_mode_session_->Initialize();
 }
 
 void CaptureModeController::Stop() {
   DCHECK(IsActive());
   capture_mode_session_->ReportSessionHistograms();
+  capture_mode_session_->Shutdown();
   capture_mode_session_.reset();
 
   delegate_->OnSessionStateChanged(/*started=*/false);
@@ -462,7 +518,7 @@ void CaptureModeController::RefreshContentProtection() {
     // HDCP violation is also considered a failure, and we're not going to wait
     // for any buffered frames in the recording service.
     RecordEndRecordingReason(EndRecordingReason::kHdcpInterruption);
-    OnRecordingEnded(/*success=*/false);
+    OnRecordingEnded(/*success=*/false, gfx::ImageSkia());
     ShowVideoRecordingStoppedNotification(/*for_hdcp=*/true);
   }
 }
@@ -474,7 +530,8 @@ void CaptureModeController::OnMuxerOutput(const std::string& chunk) {
       .Then(on_video_file_status_);
 }
 
-void CaptureModeController::OnRecordingEnded(bool success) {
+void CaptureModeController::OnRecordingEnded(bool success,
+                                             const gfx::ImageSkia& thumbnail) {
   delegate_->StopObservingRestrictedContent();
 
   // If |success| is false, then recording has been force-terminated due to a
@@ -492,12 +549,17 @@ void CaptureModeController::OnRecordingEnded(bool success) {
   DCHECK(video_file_handler_);
   video_file_handler_.AsyncCall(&VideoFileHandler::FlushBufferedChunks)
       .Then(base::BindOnce(&CaptureModeController::OnVideoFileSaved,
-                           weak_ptr_factory_.GetWeakPtr()));
+                           weak_ptr_factory_.GetWeakPtr(), thumbnail));
 }
 
 void CaptureModeController::OnActiveUserSessionChanged(
     const AccountId& account_id) {
   EndSessionOrRecording(EndRecordingReason::kActiveUserChange);
+
+  // Remove the previous notification when switching to another user.
+  auto* message_center = message_center::MessageCenter::Get();
+  message_center->RemoveNotification(kScreenCaptureNotificationId,
+                                     /*by_user=*/false);
 }
 
 void CaptureModeController::OnSessionStateChanged(
@@ -597,7 +659,7 @@ void CaptureModeController::EndSessionOrRecording(EndRecordingReason reason) {
     // block the suspend until all chunks have been received, and then we can
     // resume it.
     RecordEndRecordingReason(EndRecordingReason::kImminentSuspend);
-    OnRecordingEnded(/*success=*/false);
+    OnRecordingEnded(/*success=*/false, gfx::ImageSkia());
     return;
   }
 
@@ -739,11 +801,10 @@ void CaptureModeController::OnRecordingServiceDisconnected() {
   // StopRecording(), and it calling us back with OnRecordingEnded(), so we call
   // OnRecordingEnded() in all cases.
   RecordEndRecordingReason(EndRecordingReason::kRecordingServiceDisconnected);
-  OnRecordingEnded(/*success=*/false);
+  OnRecordingEnded(/*success=*/false, gfx::ImageSkia());
 }
 
-CaptureModeController::CaptureAllowance
-CaptureModeController::IsCaptureAllowedByEnterprisePolicies(
+CaptureAllowance CaptureModeController::IsCaptureAllowedByEnterprisePolicies(
     const CaptureParams& capture_params) const {
   if (!delegate_->IsCaptureAllowedByPolicy()) {
     return CaptureAllowance::kDisallowedByPolicy;
@@ -773,7 +834,9 @@ void CaptureModeController::TerminateRecordingUiElements() {
 
 void CaptureModeController::CaptureImage(const CaptureParams& capture_params,
                                          const base::FilePath& path) {
-  DCHECK_EQ(CaptureModeType::kImage, type_);
+  // Note that |type_| may not necessarily be |kImage| here, since this may be
+  // called to take an instant fullscreen screenshot for the keyboard shortcut,
+  // which doesn't go through the capture mode UI, and doesn't change |type_|.
   DCHECK_EQ(CaptureAllowance::kAllowed,
             IsCaptureAllowedByEnterprisePolicies(capture_params));
 
@@ -863,14 +926,17 @@ void CaptureModeController::OnVideoFileStatus(bool success) {
   EndVideoRecording(EndRecordingReason::kFileIoError);
 }
 
-void CaptureModeController::OnVideoFileSaved(bool success) {
+void CaptureModeController::OnVideoFileSaved(
+    const gfx::ImageSkia& video_thumbnail,
+    bool success) {
   DCHECK(base::CurrentUIThread::IsSet());
   DCHECK(video_file_handler_);
 
   if (!success) {
     ShowFailureNotification();
   } else {
-    ShowPreviewNotification(current_video_file_path_, gfx::Image(),
+    ShowPreviewNotification(current_video_file_path_,
+                            gfx::Image(video_thumbnail),
                             CaptureModeType::kVideo);
     DCHECK(!recording_start_time_.is_null());
     RecordCaptureModeRecordTime(
@@ -906,7 +972,7 @@ void CaptureModeController::ShowPreviewNotification(
   message_center::RichNotificationData optional_fields;
   message_center::ButtonInfo edit_button(
       l10n_util::GetStringUTF16(IDS_ASH_SCREEN_CAPTURE_BUTTON_EDIT));
-  if (!for_video)
+  if (!for_video && !Shell::Get()->session_controller()->IsUserSessionBlocked())
     optional_fields.buttons.push_back(edit_button);
   message_center::ButtonInfo delete_button(
       l10n_util::GetStringUTF16(IDS_ASH_SCREEN_CAPTURE_BUTTON_DELETE));
@@ -919,7 +985,9 @@ void CaptureModeController::ShowPreviewNotification(
       base::MakeRefCounted<message_center::HandleNotificationClickDelegate>(
           base::BindRepeating(&CaptureModeController::HandleNotificationClicked,
                               weak_ptr_factory_.GetWeakPtr(),
-                              screen_capture_path, type)));
+                              screen_capture_path, type)),
+      message_center::SystemNotificationWarningLevel::NORMAL, kCaptureModeIcon,
+      for_video);
 }
 
 void CaptureModeController::HandleNotificationClicked(
@@ -963,40 +1031,6 @@ void CaptureModeController::HandleNotificationClicked(
       kScreenCaptureNotificationId, /*by_user=*/false);
 }
 
-/* static */
-int CaptureModeController::GetDisabledNotificationMessageId(
-    CaptureModeController::CaptureAllowance allowance) {
-  switch (allowance) {
-    case CaptureAllowance::kDisallowedByPolicy:
-      return IDS_ASH_SCREEN_CAPTURE_POLICY_DISABLED_MESSAGE;
-    case CaptureAllowance::kDisallowedByDlp:
-      return IDS_ASH_SCREEN_CAPTURE_DLP_DISABLED_MESSAGE;
-    case CaptureAllowance::kDisallowedByHdcp:
-      return IDS_ASH_SCREEN_CAPTURE_HDCP_BLOCKED_MESSAGE;
-    case CaptureAllowance::kAllowed:
-      NOTREACHED();
-      return IDS_ASH_SCREEN_CAPTURE_POLICY_DISABLED_MESSAGE;
-  }
-}
-
-/* static */
-void CaptureModeController::ShowDisabledNotification(
-    CaptureModeController::CaptureAllowance allowance) {
-  DCHECK(allowance != CaptureAllowance::kAllowed);
-  int message_id = GetDisabledNotificationMessageId(allowance);
-  ShowNotification(
-      kScreenCaptureNotificationId,
-      allowance == CaptureAllowance::kDisallowedByDlp
-          ? IDS_ASH_SCREEN_CAPTURE_DLP_DISABLED_TITLE
-          : IDS_ASH_SCREEN_CAPTURE_POLICY_DISABLED_TITLE,
-      message_id,
-      /*optional_fields=*/{}, /*delegate=*/nullptr,
-      message_center::SystemNotificationWarningLevel::CRITICAL_WARNING,
-      allowance == CaptureAllowance::kDisallowedByHdcp
-          ? kCaptureModeIcon
-          : vector_icons::kBusinessIcon);
-}
-
 base::FilePath CaptureModeController::BuildImagePath() const {
   return BuildPathNoExtension(kScreenshotFileNameFmtStr, base::Time::Now())
       .AddExtension("png");
@@ -1020,7 +1054,7 @@ base::FilePath CaptureModeController::BuildImagePathForDisplay(
 base::FilePath CaptureModeController::BuildPathNoExtension(
     const char* const format_string,
     base::Time timestamp) const {
-  const base::FilePath path = delegate_->GetActiveUserDownloadsDir();
+  const base::FilePath path = delegate_->GetScreenCaptureDir();
   base::Time::Exploded exploded_time;
   timestamp.LocalExplode(&exploded_time);
 

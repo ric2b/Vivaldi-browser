@@ -3,10 +3,10 @@
 // found in the LICENSE file.
 
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/login/login_manager_test.h"
 #include "chrome/browser/chromeos/login/test/login_manager_mixin.h"
 #include "chrome/browser/chromeos/login/ui/user_adding_screen.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
@@ -58,6 +58,11 @@ IN_PROC_BROWSER_TEST_F(SystemMenuModelBuilderMultiUserTest,
   // Open the settings window and record the |settings_browser|.
   auto* manager = SettingsWindowManager::GetInstance();
   manager->ShowOSSettings(profile);
+
+  // The above ShowOSSettings() should trigger an asynchronous call to launch
+  // OS Settings SWA. Flush Mojo calls so the browser window is created.
+  web_app::FlushSystemWebAppLaunchesForTesting(profile);
+
   auto* settings_browser = manager->FindBrowserForProfile(profile);
   ASSERT_TRUE(settings_browser);
 

@@ -47,7 +47,6 @@
 #include "chrome/browser/ui/search/local_ntp_test_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/ui_features.h"
-#include "chrome/browser/ui/user_manager.h"
 #include "chrome/browser/ui/webui/welcome/helpers.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
@@ -247,6 +246,7 @@ IN_PROC_BROWSER_TEST_F(AppControllerKeepAliveBrowserTest,
   ASSERT_EQ(profile1, [ac lastProfile]);
 
   // |profile1| is active.
+  base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(profile_manager->HasKeepAliveForTesting(
       profile1, ProfileKeepAliveOrigin::kAppControllerMac));
   EXPECT_FALSE(profile_manager->HasKeepAliveForTesting(
@@ -255,6 +255,7 @@ IN_PROC_BROWSER_TEST_F(AppControllerKeepAliveBrowserTest,
   // Make |profile2| active.
   [ac windowChangedToProfile:profile2];
   ASSERT_EQ(profile2, [ac lastProfile]);
+  base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(profile_manager->HasKeepAliveForTesting(
       profile1, ProfileKeepAliveOrigin::kAppControllerMac));
   EXPECT_TRUE(profile_manager->HasKeepAliveForTesting(
@@ -380,7 +381,7 @@ IN_PROC_BROWSER_TEST_F(AppControllerNewProfileManagementBrowserTest,
 
   EXPECT_FALSE(result);
   EXPECT_EQ(2u, active_browser_list_->size());
-  EXPECT_FALSE(UserManager::IsShowing());
+  EXPECT_FALSE(ProfilePicker::IsOpen());
 }
 
 // Test that for a locked last profile, a reopen event opens the User Manager.
@@ -399,10 +400,11 @@ IN_PROC_BROWSER_TEST_F(AppControllerNewProfileManagementBrowserTest,
   // Lock the active profile.
   base::ScopedAllowBlockingForTesting allow_blocking;
   Profile* profile = [ac lastProfile];
-  ProfileAttributesEntry* entry;
-  ASSERT_TRUE(g_browser_process->profile_manager()->
-                  GetProfileAttributesStorage().
-                  GetProfileAttributesWithPath(profile->GetPath(), &entry));
+  ProfileAttributesEntry* entry =
+      g_browser_process->profile_manager()
+          ->GetProfileAttributesStorage()
+          .GetProfileAttributesWithPath(profile->GetPath());
+  ASSERT_NE(entry, nullptr);
   entry->SetIsSigninRequired(true);
   EXPECT_TRUE(entry->IsSigninRequired());
 
@@ -412,8 +414,8 @@ IN_PROC_BROWSER_TEST_F(AppControllerNewProfileManagementBrowserTest,
 
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1u, active_browser_list_->size());
-  EXPECT_TRUE(UserManager::IsShowing());
-  UserManager::Hide();
+  EXPECT_TRUE(ProfilePicker::IsOpen());
+  ProfilePicker::Hide();
 }
 
 // Test that for a guest last profile, commandDispatch should open UserManager
@@ -446,14 +448,14 @@ IN_PROC_BROWSER_TEST_F(AppControllerNewProfileManagementBrowserTest,
   base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(1u, active_browser_list_->size());
-  EXPECT_TRUE(UserManager::IsShowing());
-  UserManager::Hide();
+  EXPECT_TRUE(ProfilePicker::IsOpen());
+  ProfilePicker::Hide();
 
   local_state->SetBoolean(prefs::kBrowserGuestModeEnabled, true);
   [ac commandDispatch:item];
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(2u, active_browser_list_->size());
-  EXPECT_FALSE(UserManager::IsShowing());
+  EXPECT_FALSE(ProfilePicker::IsOpen());
 }
 
 // Test that for a guest last profile, a reopen event opens the User Manager.
@@ -481,8 +483,8 @@ IN_PROC_BROWSER_TEST_F(AppControllerNewProfileManagementBrowserTest,
   base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(1u, active_browser_list_->size());
-  EXPECT_TRUE(UserManager::IsShowing());
-  UserManager::Hide();
+  EXPECT_TRUE(ProfilePicker::IsOpen());
+  ProfilePicker::Hide();
 }
 
 IN_PROC_BROWSER_TEST_F(AppControllerNewProfileManagementBrowserTest,
@@ -513,9 +515,9 @@ IN_PROC_BROWSER_TEST_F(AppControllerNewProfileManagementBrowserTest,
 
   // No new browser is opened; the User Manager opens instead.
   EXPECT_EQ(1u, active_browser_list_->size());
-  EXPECT_TRUE(UserManager::IsShowing());
+  EXPECT_TRUE(ProfilePicker::IsActive());
 
-  UserManager::Hide();
+  ProfilePicker::Hide();
 }
 
 class AppControllerProfilePickerBrowserTest
@@ -524,10 +526,7 @@ class AppControllerProfilePickerBrowserTest
   AppControllerProfilePickerBrowserTest() {
     feature_list_.InitAndEnableFeature(features::kNewProfilePicker);
   }
-
-  ~AppControllerProfilePickerBrowserTest() override {
-    signin_util::ResetForceSigninForTesting();
-  }
+  ~AppControllerProfilePickerBrowserTest() override = default;
 
  private:
   base::test::ScopedFeatureList feature_list_;
@@ -544,14 +543,13 @@ IN_PROC_BROWSER_TEST_F(AppControllerProfilePickerBrowserTest,
 
   EXPECT_FALSE(result);
   EXPECT_EQ(2u, active_browser_list_->size());
-  EXPECT_FALSE(UserManager::IsShowing());
   EXPECT_FALSE(ProfilePicker::IsOpen());
 }
 
 // Test that for a locked last profile, a reopen event opens the ProfilePicker.
 IN_PROC_BROWSER_TEST_F(AppControllerProfilePickerBrowserTest,
                        LockedProfileReopenWithNoWindows) {
-  signin_util::SetForceSigninForTesting(true);
+  signin_util::ScopedForceSigninSetterForTesting signin_setter(true);
   // The User Manager uses the system profile as its underlying profile. To
   // minimize flakiness due to the scheduling/descheduling of tasks on the
   // different threads, pre-initialize the guest profile before it is needed.
@@ -562,10 +560,11 @@ IN_PROC_BROWSER_TEST_F(AppControllerProfilePickerBrowserTest,
   // Lock the active profile.
   base::ScopedAllowBlockingForTesting allow_blocking;
   Profile* profile = [ac lastProfile];
-  ProfileAttributesEntry* entry;
-  ASSERT_TRUE(g_browser_process->profile_manager()
-                  ->GetProfileAttributesStorage()
-                  .GetProfileAttributesWithPath(profile->GetPath(), &entry));
+  ProfileAttributesEntry* entry =
+      g_browser_process->profile_manager()
+          ->GetProfileAttributesStorage()
+          .GetProfileAttributesWithPath(profile->GetPath());
+  ASSERT_NE(entry, nullptr);
   entry->SetIsSigninRequired(true);
   EXPECT_TRUE(entry->IsSigninRequired());
 
@@ -576,7 +575,6 @@ IN_PROC_BROWSER_TEST_F(AppControllerProfilePickerBrowserTest,
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1u, active_browser_list_->size());
   EXPECT_TRUE(ProfilePicker::IsOpen());
-  EXPECT_FALSE(UserManager::IsShowing());
   ProfilePicker::Hide();
 }
 
@@ -636,7 +634,6 @@ IN_PROC_BROWSER_TEST_F(AppControllerProfilePickerBrowserTest,
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1u, active_browser_list_->size());
   EXPECT_TRUE(ProfilePicker::IsOpen());
-  EXPECT_FALSE(UserManager::IsShowing());
   ProfilePicker::Hide();
 }
 

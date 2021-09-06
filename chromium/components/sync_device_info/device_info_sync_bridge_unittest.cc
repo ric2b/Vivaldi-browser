@@ -19,14 +19,14 @@
 #include "components/prefs/testing_pref_service.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/time.h"
+#include "components/sync/engine/entity_data.h"
 #include "components/sync/model/data_batch.h"
 #include "components/sync/model/data_type_activation_request.h"
-#include "components/sync/model/entity_data.h"
 #include "components/sync/model/metadata_batch.h"
 #include "components/sync/protocol/model_type_state.pb.h"
 #include "components/sync/test/model/mock_model_type_change_processor.h"
 #include "components/sync/test/model/model_type_store_test_util.h"
-#include "components/sync/test/test_matchers.h"
+#include "components/sync/test/model/test_matchers.h"
 #include "components/sync_device_info/device_info_prefs.h"
 #include "components/sync_device_info/device_info_util.h"
 #include "components/sync_device_info/local_device_info_util.h"
@@ -1480,6 +1480,29 @@ TEST_F(DeviceInfoSyncBridgeTest,
       bridge()->IsRecentLocalCacheGuid(CacheGuidForSuffix(kLocalSuffix)));
   EXPECT_THAT(bridge()->GetLocalDeviceInfoProvider()->GetLocalDeviceInfo(),
               IsNull());
+}
+
+TEST_F(DeviceInfoSyncBridgeTest, ShouldInvokeCallbackOnReadAllMetadata) {
+  const DeviceInfoSpecifics specifics = CreateLocalDeviceSpecifics();
+  const ModelTypeState model_type_state = StateWithEncryption("ekn");
+  WriteToStoreWithMetadata({specifics}, model_type_state);
+
+  InitializeBridge();
+  // Wait until the metadata is loaded.
+  base::RunLoop run_loop;
+  EXPECT_CALL(*processor(), IsTrackingMetadata).WillOnce(Return(true));
+  EXPECT_CALL(*processor(), ModelReadyToSync)
+      .WillOnce([&run_loop](std::unique_ptr<MetadataBatch> batch) {
+        run_loop.Quit();
+      });
+  run_loop.Run();
+
+  // Check that the bridge won't call SendLocalData() during initial merge.
+  EXPECT_CALL(*processor(), Put).Times(0);
+
+  // Check that the bridge has notified observers even if the local data hasn't
+  // been changed.
+  EXPECT_EQ(1, change_count());
 }
 
 }  // namespace

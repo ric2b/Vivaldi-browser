@@ -42,8 +42,15 @@ class MojoRendererFactory final : public RendererFactory {
       AudioRendererSink* audio_renderer_sink,
       VideoRendererSink* video_renderer_sink,
       RequestOverlayInfoCB request_overlay_info_cb,
-      const gfx::ColorSpace& target_color_space,
-      bool use_platform_media_pipeline = false) final;
+      const gfx::ColorSpace& target_color_space) final;
+
+#if defined(OS_WIN)
+  std::unique_ptr<MojoRenderer> CreateMediaFoundationRenderer(
+      mojo::PendingReceiver<mojom::MediaFoundationRendererExtension>
+          renderer_extension_receiver,
+      const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+      VideoRendererSink* video_renderer_sink);
+#endif  // defined (OS_WIN)
 
 #if BUILDFLAG(ENABLE_CAST_RENDERER)
   std::unique_ptr<MojoRenderer> CreateCastRenderer(

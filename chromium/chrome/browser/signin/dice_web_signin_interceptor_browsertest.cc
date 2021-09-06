@@ -32,6 +32,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/profile_waiter.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/account_id/account_id.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
@@ -121,35 +122,6 @@ class FakeDiceWebSigninInterceptorDelegate
       DiceWebSigninInterceptor::SigninInterceptionType::kMultiUser;
   base::WeakPtr<FakeBubbleHandle> weak_bubble_handle_;
 };
-
-// Waits until a new profile is created.
-class ProfileWaiter : public ProfileManagerObserver {
- public:
-  ProfileWaiter() {
-    profile_manager_observer_.Add(g_browser_process->profile_manager());
-  }
-
-  ~ProfileWaiter() override = default;
-
-  Profile* WaitForProfileAdded() {
-    run_loop_.Run();
-    return profile_;
-  }
-
- private:
-  // ProfileManagerObserver:
-  void OnProfileAdded(Profile* profile) override {
-    profile_manager_observer_.RemoveAll();
-    profile_ = profile;
-    run_loop_.Quit();
-  }
-
-  Profile* profile_ = nullptr;
-  ScopedObserver<ProfileManager, ProfileManagerObserver>
-      profile_manager_observer_{this};
-  base::RunLoop run_loop_;
-};
-
 
 // Runs the interception and returns the new profile that was created.
 Profile* InterceptAndWaitProfileCreation(content::WebContents* contents,
@@ -249,9 +221,9 @@ class DiceWebSigninInterceptorBrowserTest : public InProcessBrowserTest {
     create_services_subscription_ =
         BrowserContextDependencyManager::GetInstance()
             ->RegisterCreateServicesCallbackForTesting(
-                base::Bind(&DiceWebSigninInterceptorBrowserTest::
-                               OnWillCreateBrowserContextServices,
-                           base::Unretained(this)));
+                base::BindRepeating(&DiceWebSigninInterceptorBrowserTest::
+                                        OnWillCreateBrowserContextServices,
+                                    base::Unretained(this)));
   }
 
   void OnWillCreateBrowserContextServices(content::BrowserContext* context) {
@@ -343,11 +315,10 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest, InterceptionTest) {
   adaptor.identity_test_env()->SetAutomaticIssueOfAccessTokens(true);
 
   // Check the profile name.
-  ProfileAttributesEntry* entry = nullptr;
   ProfileAttributesStorage& storage =
       g_browser_process->profile_manager()->GetProfileAttributesStorage();
-  ASSERT_TRUE(
-      storage.GetProfileAttributesWithPath(new_profile->GetPath(), &entry));
+  ProfileAttributesEntry* entry =
+      storage.GetProfileAttributesWithPath(new_profile->GetPath());
   ASSERT_TRUE(entry);
   EXPECT_EQ("givenname", base::UTF16ToUTF8(entry->GetLocalProfileName()));
   // Check the profile color.
@@ -393,9 +364,8 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest, SwitchAndLoad) {
       base::UTF8ToUTF16(account_info.email),
       /*is_consented_primary_account=*/false, /*icon_index=*/0,
       /*supervised_user_id*/ std::string(), EmptyAccountId());
-  ProfileAttributesEntry* entry = nullptr;
-  ASSERT_TRUE(
-      profile_storage->GetProfileAttributesWithPath(profile_path, &entry));
+  ProfileAttributesEntry* entry =
+      profile_storage->GetProfileAttributesWithPath(profile_path);
   ASSERT_TRUE(entry);
   ASSERT_EQ(entry->GetGAIAId(), account_info.gaia);
 

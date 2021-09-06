@@ -6,10 +6,10 @@
 
 #include <memory>
 
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/borealis/borealis_context.h"
 #include "chrome/browser/chromeos/borealis/borealis_context_manager.h"
 #include "chrome/browser/chromeos/borealis/borealis_metrics.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/dlcservice/fake_dlcservice_client.h"
@@ -62,6 +62,7 @@ class BorealisTasksTest : public testing::Test {
 
   void TearDown() override {
     profile_.reset();
+    context_.reset();  // must destroy before DBus shutdown
 
     chromeos::DlcserviceClient::Shutdown();
     chromeos::DBusThreadManager::Shutdown();

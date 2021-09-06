@@ -29,6 +29,10 @@ import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
 
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplication;
+import org.vivaldi.browser.common.VivaldiRelaunchUtils;
+
 /**
  * Settings fragment that displays information about Chrome languages, which allow users to
  * seamlessly find and manage their languages preferences across platforms.
@@ -52,12 +56,17 @@ public class LanguageSettings
     static final String NO_PROMPT_LANGUAGES_KEY = "translate_settings_no_prompt_languages";
     static final String NO_PROMPT_SITES_KEY = "translate_settings_no_prompt_sites";
 
+    // Vivaldi
+    static boolean isRestartRequired;
+    static final String CONTENT_LANGUAGE_SECTION_KEY = "content_langauges_section";
+
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         getActivity().setTitle(R.string.language_settings);
 
         // Show the detailed language settings if DETAILED_LANGUAGE_SETTINGS feature is enabled
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.DETAILED_LANGUAGE_SETTINGS)) {
+        if (ChromeApplication.isVivaldi() ||
+            ChromeFeatureList.isEnabled(ChromeFeatureList.DETAILED_LANGUAGE_SETTINGS)) {
             createDetailedPreferences(savedInstanceState, rootKey);
         } else {
             createBasicPreferences(savedInstanceState, rootKey);
@@ -80,6 +89,9 @@ public class LanguageSettings
                 (ChromeSwitchPreference) findPreference(TRANSLATE_SWITCH_KEY);
         boolean isTranslateEnabled = getPrefService().getBoolean(Pref.OFFER_TRANSLATE_ENABLED);
         translateSwitch.setChecked(isTranslateEnabled);
+
+        // Vivaldi
+        translateSwitch.setVisible(false);
 
         translateSwitch.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
             @Override
@@ -131,6 +143,14 @@ public class LanguageSettings
         setSelectLanguageLauncher(appLanguagePreference,
                 AddLanguageFragment.LANGUAGE_OPTIONS_UI_LANGUAGES, REQUEST_CODE_CHANGE_APP_LANGUAGE,
                 LanguagesManager.LanguageSettingsPageType.CHROME_LANGUAGE);
+
+        // Vivaldi - App language implementation
+        if (ChromeApplication.isVivaldi()) {
+            getActivity().setTitle(R.string.vivaldi_language_settings);
+            mAppLanguageTitle.setTitle(R.string.vivaldi_app_language_title);
+            findPreference(CONTENT_LANGUAGE_SECTION_KEY).setEnabled(!isRestartRequired);
+            if (isRestartRequired) VivaldiRelaunchUtils.showRelaunchDialog(getContext(), null);
+        }
     }
 
     /**
@@ -183,7 +203,7 @@ public class LanguageSettings
                 LanguagesManager.LanguageSettingsPageType.TARGET_LANGUAGE);
 
         // Vivaldi
-        getPreferenceScreen().removePreference(translateSwitch);
+        translationSettingsSection.setVisible(false);
     }
 
     @Override
@@ -209,6 +229,16 @@ public class LanguageSettings
             AppLocaleUtils.setAppLanguagePref(code);
             LanguagesManager.recordAction(
                     LanguagesManager.LanguageSettingsActionType.CHANGE_CHROME_LANGUAGE);
+
+            // Vivaldi
+            if (ChromeApplication.isVivaldi()) {
+                // Note(nagamani@vivaldi.com): Changes to content language are not saved until the app
+                // language change is applied[i.e. until the app is restarted]. Hence disabling the
+                // section to avoid user selection not being reflected after app restart.
+                isRestartRequired = true;
+                findPreference(CONTENT_LANGUAGE_SECTION_KEY).setEnabled(!isRestartRequired);
+                VivaldiRelaunchUtils.showRelaunchDialog(getContext(), null);
+            }
         } else if (requestCode == REQUEST_CODE_CHANGE_TARGET_LANGUAGE
                 && resultCode == Activity.RESULT_OK) {
             String code = data.getStringExtra(AddLanguageFragment.INTENT_SELECTED_LANGUAGE);

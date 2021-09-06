@@ -12,7 +12,7 @@
 #include "chrome/install_static/install_util.h"
 #include "chrome/install_static/policy_path_parser.h"
 
-#include "install_static/vivaldi_user_data_dir.inc"
+#include "installer/util/vivaldi_static_install_helpers.h"
 
 namespace install_static {
 
@@ -78,7 +78,7 @@ bool GetDefaultUserDataDirectory(const InstallConstants& mode,
                                  std::wstring* result) {
   // This environment variable should be set on Windows Vista and later
   // (https://msdn.microsoft.com/library/windows/desktop/dd378457.aspx).
-  std::wstring user_data_dir = GetEnvironmentString16(L"LOCALAPPDATA");
+  std::wstring user_data_dir = GetEnvironmentString(L"LOCALAPPDATA");
 
   if (user_data_dir.empty()) {
     // LOCALAPPDATA was not set; fallback to the temporary files path.
@@ -91,7 +91,7 @@ bool GetDefaultUserDataDirectory(const InstallConstants& mode,
       return false;
     user_data_dir.resize(size);
   }
-  if (VivaldiCheckStandaloneUserDir(result))
+  if (vivaldi::GetStandaloneInstallDataDirectory(*result))
     return true;
   result->swap(user_data_dir);
   if ((*result)[result->length() - 1] != L'\\')

@@ -121,6 +121,9 @@ class TestTabModel : public TabModel {
   // TabModel:
   int GetTabCount() const override { return 0; }
   int GetActiveIndex() const override { return 0; }
+  base::android::ScopedJavaLocalRef<jobject> GetJavaObject() const override {
+    return nullptr;
+  }
   content::WebContents* GetActiveWebContents() const override {
     return web_contents_.get();
   }
@@ -474,6 +477,7 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTest, IncognitoPlusRegularCheck) {
   ClosePlatformBrowser(browser);
 }
 
+#if !defined(OS_ANDROID) && !defined(CHROME_OS)
 class GuestUkmBrowserTest : public UkmBrowserTest,
                             public ::testing::WithParamInterface<bool> {
  public:
@@ -487,7 +491,6 @@ class GuestUkmBrowserTest : public UkmBrowserTest,
 };
 
 // Make sure that UKM is disabled while a guest profile's window is open.
-#if !defined(OS_ANDROID) && !defined(CHROME_OS)
 IN_PROC_BROWSER_TEST_P(GuestUkmBrowserTest, RegularPlusGuestCheck) {
   ukm::UkmTestHelper ukm_test_helper(GetUkmService());
   MetricsConsentOverride metrics_consent(true);
@@ -513,11 +516,11 @@ IN_PROC_BROWSER_TEST_P(GuestUkmBrowserTest, RegularPlusGuestCheck) {
   harness->service()->GetUserSettings()->SetSyncRequested(false);
   CloseBrowserSynchronously(regular_browser);
 }
-#endif  // !defined(OS_ANDROID) && !defined(CHROME_OS)
 
 INSTANTIATE_TEST_SUITE_P(AllGuestTypes,
                          GuestUkmBrowserTest,
                          /*is_ephemeral=*/testing::Bool());
+#endif  // !defined(OS_ANDROID) && !defined(CHROME_OS)
 
 // Make sure that UKM is disabled while an non-sync profile's window is open.
 #if !defined(OS_ANDROID)
@@ -622,16 +625,8 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTest, LogProtoData) {
 // Keep this test in sync with testUKMDemographicsReportingWithFeatureEnabled
 // and testUKMDemographicsReportingWithFeatureDisabled in
 // ios/chrome/browser/metrics/demographics_egtest.mm.
-// TODO(1102747): Crashes on android asan.
-#if defined(OS_ANDROID) && defined(ADDRESS_SANITIZER)
-#define MAYBE_AddSyncedUserBirthYearAndGenderToProtoData \
-  DISABLED_AddSyncedUserBirthYearAndGenderToProtoData
-#else
-#define MAYBE_AddSyncedUserBirthYearAndGenderToProtoData \
-  AddSyncedUserBirthYearAndGenderToProtoData
-#endif
 IN_PROC_BROWSER_TEST_P(UkmBrowserTestWithDemographics,
-                       MAYBE_AddSyncedUserBirthYearAndGenderToProtoData) {
+                       AddSyncedUserBirthYearAndGenderToProtoData) {
   ukm::UkmTestHelper ukm_test_helper(GetUkmService());
   test::DemographicsTestParams param = GetParam();
   MetricsConsentOverride metrics_consent(true);

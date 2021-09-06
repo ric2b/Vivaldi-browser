@@ -18,6 +18,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/test/test_bookmark_client.h"
 #include "components/favicon/core/test/mock_favicon_service.h"
+#include "components/sync/base/client_tag_hash.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/engine/commit_queue.h"
 #include "components/sync/model/data_type_activation_request.h"
@@ -408,10 +409,10 @@ TEST_F(
 
   // Process an update for the same bookmark with the same data.
   syncer::UpdateResponseDataList updates;
-  updates.push_back(
-      CreateUpdateResponseData({kNodeId, kTitle, kUrl, kBookmarkBarId,
-                                /*server_tag=*/std::string()},
-                               kRandomPosition, /*response_version=*/1));
+  updates.push_back(CreateUpdateResponseData(
+      {kNodeId, kTitle, kUrl, kBookmarkBarId,
+       /*server_tag=*/std::string()},
+      kRandomPosition, /*response_version=*/1, bookmark_node->guid()));
   updates[0].response_version++;
 
   EXPECT_CALL(*schedule_save_closure(), Run());
@@ -444,14 +445,25 @@ TEST_F(BookmarkModelTypeProcessorTest, ShouldDecodeSyncMetadata) {
       model_metadata.add_bookmarks_metadata();
   bookmark_metadata->set_id(bookmark_bar_node->id());
   bookmark_metadata->mutable_metadata()->set_server_id(kBookmarkBarId);
+  bookmark_metadata->mutable_metadata()->set_client_tag_hash(
+      SyncedBookmarkTracker::GetClientTagHashFromGUID(bookmark_bar_node->guid())
+          .value());
 
   bookmark_metadata = model_metadata.add_bookmarks_metadata();
   bookmark_metadata->set_id(bookmark_model()->other_node()->id());
   bookmark_metadata->mutable_metadata()->set_server_id(kOtherBookmarksId);
+  bookmark_metadata->mutable_metadata()->set_client_tag_hash(
+      SyncedBookmarkTracker::GetClientTagHashFromGUID(
+          bookmark_model()->other_node()->guid())
+          .value());
 
   bookmark_metadata = model_metadata.add_bookmarks_metadata();
   bookmark_metadata->set_id(bookmark_model()->mobile_node()->id());
   bookmark_metadata->mutable_metadata()->set_server_id(kMobileBookmarksId);
+  bookmark_metadata->mutable_metadata()->set_client_tag_hash(
+      SyncedBookmarkTracker::GetClientTagHashFromGUID(
+          bookmark_model()->mobile_node()->guid())
+          .value());
 
   // Add an entry for the bookmark node.
   *model_metadata.add_bookmarks_metadata() =
@@ -508,6 +520,13 @@ TEST_F(BookmarkModelTypeProcessorTest, ShouldDecodeEncodedSyncMetadata) {
   EXPECT_THAT(new_processor.GetTrackerForTest(), NotNull());
 }
 
+TEST_F(BookmarkModelTypeProcessorTest, ShouldDecodeEmptyMetadata) {
+  // No save should be scheduled.
+  EXPECT_CALL(*schedule_save_closure(), Run()).Times(0);
+  SimulateModelReadyToSync();
+  EXPECT_THAT(processor()->GetTrackerForTest(), IsNull());
+}
+
 TEST_F(BookmarkModelTypeProcessorTest,
        ShouldIgnoreNonEmptyMetadataWhileSyncNotDone) {
   sync_pb::BookmarkModelMetadata model_metadata;
@@ -521,9 +540,14 @@ TEST_F(BookmarkModelTypeProcessorTest,
   // Create a new processor and init it with the metadata str.
   BookmarkModelTypeProcessor new_processor(bookmark_undo_service());
 
+  // A save should be scheduled.
+  NiceMock<base::MockCallback<base::RepeatingClosure>>
+      new_schedule_save_closure;
+  EXPECT_CALL(new_schedule_save_closure, Run());
+
   std::string metadata_str;
   model_metadata.SerializeToString(&metadata_str);
-  new_processor.ModelReadyToSync(metadata_str, base::DoNothing(),
+  new_processor.ModelReadyToSync(metadata_str, new_schedule_save_closure.Get(),
                                  bookmark_model());
   // Metadata are corrupted, so no tracker should have been created.
   EXPECT_THAT(new_processor.GetTrackerForTest(), IsNull());
@@ -543,9 +567,14 @@ TEST_F(BookmarkModelTypeProcessorTest,
   // Create a new processor and init it with the metadata str.
   BookmarkModelTypeProcessor new_processor(bookmark_undo_service());
 
+  // A save should be scheduled.
+  NiceMock<base::MockCallback<base::RepeatingClosure>>
+      new_schedule_save_closure;
+  EXPECT_CALL(new_schedule_save_closure, Run());
+
   std::string metadata_str;
   model_metadata.SerializeToString(&metadata_str);
-  new_processor.ModelReadyToSync(metadata_str, base::DoNothing(),
+  new_processor.ModelReadyToSync(metadata_str, new_schedule_save_closure.Get(),
                                  bookmark_model());
 
   // Metadata are corrupted, so no tracker should have been created.
@@ -658,10 +687,6 @@ TEST_F(BookmarkModelTypeProcessorTest,
 
 TEST_F(BookmarkModelTypeProcessorTest,
        ShouldNotCommitEntitiesWithoutLoadedFavicons) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(
-      switches::kSyncDoNotCommitBookmarksWithoutFavicon);
-
   const std::string kNodeId = "node_id1";
   const std::string kTitle = "title1";
   const std::string kUrl = "http://www.url1.com";
@@ -681,14 +706,25 @@ TEST_F(BookmarkModelTypeProcessorTest,
       model_metadata.add_bookmarks_metadata();
   bookmark_metadata->set_id(bookmark_bar_node->id());
   bookmark_metadata->mutable_metadata()->set_server_id(kBookmarkBarId);
+  bookmark_metadata->mutable_metadata()->set_client_tag_hash(
+      SyncedBookmarkTracker::GetClientTagHashFromGUID(bookmark_bar_node->guid())
+          .value());
 
   bookmark_metadata = model_metadata.add_bookmarks_metadata();
   bookmark_metadata->set_id(bookmark_model()->other_node()->id());
   bookmark_metadata->mutable_metadata()->set_server_id(kOtherBookmarksId);
+  bookmark_metadata->mutable_metadata()->set_client_tag_hash(
+      SyncedBookmarkTracker::GetClientTagHashFromGUID(
+          bookmark_model()->other_node()->guid())
+          .value());
 
   bookmark_metadata = model_metadata.add_bookmarks_metadata();
   bookmark_metadata->set_id(bookmark_model()->mobile_node()->id());
   bookmark_metadata->mutable_metadata()->set_server_id(kMobileBookmarksId);
+  bookmark_metadata->mutable_metadata()->set_client_tag_hash(
+      SyncedBookmarkTracker::GetClientTagHashFromGUID(
+          bookmark_model()->mobile_node()->guid())
+          .value());
 
   // Add an entry for the bookmark node.
   bookmark_metadata = model_metadata.add_bookmarks_metadata();

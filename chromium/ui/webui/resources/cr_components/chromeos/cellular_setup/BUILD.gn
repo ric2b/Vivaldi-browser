@@ -9,181 +9,6 @@ import("../os_cr_components.gni")
 
 assert(is_chromeos, "CellularSetup UI is Chrome OS only.")
 
-js_type_check("closure_compile") {
-  deps = [
-    ":activation_code_page",
-    ":base_page",
-    ":button_bar",
-    ":cellular_eid_popup",
-    ":cellular_setup",
-    ":cellular_setup_delegate",
-    ":cellular_types",
-    ":confirmation_code_page",
-    ":esim_manager_listener_behavior",
-    ":esim_manager_utils",
-    ":final_page",
-    ":mojo_interface_provider",
-    ":profile_discovery_list_item",
-    ":profile_discovery_list_page",
-    ":provisioning_page",
-    ":psim_flow_ui",
-    ":setup_loading_page",
-    ":setup_selection_flow",
-    ":webview_post_util",
-  ]
-}
-
-js_library("button_bar") {
-  deps = [
-    ":cellular_types",
-    "//ui/webui/resources/js:i18n_behavior",
-  ]
-}
-
-js_library("base_page") {
-  deps = [ "//ui/webui/resources/js:i18n_behavior" ]
-}
-
-js_library("setup_loading_page") {
-  deps = [
-    ":base_page",
-    ":cellular_setup_delegate",
-  ]
-}
-
-js_library("webview_post_util") {
-  deps = [ "//ui/webui/resources/js:cr" ]
-  externs_list = [
-    "$externs_path/chrome_extensions.js",
-    "$externs_path/webview_tag.js",
-  ]
-}
-
-js_library("provisioning_page") {
-  deps = [
-    ":base_page",
-    ":cellular_setup_delegate",
-    ":webview_post_util",
-  ]
-  externs_list = [
-    "$externs_path/chrome_extensions.js",
-    "$externs_path/webview_tag.js",
-  ]
-}
-
-js_library("final_page") {
-  deps = [ ":base_page" ]
-}
-
-js_library("activation_code_page") {
-  deps = [
-    ":cellular_setup_delegate",
-    ":subflow_behavior",
-    "//ui/webui/resources/js:i18n_behavior",
-  ]
-}
-
-js_library("confirmation_code_page") {
-  deps = [ "//ui/webui/resources/js:i18n_behavior" ]
-}
-
-js_library("profile_discovery_list_page") {
-  deps = [
-    "//third_party/polymer/v1_0/components-chromium/iron-list:iron-list-extracted",
-    "//ui/webui/resources/js:i18n_behavior",
-  ]
-}
-
-js_library("profile_discovery_list_item") {
-  deps = [ "//ui/webui/resources/js:i18n_behavior" ]
-}
-
-js_library("psim_flow_ui") {
-  deps = [
-    ":cellular_setup_delegate",
-    ":cellular_types",
-    ":final_page",
-    ":mojo_interface_provider",
-    ":provisioning_page",
-    ":setup_loading_page",
-    ":subflow_behavior",
-    "//chromeos/services/cellular_setup/public/mojom:mojom_js_library_for_compile",
-    "//ui/webui/resources/js:assert.m",
-    "//ui/webui/resources/js:i18n_behavior",
-  ]
-}
-
-js_library("esim_flow_ui") {
-  deps = [
-    ":activation_code_page",
-    ":cellular_setup_delegate",
-    ":confirmation_code_page",
-    ":esim_manager_utils",
-    ":mojo_interface_provider",
-    ":profile_discovery_list_item",
-    ":profile_discovery_list_page",
-    ":subflow_behavior",
-    "//ui/webui/resources/js:assert.m",
-    "//ui/webui/resources/js:i18n_behavior",
-  ]
-}
-
-js_library("setup_selection_flow") {
-  deps = [
-    ":cellular_types",
-    ":subflow_behavior",
-    "//ui/webui/resources/js:i18n_behavior",
-  ]
-}
-
-js_library("cellular_eid_popup") {
-  deps = [ "//ui/webui/resources/js:i18n_behavior" ]
-}
-
-js_library("subflow_behavior") {
-  deps = [
-    ":cellular_types",
-    "//ui/webui/resources/js:cr",
-  ]
-}
-
-js_library("cellular_types") {
-  deps = [ "//ui/webui/resources/js:cr" ]
-}
-
-js_library("cellular_setup_delegate") {
-  deps = [ "//ui/webui/resources/js:cr" ]
-}
-
-js_library("cellular_setup") {
-  deps = [
-    ":button_bar",
-    ":cellular_setup_delegate",
-    ":cellular_types",
-    ":esim_flow_ui",
-    ":psim_flow_ui",
-    ":setup_selection_flow",
-    "//ui/webui/resources/js:i18n_behavior",
-  ]
-}
-
-js_library("mojo_interface_provider") {
-  deps = [
-    "//chromeos/services/cellular_setup/public/mojom:mojom_js_library_for_compile",
-    "//ui/webui/resources/js:cr",
-  ]
-}
-
-js_library("esim_manager_utils") {
-  deps = [ ":mojo_interface_provider" ]
-}
-
-js_library("esim_manager_listener_behavior") {
-  deps = [ ":mojo_interface_provider" ]
-}
-
-# Polymer3 files
-
 js_type_check("closure_compile_module") {
   is_polymer3 = true
   deps = [
@@ -305,6 +130,7 @@ js_library("setup_loading_page.m") {
   deps = [
     ":base_page.m",
     ":cellular_setup_delegate.m",
+    "//ui/webui/resources/js:assert.m",
   ]
   extra_deps = [ ":setup_loading_page_module" ]
 }
@@ -332,6 +158,7 @@ js_library("button_bar.m") {
     ":cellular_types.m",
     "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
     "//ui/webui/resources/js:i18n_behavior.m",
+    "//ui/webui/resources/js/cr/ui:focus_without_ink.m",
   ]
   extra_deps = [ ":button_bar_module" ]
 }
@@ -384,6 +211,8 @@ js_library("esim_flow_ui.m") {
     ":profile_discovery_list_page.m",
     ":subflow_behavior.m",
     "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/cr_components/chromeos/network:cellular_utils.m",
+    "//ui/webui/resources/cr_components/chromeos/network:network_listener_behavior.m",
     "//ui/webui/resources/js:assert.m",
     "//ui/webui/resources/js:i18n_behavior.m",
   ]
@@ -415,6 +244,8 @@ js_library("cellular_setup.m") {
     ":esim_flow_ui.m",
     ":psim_flow_ui.m",
     ":setup_selection_flow.m",
+    "//ui/webui/resources/cr_components/chromeos/network:cellular_utils.m",
+    "//ui/webui/resources/cr_components/chromeos/network:mojo_interface_provider.m",
     "//ui/webui/resources/js:i18n_behavior.m",
   ]
   extra_deps = [ ":cellular_setup_module" ]

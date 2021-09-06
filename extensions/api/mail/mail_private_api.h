@@ -11,65 +11,69 @@
 
 namespace extensions {
 
-class MailPrivateGetPathsFunction : public ExtensionFunction {
-  DECLARE_EXTENSION_FUNCTION("mailPrivate.getPaths", MAIL_GET_PATHS)
+class MailPrivateGetFilePathsFunction : public ExtensionFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.getFilePaths",
+                             MAIL_GET_FILE_PATHS)
  public:
-  MailPrivateGetPathsFunction() = default;
+  MailPrivateGetFilePathsFunction() = default;
 
  protected:
-  ~MailPrivateGetPathsFunction() override = default;
+  ~MailPrivateGetFilePathsFunction() override = default;
   void OnFinished(const std::vector<base::FilePath::StringType>& string_paths);
 
   // ExtensionFunction:
   ResponseAction Run() override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateGetPathsFunction);
+  DISALLOW_COPY_AND_ASSIGN(MailPrivateGetFilePathsFunction);
 };
 
-class MailPrivateSaveBufferFunction : public ExtensionFunction {
-  DECLARE_EXTENSION_FUNCTION("mailPrivate.saveBuffer", MAIL_SAVE_FILE_BUFFER)
+class MailPrivateWriteBufferToMessageFileFunction : public ExtensionFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.writeBufferToMessageFile",
+                             MAIL_WRITE_BUFFER_TO_MESSAGE_FILE)
  public:
-  MailPrivateSaveBufferFunction() = default;
+  MailPrivateWriteBufferToMessageFileFunction() = default;
 
  protected:
-  ~MailPrivateSaveBufferFunction() override = default;
+  ~MailPrivateWriteBufferToMessageFileFunction() override = default;
   void OnFinished(bool result);
   // ExtensionFunction:
   ResponseAction Run() override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateSaveBufferFunction);
+  DISALLOW_COPY_AND_ASSIGN(MailPrivateWriteBufferToMessageFileFunction);
 };
 
-class MailPrivateSaveFunction : public ExtensionFunction {
-  DECLARE_EXTENSION_FUNCTION("mailPrivate.save", MAIL_SAVE)
+class MailPrivateWriteTextToMessageFileFunction : public ExtensionFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.writeTextToMessageFile",
+                             MAIL_WRITE_TEXT_TO_MESSAGE_FILE)
  public:
-  MailPrivateSaveFunction() = default;
+  MailPrivateWriteTextToMessageFileFunction() = default;
 
  protected:
-  ~MailPrivateSaveFunction() override = default;
+  ~MailPrivateWriteTextToMessageFileFunction() override = default;
   void OnFinished(bool result);
   // ExtensionFunction:
   ResponseAction Run() override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateSaveFunction);
+  DISALLOW_COPY_AND_ASSIGN(MailPrivateWriteTextToMessageFileFunction);
 };
 
-class MailPrivateDeleteFunction : public ExtensionFunction {
-  DECLARE_EXTENSION_FUNCTION("mailPrivate.delete", MAIL_DELETE)
+class MailPrivateDeleteMessageFileFunction : public ExtensionFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.deleteMessageFile",
+                             MAIL_DELETE_MESSAGE_FILE)
  public:
-  MailPrivateDeleteFunction() = default;
+  MailPrivateDeleteMessageFileFunction() = default;
 
  protected:
-  ~MailPrivateDeleteFunction() override = default;
+  ~MailPrivateDeleteMessageFileFunction() override = default;
   void OnFinished(bool result);
   // ExtensionFunction:
   ResponseAction Run() override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateDeleteFunction);
+  DISALLOW_COPY_AND_ASSIGN(MailPrivateDeleteMessageFileFunction);
 };
 
 struct ReadFileResult {
@@ -77,103 +81,90 @@ struct ReadFileResult {
   std::string raw;
 };
 
-class MailPrivateReadFunction : public ExtensionFunction {
-  DECLARE_EXTENSION_FUNCTION("mailPrivate.read", MAIL_READ)
+class MailPrivateReadFileToBufferFunction : public ExtensionFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.readFileToBuffer",
+                             MAIL_READ_FILE_TO_BUFFER)
  public:
-  MailPrivateReadFunction() = default;
+  MailPrivateReadFileToBufferFunction() = default;
 
  protected:
-  ~MailPrivateReadFunction() override = default;
+  ~MailPrivateReadFileToBufferFunction() override = default;
   void OnFinished(ReadFileResult result);
   // ExtensionFunction:
   ResponseAction Run() override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateReadFunction);
+  DISALLOW_COPY_AND_ASSIGN(MailPrivateReadFileToBufferFunction);
 };
 
-class MailPrivateReadM3MessageFunction : public ExtensionFunction {
-  DECLARE_EXTENSION_FUNCTION("mailPrivate.readM3Message", MAIL_READ_M3_MESSAGE)
+class MailPrivateReadMessageFileToBufferFunction : public ExtensionFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.readMessageFileToBuffer",
+                             MAIL_READ_MESSAGE_FILE_TO_BUFFER)
  public:
-  MailPrivateReadM3MessageFunction() = default;
+  MailPrivateReadMessageFileToBufferFunction() = default;
 
  protected:
-  ~MailPrivateReadM3MessageFunction() override = default;
+  ~MailPrivateReadMessageFileToBufferFunction() override = default;
   void OnFinished(ReadFileResult result);
   // ExtensionFunction:
   ResponseAction Run() override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateReadM3MessageFunction);
+  DISALLOW_COPY_AND_ASSIGN(MailPrivateReadMessageFileToBufferFunction);
 };
 
-class MailPrivateReadFileFunction : public ExtensionFunction {
-  DECLARE_EXTENSION_FUNCTION("mailPrivate.readFile", MAIL_READ_FILE)
+class MailPrivateReadFileToTextFunction : public ExtensionFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.readFileToText",
+                             MAIL_READ_FILE_TO_TEXT)
  public:
-  MailPrivateReadFileFunction() = default;
+  MailPrivateReadFileToTextFunction() = default;
 
  protected:
-  ~MailPrivateReadFileFunction() override = default;
+  ~MailPrivateReadFileToTextFunction() override = default;
   void OnFinished(ReadFileResult result);
   // ExtensionFunction:
   ResponseAction Run() override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateReadFileFunction);
+  DISALLOW_COPY_AND_ASSIGN(MailPrivateReadFileToTextFunction);
 };
 
-struct GetDataDirectoryResult {
+struct GetDirectoryResult {
   bool success;
   base::FilePath::StringType path;
 };
 
-class MailPrivateGetDataDirectoryFunction : public ExtensionFunction {
-  DECLARE_EXTENSION_FUNCTION("mailPrivate.getDataDirectory",
-                             MAIL_GET_DATA_DIRECTORY)
+class MailPrivateGetFileDirectoryFunction : public ExtensionFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.getFileDirectory",
+                             MAIL_GET_FILE_DIRECTORY)
  public:
-  MailPrivateGetDataDirectoryFunction() = default;
+  MailPrivateGetFileDirectoryFunction() = default;
 
  protected:
-  ~MailPrivateGetDataDirectoryFunction() override = default;
-  void OnFinished(GetDataDirectoryResult result);
+  ~MailPrivateGetFileDirectoryFunction() override = default;
+  void OnFinished(GetDirectoryResult result);
   // ExtensionFunction:
   ResponseAction Run() override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateGetDataDirectoryFunction);
+  DISALLOW_COPY_AND_ASSIGN(MailPrivateGetFileDirectoryFunction);
 };
 
-class MailPrivateCreateDataDirectoryFunction : public ExtensionFunction {
-  DECLARE_EXTENSION_FUNCTION("mailPrivate.createDataDirectory",
-                             MAIL_CREATE_DATA_DIRECTORY)
+class MailPrivateCreateFileDirectoryFunction : public ExtensionFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.createFileDirectory",
+                             MAIL_CREATE_FILE_DIRECTORY)
  public:
-  MailPrivateCreateDataDirectoryFunction() = default;
+  MailPrivateCreateFileDirectoryFunction() = default;
 
  protected:
-  ~MailPrivateCreateDataDirectoryFunction() override = default;
-  void OnFinished(GetDataDirectoryResult result);
+  ~MailPrivateCreateFileDirectoryFunction() override = default;
+  void OnFinished(GetDirectoryResult result);
   // ExtensionFunction:
   ResponseAction Run() override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateCreateDataDirectoryFunction);
+  DISALLOW_COPY_AND_ASSIGN(MailPrivateCreateFileDirectoryFunction);
 };
-
-class MailPrivateRenameFunction : public ExtensionFunction {
-  DECLARE_EXTENSION_FUNCTION("mailPrivate.rename", MAIL_RENAME)
- public:
-  MailPrivateRenameFunction() = default;
-
- protected:
-  ~MailPrivateRenameFunction() override = default;
-  void OnFinished(bool result);
-  // ExtensionFunction:
-  ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateRenameFunction);
-};
-
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_MAIL_MAIL_PRIVATE_API_H_

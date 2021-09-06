@@ -20,7 +20,6 @@
 #include "content/common/navigation_params.h"
 #include "content/common/navigation_params_utils.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/navigation_policy.h"
 #include "content/public/common/url_utils.h"
 #include "content/test/test_navigation_url_loader.h"
 #include "content/test/test_render_frame_host.h"
@@ -31,6 +30,7 @@
 #include "net/base/load_flags.h"
 #include "net/url_request/redirect_info.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "third_party/blink/public/mojom/loader/mixed_content.mojom.h"
 
 namespace content {
 
@@ -321,7 +321,6 @@ NavigationSimulatorImpl::NavigationSimulatorImpl(
                            ? render_frame_host->frame_tree_node()
                            : web_contents->GetMainFrame()->frame_tree_node()),
       request_(nullptr),
-      original_url_(original_url),
       navigation_url_(original_url),
       initial_method_("GET"),
       browser_initiated_(browser_initiated),
@@ -362,7 +361,6 @@ void NavigationSimulatorImpl::InitializeFromStartedRequest(
   CHECK(render_frame_host_);
   CHECK_EQ(frame_tree_node_, request_->frame_tree_node());
   state_ = STARTED;
-  original_url_ = request->commit_params().original_url;
   navigation_url_ = request_->GetURL();
   // |remote_endpoint_| cannot be inferred from the request.
   // |initial_method_| cannot be set after the request has started.
@@ -1025,6 +1023,11 @@ void NavigationSimulatorImpl::DidStartNavigation(
   request_ = request;
   num_did_start_navigation_called_++;
 
+  // Some navigation requests are not directly created by the
+  // NavigationSimulator, so we should set some parameters manually after the
+  // navigation started.
+  request_->set_has_user_gesture(has_user_gesture_);
+
   // Add a throttle to count NavigationThrottle calls count.
   RegisterTestThrottle(request);
   PrepareCompleteCallbackOnRequest();
@@ -1153,15 +1156,16 @@ bool NavigationSimulatorImpl::SimulateRendererInitiatedStart() {
           false /* skip_service_worker */,
           blink::mojom::RequestContextType::HYPERLINK,
           network::mojom::RequestDestination::kDocument,
-          blink::WebMixedContentContextType::kBlockable, is_form_submission_,
-          false /* was_initiated_by_link_click */,
+          blink::mojom::MixedContentContextType::kBlockable,
+          is_form_submission_, false /* was_initiated_by_link_click */,
           GURL() /* searchable_form_url */,
           std::string() /* searchable_form_encoding */,
           GURL() /* client_side_redirect_url */,
           base::nullopt /* detools_initiator_info */,
           nullptr /* trust_token_params */, impression_,
           base::TimeTicks() /* renderer_before_unload_start */,
-          base::TimeTicks() /* renderer_before_unload_end */);
+          base::TimeTicks() /* renderer_before_unload_end */,
+          base::nullopt /* web_bundle_token */);
   auto common_params = CreateCommonNavigationParams();
   common_params->navigation_start = base::TimeTicks::Now();
   common_params->url = navigation_url_;
@@ -1184,7 +1188,8 @@ bool NavigationSimulatorImpl::SimulateRendererInitiatedStart() {
       navigation_client_remote.InitWithNewEndpointAndPassReceiver();
   render_frame_host_->frame_host_receiver_for_testing().impl()->BeginNavigation(
       std::move(common_params), std::move(begin_params), mojo::NullRemote(),
-      std::move(navigation_client_remote), mojo::NullRemote());
+      std::move(navigation_client_remote), mojo::NullRemote(),
+      mojo::NullRemote());
 
   NavigationRequest* request =
       render_frame_host_->frame_tree_node()->navigation_request();
@@ -1298,12 +1303,17 @@ NavigationSimulatorImpl::BuildDidCommitProvisionalLoadParams(
     int last_http_status_code) {
   auto params = mojom::DidCommitProvisionalLoadParams::New();
   params->url = navigation_url_;
-  params->original_request_url = original_url_;
   params->referrer = mojo::Clone(referrer_);
   params->contents_mime_type = contents_mime_type_;
   params->transition = transition_;
-  params->gesture =
-      has_user_gesture_ ? NavigationGestureUser : NavigationGestureAuto;
+  if (request_) {
+    params->gesture = request_->common_params().has_user_gesture
+                          ? NavigationGestureUser
+                          : NavigationGestureAuto;
+  } else {
+    params->gesture =
+        has_user_gesture_ ? NavigationGestureUser : NavigationGestureAuto;
+  }
   params->history_list_was_cleared = history_list_was_cleared_;
   params->did_create_new_entry = DidCreateNewEntry();
   params->should_replace_current_entry = should_replace_current_entry_;

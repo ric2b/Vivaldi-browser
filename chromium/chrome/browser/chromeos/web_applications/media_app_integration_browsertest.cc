@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/constants/ash_features.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
@@ -24,7 +25,6 @@
 #include "chromeos/components/media_app_ui/buildflags.h"
 #include "chromeos/components/media_app_ui/test/media_app_ui_browsertest.h"
 #include "chromeos/components/media_app_ui/url_constants.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/crash/content/browser/error_reporting/mock_crash_endpoint.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
@@ -607,17 +607,15 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppAllProfilesTest,
   EXPECT_EQ(expected_contents, renamed_contents);
 }
 
-INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_WEB_APP_INFO_INSTALL_P(
+INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
     MediaAppIntegrationTest);
 
 INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_ALL_PROFILE_TYPES_P(
-    MediaAppIntegrationAllProfilesTest,
-    kWebAppInfoInstall);
+    MediaAppIntegrationAllProfilesTest);
 
 // Note: All MediaAppIntegrationWithFilesAppTest cases above currently want
 // coverage for all profile types, so the "less" prarameterized prefix is not
 // instantiated to avoid a gtest warning.
 
 INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_ALL_PROFILE_TYPES_P(
-    MediaAppIntegrationWithFilesAppAllProfilesTest,
-    kWebAppInfoInstall);
+    MediaAppIntegrationWithFilesAppAllProfilesTest);

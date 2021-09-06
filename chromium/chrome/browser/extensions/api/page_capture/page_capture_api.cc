@@ -116,11 +116,11 @@ ExtensionFunction::ResponseAction PageCaptureSaveAsMHTMLFunction::Run() {
     }
     // This Unretained is safe because this object is Released() in
     // OnMessageReceived which gets called at some point after callback is run.
-    auto callback =
-        base::Bind(&PageCaptureSaveAsMHTMLFunction::ResolvePermissionRequest,
-                   base::Unretained(this));
     permission_helper::HandlePermissionRequest(
-        *extension(), {APIPermission::kPageCapture}, web_contents, callback,
+        *extension(), {APIPermission::kPageCapture}, web_contents,
+        base::BindOnce(
+            &PageCaptureSaveAsMHTMLFunction::ResolvePermissionRequest,
+            base::Unretained(this)),
         permission_helper::PromptFactory());
     return RespondLater();
   }
@@ -302,7 +302,7 @@ void PageCaptureSaveAsMHTMLFunction::ReturnSuccess(int64_t file_size) {
                                                            mhtml_path_);
 
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-  dict->SetString("mhtmlFilePath", mhtml_path_.value());
+  dict->SetString("mhtmlFilePath", mhtml_path_.AsUTF8Unsafe());
   dict->SetInteger("mhtmlFileLength", file_size);
   Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(dict))));
 

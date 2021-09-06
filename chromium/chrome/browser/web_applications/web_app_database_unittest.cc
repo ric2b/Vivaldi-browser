@@ -272,7 +272,7 @@ class WebAppDatabaseTest : public WebAppTest {
       app->SetLaunchQueryParams(base::NumberToString(random.next_uint()));
 
     const RunOnOsLoginMode run_on_os_login_modes[3] = {
-        RunOnOsLoginMode::kUndefined, RunOnOsLoginMode::kWindowed,
+        RunOnOsLoginMode::kNotRun, RunOnOsLoginMode::kWindowed,
         RunOnOsLoginMode::kMinimized};
     app->SetRunOnOsLoginMode(run_on_os_login_modes[random.next_uint(3)]);
 
@@ -322,6 +322,7 @@ class WebAppDatabaseTest : public WebAppTest {
         CreateShortcutsMenuItemInfos(base_url, random.next_uint()));
     app->SetDownloadedShortcutsMenuIconsSizes(
         CreateDownloadedShortcutsMenuIconsSizes());
+    app->SetManifestUrl(GURL(base_url + "manifest" + seed_str + ".json"));
 
     if (IsChromeOs()) {
       auto chromeos_data = base::make_optional<WebAppChromeOsData>();
@@ -606,7 +607,8 @@ TEST_F(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   EXPECT_TRUE(app->install_time().is_null());
   EXPECT_TRUE(app->shortcuts_menu_item_infos().empty());
   EXPECT_TRUE(app->downloaded_shortcuts_menu_icons_sizes().empty());
-  EXPECT_EQ(app->run_on_os_login_mode(), RunOnOsLoginMode::kUndefined);
+  EXPECT_EQ(app->run_on_os_login_mode(), RunOnOsLoginMode::kNotRun);
+  EXPECT_TRUE(app->manifest_url().is_empty());
   controller().RegisterApp(std::move(app));
 
   Registry registry = database_factory().ReadRegistry();
@@ -661,7 +663,8 @@ TEST_F(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   EXPECT_TRUE(app_copy->url_handlers().empty());
   EXPECT_TRUE(app_copy->shortcuts_menu_item_infos().empty());
   EXPECT_TRUE(app_copy->downloaded_shortcuts_menu_icons_sizes().empty());
-  EXPECT_EQ(app_copy->run_on_os_login_mode(), RunOnOsLoginMode::kUndefined);
+  EXPECT_EQ(app_copy->run_on_os_login_mode(), RunOnOsLoginMode::kNotRun);
+  EXPECT_TRUE(app_copy->manifest_url().is_empty());
 }
 
 TEST_F(WebAppDatabaseTest, WebAppWithManyIcons) {

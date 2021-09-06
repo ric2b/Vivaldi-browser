@@ -37,20 +37,24 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     User decision when presented with a security interstitial. As of M44,
     subresource interstitials were split into their own entries. As of M52,
     social_engineering_ads* and social_engineering_landing* interstitial reasons
-    are split into their own entries from phishing*.
+    are split into their own entries from phishing*. As of M90,
+    social_engineering_ads* and social_engineering_landing* interstitial reasons
+    have been removed because they don't trigger interstitials.
   </summary>
 </histogram>
 
 <histogram name="interstitial.decision.repeat_visit"
     enum="SecurityInterstitialDecision" expires_after="M94">
-  <owner>felt@chromium.org</owner>
   <owner>carlosil@chromium.org</owner>
+  <owner>security-enamel@chromium.org</owner>
   <summary>
     User decision when presented with a security interstitial, on a site that
     the user had previously visited. As of M44, subresource interstitials were
     split into their own entries. As of M52, social_engineering_ads* and
     social_engineering_landing* interstitial reasons are split into their own
-    entries from phishing*.
+    entries from phishing*. As of M90, social_engineering_ads* and
+    social_engineering_landing* interstitial reasons have been removed because
+    they don't trigger interstitials.
   </summary>
 </histogram>
 
@@ -62,7 +66,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     User interactions with a security interstitial. As of M44, subresource
     interstitials were split into their own entries. As of M52,
     social_engineering_ads* and social_engineering_landing* interstitial reasons
-    are split into their own entries from phishing*.
+    are split into their own entries from phishing*. As of M90,
+    social_engineering_ads* and social_engineering_landing* interstitial reasons
+    have been removed because they don't trigger interstitials.
   </summary>
 </histogram>
 
@@ -79,7 +85,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="interstitial.ssl.cause.nonoverridable" enum="SSLErrorCauses"
-    expires_after="2021-06-20">
+    expires_after="2021-08-22">
   <owner>estark@chromium.org</owner>
   <owner>carlosil@chromium.org</owner>
   <summary>
@@ -257,13 +263,35 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="TypedNavigationUpgradeThrottle.Event"
-    enum="TypedNavigationUpgradeThrottleEvent" expires_after="M92">
+    enum="TypedNavigationUpgradeThrottleEvent" expires_after="2021-08-09">
   <owner>meacer@chromium.org</owner>
-  <owner>security-enamel@chromium.org</owner>
+  <owner>trusty-transport@chromium.org</owner>
   <summary>
-    Events for upgradind Default Omnibox Navigations to HTTPS feature. Recorded
+    Events for upgrading Default Omnibox Navigations to HTTPS feature. Recorded
     when a navigation is started by typing a domain name without a scheme and
     the URL is defaulted to HTTPS instead of HTTP.
+  </summary>
+</histogram>
+
+<histogram name="TypedNavigationUpgradeThrottle.UpgradeFailTime" units="ms"
+    expires_after="2021-08-09">
+  <owner>meacer@chromium.org</owner>
+  <owner>trusty-transport@chromium.org</owner>
+  <summary>
+    Records the duration to detect a failed HTTPS upgrade for omnibox
+    navigations typed without a scheme (i.e. HTTP fallbacks). Only recorded when
+    the HTTPS load fails with an SSL or net error. Not recorded when the upgrade
+    timer expires. Recorded once for a redirect chain.
+  </summary>
+</histogram>
+
+<histogram name="TypedNavigationUpgradeThrottle.UpgradeSuccessTime" units="ms"
+    expires_after="2021-08-09">
+  <owner>meacer@chromium.org</owner>
+  <owner>trusty-transport@chromium.org</owner>
+  <summary>
+    Records the duration to detect a successful HTTPS upgrade for omnibox
+    navigations typed without a scheme. Recorded once for a redirect chain.
   </summary>
 </histogram>
 

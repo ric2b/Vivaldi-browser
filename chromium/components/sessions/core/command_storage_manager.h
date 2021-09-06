@@ -14,11 +14,8 @@
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/sequenced_task_runner.h"
 #include "components/sessions/core/sessions_export.h"
-
-namespace base {
-class SequencedTaskRunner;
-}
 
 namespace sessions {
 class CommandStorageManagerDelegate;
@@ -33,8 +30,12 @@ class CommandStorageBackend;
 // and processed after a delay.
 class SESSIONS_EXPORT CommandStorageManager {
  public:
+  // The bool parameter indicates whether there was an error reading the file.
+  // If there was an error, the vector contains the set of commands up to the
+  // error.
   using GetCommandsCallback =
-      base::OnceCallback<void(std::vector<std::unique_ptr<SessionCommand>>)>;
+      base::OnceCallback<void(std::vector<std::unique_ptr<SessionCommand>>,
+                              bool)>;
 
   // Identifies the type of session service this is. This is used by the
   // backend to determine the name of the files.
@@ -55,15 +56,20 @@ class SESSIONS_EXPORT CommandStorageManager {
   // standardize on that of `kOther`.
   //
   // See CommandStorageBackend for details on `use_marker`.
-  CommandStorageManager(SessionType type,
-                        const base::FilePath& path,
-                        CommandStorageManagerDelegate* delegate,
-                        bool use_marker = false,
-                        bool enable_crypto = false,
-                        const std::vector<uint8_t>& decryption_key = {});
+  CommandStorageManager(
+      SessionType type,
+      const base::FilePath& path,
+      CommandStorageManagerDelegate* delegate,
+      bool use_marker = false,
+      bool enable_crypto = false,
+      const std::vector<uint8_t>& decryption_key = {},
+      scoped_refptr<base::SequencedTaskRunner> backend_task_runner = nullptr);
   CommandStorageManager(const CommandStorageManager&) = delete;
   CommandStorageManager& operator=(const CommandStorageManager&) = delete;
   virtual ~CommandStorageManager();
+
+  static scoped_refptr<base::SequencedTaskRunner>
+  CreateDefaultBackendTaskRunner();
 
   // Helper to generate a new key.
   static std::vector<uint8_t> CreateCryptoKey();
@@ -145,7 +151,7 @@ class SESSIONS_EXPORT CommandStorageManager {
 
   // Whether the backend file should be recreated the next time we send
   // over the commands.
-  bool pending_reset_ = false;
+  bool pending_reset_;
 
   // The number of commands sent to the backend before doing a reset.
   int commands_since_reset_ = 0;

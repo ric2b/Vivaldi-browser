@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "base/win/scoped_handle.h"
+#include "base/win/windows_types.h"
+
 #include <windows.h>
 
 namespace base {

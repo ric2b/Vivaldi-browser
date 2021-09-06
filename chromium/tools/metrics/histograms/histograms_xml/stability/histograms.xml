@@ -86,7 +86,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.Android.RendererCrash" enum="Boolean"
-    expires_after="2021-06-06">
+    expires_after="2021-08-09">
   <owner>wnwen@chromium.org</owner>
   <summary>
     Counts renderer crashes including OOMs. Android only. Mirrors old stability
@@ -96,7 +96,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Stability.Android.StrongBindingOomRemainingBindingState"
     enum="Android.ChildProcessBindingStateCombination"
-    expires_after="2021-04-25">
+    expires_after="2021-08-09">
   <owner>boliu@chromium.org</owner>
   <owner>ssid@chromium.org</owner>
   <summary>
@@ -120,7 +120,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.BadMessageTerminated.Chrome"
-    enum="BadMessageReasonChrome" expires_after="2021-05-16">
+    enum="BadMessageReasonChrome" expires_after="2021-07-18">
   <owner>creis@chromium.org</owner>
   <owner>jamescook@chromium.org</owner>
   <summary>
@@ -239,6 +239,20 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Stability.Counts2" enum="StabilityEventType"
+    expires_after="never">
+<!--
+  expires-never: Critical stability metrics. go/chrome-browser-guardian-metrics
+  -->
+
+  <owner>rkaplow@chromium.org</owner>
+  <owner>chrome-metrics-team@google.com</owner>
+  <summary>
+    Collects various counters related to stability. The majority of them are
+    crash types.
+  </summary>
+</histogram>
+
 <histogram name="Stability.ExitFunnel" units="ms" expires_after="M85">
   <obsolete>
     Removed 10/2020 although this has been dead for many years.
@@ -250,13 +264,36 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Stability.Experimental.BrowserCrash" enum="Boolean"
+    expires_after="2021-06-15">
+  <owner>asvitkine@chromium.org</owner>
+  <owner>chrome-metrics-team@google.com</owner>
+  <summary>
+    Logged at the same time as the kBrowserCrash bucket of Stability.Counts2,
+    for debugging crbug.com/1176977.
+  </summary>
+</histogram>
+
 <histogram name="Stability.Experimental.Counts" enum="StabilityEventType"
     expires_after="2021-01-15">
+  <obsolete>
+    Removed 01/2021, replaced with Stability.Counts2.
+  </obsolete>
   <owner>rkaplow@chromium.org</owner>
   <owner>chrome-metrics-team@google.com</owner>
   <summary>
     Collects various counters related to stability. The majority of them are
     crash types.
+  </summary>
+</histogram>
+
+<histogram name="Stability.Experimental.Counts2" enum="StabilityEventType"
+    expires_after="2021-06-15">
+  <owner>asvitkine@chromium.org</owner>
+  <owner>chrome-metrics-team@google.com</owner>
+  <summary>
+    Like Stability.Counts2, but logged as a sparse histogram for debugging
+    crbug.com/1176977.
   </summary>
 </histogram>
 
@@ -270,6 +307,16 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     buckets of this histogram should be equal to the &quot;Total pageloads&quot;
     shown on Stability dashboards and can be used to diagnose changes to this
     value.
+  </summary>
+</histogram>
+
+<histogram name="Stability.Experimental.SessionId" units="session id"
+    expires_after="2021-06-15">
+  <owner>asvitkine@chromium.org</owner>
+  <owner>chrome-metrics-team@google.com</owner>
+  <summary>
+    Logs the UMA session id as a histogram, to help debug crbug.com/1176977.
+    Logged with MOD 1000 to limit the number of distinct values reported.
   </summary>
 </histogram>
 
@@ -288,23 +335,23 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="Stability.Internals.FileMetricsProvider.BrowserMetrics.UnsentFilesCount"
-    units="counts" expires_after="M87">
+    units="counts" expires_after="M89">
   <owner>michaelbai@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
-    The number of the unsent files at the time the stability recorded.
+    The number of unsent files. Emitted when the stability is recorded.
   </summary>
 </histogram>
 
 <histogram
     name="Stability.Internals.FileMetricsProvider.BrowserMetrics.UnsentSamplesCount"
-    units="samples" expires_after="M87">
+    units="samples" expires_after="M89">
   <owner>michaelbai@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
     The total number of samples that will be lost if ASSOCIATE_INTERNAL_PROFILE
-    isn't enabled since the previous stability recorded. This is different than
-    the previous browser run because one file was just uploaded before the
+    hasn't been enabled since the previous stability recorded. This is different
+    than the previous browser run because one file was just uploaded before the
     stability is recorded.
   </summary>
 </histogram>
@@ -347,7 +394,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Stability.IOS.Experimental.Counts"
     enum="IOSStabilityUserVisibleTerminationType" expires_after="2021-06-15">
-  <owner>eugenebut@chromium.org</owner>
+  <owner>eugenebut@google.com</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
     Recorded when iOS app has started after a crash caused by system signal or
@@ -367,7 +414,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="Stability.iOS.TabCountBefore{Event}" units="tabs"
     expires_after="2021-05-05">
   <owner>djean@chromium.org</owner>
-  <owner>eugenebut@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
     The number of tabs opened in the previous session when the app starts after
@@ -399,7 +445,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.iOS.UTE.AvailableStorage" units="KB"
-    expires_after="2021-06-06">
+    expires_after="2021-08-09">
   <owner>michaeldo@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -412,7 +458,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.iOS.UTE.BatteryCharge" units="%"
-    expires_after="2021-05-30">
+    expires_after="2021-08-01">
   <owner>michaeldo@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -425,7 +471,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.iOS.UTE.DeviceThermalState"
-    enum="IOSDeviceThermalState" expires_after="2021-06-06">
+    enum="IOSDeviceThermalState" expires_after="2021-08-09">
   <owner>michaeldo@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -435,7 +481,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.iOS.UTE.HasPossibleExplanation"
-    enum="BooleanHasPossibleExplanation" expires_after="2021-06-06">
+    enum="BooleanHasPossibleExplanation" expires_after="2021-08-09">
   <owner>michaeldo@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -446,7 +492,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.iOS.UTE.LowPowerModeEnabled" enum="BooleanEnabled"
-    expires_after="2021-05-30">
+    expires_after="2021-08-01">
   <owner>michaeldo@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -456,8 +502,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.iOS.UTE.MobileSessionAppState" enum="IOSAppState"
-    expires_after="2021-05-30">
-  <owner>eugenebut@chromium.org</owner>
+    expires_after="2021-08-01">
+  <owner>justincohen@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
     Recorded when app starts after Unexplained Termination Event (UTE) or
@@ -468,7 +514,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Stability.iOS.UTE.MobileSessionAppWillTerminateWasReceived"
     enum="AppWillTerminateReceived" expires_after="2021-07-11">
-  <owner>eugenebut@chromium.org</owner>
+  <owner>eugenebut@google.com</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
     Recorded when app starts after Unexplained Termination Event (UTE) or
@@ -481,7 +527,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Stability.iOS.UTE.MobileSessionOOMShutdownHint"
     enum="OOMShutdownHint" expires_after="2021-06-22">
-  <owner>eugenebut@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <owner>sdefresne@chromium.org</owner>
   <summary>
@@ -493,8 +538,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.iOS.UTE.OSRestartedAfterPreviousSession"
-    enum="BooleanRebooted" expires_after="2021-06-06">
-  <owner>eugenebut@chromium.org</owner>
+    enum="BooleanRebooted" expires_after="2021-08-09">
+  <owner>olivierrobin@chromium.org</owner>
   <owner>michaeldo@chromium.org</owner>
   <summary>
     true if OS was restarted after the previous session. Logged on application
@@ -516,7 +561,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.iOS.UTE.TimeBetweenUTEAndNextLaunch" units="ms"
-    expires_after="2021-06-13">
+    expires_after="2021-08-15">
   <owner>michaeldo@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -527,8 +572,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.MobileSessionShutdownType"
-    enum="MobileSessionShutdownType" expires_after="2021-06-20">
-  <owner>eugenebut@chromium.org</owner>
+    enum="MobileSessionShutdownType" expires_after="2021-08-22">
+  <owner>michaeldo@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
     Type of the shutdown. This histogram is recorded at startup and logs a

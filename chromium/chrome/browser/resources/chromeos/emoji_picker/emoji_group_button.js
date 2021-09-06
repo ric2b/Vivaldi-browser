@@ -3,13 +3,13 @@
 // found in the LICENSE file.
 
 import './icons.js';
-import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
 
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {GROUP_BUTTON_EVENT, GroupButtonEvent} from './events.js';
+import {createCustomEvent, GROUP_BUTTON_CLICK} from './events.js';
 
-class EmojiGroupButton extends PolymerElement {
+export class EmojiGroupButton extends PolymerElement {
   static get is() {
     return 'emoji-group-button';
   }
@@ -20,9 +20,13 @@ class EmojiGroupButton extends PolymerElement {
 
   static get properties() {
     return {
-      /** @type {string} */
-      icon: {type: String},
-      group: {type: String},
+      /** @type {!string} */
+      name: {type: String, readonly: true},
+      /** @type {!string} */
+      icon: {type: String, readonly: true},
+      /** @type {!string} */
+      groupId: {type: String, readonly: true},
+      /** @type {!boolean} */
       active: {type: Boolean, value: false},
     };
   }
@@ -32,15 +36,12 @@ class EmojiGroupButton extends PolymerElement {
   }
 
   handleClick(ev) {
-    /** @type {GroupButtonEvent} */
-    const event = new CustomEvent(
-        GROUP_BUTTON_EVENT,
-        {bubbles: true, composed: true, detail: {group: this.group}});
-    this.dispatchEvent(event);
+    this.dispatchEvent(
+        createCustomEvent(GROUP_BUTTON_CLICK, {group: this.groupId}));
   }
 
   _className(active) {
-    return active ? 'active' : '';
+    return active ? 'emoji-group-active' : '';
   }
 }
 

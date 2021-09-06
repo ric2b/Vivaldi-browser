@@ -10,6 +10,7 @@
 <translation id="1088300314857992706"><ph name="USER_EMAIL_ADDRESS" /> өмнө нь Chrome ашиглаж байсан</translation>
 <translation id="1097330777386562916">Таныг Chrome-с гарах үед күүки болон сайтын өгөгдлийг устгах</translation>
 <translation id="110877069173485804">Энэ бол таны Chrome.</translation>
+<translation id="1125124144982679672">Chrome-г хэн ашиглаж байна вэ?</translation>
 <translation id="1142745911746664600">Chrome-г шинэчлэх боломжгүй байна</translation>
 <translation id="1154147086299354128">&amp;Chrome-д нээх</translation>
 <translation id="123620459398936149">Chrome OS нь таны өгөгдлийг sync хийж чадсангүй. Sync-ийн нэвтрэх хэллэгээ шинэчилнэ үү.</translation>
@@ -19,7 +20,10 @@
 <translation id="1399397803214730675">Google Chrome-ийн сүүлийн үеийн хувилбар аль хэдийн энэ компьютерт байна. Хэрэв программ хангамж ажиллахгүй байгаа бол Google Chrome-ийг устгаад, дахин оролдож үзнэ үү.</translation>
 <translation id="1434626383986940139">Chrome Canary програмууд</translation>
 <translation id="147727933880789532">Энэ өргөтгөл нь одоогоор Сайжруулсан аюулгүй хөтчийн стандартад нийцэхгүй байгаа тул Chrome үүнийг идэвхгүй болгохыг зөвлөж байна.</translation>
+<translation id="1516530951338665275">Үргэлжлүүлэн хослуулахын тулд Google Chrome-д Bluetooth-н 
+хандалт шаардлагатай. <ph name="IDS_BLUETOOTH_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK" /></translation>
 <translation id="1553358976309200471">Chrome-г шинэчлэх</translation>
+<translation id="1583073672411044740"><ph name="EXISTING_USER" /> Chrome-н энэ профайлд аль хэдийн нэвтэрсэн байна. Энэ нь <ph name="USER_EMAIL_ADDRESS" />-д Chrome-н шинэ профайл үүсгэнэ</translation>
 <translation id="1587223624401073077">Google Chrome нь таны камерыг ашиглаж байна.</translation>
 <translation id="1587325591171447154"><ph name="FILE_NAME" /> аюултай тул үүнийг Chrome блок хийсэн.</translation>
 <translation id="1597911401261118146">Нууц үгнүүддээ өгөгдлийн зөрчил болон аюулгүй байдлын өөр асуудал байхгүй болохыг шалгахын тулд <ph name="BEGIN_LINK" />Chrome-д нэвтэрнэ үү<ph name="END_LINK" />.</translation>
@@ -89,6 +93,7 @@
 <translation id="3065168410429928842">Chrome-н таб</translation>
 <translation id="3080151273017101988">Google Chrome хаагдсан үед үндсэн аппликйешнуудыг үргэлжлүүлэн ажиллуул</translation>
 <translation id="3089968997497233615">Google Chrome-ийн шинэ, илүү аюулгүй хувилбар бэлэн боллоо.</translation>
+<translation id="3100998948628680988">Chrome-н профайлаа нэрлэнэ үү</translation>
 <translation id="3114643501466072395">Бусад нууц үгэндээ өгөгдлийн зөрчил болон аюулгүй байдлын өөр асуудал байхгүй болохыг шалгахын тулд <ph name="BEGIN_LINK" />Chrome-д нэвтэрнэ үү<ph name="END_LINK" />.</translation>
 <translation id="3127818369811890733">Chrome үйлдлийн систем таны өгөгдлийг синк хийж чадсангүй.</translation>
 <translation id="3140883423282498090">Таны оруулсан өөрчлөлт дараа дахин Google Chrome-г ашиглах үед идэвхжинэ.</translation>
@@ -113,6 +118,7 @@
 <translation id="3735758079232443276">"<ph name="EXTENSION_NAME" />" өргөтгөл нь таныг Chrome-г эхлүүлэх үед хуудсанд харагдах зүйлийг өөрчилсөн.</translation>
 <translation id="3779473566290487688">Google Chrome-н цаашдын шинэчлэлтийг авахын тулд танд OS X 10.11 буюу түүнээс хойших хувилбар хэрэгтэй болно. Энэ компьютер OS X 10.10 хувилбарыг ашиглаж байна.</translation>
 <translation id="3780814664026482060">Chrome - <ph name="PAGE_TITLE" /></translation>
+<translation id="3835168907083856002">Энэ нь <ph name="USER_EMAIL_ADDRESS" />-д Chrome-н шинэ профайл үүсгэнэ</translation>
 <translation id="386202838227397562">Бүх Google Chrome-ын цонхнуудыг хааж дахин оролдоно уу.</translation>
 <translation id="3865754807470779944">Chrome <ph name="PRODUCT_VERSION" /> хувилбарыг суулгасан</translation>
 <translation id="3873044882194371212">Холбоосыг Chrome-н нууцлалтай цонхонд нээх</translation>
@@ -120,7 +126,6 @@
 <translation id="4050175100176540509">Хамгийн сүүлийн хувилбар дээр аюулгүй байдлын чухал сайжруулалт болон шинэ функцийг санал болгож байна.</translation>
 <translation id="4053720452172726777">Google Chrome-ыг өөртөө тохируулан хянах</translation>
 <translation id="4110895483821904099">Chrome-н шинэ профайлаа тохируулах</translation>
-<translation id="4143243756087420366">Chrome-н нэр болон зураг</translation>
 <translation id="4147555960264124640">Та хяналтанд байдаг дансаар нэвтэрч байгаа бөгөөд администраторт таны Google Chrome-ийн профайлыг хянах боломжийг олгож байна. Таны апп, хавчуурга, түүх, нууц үг болон бусад тохиргоо гэх мэт Chrome дата нь байнга <ph name="USER_NAME" />-д хадгалагдана. Та Google Accounts Dashboard-ийн тусламжтай эдгээр датаг устгаж болох боловч энэ датаг өөр данстай хуваалцах боломжгүй. <ph name="LEARN_MORE" /></translation>
 <translation id="4149882025268051530">Суурьлуулагч Archive файлыг задалж чадсангүй. Google Chrome-ыг дахин татаж авна уу.</translation>
 <translation id="4191857738314598978">{0,plural, =1{Chrome-г 1 хоногийн дотор дахин ажиллуулна уу}other{Chrome-г # хоногийн дотор дахин ажиллуулна уу}}</translation>
@@ -149,7 +154,6 @@
 <translation id="4633000520311261472">Chrome-ыг илүү аюулгүй болгохын тулд бид <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />-дахь жагсаалтанд ороогүй мөн танд мэдэгдэлгүйгээр нэмэгдсэн байж болох зарим нэг өргөтгөлүүдийг идэвхгүй болголоо.</translation>
 <translation id="4666328473657283332">Та бүх төхөөрөмж дээрээ Chrome-н зүйлсдээ хандахын тулд нэвтэрч синк хийхийг асаана уу.</translation>
 <translation id="4728575227883772061">Тодорхой бус шалтгаанаар суурьлуулалт амжилтгүй боллоо. Хэрэв Google Chrome нээлттэй байгаа бол хаагаад, дахин оролдож үзнэ үү.</translation>
-<translation id="4750550185319565338"><ph name="PLUGIN_NAME" />-г идэвхжүүлэхийн тулд Chrome-г дахин эхлүүлнэ үү</translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
 <translation id="4771048833395599659">Энэ файл аюултай байж болзошгүй тул Chrome блоклосон байна.</translation>
 <translation id="479167709087336770">Энэ нь Google хайлтад ашигладаг зөв бичгийн ижил алдаа шалгагчийг ашигладаг. Таны хөтчид бичсэн текстийг Google-д илгээдэг. Та энэ ажиллах төлөвийг хүссэн үедээ тохиргоонд өөрчилж болно</translation>
@@ -175,10 +179,9 @@
 <translation id="5430073640787465221">Та сонгосон файл хүчин төгөлдөр бус эсвэл гэмтсэн байна.
 
 Google Chrome таны тохируулгыг дахин сэргээх боломжгүй байна.</translation>
+<translation id="5434383153637353914">Энэ хуудас танд нэвтэрсэн Google бүртгэлүүдээ удирдах боломжийг олгоно. Эдгээр бүртгэл Chrome хөтөч, Play Store-н аппууд болон Gmail, Драйв ба YouTube зэрэг үйлчилгээнүүдэд боломжтой болно. <ph name="LINK_BEGIN" />Нэмэлт мэдээлэл авах<ph name="LINK_END" /></translation>
 <translation id="556024056938947818">Google Chrome нууц харуулахыг хичээж байна.</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
-<translation id="5655746611259367388">Та үүнийг болон <ph name="USER_NAME" />-д нэмсэн бусад Google Бүртгэлийг нэг дороос <ph name="LINK_BEGIN" />Тохиргоо<ph name="LINK_END" /> хэсэгт удирдах боломжтой.
-          Таны Chrome хөтчийн вебсайтууд болон Google Play-н аппуудад өгсөн зөвшөөрөл нь бүх бүртгэлд хэрэгжиж болзошгүй.</translation>
 <translation id="5657226924540934362">Хэрэв энэ хуудсан дээр тохиргоог харуулахгүй байгаа бол <ph name="LINK_BEGIN" />
       Chrome үйлдлийн системийнхээ тохиргоо<ph name="LINK_END" /> дотроос хайна уу</translation>
 <translation id="565744775970812598"><ph name="FILE_NAME" /> аюултай байж болзошгүй тул үүнийг Chrome блок хийсэн.</translation>
@@ -187,6 +190,7 @@ Google Chrome таны тохируулгыг дахин сэргээх боло
 <translation id="5690427481109656848">Google ХХК</translation>
 <translation id="5715063361988620182">{SECONDS,plural, =1{Google Chrome 1 секундийн дараа дахин эхэлнэ}other{Google Chrome # секундийн дараа дахин эхэлнэ}}</translation>
 <translation id="573759479754913123">Chrome үйлдлийн системийн тухай</translation>
+<translation id="5756509061973259733">Энэ бүртгэлтэй Chrome-н профайл аль хэдийн энэ төхөөрөмж дээр байна</translation>
 <translation id="5795887333006832406"><ph name="PAGE_TITLE" /> - Google Chrome Канари</translation>
 <translation id="5804318322022881572">Chrome-г эхлүүлж чадсангүй. Дахин оролдоно уу.</translation>
 <translation id="5867197326698922595">Google Chrome нь нууц үгсийг засах гэж оролдож байна.</translation>
@@ -259,7 +263,6 @@ Google Chrome таны тохируулгыг дахин сэргээх боло
 <translation id="7930071585467473040">Google Chrome нь нууц үгс хуулахыг оролдож байна.</translation>
 <translation id="7962410387636238736">Энэ компьютер Windows XP болон Windows Vista-г дэмжихээ больсон тул цаашид Google Chrome-н шинэчлэлтийг авахгүй.</translation>
 <translation id="8008534537613507642">Chrome-ийг дахин суулгах</translation>
-<translation id="8009904340233602924">Chrome-г бүртгэлгүйгээр ашиглах</translation>
 <translation id="8013993649590906847">Хэрэв зурагт хэрэгтэй тайлбар байхгүй бол Chrome танд тайлбар өгөхөөр оролдох болно. Тайлбар үүсгэхийн тулд зургийг Google-д илгээнэ.</translation>
 <translation id="8129812357326543296">Google Chrome-ийн тухай</translation>
 <translation id="8255190535488645436">Google Chrome нь таны камер болон микрофоныг ашиглаж байна.</translation>
@@ -300,6 +303,5 @@ Google Chrome таны тохируулгыг дахин сэргээх боло
 <translation id="9138603949443464873">Өөрчлөлтөө хэрэгжүүлэхийн тулд Chrome-г дахин ажиллуулна уу</translation>
 <translation id="919706545465235479">Синкийг эхлүүлэхийн тулд Chrome-г шинэчлэх</translation>
 <translation id="940313311831216333">Та бүх төхөөрөмж дээрээ Chrome-н зүйлсдээ хандахын тулд нэвтэрч, дараа нь синк хийхийг асаана уу.</translation>
-<translation id="94743460404517794">Хэрэв танд олон Google Бүртгэл байгаа бол тэдгээрийг <ph name="DEVICE_TYPE" />-д нэмэх боломжтой. Таны бүртгэлүүд Chrome хөтөч, Play Store түүнчлэн Gmail, Драйв болон YouTube зэрэг үйлчилгээнүүдэд боломжтой болно. <ph name="LINK_BEGIN" />Нэмэлт мэдээлэл авах<ph name="LINK_END" /></translation>
 <translation id="989369509083708165">Google Chrome таны өгөгдмөл хөтөч байна</translation>
 </translationbundle>

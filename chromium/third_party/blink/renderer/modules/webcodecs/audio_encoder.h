@@ -29,9 +29,8 @@ class MODULES_EXPORT AudioEncoderTraits {
  public:
   struct ParsedConfig final : public GarbageCollected<ParsedConfig> {
     media::AudioCodec codec = media::kUnknownAudioCodec;
-    int channels = 0;
-    uint64_t bitrate = 0;
-    uint32_t sample_rate = 0;
+    media::AudioEncoder::Options options;
+    String codec_string;
 
     void Trace(Visitor*) const {}
   };
@@ -76,7 +75,6 @@ class MODULES_EXPORT AudioEncoder final
   void ProcessEncode(Request* request) override;
   void ProcessConfigure(Request* request) override;
   void ProcessReconfigure(Request* request) override;
-  void ProcessFlush(Request* request) override;
 
   ParsedConfig* ParseConfig(const AudioEncoderConfig* opts,
                             ExceptionState&) override;
@@ -86,9 +84,13 @@ class MODULES_EXPORT AudioEncoder final
   bool CanReconfigure(ParsedConfig& original_config,
                       ParsedConfig& new_config) override;
 
-  void CallOutputCallback(ParsedConfig* active_config,
-                          uint32_t reset_count,
-                          media::EncodedAudioBuffer encoded_buffer);
+  void CallOutputCallback(
+      ParsedConfig* active_config,
+      uint32_t reset_count,
+      media::EncodedAudioBuffer encoded_buffer,
+      base::Optional<media::AudioEncoder::CodecDescription> codec_desc);
+
+  bool produced_first_output_ = false;
 };
 
 }  // namespace blink

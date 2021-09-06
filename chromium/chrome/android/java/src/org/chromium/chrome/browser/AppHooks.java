@@ -15,7 +15,6 @@ import com.google.android.gms.common.GoogleApiAvailability;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.annotations.CalledByNative;
-import org.chromium.chrome.browser.banners.AppDetailsDelegate;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.directactions.DirectActionCoordinator;
 import org.chromium.chrome.browser.feedback.FeedbackReporter;
@@ -46,12 +45,12 @@ import org.chromium.chrome.browser.webapps.GooglePlayWebApkInstallDelegate;
 import org.chromium.chrome.browser.xsurface.ProcessScope;
 import org.chromium.chrome.browser.xsurface.ProcessScopeDependencyProvider;
 import org.chromium.chrome.modules.image_editor.ImageEditorModuleProvider;
-import org.chromium.components.browser_ui.widget.FeatureHighlightProvider;
 import org.chromium.components.external_intents.AuthenticatorNavigationInterceptor;
 import org.chromium.components.policy.AppRestrictionsProvider;
 import org.chromium.components.policy.CombinedPolicyProvider;
 import org.chromium.components.signin.AccountManagerDelegate;
 import org.chromium.components.signin.SystemAccountManagerDelegate;
+import org.chromium.components.webapps.AppDetailsDelegate;
 
 import java.util.Collections;
 import java.util.List;
@@ -268,13 +267,6 @@ public abstract class AppHooks {
     }
 
     /**
-     * @return A new {@link FeatureHighlightProvider}.
-     */
-    public FeatureHighlightProvider createFeatureHighlightProvider() {
-        return new FeatureHighlightProvider();
-    }
-
-    /**
      * @return A new {@link DigitalWellbeingClient} instance.
      */
     public DigitalWellbeingClient createDigitalWellbeingClient() {
@@ -342,5 +334,9 @@ public abstract class AppHooks {
 
     public ChromeStartupDelegate createChromeStartupDelegate() {
         return new ChromeStartupDelegate();
+    }
+
+    public boolean canStartForegroundServiceWhileInvisible() {
+        return true;
     }
 }

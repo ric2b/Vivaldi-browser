@@ -24,8 +24,7 @@
 #include "chrome/installer/util/work_item.h"
 #include "chrome/installer/util/work_item_list.h"
 
-#include "base/vivaldi_switches.h"
-#include "installer/util/vivaldi_install_util.h"
+#include "installer/util/vivaldi_setup_util.h"
 
 namespace installer {
 
@@ -83,47 +82,7 @@ void InstallerState::Initialize(const base::CommandLine& command_line,
 
   const bool is_uninstall = command_line.HasSwitch(switches::kUninstall);
 
-  target_path_ = GetChromeInstallPath(system_install());
-
-  // TODO(igor@vivaldi.com): This partially duplicates what
-  // VivaldiPrepareConfig() does. Figure a good way to read the settings once.
-  is_vivaldi_update_ =
-      command_line.HasSwitch(vivaldi::constants::kVivaldiUpdate);
-  is_vivaldi_standalone_ =
-      command_line.HasSwitch(vivaldi::constants::kVivaldiStandalone);
-  is_vivaldi_register_standalone_ =
-      command_line.HasSwitch(vivaldi::constants::kVivaldiRegisterStandalone);
-  is_vivaldi_silent_update_ =
-      command_line.HasSwitch(::switches::kVivaldiSilentUpdate);
-  const bool vivaldi_install_dir_supplied =
-      command_line.HasSwitch(vivaldi::constants::kVivaldiInstallDir);
-  if (kVivaldi && !vivaldi_install_dir_supplied) {
-    base::win::RegKey key;
-    LONG result = key.Open(root_key_, vivaldi::constants::kVivaldiKey,
-                           KEY_QUERY_VALUE | KEY_WOW64_32KEY);
-    if (result == ERROR_SUCCESS) {
-      if (is_uninstall) {
-        // Use the UninstallString value from the registry.
-        std::wstring uninstall_str;
-        result = key.ReadValue(kUninstallStringField, &uninstall_str);
-        if ((result == ERROR_SUCCESS) && !uninstall_str.empty()) {
-          // Strip off <version> / Installer / setup.exe
-          target_path_ =
-              base::FilePath(uninstall_str).DirName().DirName().DirName();
-        }
-      } else {
-        // If there is no vivaldi-install-dir supplied on the command line,
-        // use the registry destination folder.
-        std::wstring folder_str;
-        result = key.ReadValue(
-            vivaldi::constants::kVivaldiInstallerDestinationFolder,
-            &folder_str);
-        if ((result == ERROR_SUCCESS) && !folder_str.empty()) {
-          target_path_ = base::FilePath(folder_str).Append(kInstallBinaryDir);
-        }
-      }
-    }
-  }
+  target_path_ = GetChromeInstallPathWithPrefs(system_install(), prefs);
 
   state_key_ = install_static::GetClientStateKeyPath();
 
@@ -206,10 +165,6 @@ void InstallerState::Clear() {
   root_key_ = nullptr;
   msi_ = false;
   verbose_logging_ = false;
-
-  is_vivaldi_standalone_ = false;
-  is_vivaldi_register_standalone_ = false;
-  is_vivaldi_silent_update_ = false;
 }
 
 void InstallerState::SetStage(InstallerStage stage) const {
@@ -220,8 +175,8 @@ void InstallerState::SetStage(InstallerStage stage) const {
 void InstallerState::WriteInstallerResult(
     InstallStatus status,
     int string_resource_id,
-    const base::string16* const launch_cmd) const {
-  if (!is_vivaldi_standalone()) {
+    const std::wstring* const launch_cmd) const {
+  if (!vivaldi::IsInstallStandalone()) {
     // clang-format off
   // Use a no-rollback list since this is a best-effort deal.
   std::unique_ptr<WorkItemList> install_list(WorkItem::CreateWorkItemList());

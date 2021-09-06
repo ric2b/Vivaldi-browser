@@ -52,6 +52,7 @@
 #include "extensions/browser/bad_message.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_util.h"
+#include "extensions/browser/extension_web_contents_observer.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/browser/guest_view/web_view/web_view_content_script_manager.h"
@@ -874,9 +875,9 @@ void WebViewGuest::GuestReady() {
 #ifndef VIVALDI_BUILD
   CHECK(web_contents()->GetMainFrame()->GetProcess()->IsForGuestsOnly());
 #endif // VIVALDI_BUILD
-  content::RenderFrameHost* main_frame = web_contents()->GetMainFrame();
-  main_frame->Send(
-      new ExtensionMsg_SetFrameName(main_frame->GetRoutingID(), name_));
+  ExtensionWebContentsObserver::GetForWebContents(web_contents())
+      ->GetLocalFrame(web_contents()->GetMainFrame())
+      ->SetFrameName(name_);
 
   if (IsVivaldiRunning() &&
       !web_contents()->GetRenderViewHost()->GetWidget()->GetView()) {
@@ -1671,19 +1672,18 @@ void WebViewGuest::SetName(const std::string& name) {
     return;
   name_ = name;
 
-  content::RenderFrameHost* main_frame = web_contents()->GetMainFrame();
-  main_frame->Send(
-      new ExtensionMsg_SetFrameName(main_frame->GetRoutingID(), name_));
+  ExtensionWebContentsObserver::GetForWebContents(web_contents())
+      ->GetLocalFrame(web_contents()->GetMainFrame())
+      ->SetFrameName(name_);
 }
 
 void WebViewGuest::SetSpatialNavigationEnabled(bool enabled) {
   if (is_spatial_navigation_enabled_ == enabled)
     return;
   is_spatial_navigation_enabled_ = enabled;
-
-  content::RenderFrameHost* main_frame = web_contents()->GetMainFrame();
-  main_frame->Send(new ExtensionMsg_SetSpatialNavigationEnabled(
-      main_frame->GetRoutingID(), enabled));
+  ExtensionWebContentsObserver::GetForWebContents(web_contents())
+      ->GetLocalFrame(web_contents()->GetMainFrame())
+      ->SetSpatialNavigationEnabled(enabled);
 }
 
 bool WebViewGuest::IsSpatialNavigationEnabled() const {

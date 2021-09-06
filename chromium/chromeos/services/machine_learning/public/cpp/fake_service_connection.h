@@ -14,6 +14,7 @@
 #include "chromeos/services/machine_learning/public/mojom/grammar_checker.mojom.h"
 #include "chromeos/services/machine_learning/public/mojom/graph_executor.mojom.h"
 #include "chromeos/services/machine_learning/public/mojom/handwriting_recognizer.mojom.h"
+#include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom.h"
 #include "chromeos/services/machine_learning/public/mojom/model.mojom.h"
 #include "chromeos/services/machine_learning/public/mojom/tensor.mojom.h"
 #include "chromeos/services/machine_learning/public/mojom/text_classifier.mojom.h"
@@ -34,6 +35,7 @@ namespace machine_learning {
 // specified by a previous call to SetOutputSelection.
 // For use with ServiceConnection::UseFakeServiceConnectionForTesting().
 class FakeServiceConnectionImpl : public ServiceConnection,
+                                  public mojom::MachineLearningService,
                                   public mojom::Model,
                                   public mojom::TextClassifier,
                                   public mojom::HandwritingRecognizer,
@@ -43,6 +45,16 @@ class FakeServiceConnectionImpl : public ServiceConnection,
  public:
   FakeServiceConnectionImpl();
   ~FakeServiceConnectionImpl() override;
+
+  // ServiceConnection:
+  mojom::MachineLearningService& GetMachineLearningService() override;
+  void BindMachineLearningService(
+      mojo::PendingReceiver<mojom::MachineLearningService> receiver) override;
+  void Initialize() override;
+
+  // mojom::MachineLearningService:
+  void Clone(
+      mojo::PendingReceiver<mojom::MachineLearningService> receiver) override;
 
   // It's safe to execute LoadBuiltinModel, LoadFlatBufferModel and
   // LoadTextClassifier for multi times, but all the receivers will be bound to
@@ -217,8 +229,9 @@ class FakeServiceConnectionImpl : public ServiceConnection,
   void HandleLoadGrammarCheckerCall(
       mojo::PendingReceiver<mojom::GrammarChecker> receiver,
       mojom::MachineLearningService::LoadGrammarCheckerCallback callback);
-  void HandleGrammarCheckerQueryCall(mojom::GrammarCheckerQueryPtr query,
-                                 mojom::GrammarChecker::CheckCallback callback);
+  void HandleGrammarCheckerQueryCall(
+      mojom::GrammarCheckerQueryPtr query,
+      mojom::GrammarChecker::CheckCallback callback);
   void HandleLoadSpeechRecognizerCall(
       mojo::PendingRemote<mojom::SodaClient> soda_client,
       mojo::PendingReceiver<mojom::SodaRecognizer> soda_recognizer,
@@ -228,6 +241,10 @@ class FakeServiceConnectionImpl : public ServiceConnection,
   void HandleStartCall();
   void HandleMarkDoneCall();
 
+  // Additional receivers bound via `Clone`.
+  mojo::ReceiverSet<mojom::MachineLearningService> clone_ml_service_receivers_;
+
+  mojo::Remote<mojom::MachineLearningService> machine_learning_service_;
   mojo::ReceiverSet<mojom::Model> model_receivers_;
   mojo::ReceiverSet<mojom::GraphExecutor> graph_receivers_;
   mojo::ReceiverSet<mojom::TextClassifier> text_classifier_receivers_;

@@ -117,6 +117,9 @@ class NetworkHandler : public DevToolsDomainHandler,
                  Maybe<std::string> same_site,
                  Maybe<double> expires,
                  Maybe<std::string> priority,
+                 Maybe<bool> same_party,
+                 Maybe<std::string> source_scheme,
+                 Maybe<int> source_port,
                  std::unique_ptr<SetCookieCallback> callback) override;
   void SetCookies(
       std::unique_ptr<protocol::Array<Network::CookieParam>> cookies,
@@ -213,7 +216,8 @@ class NetworkHandler : public DevToolsDomainHandler,
       const std::string& devtools_request_id,
       const net::CookieAndLineAccessResultList& response_cookie_list,
       const std::vector<network::mojom::HttpRawHeaderPairPtr>& response_headers,
-      const base::Optional<std::string>& response_headers_text);
+      const base::Optional<std::string>& response_headers_text,
+      network::mojom::IPAddressSpace resource_address_space);
   void OnTrustTokenOperationDone(
       const std::string& devtools_request_id,
       const network::mojom::TrustTokenOperationResult& result);
@@ -232,6 +236,15 @@ class NetworkHandler : public DevToolsDomainHandler,
       const String& url,
       std::unique_ptr<protocol::Network::LoadNetworkResourceOptions> options,
       std::unique_ptr<LoadNetworkResourceCallback> callback) override;
+
+  // Protocol builders.
+  static String BuildPrivateNetworkRequestPolicy(
+      network::mojom::PrivateNetworkRequestPolicy policy);
+  static protocol::Network::IPAddressSpace BuildIpAddressSpace(
+      network::mojom::IPAddressSpace space);
+  static Maybe<protocol::Network::ClientSecurityState>
+  MaybeBuildClientSecurityState(
+      const network::mojom::ClientSecurityStatePtr& state);
 
  private:
   void OnLoadNetworkResourceFinished(DevToolsNetworkResourceLoader* loader,

@@ -90,6 +90,19 @@ void ScopedStyleResolver::AddFontFaceRules(const RuleSet& rule_set) {
     document.GetStyleResolver().InvalidateMatchedPropertiesCache();
 }
 
+void ScopedStyleResolver::AddCounterStyleRules(const RuleSet& rule_set) {
+  if (!RuntimeEnabledFeatures::CSSAtRuleCounterStyleInShadowDOMEnabled()) {
+    // Our support of @counter-style rules in shadow DOM is experimental and
+    // non-standard. See https://github.com/w3c/csswg-drafts/issues/5693
+    if (!GetTreeScope().RootNode().IsDocumentNode())
+      return;
+  }
+
+  if (rule_set.CounterStyleRules().IsEmpty())
+    return;
+  EnsureCounterStyleMap().AddCounterStyles(rule_set);
+}
+
 void ScopedStyleResolver::AppendActiveStyleSheets(
     unsigned index,
     const ActiveStyleSheetVector& active_sheets) {
@@ -106,8 +119,7 @@ void ScopedStyleResolver::AppendActiveStyleSheets(
     style_sheets_.push_back(sheet);
     AddKeyframeRules(rule_set);
     AddFontFaceRules(rule_set);
-    if (!rule_set.CounterStyleRules().IsEmpty())
-      EnsureCounterStyleMap().AddCounterStyles(rule_set);
+    AddCounterStyleRules(rule_set);
     AddSlottedRules(rule_set, sheet, index++);
   }
 }
@@ -140,7 +152,8 @@ void ScopedStyleResolver::ResetStyle() {
   viewport_dependent_media_query_results_.clear();
   device_dependent_media_query_results_.clear();
   keyframes_rule_map_.clear();
-  counter_style_map_.Clear();
+  if (counter_style_map_)
+    counter_style_map_->Dispose();
   slotted_rule_set_ = nullptr;
   needs_append_all_sheets_ = false;
 }

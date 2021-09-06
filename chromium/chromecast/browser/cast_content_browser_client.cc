@@ -106,6 +106,7 @@
 #include "components/cdm/browser/cdm_message_filter_android.h"
 #include "components/crash/core/app/crashpad.h"
 #include "media/audio/android/audio_manager_android.h"
+#include "media/audio/audio_features.h"
 #else
 #include "chromecast/browser/memory_pressure_controller_impl.h"
 #endif  // defined(OS_ANDROID)
@@ -178,8 +179,10 @@ CastContentBrowserClient::CastContentBrowserClient(
       // TODO(juke): Reenable this after solving casting issue on LAN.
       blink::features::kMixedContentAutoupgrade,
 #if defined(OS_ANDROID)
-      ::media::kAudioFocusLossSuspendMediaSession,
-      ::media::kRequestSystemAudioFocus,
+          ::media::kAudioFocusLossSuspendMediaSession,
+          ::media::kRequestSystemAudioFocus,
+          // Disable AAudio improve AV sync performance.
+          ::features::kUseAAudioDriver,
 #endif
   });
 }
@@ -528,7 +531,7 @@ CastContentBrowserClient::GetSystemNetworkContext() {
 }
 
 void CastContentBrowserClient::OverrideWebkitPrefs(
-    content::RenderViewHost* render_view_host,
+    content::WebContents* web_contents,
     blink::web_pref::WebPreferences* prefs) {
   prefs->allow_scripts_to_close_windows = true;
   // TODO(halliwell): http://crbug.com/391089. This pref defaults to to true
@@ -557,8 +560,6 @@ void CastContentBrowserClient::OverrideWebkitPrefs(
 
   // Disable WebSQL databases by default.
   prefs->databases_enabled = false;
-  content::WebContents* web_contents =
-      content::WebContents::FromRenderViewHost(render_view_host);
   if (web_contents) {
     chromecast::CastWebContents* cast_web_contents =
         chromecast::CastWebContents::FromWebContents(web_contents);
@@ -940,7 +941,8 @@ void CastContentBrowserClient::ConfigureNetworkContextParams(
     bool in_memory,
     const base::FilePath& relative_partition_path,
     network::mojom::NetworkContextParams* network_context_params,
-    network::mojom::CertVerifierCreationParams* cert_verifier_creation_params) {
+    cert_verifier::mojom::CertVerifierCreationParams*
+        cert_verifier_creation_params) {
   return cast_network_contexts_->ConfigureNetworkContextParams(
       context, in_memory, relative_partition_path, network_context_params,
       cert_verifier_creation_params);

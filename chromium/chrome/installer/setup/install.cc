@@ -55,6 +55,7 @@
 #include "base/win/win_util.h"
 
 #include "installer/util/vivaldi_install_util.h"
+#include "installer/util/vivaldi_setup_util.h"
 
 namespace installer {
 
@@ -95,7 +96,7 @@ void LogShortcutOperation(ShellUtil::ShortcutLocation location,
     case ShellUtil::SHORTCUT_LOCATION_START_MENU_CHROME_APPS_DIR:
       message.append(
           "Start menu/" +
-          base::UTF16ToUTF8(InstallUtil::GetChromeAppsShortcutDirName()) + " ");
+          base::WideToUTF8(InstallUtil::GetChromeAppsShortcutDirName()) + " ");
       break;
     default:
       NOTREACHED();
@@ -103,15 +104,15 @@ void LogShortcutOperation(ShellUtil::ShortcutLocation location,
 
   message.push_back('"');
   if (properties.has_shortcut_name())
-    message.append(base::UTF16ToUTF8(properties.shortcut_name));
+    message.append(base::WideToUTF8(properties.shortcut_name));
   else
-    message.append(base::UTF16ToUTF8(InstallUtil::GetDisplayName()));
+    message.append(base::WideToUTF8(InstallUtil::GetDisplayName()));
   message.push_back('"');
 
   message.append(" shortcut to ");
-  message.append(base::UTF16ToUTF8(properties.target.value()));
+  message.append(base::WideToUTF8(properties.target.value()));
   if (properties.has_arguments())
-    message.append(base::UTF16ToUTF8(properties.arguments));
+    message.append(base::WideToUTF8(properties.arguments));
 
   if (properties.pin_to_taskbar && base::win::CanPinShortcutToTaskbar())
     message.append(" and pinning to the taskbar");
@@ -135,7 +136,7 @@ void ExecuteAndLogShortcutOperation(
 }
 
 void AddChromeToMediaPlayerList() {
-  base::string16 reg_path(kMediaPlayerRegPath);
+  std::wstring reg_path(kMediaPlayerRegPath);
   // registry paths can also be appended like file system path
   reg_path.push_back(base::FilePath::kSeparators[0]);
   reg_path.append(kChromeExe);
@@ -236,7 +237,7 @@ InstallStatus InstallNewVersion(const InstallParams& install_params,
   }
 
   // if standalone install we treat this as a first install
-  if (installer_state.is_vivaldi_standalone()) {
+  if (vivaldi::IsInstallStandalone()) {
     VLOG(1) << "Standalone install of version " << new_version.GetString();
     return installer::FIRST_INSTALL_SUCCESS;
   }
@@ -266,20 +267,20 @@ std::string GenerateVisualElementsManifest(const base::Version& version) {
       "</Application>\r\n";
 
   // Construct the relative path to the versioned VisualElements directory.
-  base::string16 elements_dir(base::ASCIIToUTF16(version.GetString()));
+  std::wstring elements_dir(base::ASCIIToWide(version.GetString()));
   elements_dir.push_back(base::FilePath::kSeparators[0]);
   elements_dir.append(kVisualElements);
 
-  const base::string16 manifest_template(base::ASCIIToUTF16(kManifestTemplate));
+  const std::wstring manifest_template(base::ASCIIToWide(kManifestTemplate));
 
   // Fill the manifest with the desired values.
-  const base::char16* logo_suffix =
+  const wchar_t* logo_suffix =
       install_static::InstallDetails::Get().logo_suffix();
-  base::string16 manifest16(base::StringPrintf(
+  std::wstring manifest(base::StringPrintf(
       manifest_template.c_str(), elements_dir.c_str(), logo_suffix,
       elements_dir.c_str(), logo_suffix, elements_dir.c_str(), logo_suffix));
 
-  return base::UTF16ToUTF8(manifest16);
+  return base::WideToUTF8(manifest);
 }
 
 // Whether VisualElements assets exist for this brand and mode.
@@ -442,10 +443,7 @@ void CreateOrUpdateShortcuts(const base::FilePath& target,
 void RegisterChromeOnMachine(const InstallerState& installer_state,
                              bool make_chrome_default,
                              const base::Version& version) {
-  // NOTE(jarle@vivaldi.com):
-  // If standalone install and we should not register ourselves, return now.
-  if (installer_state.is_vivaldi_standalone() &&
-      !installer_state.is_vivaldi_register_standalone())
+  if (!vivaldi::PrepareRegistration(installer_state))
     return;
 
   // Try to add Chrome to Media Player shim inclusion list. We don't do any
@@ -471,11 +469,6 @@ void RegisterChromeOnMachine(const InstallerState& installer_state,
     ShellUtil::MakeChromeDefault(level, chrome_exe, true);
   } else {
     ShellUtil::RegisterChromeBrowserBestEffort(chrome_exe);
-  }
-
-  if (make_chrome_default || (!installer_state.is_vivaldi_update() &&
-                              !vivaldi::IsUpdateNotifierEnabledForAnyPath())) {
-    vivaldi::EnableUpdateNotifierFromInstaller(installer_state.target_path());
   }
 }
 
@@ -561,7 +554,7 @@ InstallStatus InstallOrUpdateProduct(const InstallParams& install_params,
         new_version);
 
     if (!installer_state.system_install() &&
-        !installer_state.is_vivaldi_standalone()) {
+        !vivaldi::IsInstallStandalone()) {
       UpdateDefaultBrowserBeaconForPath(
           installer_state.target_path().Append(kChromeExe));
     }
@@ -605,9 +598,10 @@ void LaunchDeleteOldVersionsProcess(const base::FilePath& setup_path,
                                   vivaldi_install_dir);
   }
 #if !defined(OFFICIAL_BUILD)
-  extern base::FilePath* vivaldi_debug_subprocesses_exe;
-  if (vivaldi_debug_subprocesses_exe) {
-    command_line.SetProgram(*vivaldi_debug_subprocesses_exe);
+  if (vivaldi::debug_subprocesses_exe) {
+    command_line.SetProgram(*vivaldi::debug_subprocesses_exe);
+    command_line.AppendSwitchPath(vivaldi::constants::kVivaldiDebugTargetExe,
+                                  setup_path);
   }
 #endif
 

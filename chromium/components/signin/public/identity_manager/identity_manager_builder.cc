@@ -64,7 +64,7 @@ std::unique_ptr<PrimaryAccountManager> BuildPrimaryAccountManager(
     PrefService* local_state) {
   std::unique_ptr<PrimaryAccountManager> primary_account_manager;
   std::unique_ptr<PrimaryAccountPolicyManager> policy_manager;
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS_ASH) && !defined(OS_IOS)
   policy_manager = std::make_unique<PrimaryAccountPolicyManagerImpl>(client);
 #endif
   primary_account_manager = std::make_unique<PrimaryAccountManager>(
@@ -172,9 +172,10 @@ IdentityManager::InitParameters BuildIdentityManagerInitParameters(
   init_params.primary_account_manager = std::move(primary_account_manager);
   init_params.token_service = std::move(token_service);
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  init_params.chromeos_account_manager = params->account_manager;
+  init_params.ash_account_manager = params->account_manager;
 #endif
 
+  init_params.allow_access_token_fetch = params->allow_access_token_fetch;
   return init_params;
 }
 

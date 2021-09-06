@@ -4,18 +4,17 @@
 
 package org.chromium.chrome.browser.webapps;
 
-import android.annotation.TargetApi;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
-import android.graphics.drawable.Icon;
-import android.os.Build;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.recyclerview.widget.RecyclerView;
+
+import org.chromium.components.webapps.WebappsIconUtils;
 
 /**
  * The view portion of the PWA Install bottom sheet.
@@ -83,28 +82,14 @@ public class PwaInstallBottomSheetView {
         descriptionView.setVisibility(description.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
-    void setCategories(String categories) {
-        TextView categoriesView = mContentView.findViewById(R.id.categories);
-        categoriesView.setText(
-                mContext.getString(R.string.pwa_install_bottom_sheet_categories, categories));
-
-        categoriesView.setVisibility(categories.isEmpty() ? View.GONE : View.VISIBLE);
-    }
-
     void setIcon(Bitmap icon, boolean isAdaptive) {
         ImageView imageView = mToolbarView.findViewById(R.id.app_icon);
-        if (isAdaptive && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            setAdaptiveIcon(imageView, icon);
+        if (isAdaptive && WebappsIconUtils.doesAndroidSupportMaskableIcons()) {
+            imageView.setImageBitmap(WebappsIconUtils.generateAdaptiveIconBitmap(icon));
         } else {
-            assert !isAdaptive : "Adaptive icons should not be provided pre-Android O.";
             imageView.setImageBitmap(icon);
         }
         imageView.setVisibility(View.VISIBLE);
-    }
-
-    @TargetApi(Build.VERSION_CODES.O)
-    private void setAdaptiveIcon(ImageView imageView, Bitmap icon) {
-        imageView.setImageIcon(Icon.createWithAdaptiveBitmap(icon));
     }
 
     void setCanSubmit(boolean canSubmit) {
@@ -118,6 +103,9 @@ public class PwaInstallBottomSheetView {
 
     // Testing functions:
 
+    public static int getButtonInstallViewIdForTesting() {
+        return R.id.button_install;
+    }
     public static int getAppNameViewIdForTesting() {
         return R.id.app_name;
     }
@@ -126,8 +114,5 @@ public class PwaInstallBottomSheetView {
     }
     public static int getDescViewIdForTesting() {
         return R.id.description;
-    }
-    public static int getCategoriesViewIdForTesting() {
-        return R.id.categories;
     }
 }

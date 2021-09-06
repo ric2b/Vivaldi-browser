@@ -243,6 +243,23 @@ class OriginIsolationOptInHeaderTest : public IsolatedOriginTestBase {
   DISALLOW_COPY_AND_ASSIGN(OriginIsolationOptInHeaderTest);
 };
 
+// As in OriginIsolationOptInHeaderTest, but with same-process origin isolation.
+class SameProcessOriginIsolationOptInHeaderTest
+    : public OriginIsolationOptInHeaderTest {
+ public:
+  SameProcessOriginIsolationOptInHeaderTest() = default;
+  ~SameProcessOriginIsolationOptInHeaderTest() override = default;
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    OriginIsolationOptInHeaderTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitch(switches::kDisableSiteIsolation);
+    command_line->RemoveSwitch(switches::kSitePerProcess);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(SameProcessOriginIsolationOptInHeaderTest);
+};
+
 // Used for a few tests that check non-HTTPS secure context behavior.
 class OriginIsolationOptInHttpServerHeaderTest : public IsolatedOriginTestBase {
  public:
@@ -393,8 +410,8 @@ IN_PROC_BROWSER_TEST_F(OriginIsolationOptInHeaderTest, Basic) {
   EXPECT_THAT(
       histograms.GetAllSamples("Navigation.OriginAgentCluster.Result"),
       testing::ElementsAre(base::Bucket(
-          static_cast<int>(NavigationRequest::OptInOriginIsolationEndResult::
-                               kRequestedAndIsolated),
+          static_cast<int>(NavigationRequest::OriginAgentClusterEndResult::
+                               kRequestedAndOriginKeyed),
           1)));
 }
 
@@ -478,14 +495,65 @@ IN_PROC_BROWSER_TEST_F(OriginIsolationOptInHeaderTest,
   EXPECT_THAT(
       histograms.GetAllSamples("Navigation.OriginAgentCluster.Result"),
       testing::ElementsAre(
-          base::Bucket(static_cast<int>(
-                           NavigationRequest::OptInOriginIsolationEndResult::
-                               kNotRequestedAndNotIsolated),
-                       2),
-          base::Bucket(static_cast<int>(
-                           NavigationRequest::OptInOriginIsolationEndResult::
-                               kRequestedAndIsolated),
-                       1)));
+          base::Bucket(
+              static_cast<int>(NavigationRequest::OriginAgentClusterEndResult::
+                                   kNotRequestedAndNotOriginKeyed),
+              2),
+          base::Bucket(
+              static_cast<int>(NavigationRequest::OriginAgentClusterEndResult::
+                                   kRequestedAndOriginKeyed),
+              1)));
+}
+
+// In this test the sub-origin is isolated because the header requests it. It
+// will have the same site instance as the main frame, and it will be in the
+// same process.
+IN_PROC_BROWSER_TEST_F(SameProcessOriginIsolationOptInHeaderTest,
+                       SimpleSubOriginIsolationTest) {
+  base::HistogramTester histograms;
+  SetHeaderValue("?1");
+  // Start off with an a(a) page, then navigate the subframe to an isolated sub
+  // origin.
+  GURL test_url(https_server()->GetURL("foo.com",
+                                       "/cross_site_iframe_factory.html?"
+                                       "foo.com(foo.com)"));
+  GURL isolated_suborigin_url(
+      https_server()->GetURL("isolated.foo.com", "/isolate_origin"));
+  GURL origin_url = url::Origin::Create(isolated_suborigin_url).GetURL();
+  EXPECT_FALSE(
+      SiteIsolationPolicy::IsProcessIsolationForOriginAgentClusterEnabled());
+  EXPECT_TRUE(NavigateToURL(shell(), test_url));
+  EXPECT_EQ(2u, shell()->web_contents()->GetAllFrames().size());
+
+  FrameTreeNode* root = web_contents()->GetFrameTree()->root();
+  FrameTreeNode* child_frame_node = root->child_at(0);
+  EXPECT_TRUE(
+      NavigateToURLFromRenderer(child_frame_node, isolated_suborigin_url));
+  EXPECT_EQ(root->current_frame_host()->GetSiteInstance(),
+            child_frame_node->current_frame_host()->GetSiteInstance());
+  EXPECT_FALSE(child_frame_node->current_frame_host()
+                   ->GetSiteInstance()
+                   ->RequiresDedicatedProcess());
+  auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
+  EXPECT_TRUE(policy->ShouldOriginGetOptInIsolation(
+      root->current_frame_host()->GetSiteInstance()->GetIsolationContext(),
+      url::Origin::Create(isolated_suborigin_url),
+      false /* origin_requests_isolation */));
+  EXPECT_TRUE(policy->HasOriginEverRequestedOptInIsolation(
+      web_contents()->GetBrowserContext(),
+      url::Origin::Create(isolated_suborigin_url)));
+
+  EXPECT_THAT(
+      histograms.GetAllSamples("Navigation.OriginAgentCluster.Result"),
+      testing::ElementsAre(
+          base::Bucket(
+              static_cast<int>(NavigationRequest::OriginAgentClusterEndResult::
+                                   kNotRequestedAndNotOriginKeyed),
+              2),
+          base::Bucket(
+              static_cast<int>(NavigationRequest::OriginAgentClusterEndResult::
+                                   kRequestedAndOriginKeyed),
+              1)));
 }
 
 // In this test the sub-origin isn't isolated because no header is set. It will
@@ -512,8 +580,8 @@ IN_PROC_BROWSER_TEST_F(OriginIsolationOptInHeaderTest,
   EXPECT_THAT(
       histograms.GetAllSamples("Navigation.OriginAgentCluster.Result"),
       testing::ElementsAre(base::Bucket(
-          static_cast<int>(NavigationRequest::OptInOriginIsolationEndResult::
-                               kNotRequestedAndNotIsolated),
+          static_cast<int>(NavigationRequest::OriginAgentClusterEndResult::
+                               kNotRequestedAndNotOriginKeyed),
           3)));
 }
 
@@ -673,7 +741,8 @@ IN_PROC_BROWSER_TEST_F(OriginIsolationOptInHeaderTest,
 
   WebContentsConsoleObserver console_observer(shell()->web_contents());
   console_observer.SetPattern(
-      "The page did not request origin isolation, but was isolated anyway*");
+      "The page did not request an origin-keyed agent cluster, but was put in "
+      "one anyway*");
 
   EXPECT_TRUE(
       NavigateToURLFromRenderer(child_frame_node1, isolated_suborigin_url));
@@ -697,20 +766,20 @@ IN_PROC_BROWSER_TEST_F(OriginIsolationOptInHeaderTest,
       histograms.GetAllSamples("Navigation.OriginAgentCluster.Result"),
       testing::ElementsAre(
           // Original loads of a(a,a) go here.
-          base::Bucket(static_cast<int>(
-                           NavigationRequest::OptInOriginIsolationEndResult::
-                               kNotRequestedAndNotIsolated),
-                       3),
+          base::Bucket(
+              static_cast<int>(NavigationRequest::OriginAgentClusterEndResult::
+                                   kNotRequestedAndNotOriginKeyed),
+              3),
           // Second isolated subframe load goes here.
-          base::Bucket(static_cast<int>(
-                           NavigationRequest::OptInOriginIsolationEndResult::
-                               kNotRequestedButIsolated),
-                       1),
+          base::Bucket(
+              static_cast<int>(NavigationRequest::OriginAgentClusterEndResult::
+                                   kNotRequestedButOriginKeyed),
+              1),
           // First isolated subframe load goes here.
-          base::Bucket(static_cast<int>(
-                           NavigationRequest::OptInOriginIsolationEndResult::
-                               kRequestedAndIsolated),
-                       1)));
+          base::Bucket(
+              static_cast<int>(NavigationRequest::OriginAgentClusterEndResult::
+                                   kRequestedAndOriginKeyed),
+              1)));
 }
 
 // This test ensures that if an origin starts off not being isolated in a
@@ -746,7 +815,8 @@ IN_PROC_BROWSER_TEST_F(OriginIsolationOptInHeaderTest,
 
   WebContentsConsoleObserver console_observer(shell()->web_contents());
   console_observer.SetPattern(
-      "The page requested origin isolation, but could not be isolated*");
+      "The page requested an origin-keyed agent cluster using the "
+      "Origin-Agent-Cluster header, but could not be origin-keyed*");
 
   EXPECT_TRUE(
       NavigateToURLFromRenderer(child_frame_node1, isolated_suborigin_url));
@@ -766,14 +836,14 @@ IN_PROC_BROWSER_TEST_F(OriginIsolationOptInHeaderTest,
       histograms.GetAllSamples("Navigation.OriginAgentCluster.Result"),
       testing::ElementsAre(
           // Original loads of a(a,a) go here.
-          base::Bucket(static_cast<int>(
-                           NavigationRequest::OptInOriginIsolationEndResult::
-                               kNotRequestedAndNotIsolated),
-                       4),
-          base::Bucket(static_cast<int>(
-                           NavigationRequest::OptInOriginIsolationEndResult::
-                               kRequestedButNotIsolated),
-                       1)));
+          base::Bucket(
+              static_cast<int>(NavigationRequest::OriginAgentClusterEndResult::
+                                   kNotRequestedAndNotOriginKeyed),
+              4),
+          base::Bucket(
+              static_cast<int>(NavigationRequest::OriginAgentClusterEndResult::
+                                   kRequestedButNotOriginKeyed),
+              1)));
 }
 
 // This test ensures that if an origin starts off not being isolated in a
@@ -1139,14 +1209,14 @@ IN_PROC_BROWSER_TEST_F(OriginIsolationOptInHeaderTest, IsolatedBaseOrigin) {
   EXPECT_THAT(
       histograms.GetAllSamples("Navigation.OriginAgentCluster.Result"),
       testing::ElementsAre(
-          base::Bucket(static_cast<int>(
-                           NavigationRequest::OptInOriginIsolationEndResult::
-                               kNotRequestedAndNotIsolated),
-                       2),
-          base::Bucket(static_cast<int>(
-                           NavigationRequest::OptInOriginIsolationEndResult::
-                               kRequestedAndIsolated),
-                       1)));
+          base::Bucket(
+              static_cast<int>(NavigationRequest::OriginAgentClusterEndResult::
+                                   kNotRequestedAndNotOriginKeyed),
+              2),
+          base::Bucket(
+              static_cast<int>(NavigationRequest::OriginAgentClusterEndResult::
+                                   kRequestedAndOriginKeyed),
+              1)));
 }
 
 // This test is the same as OriginIsolationOptInHeaderTest
@@ -1775,11 +1845,11 @@ IN_PROC_BROWSER_TEST_F(StrictOriginIsolationTest,
   // Calculate the expected SiteInfo for each URL.  Both |foo_url| and
   // |bar_url| should have a site URL of |app_url|, but the process locks
   // should be foo.com and bar.com.
-  SiteInfo foo_site_info = SiteInstanceImpl::ComputeSiteInfoForTesting(
+  SiteInfo foo_site_info = SiteInfo::CreateForTesting(
       web_contents()->GetSiteInstance()->GetIsolationContext(), foo_url);
   EXPECT_EQ(app_url, foo_site_info.site_url());
   EXPECT_EQ(foo_url.GetOrigin(), foo_site_info.process_lock_url());
-  SiteInfo bar_site_info = SiteInstanceImpl::ComputeSiteInfoForTesting(
+  SiteInfo bar_site_info = SiteInfo::CreateForTesting(
       web_contents()->GetSiteInstance()->GetIsolationContext(), bar_url);
   EXPECT_EQ(app_url, bar_site_info.site_url());
   EXPECT_EQ(bar_url.GetOrigin(), bar_site_info.process_lock_url());
@@ -2343,7 +2413,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedOriginTest, ProcessLimit) {
                                                const GURL& url) {
     return RenderProcessHostImpl::IsSuitableHost(
         process, isolation_context,
-        SiteInstanceImpl::ComputeSiteInfoForTesting(isolation_context, url));
+        SiteInfo::CreateForTesting(isolation_context, url));
   };
   EXPECT_TRUE(is_suitable_host(foo_process, foo_url));
   EXPECT_FALSE(is_suitable_host(foo_process, isolated_foo_url));
@@ -3067,8 +3137,8 @@ IN_PROC_BROWSER_TEST_F(IsolatedOriginLongListTest, Test) {
 }
 
 // Check that navigating a subframe to an isolated origin error page puts the
-// subframe into an OOPIF and its own SiteInstance.  Also check that a
-// non-isolated error page in a subframe ends up in the correct SiteInstance.
+// subframe into an OOPIF and its own SiteInstance.  Also check that the error
+// page in a subframe ends up in the correct SiteInstance.
 IN_PROC_BROWSER_TEST_F(IsolatedOriginTest, SubframeErrorPages) {
   GURL top_url(
       embedded_test_server()->GetURL("/frame_tree/page_with_two_frames.html"));
@@ -3094,8 +3164,16 @@ IN_PROC_BROWSER_TEST_F(IsolatedOriginTest, SubframeErrorPages) {
 
     EXPECT_NE(root->current_frame_host()->GetSiteInstance(),
               child1->current_frame_host()->GetSiteInstance());
-    EXPECT_EQ(GURL("http://isolated.foo.com/"),
-              child1->current_frame_host()->GetSiteInstance()->GetSiteURL());
+    if (!SiteIsolationPolicy::IsErrorPageIsolationEnabled(
+            /*in_main_frame=*/false)) {
+      EXPECT_EQ(GURL("http://isolated.foo.com/"),
+                child1->current_frame_host()->GetSiteInstance()->GetSiteURL());
+    } else {
+      EXPECT_TRUE(child1->current_frame_host()
+                      ->GetSiteInstance()
+                      ->GetSiteInfo()
+                      .is_error_page());
+    }
   }
 
   {
@@ -3109,15 +3187,24 @@ IN_PROC_BROWSER_TEST_F(IsolatedOriginTest, SubframeErrorPages) {
     if (AreStrictSiteInstancesEnabled()) {
       EXPECT_NE(root->current_frame_host()->GetSiteInstance(),
                 child2->current_frame_host()->GetSiteInstance());
-      EXPECT_EQ(SiteInstance::GetSiteForURL(web_contents()->GetBrowserContext(),
-                                            regular_url),
-                child2->current_frame_host()->GetSiteInstance()->GetSiteURL());
+      if (!SiteIsolationPolicy::IsErrorPageIsolationEnabled(
+              /*in_main_frame=*/false)) {
+        EXPECT_EQ(
+            SiteInfo::CreateForTesting(
+                IsolationContext(web_contents()->GetBrowserContext()),
+                regular_url),
+            child2->current_frame_host()->GetSiteInstance()->GetSiteInfo());
+      }
     } else {
       EXPECT_EQ(root->current_frame_host()->GetSiteInstance(),
                 child2->current_frame_host()->GetSiteInstance());
     }
-    EXPECT_NE(GURL(kUnreachableWebDataURL),
-              child2->current_frame_host()->GetSiteInstance()->GetSiteURL());
+    EXPECT_EQ(SiteIsolationPolicy::IsErrorPageIsolationEnabled(
+                  /*in_main_frame=*/false),
+              child2->current_frame_host()
+                  ->GetSiteInstance()
+                  ->GetSiteInfo()
+                  .is_error_page());
   }
 }
 
@@ -3830,7 +3917,8 @@ IN_PROC_BROWSER_TEST_F(DynamicIsolatedOriginTest,
   // The old foo.com process should still be able to access bar.com data,
   // since it isn't locked to a specific site.
   int old_process_id = root->current_frame_host()->GetProcess()->GetID();
-  EXPECT_TRUE(policy->CanAccessDataForOrigin(old_process_id, bar_url));
+  EXPECT_TRUE(policy->CanAccessDataForOrigin(old_process_id,
+                                             url::Origin::Create(bar_url)));
 
   // In particular, make sure the bar.com iframe in the old foo.com process can
   // still access bar.com cookies.
@@ -3853,9 +3941,11 @@ IN_PROC_BROWSER_TEST_F(DynamicIsolatedOriginTest,
   // enforcements. Currently this is only on Android, but will be extended to
   // desktop, at which time the EXPECT_TRUE() case below can be removed.
 #if defined(OS_ANDROID)
-  EXPECT_FALSE(policy->CanAccessDataForOrigin(old_process_id, bar_url));
+  EXPECT_FALSE(policy->CanAccessDataForOrigin(old_process_id,
+                                              url::Origin::Create(bar_url)));
 #else
-  EXPECT_TRUE(policy->CanAccessDataForOrigin(old_process_id, bar_url));
+  EXPECT_TRUE(policy->CanAccessDataForOrigin(old_process_id,
+                                             url::Origin::Create(bar_url)));
 #endif
 }
 
@@ -4168,68 +4258,6 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_FALSE(first_instance->RequiresDedicatedProcess());
   EXPECT_TRUE(policy->GetProcessLock(first_instance->GetProcess()->GetID())
                   .allows_any_site());
-}
-
-// Test that we're not tracking whether we did a proactive BrowsingInstance
-// swap, bfcache eligibility, and whether unload runs after commit or not for
-// same-site navigations where we did a BrowsingInstance swap due to dynamic
-// isolation (instead of doing it proactively due to
-// ProactivelySwapBrowsingInstance).
-IN_PROC_BROWSER_TEST_F(DynamicIsolatedOriginTest,
-                       ProactiveSameSiteBISwapHistogramsNotModified) {
-  // This test is designed to run without strict site isolation.
-  if (AreAllSitesIsolatedForTesting())
-    return;
-  GURL url_a1(embedded_test_server()->GetURL("a.com", "/title1.html"));
-  GURL url_a2(embedded_test_server()->GetURL("a.com", "/title2.html"));
-  WebContentsImpl* web_contents =
-      static_cast<WebContentsImpl*>(shell()->web_contents());
-  const char kSameSiteNavigationDidSwapHistogramName[] =
-      "BackForwardCache.ProactiveSameSiteBISwap.SameSiteNavigationDidSwap";
-  const char kEligibilityDuringCommitHistogramName[] =
-      "BackForwardCache.ProactiveSameSiteBISwap.EligibilityDuringCommit";
-  const char kUnloadRunsAfterCommitHistogramName[] =
-      "BackForwardCache.ProactiveSameSiteBISwap.UnloadRunsAfterCommit";
-  base::HistogramTester histogram_tester;
-
-  // 1) Navigate to a.com/title1.html.
-  EXPECT_TRUE(NavigateToURL(shell(), url_a1));
-  FrameTreeNode* root = web_contents->GetFrameTree()->root();
-  scoped_refptr<SiteInstance> first_instance =
-      root->current_frame_host()->GetSiteInstance();
-  histogram_tester.ExpectTotalCount(kSameSiteNavigationDidSwapHistogramName, 0);
-  histogram_tester.ExpectTotalCount(kEligibilityDuringCommitHistogramName, 0);
-  histogram_tester.ExpectTotalCount(kUnloadRunsAfterCommitHistogramName, 0);
-
-  // Add unload handler to A1.
-  EXPECT_TRUE(
-      ExecJs(web_contents->GetMainFrame(), "window.onunload = () => {} "));
-
-  // Start isolating a.com.
-  BrowserContext* context = shell()->web_contents()->GetBrowserContext();
-  auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
-  policy->AddIsolatedOrigins({url::Origin::Create(url_a1)},
-                             IsolatedOriginSource::TEST, context);
-
-  // 2) Navigate same-site from a.com/title1.html to a.com/title2.html, which
-  // should trigger a BrowsingInstance swap due to dynamic isolation.
-  EXPECT_TRUE(NavigateToURL(shell(), url_a2));
-  scoped_refptr<SiteInstance> second_instance =
-      root->current_frame_host()->GetSiteInstance();
-  EXPECT_NE(first_instance, second_instance);
-  EXPECT_FALSE(first_instance->IsRelatedSiteInstance(second_instance.get()));
-
-  // We didn't do a same-site proactive BrowsingInstance swap. Since this
-  histogram_tester.ExpectUniqueSample(kSameSiteNavigationDidSwapHistogramName,
-                                      false, 1);
-  // There's no unload handler in A1 but we should not save anything to
-  // UnloadRunsAfterCommit (as it only cares about proactive BrowsingInstance
-  // swap cases).
-  histogram_tester.ExpectTotalCount(kUnloadRunsAfterCommitHistogramName, 0);
-  // A1's eligibility/ineligibility for bfcache should not be counted in
-  // EligibilityDuringCommitAfterBISwap histogram (as it only cares about
-  // proactive BrowsingInstance swap cases).
-  histogram_tester.ExpectTotalCount(kEligibilityDuringCommitHistogramName, 0);
 }
 
 // This class allows intercepting the BroadcastChannelProvider::ConnectToChannel

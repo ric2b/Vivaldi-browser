@@ -23,7 +23,6 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/android/feed/feed_host_service_factory.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/autofill/strike_database_factory.h"
 #include "chrome/browser/availability/availability_prober.h"
@@ -60,9 +59,9 @@
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
-#include "chrome/browser/permissions/adaptive_quiet_notification_permission_ui_enabler.h"
+#include "chrome/browser/permissions/permission_actions_history.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker_factory.h"
-#include "chrome/browser/prefetch/no_state_prefetch/prerender_manager_factory.h"
+#include "chrome/browser/prefetch/no_state_prefetch/no_state_prefetch_manager_factory.h"
 #include "chrome/browser/prefetch/prefetch_proxy/prefetch_proxy_origin_decider.h"
 #include "chrome/browser/prefetch/prefetch_proxy/prefetch_proxy_service.h"
 #include "chrome/browser/prefetch/prefetch_proxy/prefetch_proxy_service_factory.h"
@@ -101,13 +100,12 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_service.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
 #include "components/device_event_log/device_event_log.h"
-#include "components/feed/content/feed_host_service.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/language/core/browser/url_language_histogram.h"
 #include "components/nacl/browser/nacl_browser.h"
 #include "components/nacl/browser/pnacl_host.h"
-#include "components/no_state_prefetch/browser/prerender_manager.h"
+#include "components/no_state_prefetch/browser/no_state_prefetch_manager.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/open_from_clipboard/clipboard_recent_content.h"
 #include "components/password_manager/core/browser/password_manager_features_util.h"
@@ -140,12 +138,12 @@
 #include "chrome/android/chrome_jni_headers/PackageHash_jni.h"
 #include "chrome/browser/android/customtabs/origin_verifier.h"
 #include "chrome/browser/android/explore_sites/explore_sites_service_factory.h"
-#include "chrome/browser/android/feed/feed_lifecycle_bridge.h"
 #include "chrome/browser/android/feed/v2/feed_service_factory.h"
 #include "chrome/browser/android/oom_intervention/oom_intervention_decider.h"
 #include "chrome/browser/android/search_permissions/search_permissions_service.h"
 #include "chrome/browser/android/webapps/webapp_registry.h"
 #include "chrome/browser/offline_pages/offline_page_model_factory.h"
+#include "chrome/browser/profiles/profile_android.h"
 #include "components/cdm/browser/media_drm_storage_impl.h"  // nogncheck crbug.com/1125897
 #include "components/feed/buildflags.h"
 #include "components/feed/core/v2/public/feed_service.h"
@@ -162,11 +160,11 @@
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/system_proxy_manager.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/attestation/attestation_client.h"
 #include "chromeos/dbus/attestation/interface.pb.h"
@@ -491,17 +489,18 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
             filter_builder->BuildNetworkServiceFilter(),
             CreateTaskCompletionClosureForMojo(TracingDataType::kHostCache));
 
-    // The PrerenderManager keeps history of prerendered pages, so clear that.
-    // It also may have a prerendered page. If so, the page could be
+    // The NoStatePrefetchManager keeps history of pages scanned for prefetch,
+    // so clear that. It also may have a scanned page. If so, the page could be
     // considered to have a small amount of historical information, so delete
     // it, too.
-    prerender::PrerenderManager* prerender_manager =
-        prerender::PrerenderManagerFactory::GetForBrowserContext(profile_);
-    if (prerender_manager) {
+    prerender::NoStatePrefetchManager* no_state_prefetch_manager =
+        prerender::NoStatePrefetchManagerFactory::GetForBrowserContext(
+            profile_);
+    if (no_state_prefetch_manager) {
       // TODO(dmurph): Support all backends with filter (crbug.com/113621).
-      prerender_manager->ClearData(
-          prerender::PrerenderManager::CLEAR_PRERENDER_CONTENTS |
-          prerender::PrerenderManager::CLEAR_PRERENDER_HISTORY);
+      no_state_prefetch_manager->ClearData(
+          prerender::NoStatePrefetchManager::CLEAR_PRERENDER_CONTENTS |
+          prerender::NoStatePrefetchManager::CLEAR_PRERENDER_HISTORY);
     }
 
     // The saved Autofill profiles and credit cards can include the origin from
@@ -691,7 +690,9 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
       MediaDeviceIDSalt::Reset(profile_->GetPrefs());
 
 #if defined(OS_ANDROID)
-      Java_PackageHash_onCookiesDeleted(base::android::AttachCurrentThread());
+      Java_PackageHash_onCookiesDeleted(
+          base::android::AttachCurrentThread(),
+          ProfileAndroid::FromProfile(profile_)->GetJavaObject());
 #endif
     }
 
@@ -785,9 +786,8 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
                                                                   delete_end_);
     }
 
-    auto* permission_ui_enabler =
-        AdaptiveQuietNotificationPermissionUiEnabler::GetForProfile(profile_);
-    permission_ui_enabler->ClearInteractionHistory(delete_begin_, delete_end_);
+    PermissionActionsHistory::GetForProfile(profile_)->ClearHistory(
+        delete_begin_, delete_end_);
   }
 
   if ((remove_mask & constants::DATA_TYPE_SITE_USAGE_DATA) ||
@@ -976,7 +976,8 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
 #endif
 
     browsing_data::RemovePrerenderCacheData(
-        prerender::PrerenderManagerFactory::GetForBrowserContext(profile_));
+        prerender::NoStatePrefetchManagerFactory::GetForBrowserContext(
+            profile_));
 
     if (base::FeatureList::IsEnabled(media::kUseMediaHistoryStore)) {
       media_history::MediaHistoryKeyedService* media_history_service =
@@ -991,26 +992,15 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
 
 #if defined(OS_ANDROID)
 #if BUILDFLAG(ENABLE_FEED_V2)
-    if (feed::IsV2Enabled()) {
-      // Don't bridge through if the service isn't present, which means we're
-      // probably running in a native unit test.
-      feed::FeedService* service =
-          feed::FeedServiceFactory::GetForBrowserContext(profile_);
-      if (service) {
-        service->ClearCachedData();
-      }
+    // Don't bridge through if the service isn't present, which means we're
+    // probably running in a native unit test.
+    feed::FeedService* service =
+        feed::FeedServiceFactory::GetForBrowserContext(profile_);
+    if (service) {
+      service->ClearCachedData();
     }
 #endif  // BUILDFLAG(ENABLE_FEED_V2)
 
-#if BUILDFLAG(ENABLE_FEED_V1)
-    if (feed::IsV1Enabled()) {
-      // Don't bridge through if the service isn't present, which means we're
-      // probably running in a native unit test.
-      if (feed::FeedHostServiceFactory::GetForBrowserContext(profile_)) {
-        feed::FeedLifecycleBridge::ClearCachedData();
-      }
-    }
-#endif  // BUILDFLAG(ENABLE_FEED_V1)
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_ANDROID)

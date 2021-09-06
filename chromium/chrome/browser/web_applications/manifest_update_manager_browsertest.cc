@@ -48,6 +48,7 @@
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
 #include "third_party/skia/include/core/SkColor.h"
 
@@ -1111,30 +1112,51 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
             SK_ColorBLACK);
 }
 
+class ManifestUpdateManagerCaptureLinksBrowserTest
+    : public ManifestUpdateManagerBrowserTest {
+ public:
+  ManifestUpdateManagerCaptureLinksBrowserTest() {
+    scoped_feature_list_.InitAndEnableFeature(
+        blink::features::kWebAppEnableLinkCapturing);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerCaptureLinksBrowserTest,
+                       CheckFindsCaptureLinksChange) {
+  constexpr char kManifestTemplate[] = R"(
+    {
+      "name": "Test app name",
+      "start_url": ".",
+      "scope": "/",
+      "display": "standalone",
+      "icons": $1,
+      "capture_links": "$2"
+    }
+  )";
+  OverrideManifest(kManifestTemplate, {kInstallableIconList, "none"});
+  AppId app_id = InstallWebApp();
+  EXPECT_EQ(GetProvider().registrar().GetAppCaptureLinks(app_id),
+            blink::mojom::CaptureLinks::kNone);
+
+  OverrideManifest(kManifestTemplate, {kInstallableIconList, "new-client"});
+  EXPECT_EQ(GetResultAfterPageLoad(GetAppURL(), &app_id),
+            ManifestUpdateResult::kAppUpdated);
+  histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
+                                      ManifestUpdateResult::kAppUpdated, 1);
+  CheckShortcutInfoUpdated(app_id, kInstallableIconTopLeftColor);
+  EXPECT_EQ(GetProvider().registrar().GetAppCaptureLinks(app_id),
+            blink::mojom::CaptureLinks::kNewClient);
+}
+
 class ManifestUpdateManagerSystemAppBrowserTest
     : public ManifestUpdateManagerBrowserTest {
  public:
-  static constexpr char kSystemAppManifestText[] =
-      R"({
-        "name": "Test System App",
-        "display": "standalone",
-        "icons": [
-          {
-            "src": "icon-256.png",
-            "sizes": "256x256",
-            "type": "image/png"
-          }
-        ],
-        "start_url": "/pwa.html",
-        "theme_color": "$1"
-      })";
-
   ManifestUpdateManagerSystemAppBrowserTest()
       : system_app_(
-            TestSystemWebAppInstallation::SetUpStandaloneSingleWindowApp(
-                false)) {
-    system_app_->SetManifest(base::ReplaceStringPlaceholders(
-        kSystemAppManifestText, {"#0f0"}, nullptr));
+            TestSystemWebAppInstallation::SetUpStandaloneSingleWindowApp()) {
   }
 
   void SetUpOnMainThread() override { system_app_->WaitForAppInstall(); }
@@ -1143,14 +1165,8 @@ class ManifestUpdateManagerSystemAppBrowserTest
   std::unique_ptr<TestSystemWebAppInstallation> system_app_;
 };
 
-constexpr char
-    ManifestUpdateManagerSystemAppBrowserTest::kSystemAppManifestText[];
-
 IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerSystemAppBrowserTest,
                        CheckUpdateSkipped) {
-  system_app_->SetManifest(base::ReplaceStringPlaceholders(
-      kSystemAppManifestText, {"#f00"}, nullptr));
-
   AppId app_id = system_app_->GetAppId();
   EXPECT_EQ(GetResultAfterPageLoad(system_app_->GetAppUrl(), &app_id),
             ManifestUpdateResult::kAppIsSystemWebApp);

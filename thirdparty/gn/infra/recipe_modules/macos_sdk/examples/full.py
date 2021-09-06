@@ -12,7 +12,6 @@ DEPS = [
 
 def RunSteps(api):
   with api.macos_sdk():
-    sdk_dir = api.macos_sdk.sdk_dir if api.platform.is_mac else None
     api.step('gn', ['gn', 'gen', 'out/Release'])
     api.step('ninja', ['ninja', '-C', 'out/Release'])
 

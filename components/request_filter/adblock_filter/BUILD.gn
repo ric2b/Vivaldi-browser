@@ -72,7 +72,8 @@ source_set("adblock_filter") {
 
   deps = [
     ":adblock_parser",
-    ":package_ublock_data",
+    ":package_adblocker_files",
+    "mojom",
     "//base:base",
     "//base:i18n",
     "//base/util/values:values_util",
@@ -82,7 +83,6 @@ source_set("adblock_filter") {
     "//url",
     "//third_party/re2",
     "//vivaldi/components/request_filter/adblock_filter/flat:adblock_rules_list",
-    "//vivaldi_mojom/components/request_filter/adblock_filter/mojom",
     "//third_party/blink/public/common",
   ]
 }
@@ -104,24 +104,43 @@ source_set("unit_tests") {
 
 ublock_dir = "//vivaldi/thirdparty/ublock"
 ublock_resources = ublock_dir + "/src/web_accessible_resources"
-ublock_output = "$root_out_dir/resources/vivaldi/ublock_resources"
+adblockplus_snippets = "//vivaldi/thirdparty/adblockpluscore/lib/content/snippets.js"
+adblockplus_snippets_loader = "//vivaldi/thirdparty/adblockpluscore/lib/snippets.js"
+compiled_adblockplus_snippets_loader_dir = "$root_out_dir/gen/components/request_filter/adblock_filter/abp_snippets"
+compiled_adblockplus_snippets_loader = compiled_adblockplus_snippets_loader_dir + "/snippets.js"
+resources_output = "$root_out_dir/resources/vivaldi/adblocker_resources"
 
 copy("ublock_license") {
   sources = [
     "$ublock_dir/LICENSE.txt",
   ]
   outputs = [
-    "$ublock_output/{{source_file_part}}",
+    "$resources_output/{{source_file_part}}",
   ]
 }
 
-action("package_ublock_data") {
-  resources = "$ublock_output/resources.json"
+action("make_snippets_loader") {
+  script = "//vivaldi/components/request_filter/adblock_filter/abp_snippets_tools/make_snippets_loader.py"
 
-  # Ensures the output directory exists
-  deps= [
-    ":ublock_license"
+  sources = [
+    adblockplus_snippets,
+    adblockplus_snippets_loader
   ]
+
+  outputs = [
+    compiled_adblockplus_snippets_loader_dir,
+    compiled_adblockplus_snippets_loader
+  ]
+
+  args = [
+    "--loader", rebase_path(adblockplus_snippets_loader, root_build_dir),
+    "--snippets", rebase_path(adblockplus_snippets, root_build_dir),
+    "--output", rebase_path(compiled_adblockplus_snippets_loader, root_build_dir),
+  ]
+}
+
+action("package_redirectable_resources") {
+  resources = "$resources_output/redirectable_resources.json"
 
   sources = [
     ublock_resources,
@@ -138,5 +157,38 @@ action("package_ublock_data") {
     "--output", rebase_path(resources, root_build_dir),
     "--exclude", "README.txt", "empty",
     "--add-empty", "noop.css"
+  ]
+}
+
+action("package_injectable_resources") {
+  resources = "$resources_output/injectable_resources.json"
+
+  deps= [
+    ":make_snippets_loader",
+  ]
+
+  sources = [
+    compiled_adblockplus_snippets_loader_dir,
+  ]
+
+  outputs = [
+    resources
+  ]
+
+  script = "//vivaldi/tools/resources2json/resources2json.py"
+
+  args = [
+    "--input_dir", rebase_path(compiled_adblockplus_snippets_loader_dir, root_build_dir),
+    "--output", rebase_path(resources, root_build_dir),
+  ]
+}
+
+group("package_adblocker_files") {
+  deps = [
+    # adblockplus and ublock use the same license, so we only need one of their
+    # license files
+    ":ublock_license",
+    ":package_redirectable_resources",
+    ":package_injectable_resources"
   ]
 }

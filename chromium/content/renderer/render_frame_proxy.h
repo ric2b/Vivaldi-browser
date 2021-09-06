@@ -8,10 +8,10 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "cc/paint/paint_canvas.h"
-#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "content/common/content_export.h"
 #include "content/common/frame_messages.h"
 #include "content/common/frame_proxy.mojom.h"
+#include "content/common/frame_replication_state.mojom-forward.h"
 #include "content/renderer/child_frame_compositor.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
@@ -22,6 +22,7 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/common/frame/frame_visual_properties.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/common/widget/screen_info.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
@@ -42,7 +43,6 @@ class BlinkInterfaceRegistryImpl;
 class ChildFrameCompositingHelper;
 class RenderFrameImpl;
 class RenderViewImpl;
-struct FrameReplicationState;
 
 // When a page's frames are rendered by multiple processes, each renderer has a
 // full copy of the frame tree. It has full RenderFrames for the frames it is
@@ -80,7 +80,7 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
       RenderFrameImpl* frame_to_replace,
       int routing_id,
       blink::mojom::TreeScopeType scope,
-      const base::UnguessableToken& proxy_frame_token);
+      const blink::RemoteFrameToken& proxy_frame_token);
 
   // This method should be used to create a RenderFrameProxy, when there isn't
   // an existing RenderFrame. It should be called to construct a local
@@ -97,12 +97,12 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   // as a frame, not a proxy.
   static RenderFrameProxy* CreateFrameProxy(
       AgentSchedulingGroup& agent_scheduling_group,
+      const blink::RemoteFrameToken& frame_token,
       int routing_id,
+      const base::Optional<blink::FrameToken>& opener_frame_token,
       int render_view_routing_id,
-      const base::Optional<base::UnguessableToken>& opener_frame_token,
       int parent_routing_id,
-      const FrameReplicationState& replicated_state,
-      const base::UnguessableToken& frame_token,
+      mojom::FrameReplicationStatePtr replicated_state,
       const base::UnguessableToken& devtools_frame_token);
 
   // Creates a RenderFrameProxy to be used with a portal owned by |parent|.
@@ -111,7 +111,7 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
       AgentSchedulingGroup& agent_scheduling_group,
       RenderFrameImpl* parent,
       int proxy_routing_id,
-      const base::UnguessableToken& frame_token,
+      const blink::RemoteFrameToken& frame_token,
       const base::UnguessableToken& devtools_frame_token,
       const blink::WebElement& portal_element);
 
@@ -135,7 +135,7 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
 
   // Pass replicated information, such as security origin, to this
   // RenderFrameProxy's WebRemoteFrame.
-  void SetReplicatedState(const FrameReplicationState& state);
+  void SetReplicatedState(mojom::FrameReplicationStatePtr state);
 
   int routing_id() { return routing_id_; }
   RenderViewImpl* render_view() { return render_view_; }
@@ -148,7 +148,6 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
 
   void Navigate(
       const blink::WebURLRequest& request,
-      blink::WebLocalFrame* initiator_frame,
       bool should_replace_current_entry,
       bool is_opener_navigation,
       bool initiator_frame_has_download_sandbox_flag,
@@ -156,17 +155,16 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
       bool initiator_frame_is_ad,
       blink::CrossVariantMojoRemote<blink::mojom::BlobURLTokenInterfaceBase>
           blob_url_token,
-      const base::Optional<blink::WebImpression>& impression) override;
-  const viz::LocalSurfaceId& GetLocalSurfaceId() const override;
+      const base::Optional<blink::WebImpression>& impression,
+      const blink::LocalFrameToken* initiator_frame_token,
+      blink::CrossVariantMojoRemote<
+          blink::mojom::PolicyContainerHostKeepAliveHandleInterfaceBase>
+          initiator_policy_container_keep_alive_handle) override;
   bool RemoteProcessGone() const override;
+  void DidSetFrameSinkId() override;
   base::UnguessableToken GetDevToolsFrameToken() override;
-  viz::FrameSinkId GetFrameSinkId() const override;
-  void WasEvicted() override;
 
   void DidStartLoading();
-
-  // Called when the associated FrameSinkId has changed.
-  void FrameSinkIdChanged(const viz::FrameSinkId& frame_sink_id);
 
  private:
   RenderFrameProxy(AgentSchedulingGroup& agent_scheduling_group,
@@ -180,16 +178,12 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   mojom::RenderFrameProxyHost* GetFrameProxyHost();
 
   // mojom::RenderFrameProxy implementation:
-  void EnableAutoResize(const gfx::Size& min_size,
-                        const gfx::Size& max_size) override;
-  void DisableAutoResize() override;
-  void DidUpdateVisualProperties(
-      const cc::RenderFrameMetadata& metadata) override;
   void ChildProcessGone() override;
-  void SetFrameSinkId(const viz::FrameSinkId& frame_sink_id) override;
+
+  // blink::WebRemoteFrameClient implementation:
   void WillSynchronizeVisualProperties(
-      bool synchronized_props_changed,
       bool capture_sequence_number_changed,
+      const viz::SurfaceId& surface_id,
       const gfx::Size& compositor_viewport_size) override;
 
   // ChildFrameCompositor:
@@ -234,10 +228,6 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   base::UnguessableToken devtools_frame_token_;
 
   bool remote_process_gone_ = false;
-
-  viz::FrameSinkId frame_sink_id_;
-  std::unique_ptr<viz::ParentLocalSurfaceIdAllocator>
-      parent_local_surface_id_allocator_;
 
   // The layer used to embed the out-of-process content.
   scoped_refptr<cc::Layer> embedded_layer_;

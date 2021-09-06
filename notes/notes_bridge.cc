@@ -728,7 +728,8 @@ bool NotesBridge::IsFolderAvailable(const NoteNode* folder) const {
       IdentityManagerFactory::GetForProfile(profile_->GetOriginalProfile());
   return (folder->type() != NoteNode::TRASH &&  // TODO
           folder->type() != NoteNode::OTHER) ||
-         (identity_manager && identity_manager->HasPrimaryAccount());
+         (identity_manager &&
+          identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSync));
 }
 
 void NotesBridge::NotifyIfDoneLoading() {

@@ -11,17 +11,16 @@
 #include "base/task/post_task.h"
 #include "base/task_runner.h"
 #include "chrome/browser/policy/messaging_layer/upload/record_handler_impl.h"
-#include "chrome/browser/policy/messaging_layer/util/backoff_settings.h"
-#include "chrome/browser/policy/messaging_layer/util/status.h"
-#include "chrome/browser/policy/messaging_layer/util/status_macros.h"
-#include "chrome/browser/policy/messaging_layer/util/statusor.h"
-#include "chrome/browser/policy/messaging_layer/util/task_runner_context.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
-#include "components/policy/proto/record.pb.h"
-#include "components/policy/proto/record_constants.pb.h"
+#include "components/reporting/proto/record.pb.h"
+#include "components/reporting/proto/record_constants.pb.h"
+#include "components/reporting/util/status.h"
+#include "components/reporting/util/status_macros.h"
+#include "components/reporting/util/statusor.h"
+#include "components/reporting/util/task_runner_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -92,24 +91,27 @@ void DmServerUploader::OnStart() {
     Complete(Status(error::INVALID_ARGUMENT, "handler was null"));
     return;
   }
-  // Early exit if we don't have any records.
-  // TODO(b/170054326) Allow empty records list if encryption keys delivery is
-  // requested and return OK in this case.
-  if (encrypted_records_->empty()) {
+  // Early exit if we don't have any records and do not need encryption key.
+  if (encrypted_records_->empty() && !need_encryption_key_) {
     Complete(
         Status(error::INVALID_ARGUMENT, "No records received for upload."));
     return;
   }
-  ProcessRecords();
+
+  if (!encrypted_records_->empty()) {
+    ProcessRecords();
+  }
+
+  HandleRecords();
 }
 
 void DmServerUploader::ProcessRecords() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   Status process_status;
 
-  const uint64_t expected_generation_id =
+  const int64_t expected_generation_id =
       encrypted_records_->front().sequencing_information().generation_id();
-  uint64_t expected_sequencing_id =
+  int64_t expected_sequencing_id =
       encrypted_records_->front().sequencing_information().sequencing_id();
 
   // Will stop processing records on the first record that fails to pass.
@@ -132,8 +134,6 @@ void DmServerUploader::ProcessRecords() {
 
   // Discarding the remaining records.
   encrypted_records_->resize(records_added);
-
-  HandleRecords();
 }
 
 void DmServerUploader::HandleRecords() {
@@ -151,8 +151,8 @@ void DmServerUploader::Complete(CompletionResponse completion_response) {
 
 Status DmServerUploader::IsRecordValid(
     const EncryptedRecord& encrypted_record,
-    const uint64_t expected_generation_id,
-    const uint64_t expected_sequencing_id) const {
+    const int64_t expected_generation_id,
+    const int64_t expected_sequencing_id) const {
   // Test to ensure all records are in the same generation.
   if (encrypted_record.sequencing_information().generation_id() !=
       expected_generation_id) {
@@ -223,13 +223,14 @@ void DmServerUploadService::InitRecordHandler(
 }
 
 void DmServerUploadService::UploadCompletion(
-    StatusOr<SequencingInformation> upload_result) const {
+    CompletionResponse upload_result) const {
   if (!upload_result.ok()) {
     LOG(WARNING) << upload_result.status();
     return;
   }
 
-  upload_cb_.Run(upload_result.ValueOrDie());
+  upload_cb_.Run(upload_result.ValueOrDie().sequencing_information,
+                 upload_result.ValueOrDie().force_confirm);
 }
 
 CloudPolicyClient* DmServerUploadService::GetClient() {

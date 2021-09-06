@@ -77,11 +77,11 @@
   }
 
   if ((self = [super init])) {
-    // TODO(https://crbug.com/1144992): If crash fixed, investigate why browser
-    // cannot be created here.
+    // Since AppleScript requests can arrive at any time, including during
+    // browser shutdown or profile deletion, we have to check whether it's okay
+    // to spawn a new browser for the specified profile or not.
     if (Browser::GetCreationStatusForProfile(aProfile) !=
         Browser::CreationStatus::kOk) {
-      NOTREACHED();
       [self release];
       return nil;
     }
@@ -195,9 +195,7 @@
       GURL(chrome::kChromeUINewTabURL),
       ui::PAGE_TRANSITION_TYPED);
   CoreTabHelper* core_tab_helper = CoreTabHelper::FromWebContents(contents);
-  if (core_tab_helper) {
   core_tab_helper->set_new_tab_start_time(newTabStartTime);
-  }
   [aTab setWebContents:contents];
 }
 
@@ -216,9 +214,7 @@
   Navigate(&params);
   CoreTabHelper* core_tab_helper =
       CoreTabHelper::FromWebContents(params.navigated_or_inserted_contents);
-  if (core_tab_helper) {
   core_tab_helper->set_new_tab_start_time(newTabStartTime);
-  }
 
   [aTab setWebContents:params.navigated_or_inserted_contents];
 }

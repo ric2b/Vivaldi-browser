@@ -115,6 +115,7 @@ ash::ShelfLaunchSource ConvertLaunchSource(
     case apps::mojom::LaunchSource::kFromArc:
     case apps::mojom::LaunchSource::kFromSharesheet:
     case apps::mojom::LaunchSource::kFromReleaseNotesNotification:
+    case apps::mojom::LaunchSource::kFromFullRestore:
       return ash::LAUNCH_FROM_UNKNOWN;
   }
 }
@@ -295,7 +296,7 @@ content::WebContents* ExtensionAppsBase::LaunchAppWithIntentImpl(
     int32_t event_flags,
     apps::mojom::IntentPtr intent,
     apps::mojom::LaunchSource launch_source,
-    int64_t display_id) {
+    apps::mojom::WindowInfoPtr window_info) {
   const auto* extension = MaybeGetExtension(app_id);
   if (!extension || !extensions::util::IsAppLaunchable(app_id, profile_)) {
     return nullptr;
@@ -305,16 +306,17 @@ content::WebContents* ExtensionAppsBase::LaunchAppWithIntentImpl(
     RunExtensionEnableFlow(
         app_id, base::BindOnce(&ExtensionAppsBase::LaunchAppWithIntent,
                                weak_factory_.GetWeakPtr(), app_id, event_flags,
-                               std::move(intent), launch_source, display_id));
+                               std::move(intent), launch_source,
+                               std::move(window_info)));
     return nullptr;
   }
 
   auto params = apps::CreateAppLaunchParamsForIntent(
-      app_id, event_flags, GetAppLaunchSource(launch_source), display_id,
+      app_id, event_flags, GetAppLaunchSource(launch_source),
+      window_info ? window_info->display_id : display::kInvalidDisplayId,
       extensions::GetLaunchContainer(extensions::ExtensionPrefs::Get(profile_),
                                      extension),
       std::move(intent));
-  params.launch_source = launch_source;
   return LaunchImpl(std::move(params));
 }
 
@@ -370,7 +372,8 @@ void ExtensionAppsBase::Connect(
   }
   mojo::Remote<apps::mojom::Subscriber> subscriber(
       std::move(subscriber_remote));
-  subscriber->OnApps(std::move(apps));
+  subscriber->OnApps(std::move(apps), apps::mojom::AppType::kExtension,
+                     true /* should_notify_initialized */);
   subscribers_.Add(std::move(subscriber));
 }
 
@@ -393,13 +396,17 @@ void ExtensionAppsBase::LoadIcon(const std::string& app_id,
 void ExtensionAppsBase::Launch(const std::string& app_id,
                                int32_t event_flags,
                                apps::mojom::LaunchSource launch_source,
-                               int64_t display_id) {
+                               apps::mojom::WindowInfoPtr window_info) {
   const auto* extension = MaybeGetExtension(app_id);
-  if (!extension || !extensions::util::IsAppLaunchable(app_id, profile_) ||
-      RunExtensionEnableFlow(
-          app_id,
-          base::BindOnce(&ExtensionAppsBase::Launch, weak_factory_.GetWeakPtr(),
-                         app_id, event_flags, launch_source, display_id))) {
+  if (!extension || !extensions::util::IsAppLaunchable(app_id, profile_)) {
+    return;
+  }
+
+  if (!extensions::util::IsAppLaunchableWithoutEnabling(app_id, profile_)) {
+    RunExtensionEnableFlow(
+        app_id, base::BindOnce(&ExtensionAppsBase::Launch,
+                               weak_factory_.GetWeakPtr(), app_id, event_flags,
+                               launch_source, std::move(window_info)));
     return;
   }
 
@@ -429,14 +436,14 @@ void ExtensionAppsBase::Launch(const std::string& app_id,
     case apps::mojom::LaunchSource::kFromArc:
     case apps::mojom::LaunchSource::kFromSharesheet:
     case apps::mojom::LaunchSource::kFromReleaseNotesNotification:
+    case apps::mojom::LaunchSource::kFromFullRestore:
       break;
   }
 
   // The app will be created for the currently active profile.
   AppLaunchParams params = CreateAppLaunchParamsWithEventFlags(
       profile_, extension, event_flags, GetAppLaunchSource(launch_source),
-      display_id);
-  params.launch_source = launch_source;
+      window_info ? window_info->display_id : display::kInvalidDisplayId);
   ash::ShelfLaunchSource source = ConvertLaunchSource(launch_source);
   if ((source == ash::LAUNCH_FROM_APP_LIST ||
        source == ash::LAUNCH_FROM_APP_LIST_SEARCH) &&
@@ -462,7 +469,6 @@ void ExtensionAppsBase::LaunchAppWithFiles(
   AppLaunchParams params(
       app_id, container, ui::DispositionFromEventFlags(event_flags),
       GetAppLaunchSource(launch_source), display::kDefaultDisplayId);
-  params.launch_source = launch_source;
   for (const auto& file_path : file_paths->file_paths) {
     params.launch_files.push_back(file_path);
   }
@@ -474,9 +480,9 @@ void ExtensionAppsBase::LaunchAppWithIntent(
     int32_t event_flags,
     apps::mojom::IntentPtr intent,
     apps::mojom::LaunchSource launch_source,
-    int64_t display_id) {
+    apps::mojom::WindowInfoPtr window_info) {
   LaunchAppWithIntentImpl(app_id, event_flags, std::move(intent), launch_source,
-                          display_id);
+                          std::move(window_info));
 }
 
 void ExtensionAppsBase::Uninstall(const std::string& app_id,

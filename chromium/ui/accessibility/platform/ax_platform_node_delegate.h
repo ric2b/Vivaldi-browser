@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "base/optional.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_clipping_behavior.h"
 #include "ui/accessibility/ax_coordinate_system.h"
 #include "ui/accessibility/ax_enums.mojom-forward.h"
@@ -95,7 +96,7 @@ class AX_EXPORT AXPlatformNodeDelegate {
 
   // Get the unignored selection from the tree, meaning the selection whose
   // endpoints are on unignored nodes. (An ignored node means that the node
-  // should not be exposed to platform APIs: See "IsInvisibleOrIgnored".)
+  // should not be exposed to platform APIs: See `IsInvisibleOrIgnored`.)
   virtual const AXTree::Selection GetUnignoredSelection() const = 0;
 
   // Creates a text position rooted at this object.
@@ -124,7 +125,7 @@ class AX_EXPORT AXPlatformNodeDelegate {
   // should return the number of unignored children. All ignored nodes are
   // recursively removed from the children count. (An ignored node means that
   // the node should not be exposed to platform APIs: See
-  // "IsInvisibleOrIgnored".)
+  // `IsInvisibleOrIgnored`.)
   virtual int GetChildCount() const = 0;
 
   // Get a child of a node given a 0-based index.
@@ -132,7 +133,7 @@ class AX_EXPORT AXPlatformNodeDelegate {
   // Note that for accessibility trees that have ignored nodes, this method
   // returns only unignored children. All ignored nodes are recursively removed.
   // (An ignored node means that the node should not be exposed to platform
-  // APIs: See "IsInvisibleOrIgnored".)
+  // APIs: See `IsInvisibleOrIgnored`.)
   virtual gfx::NativeViewAccessible ChildAtIndex(int index) = 0;
 
   // Returns true if it has a modal dialog.
@@ -178,9 +179,12 @@ class AX_EXPORT AXPlatformNodeDelegate {
   virtual bool IsToplevelBrowserWindow() = 0;
 
   // If this object is exposed to the platform's accessibility layer, returns
-  // this object. Otherwise, returns the platform leaf under which this object
-  // is found.
-  virtual gfx::NativeViewAccessible GetClosestPlatformObject() const = 0;
+  // this object. Otherwise, returns the platform leaf or lowest unignored
+  // ancestor under which this object is found.
+  //
+  // (An ignored node means that the node should not be exposed to platform
+  // APIs: See `IsInvisibleOrIgnored`.)
+  virtual gfx::NativeViewAccessible GetLowestPlatformAncestor() const = 0;
 
   class ChildIterator {
    public:
@@ -412,6 +416,10 @@ class AX_EXPORT AXPlatformNodeDelegate {
   virtual bool IsOrderedSet() const = 0;
   virtual base::Optional<int> GetPosInSet() const = 0;
   virtual base::Optional<int> GetSetSize() const = 0;
+
+  // Computed colors, taking blending into account.
+  virtual SkColor GetColor() const = 0;
+  virtual SkColor GetBackgroundColor() const = 0;
 
   //
   // Events.

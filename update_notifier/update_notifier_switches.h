@@ -5,23 +5,56 @@
 
 namespace vivaldi_update_notifier {
 
+constexpr bool kUseTaskScheduler = false;
+
+enum class ExitCode {
+  kOk = 0,
+
+  // Generic error
+  kError = 1,
+
+  // The notifier process already runs.
+  kAlreadyRuns = 20,
+
+  // Automatic updates are disabled.
+  kDisabled = 21,
+};
+
 // Command line switches for the update notifier.
+
+// Manually check for update.
 extern const char kCheckForUpdates[];
-extern const char kEnableLogging[];
+
+// Mark invocation from Windows Task Scheduler.
+extern const char kFromScheduler[];
+
+extern const char kInstallMode[];
+
+// Switches for subactions
+extern const char kDisable[];
+extern const char kEnable[];
+extern const char kEnableIfUpgrade[];
+extern const char kIsEnabled[];
+extern const char kLaunchIfEnabled[];
+extern const char kUnregister[];
 
 // Command line switches for debugging not supported in the official build.
 extern const char kDebugExeDir[];
-extern const char kDebugFirstDelay[];
 extern const char kDebugKeepRunning[];
+extern const char kDebugLanguage[];
 extern const char kDebugSetupExe[];
 extern const char kDebugVersion[];
 
 // Prefixes for event names for inter-process communications
+extern const wchar_t kCheckForUpdatesEventPrefix[];
+extern const wchar_t kQuitEventPrefix[];
+extern const wchar_t kGlobalQuitEventPrefix[];
+extern const wchar_t kNetworkInstallerUniquenessEventName[];
 
-extern const wchar_t kCheckForUpdatesEventName[];
-extern const wchar_t kQuitEventName[];
-extern const wchar_t kGlobalQuitEventName[];
-extern const wchar_t kGlobalUniquenessCheckEventName[];
+extern const wchar_t kVivaldiSubjectName[];
+extern const wchar_t kVivaldiTestSubjectName[];
+
+extern const wchar_t kVivaldiScheduleTaskNamePrefix[];
 
 }  // namespace vivaldi_update_notifier
 

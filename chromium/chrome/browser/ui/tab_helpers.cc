@@ -71,6 +71,7 @@
 #include "chrome/browser/sync/sessions/sync_sessions_web_contents_router_factory.h"
 #include "chrome/browser/sync/sync_encryption_keys_tab_helper.h"
 #include "chrome/browser/tab_contents/navigation_metrics_recorder.h"
+#include "chrome/browser/tflite_experiment/tflite_experiment_switches.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/find_bar/find_bar_state.h"
@@ -88,7 +89,6 @@
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/services/machine_learning/machine_learning_tflite_buildflags.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/blocked_content/popup_blocker_tab_helper.h"
@@ -103,6 +103,7 @@
 #include "components/javascript_dialogs/tab_modal_dialog_manager.h"
 #include "components/offline_pages/buildflags/buildflags.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
+#include "components/optimization_guide/machine_learning_tflite_buildflags.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/performance_manager/public/decorators/tab_properties_decorator.h"
 #include "components/performance_manager/public/performance_manager.h"
@@ -122,7 +123,7 @@
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/oom_intervention/oom_intervention_tab_helper.h"
 #include "chrome/browser/android/search_permissions/search_geolocation_disclosure_tab_helper.h"
-#include "chrome/browser/banners/app_banner_manager_android.h"
+#include "chrome/browser/banners/android/chrome_app_banner_manager_android.h"
 #include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "chrome/browser/ui/android/autofill_assistant/autofill_assistant_tab_helper.h"
 #include "chrome/browser/ui/android/context_menu_helper.h"
@@ -174,6 +175,7 @@
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/ui/web_applications/web_app_metrics.h"
+#include "chrome/browser/ui/web_applications/web_app_metrics_tab_helper.h"
 #include "chrome/browser/web_applications/components/web_app_utils.h"
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
 #include "extensions/browser/view_type_utils.h"
@@ -205,6 +207,9 @@
 #include "app/vivaldi_apptools.h"
 #include "browser/ui/vivaldi_tab_helpers.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
+#if !defined(OS_ANDROID)
+#include "browser/translate/vivaldi_translate_client.h"
+#endif
 
 using content::WebContents;
 
@@ -240,9 +245,10 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
 #endif
   bool enable_autofill_download_manager = true;
   if (vivaldi::IsVivaldiRunning()) {
-    Profile* profile = Profile::FromBrowserContext(web_contents->GetBrowserContext());
-    enable_autofill_download_manager =
-        profile->GetPrefs()->GetBoolean(vivaldiprefs::kPrivacyAutofillServerAssist);
+    Profile* profile =
+        Profile::FromBrowserContext(web_contents->GetBrowserContext());
+    enable_autofill_download_manager = profile->GetPrefs()->GetBoolean(
+        vivaldiprefs::kPrivacyAutofillServerAssist);
   }
 
   Profile* profile =
@@ -264,9 +270,12 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
       autofill::ChromeAutofillClient::FromWebContents(web_contents));
   ChromeSubresourceFilterClient::CreateThrottleManagerWithClientForWebContents(
       web_contents);
-  if (!vivaldi::IsVivaldiRunning()) {
+#if !defined(OS_ANDROID)
+  if (vivaldi::IsVivaldiRunning())
+    VivaldiTranslateClient::CreateForWebContents(web_contents);
+  else
   ChromeTranslateClient::CreateForWebContents(web_contents);
-  }
+#endif
   ConnectionHelpTabHelper::CreateForWebContents(web_contents);
   CoreTabHelper::CreateForWebContents(web_contents);
   DataReductionProxyTabHelper::CreateForWebContents(web_contents);
@@ -289,7 +298,8 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
       web_contents);
 
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
-  TFLiteExperimentObserver::CreateForWebContents(web_contents);
+  if (tflite_experiment::switches::GetTFLiteModelPath())
+    TFLiteExperimentObserver::CreateForWebContents(web_contents);
 #endif
 
   if (MediaEngagementService::IsEnabled())
@@ -373,7 +383,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   {
     // Remove after fixing https://crbug/905919
     TRACE_EVENT0("browser", "AppBannerManagerAndroid::CreateForWebContents");
-    webapps::AppBannerManagerAndroid::CreateForWebContents(web_contents);
+    webapps::ChromeAppBannerManagerAndroid::CreateForWebContents(web_contents);
   }
   ContextMenuHelper::CreateForWebContents(web_contents);
   javascript_dialogs::TabModalDialogManager::CreateForWebContents(
@@ -478,8 +488,9 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   extensions::WebNavigationTabObserver::CreateForWebContents(web_contents);
   if (web_app::AreWebAppsEnabled(profile))
     web_app::WebAppTabHelper::CreateForWebContents(web_contents);
-  if (site_engagement::SiteEngagementService::IsEnabled())
-    web_app::WebAppMetrics::Get(profile);
+  // Note WebAppMetricsTabHelper must be created after AppBannerManager.
+  if (web_app::WebAppMetricsTabHelper::IsEnabled(web_contents))
+    web_app::WebAppMetricsTabHelper::CreateForWebContents(web_contents);
 #endif
 
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)

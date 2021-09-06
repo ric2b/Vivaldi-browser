@@ -168,7 +168,8 @@ class BookmarkBarView : public views::AccessiblePaneView,
   void OnDragEntered(const ui::DropTargetEvent& event) override;
   int OnDragUpdated(const ui::DropTargetEvent& event) override;
   void OnDragExited() override;
-  int OnPerformDrop(const ui::DropTargetEvent& event) override;
+  ui::mojom::DragOperation OnPerformDrop(
+      const ui::DropTargetEvent& event) override;
   void OnThemeChanged() override;
   void VisibilityChanged(View* starting_from, bool is_visible) override;
 
@@ -347,6 +348,9 @@ class BookmarkBarView : public views::AccessiblePaneView,
 
   // Updates the visibility of the apps shortcut based on the pref value.
   void OnAppsPageShortcutVisibilityPrefChanged();
+
+  // Updates the visibility of the reading list based on the pref value.
+  void OnReadingListVisibilityPrefChanged();
 
   void OnShowManagedBookmarksPrefChanged();
 

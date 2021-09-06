@@ -151,6 +151,8 @@ const SurveyIdentifiers surveys[] = {
      "bAeiT5J4P0ugnJ3q1cK0Ra6jg7s8"},
     {&features::kHaTSDesktopDevToolsIssuesCSP, "devtools-issues-csp",
      "c9fjDmwjb0ugnJ3q1cK0USeAJJ9C"},
+    {&features::kHaTSDesktopDevToolsLayoutPanel, "devtools-layout-panel",
+     "hhoMFLFq70ugnJ3q1cK0XYpqkErh"},
     {&features::kHappinessTrackingSurveysForDesktopSettings,
      kHatsSurveyTriggerSettings, kTriggerIdProvidedByFeatureParams},
     {&features::kHappinessTrackingSurveysForDesktopSettingsPrivacy,
@@ -354,11 +356,6 @@ void HatsService::GetSurveyMetadataForTesting(
     metadata->last_survey_check_time = last_survey_check_time;
 }
 
-void HatsService::SetSurveyCheckerForTesting(
-    std::unique_ptr<HatsSurveyStatusChecker> checker) {
-  checker_ = std::move(checker);
-}
-
 void HatsService::RemoveTask(const DelayedSurveyTask& task) {
   pending_tasks_.erase(task);
 }
@@ -500,6 +497,17 @@ bool HatsService::CanShowSurvey(const std::string& trigger) const {
     }
   }
 
+  // If an attempt to check with the HaTS servers whether a survey should be
+  // delivered was made too recently, another survey cannot be shown.
+  base::Optional<base::Time> last_survey_check_time =
+      util::ValueToTime(pref_data->FindPath(GetLastSurveyCheckTime(trigger)));
+  if (last_survey_check_time.has_value()) {
+    base::TimeDelta elapsed_time_since_last_check =
+        base::Time::Now() - *last_survey_check_time;
+    if (elapsed_time_since_last_check < kMinimumTimeBetweenSurveyChecks)
+      return false;
+  }
+
   return true;
 }
 
@@ -535,64 +543,18 @@ void HatsService::CheckSurveyStatusAndMaybeShow(
     return;
   }
 
-  base::Optional<base::Time> last_survey_check_time =
-      util::ValueToTime(pref_data->FindPath(GetLastSurveyCheckTime(trigger)));
-  if (last_survey_check_time.has_value()) {
-    base::TimeDelta elapsed_time_since_last_check =
-        base::Time::Now() - *last_survey_check_time;
-    if (elapsed_time_since_last_check < kMinimumTimeBetweenSurveyChecks) {
-      std::move(failure_callback).Run();
-      return;
-    }
-  }
-
   DCHECK(survey_configs_by_triggers_.find(trigger) !=
          survey_configs_by_triggers_.end());
 
-  if (base::FeatureList::IsEnabled(
-          features::kHappinessTrackingSurveysForDesktopMigration)) {
-    // Bypass the checker for showing HaTS Next surveys as the survey website
-    // itself will determine eligibility. This is communicated via updates to
-    // HatsNextWebDialog::OnSurveyStateUpdateReceived.
-    DCHECK(!hats_next_dialog_exists_);
-    browser->window()->ShowHatsBubble(
-        survey_configs_by_triggers_[trigger].en_site_id_,
-        std::move(success_callback), std::move(failure_callback));
-    hats_next_dialog_exists_ = true;
-  } else {
-    if (!checker_)
-      checker_ = std::make_unique<HatsSurveyStatusChecker>(profile_);
-    checker_->CheckSurveyStatus(
-        survey_configs_by_triggers_[trigger].en_site_id_,
-        base::BindOnce(&HatsService::ShowSurvey, weak_ptr_factory_.GetWeakPtr(),
-                       browser, trigger),
-        base::BindOnce(&HatsService::OnSurveyStatusError,
-                       weak_ptr_factory_.GetWeakPtr(), trigger));
-  }
-}
-
-void HatsService::ShowSurvey(Browser* browser, const std::string& trigger) {
-  auto survey_id = survey_configs_by_triggers_[trigger].en_site_id_;
-  RecordSurveyAsShown(survey_id);
-  browser->window()->ShowHatsBubble(survey_id, base::DoNothing(),
-                                    base::DoNothing());
-  checker_.reset();
-}
-
-void HatsService::OnSurveyStatusError(const std::string& trigger,
-                                      HatsSurveyStatusChecker::Status error) {
+  // As soon as the HaTS Next dialog is created it will attempt to contact
+  // the HaTS servers to check for a survey.
   DictionaryPrefUpdate update(profile_->GetPrefs(), prefs::kHatsSurveyMetadata);
-  base::DictionaryValue* pref_update_data = update.Get();
+  update->SetPath(GetLastSurveyCheckTime(trigger),
+                  util::TimeToValue(base::Time::Now()));
 
-  if (error == HatsSurveyStatusChecker::Status::kUnreachable) {
-    UMA_HISTOGRAM_ENUMERATION(kHatsShouldShowSurveyReasonHistogram,
-                              ShouldShowSurveyReasons::kNoSurveyUnreachable);
-    pref_update_data->SetPath(GetLastSurveyCheckTime(trigger),
-                              util::TimeToValue(base::Time::Now()));
-  } else if (error == HatsSurveyStatusChecker::Status::kOverCapacity) {
-    UMA_HISTOGRAM_ENUMERATION(kHatsShouldShowSurveyReasonHistogram,
-                              ShouldShowSurveyReasons::kNoSurveyOverCapacity);
-    pref_update_data->SetBoolPath(GetIsSurveyFull(trigger), true);
-  }
-  checker_.reset();
+  DCHECK(!hats_next_dialog_exists_);
+  browser->window()->ShowHatsDialog(
+      survey_configs_by_triggers_[trigger].en_site_id_,
+      std::move(success_callback), std::move(failure_callback));
+  hats_next_dialog_exists_ = true;
 }

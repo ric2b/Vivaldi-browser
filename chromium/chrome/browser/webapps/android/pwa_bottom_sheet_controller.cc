@@ -8,7 +8,7 @@
 #include "base/android/jni_string.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/banners/app_banner_manager_android.h"
+#include "chrome/browser/banners/android/chrome_app_banner_manager_android.h"
 #include "chrome/browser/webapps/android/features.h"
 #include "chrome/browser/webapps/android/jni_headers/PwaBottomSheetControllerProvider_jni.h"
 #include "chrome/browser/webapps/android/jni_headers/PwaBottomSheetController_jni.h"
@@ -24,15 +24,13 @@ using base::android::ScopedJavaLocalRef;
 namespace {
 
 bool CanShowBottomSheet(content::WebContents* web_contents,
-                        const base::string16& description,
-                        const std::vector<base::string16>& categories,
-                        const std::map<GURL, SkBitmap>& screenshots) {
+                        const std::vector<SkBitmap>& screenshots) {
   if (!base::FeatureList::IsEnabled(
-          webapps::features::kPwaInstallUseBottomSheet))
+          webapps::features::kPwaInstallUseBottomSheet)) {
     return false;
+  }
 
-  if (description.size() == 0 || categories.size() == 0 ||
-      screenshots.size() == 0)
+  if (screenshots.size() == 0)
     return false;
 
   JNIEnv* env = base::android::AttachCurrentThread();
@@ -47,50 +45,55 @@ namespace webapps {
 PwaBottomSheetController::~PwaBottomSheetController() = default;
 
 // static
-void JNI_PwaBottomSheetController_CreateAndShowBottomSheetInstaller(
+jboolean JNI_PwaBottomSheetController_RequestOrExpandBottomSheetInstaller(
     JNIEnv* env,
-    const JavaParamRef<jobject>& jweb_contents) {
+    const JavaParamRef<jobject>& jweb_contents,
+    int install_trigger) {
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(jweb_contents);
-  AppBannerManagerAndroid* app_banner_manager =
-      AppBannerManagerAndroid::FromWebContents(web_contents);
+  auto* app_banner_manager =
+      ChromeAppBannerManagerAndroid::FromWebContents(web_contents);
 
-  const blink::Manifest& manifest = app_banner_manager->manifest();
-  PwaBottomSheetController::MaybeCreateAndShow(
-      nullptr, web_contents, app_banner_manager->GetAppName(),
-      app_banner_manager->primary_icon(),
-      app_banner_manager->has_maskable_primary_icon(),
-      app_banner_manager->validated_url(), app_banner_manager->screenshots(),
-      manifest.description.value_or(base::string16()), manifest.categories,
-      /* show_expanded= */ true);
+  WebappInstallSource install_source = InstallableMetrics::GetInstallSource(
+      web_contents, static_cast<InstallTrigger>(install_trigger));
+  return app_banner_manager->MaybeShowPwaBottomSheetController(
+      /* expand_sheet= */ true, install_source);
 }
 
 // static
-void PwaBottomSheetController::MaybeCreateAndShow(
-    base::WeakPtr<InstallableAmbientBadgeInfoBarDelegate::Client> weak_client,
+bool PwaBottomSheetController::MaybeShow(
     content::WebContents* web_contents,
     const base::string16& app_name,
     const SkBitmap& primary_icon,
     const bool is_primary_icon_maskable,
     const GURL& start_url,
-    const std::map<GURL, SkBitmap>& screenshots,
+    const std::vector<SkBitmap>& screenshots,
     const base::string16& description,
-    const std::vector<base::string16>& categories,
-    bool show_expanded) {
-  if (CanShowBottomSheet(web_contents, description, categories, screenshots)) {
+    bool expand_sheet,
+    std::unique_ptr<AddToHomescreenParams> a2hs_params,
+    base::RepeatingCallback<void(AddToHomescreenInstaller::Event,
+                                 const AddToHomescreenParams&)>
+        a2hs_event_callback) {
+  if (!CanShowBottomSheet(web_contents, screenshots))
+    return false;
+
+  JNIEnv* env = base::android::AttachCurrentThread();
+  if (Java_PwaBottomSheetControllerProvider_doesBottomSheetExist(
+          env, web_contents->GetJavaWebContents())) {
+    Java_PwaBottomSheetControllerProvider_updateState(
+        env, web_contents->GetJavaWebContents(),
+        jint(a2hs_params->install_source), expand_sheet);
+  } else {
     // Lifetime of this object is managed by the Java counterpart, iff bottom
     // sheets can be shown (otherwise an infobar is used and this class is no
     // longer needed).
     PwaBottomSheetController* controller = new PwaBottomSheetController(
         app_name, primary_icon, is_primary_icon_maskable, start_url,
-        screenshots, description, categories, show_expanded);
-    controller->ShowBottomSheetInstaller(web_contents);
-    return;
+        screenshots, description, std::move(a2hs_params),
+        std::move(a2hs_event_callback));
+    controller->ShowBottomSheetInstaller(web_contents, expand_sheet);
   }
-
-  InstallableAmbientBadgeInfoBarDelegate::Create(
-      web_contents, weak_client, app_name, primary_icon,
-      is_primary_icon_maskable, start_url);
+  return true;
 }
 
 PwaBottomSheetController::PwaBottomSheetController(
@@ -98,21 +101,43 @@ PwaBottomSheetController::PwaBottomSheetController(
     const SkBitmap& primary_icon,
     const bool is_primary_icon_maskable,
     const GURL& start_url,
-    const std::map<GURL, SkBitmap>& screenshots,
+    const std::vector<SkBitmap>& screenshots,
     const base::string16& description,
-    const std::vector<base::string16>& categories,
-    bool show_expanded)
+    std::unique_ptr<AddToHomescreenParams> a2hs_params,
+    base::RepeatingCallback<void(AddToHomescreenInstaller::Event,
+                                 const AddToHomescreenParams&)>
+        a2hs_event_callback)
     : app_name_(app_name),
       primary_icon_(primary_icon),
       is_primary_icon_maskable_(is_primary_icon_maskable),
       start_url_(start_url),
       screenshots_(screenshots),
       description_(description),
-      categories_(categories),
-      show_expanded_(show_expanded) {}
+      a2hs_params_(std::move(a2hs_params)),
+      a2hs_event_callback_(a2hs_event_callback) {}
 
 void PwaBottomSheetController::Destroy(JNIEnv* env) {
+  // When the bottom sheet hasn't been expanded, it is considered equivalent to
+  // the regular install infobar and the expanded state equivalent
+  // to the regular install dialog prompt. Therefore, we send UI_CANCELLED
+  // only if the bottom sheet was ever expanded.
+  if (!install_triggered_ && sheet_expanded_) {
+    a2hs_event_callback_.Run(AddToHomescreenInstaller::Event::UI_CANCELLED,
+                             *a2hs_params_);
+  }
   delete this;
+}
+
+void PwaBottomSheetController::UpdateInstallSource(JNIEnv* env,
+                                                   int install_source) {
+  a2hs_params_->install_source =
+      static_cast<WebappInstallSource>(install_source);
+}
+
+void PwaBottomSheetController::OnSheetExpanded(JNIEnv* env) {
+  a2hs_event_callback_.Run(AddToHomescreenInstaller::Event::UI_SHOWN,
+                           *a2hs_params_);
+  sheet_expanded_ = true;
 }
 
 void PwaBottomSheetController::OnAddToHomescreen(
@@ -122,16 +147,18 @@ void PwaBottomSheetController::OnAddToHomescreen(
       content::WebContents::FromJavaWebContents(jweb_contents);
   if (!web_contents)
     return;
-  AppBannerManagerAndroid* app_banner_manager =
-      AppBannerManagerAndroid::FromWebContents(web_contents);
+  auto* app_banner_manager =
+      ChromeAppBannerManagerAndroid::FromWebContents(web_contents);
   if (!app_banner_manager)
     return;
 
-  app_banner_manager->Install();
+  install_triggered_ = true;
+  app_banner_manager->Install(*a2hs_params_, std::move(a2hs_event_callback_));
 }
 
 void PwaBottomSheetController::ShowBottomSheetInstaller(
-    content::WebContents* web_contents) {
+    content::WebContents* web_contents,
+    bool expand_sheet) {
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jstring> j_user_title =
       ConvertUTF16ToJavaString(env, app_name_);
@@ -143,22 +170,21 @@ void PwaBottomSheetController::ShowBottomSheetInstaller(
   ScopedJavaLocalRef<jstring> j_description =
       ConvertUTF16ToJavaString(env, description_);
 
-  base::string16 category_list =
-      base::JoinString(categories_, ASCIIToUTF16(", "));
-  ScopedJavaLocalRef<jstring> j_categories =
-      ConvertUTF16ToJavaString(env, category_list);
-
   ScopedJavaLocalRef<jobject> j_bitmap =
       gfx::ConvertToJavaBitmap(primary_icon_);
 
   Java_PwaBottomSheetControllerProvider_showPwaBottomSheetInstaller(
       env, reinterpret_cast<intptr_t>(this), web_contents->GetJavaWebContents(),
-      show_expanded_, j_bitmap, is_primary_icon_maskable_, j_user_title, j_url,
-      j_description, j_categories);
+      j_bitmap, is_primary_icon_maskable_, j_user_title, j_url, j_description);
 
-  for (const auto& item : screenshots_) {
-    if (!item.second.isNull())
-      UpdateScreenshot(item.second, web_contents);
+  for (const auto& screenshot : screenshots_) {
+    if (!screenshot.isNull())
+      UpdateScreenshot(screenshot, web_contents);
+  }
+
+  if (expand_sheet) {
+    Java_PwaBottomSheetControllerProvider_expandPwaBottomSheetInstaller(
+        env, web_contents->GetJavaWebContents());
   }
 }
 

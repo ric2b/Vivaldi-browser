@@ -18,7 +18,6 @@ import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.layouts.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
@@ -100,9 +99,6 @@ public class TabListSceneLayer extends SceneLayer {
                     backgroundResourceId, backgroundAlpha, backgroundTopOffset);
         }
 
-        boolean isHTSEnabled =
-                ChromeFeatureList.isEnabled(ChromeFeatureList.HORIZONTAL_TAB_SWITCHER_ANDROID);
-
         final float shadowAlpha = ColorUtils.shouldUseLightForegroundOnBackground(tabListBgColor)
                 ? LayoutTab.SHADOW_ALPHA_ON_DARK_BG
                 : LayoutTab.SHADOW_ALPHA_ON_LIGHT_BG;
@@ -113,7 +109,7 @@ public class TabListSceneLayer extends SceneLayer {
             final float decoration = t.getDecorationAlpha();
 
             int urlBarBackgroundId = R.drawable.modern_location_bar;
-            boolean useIncognitoColors = t.isIncognito() && !isHTSEnabled;
+            boolean useIncognitoColors = t.isIncognito();
 
             if (ChromeApplication.isVivaldi()) urlBarBackgroundId = R.drawable.vivaldi_location_bar;
 
@@ -129,6 +125,9 @@ public class TabListSceneLayer extends SceneLayer {
                     t.isIncognito() ? R.color.tab_back_incognito : R.color.tab_back;
 
             int[] relatedTabIds = getRelatedTabIds(t.getId());
+
+            float toolbarYOffset = browserControls.getTopControlOffset()
+                    + browserControls.getTopControlsMinHeight();
 
             // TODO(dtrainor, clholgat): remove "* dpToPx" once the native part fully supports dp.
             TabListSceneLayerJni.get().putTabLayer(mNativePtr, TabListSceneLayer.this, t.getId(),
@@ -154,8 +153,8 @@ public class TabListSceneLayer extends SceneLayer {
                     t.getBrightness(), t.showToolbar(), defaultThemeColor,
                     t.getToolbarBackgroundColor(), closeButtonColor, t.anonymizeToolbar(),
                     t.isTitleNeeded(), urlBarBackgroundId, t.getTextBoxBackgroundColor(),
-                    t.getToolbarAlpha(), browserControls.getContentOffset(), t.getSideBorderScale(),
-                    t.insetBorderVertical());
+                    t.getToolbarAlpha(), toolbarYOffset, browserControls.getContentOffset(),
+                    t.getSideBorderScale(), t.insetBorderVertical());
         }
         TabListSceneLayerJni.get().finishBuildingFrame(mNativePtr, TabListSceneLayer.this);
     }
@@ -166,8 +165,7 @@ public class TabListSceneLayer extends SceneLayer {
     protected int getTabListBackgroundColor(Context context) {
         int colorId = R.color.default_bg_color;
 
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.HORIZONTAL_TAB_SWITCHER_ANDROID)
-                || TabUiFeatureUtilities.isGridTabSwitcherEnabled()) {
+        if (TabUiFeatureUtilities.isGridTabSwitcherEnabled()) {
             if (mTabModelSelector != null && mTabModelSelector.isIncognitoSelected()) {
                 colorId = R.color.default_bg_color_dark;
             } else {
@@ -229,8 +227,8 @@ public class TabListSceneLayer extends SceneLayer {
                 float saturation, float brightness, boolean showToolbar, int defaultThemeColor,
                 int toolbarBackgroundColor, int closeButtonColor, boolean anonymizeToolbar,
                 boolean showTabTitle, int toolbarTextBoxResource, int toolbarTextBoxBackgroundColor,
-                float toolbarTextBoxAlpha, float contentOffset, float sideBorderScale,
-                boolean insetVerticalBorder);
+                float toolbarTextBoxAlpha, float toolbarYOffset, float contentOffset,
+                float sideBorderScale, boolean insetVerticalBorder);
 
         void putBackgroundLayer(long nativeTabListSceneLayer, TabListSceneLayer caller,
                 int resourceId, float alpha, int topOffset);

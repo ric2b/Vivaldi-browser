@@ -31,7 +31,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.chromium.base.BuildConfig;
-import org.chromium.net.GURLUtils;
+import org.chromium.components.embedder_support.util.UrlConstants;
+import org.vivaldi.browser.common.VivaldiUrlConstants;
 
 /**
  * Represents the view inside the page info popup.
@@ -260,8 +261,9 @@ public class PageInfoView extends FrameLayout implements OnClickListener {
         // NOTE(david@vivaldi.com): This is just a temporary url display fix as we're still using
         // the chrome_scheme urls internally.
         if (BuildConfig.IS_VIVALDI &&
-                GURLUtils.getScheme(params.url.toString()).equals("chrome")) {
-            String url = params.url.toString().replaceFirst("chrome", "vivaldi");
+                params.url.toString().startsWith(UrlConstants.CHROME_URL_SHORT_PREFIX)) {
+            String url = params.url.toString()
+                    .replaceFirst(UrlConstants.CHROME_SCHEME, VivaldiUrlConstants.VIVALDI_SCHEME);
             mUrlTitle.setUrl(url, url.length());
         } else
         mUrlTitle.setUrl(params.url, params.urlOriginLength);

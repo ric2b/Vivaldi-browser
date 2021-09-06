@@ -4,17 +4,18 @@
 
 #include "chrome/browser/ui/webui/settings/chromeos/main_section.h"
 
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/resources/grit/ash_public_unscaled_resources.h"
 #include "base/feature_list.h"
 #include "base/i18n/message_formatter.h"
 #include "base/i18n/number_formatting.h"
 #include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/minimum_version_policy_handler.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/metrics_handler.h"
 #include "chrome/browser/ui/webui/plural_string_handler.h"
@@ -28,7 +29,6 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/os_settings_resources.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -48,7 +48,7 @@ void AddSearchInSettingsStrings(content::WebUIDataSource* html_source) {
       {"searchResultSelected", IDS_OS_SEARCH_RESULT_ROW_A11Y_RESULT_SELECTED},
       {"clearSearch", IDS_CLEAR_SEARCH},
   };
-  AddLocalizedStringsBulk(html_source, kLocalizedStrings);
+  html_source->AddLocalizedStrings(kLocalizedStrings);
 
   html_source->AddString(
       "searchNoOsResultsHelp",
@@ -157,7 +157,7 @@ void MainSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"large", IDS_SETTINGS_LARGE_FONT},
       {"veryLarge", IDS_SETTINGS_VERY_LARGE_FONT},
   };
-  AddLocalizedStringsBulk(html_source, kLocalizedStrings);
+  html_source->AddLocalizedStrings(kLocalizedStrings);
 
   // This handler is for chrome://os-settings.
   html_source->AddBoolean("isOSSettings", true);

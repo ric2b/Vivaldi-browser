@@ -129,6 +129,16 @@ struct ScopedDav1dPictureFree {
   }
 };
 
+// static
+SupportedVideoDecoderConfigs Dav1dVideoDecoder::SupportedConfigs() {
+  return {{/*profile_min=*/AV1PROFILE_PROFILE_MAIN,
+           /*profile_max=*/AV1PROFILE_PROFILE_HIGH,
+           /*coded_size_min=*/kDefaultSwDecodeSizeMin,
+           /*coded_size_max=*/kDefaultSwDecodeSizeMax,
+           /*allow_encrypted=*/false,
+           /*require_encrypted=*/false}};
+}
+
 Dav1dVideoDecoder::Dav1dVideoDecoder(MediaLog* media_log,
                                      OffloadState offload_state)
     : media_log_(media_log),
@@ -143,6 +153,10 @@ Dav1dVideoDecoder::~Dav1dVideoDecoder() {
 
 std::string Dav1dVideoDecoder::GetDisplayName() const {
   return "Dav1dVideoDecoder";
+}
+
+VideoDecoderType Dav1dVideoDecoder::GetDecoderType() const {
+  return VideoDecoderType::kDav1d;
 }
 
 void Dav1dVideoDecoder::Initialize(const VideoDecoderConfig& config,

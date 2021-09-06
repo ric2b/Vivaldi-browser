@@ -1137,6 +1137,8 @@ HTMLElement* CompositeEditCommand::MoveParagraphContentsToNewBlockIfNecessary(
   visible_pos = CreateVisiblePosition(pos);
   visible_paragraph_start = StartOfParagraph(visible_pos);
   visible_paragraph_end = EndOfParagraph(visible_pos);
+  DCHECK_LE(visible_paragraph_start.DeepEquivalent(),
+            visible_paragraph_end.DeepEquivalent());
   MoveParagraphs(visible_paragraph_start, visible_paragraph_end, destination,
                  editing_state);
   if (editing_state->IsAborted())
@@ -1911,8 +1913,10 @@ Position CompositeEditCommand::PositionAvoidingSpecialElementBoundary(
     if (visible_pos.DeepEquivalent() == last_in_anchor.DeepEquivalent()) {
       // Make sure anchors are pushed down before avoiding them so that we don't
       // also avoid structural elements like lists and blocks (5142012).
-      if (original.AnchorNode() != enclosing_anchor &&
-          original.AnchorNode()->parentNode() != enclosing_anchor) {
+      Element* enclosing_block = EnclosingBlock(original.AnchorNode());
+      if (enclosing_block &&
+          enclosing_block->IsDescendantOf(enclosing_anchor)) {
+        // Only push down anchor element if there are block elements inside it.
         PushAnchorElementDown(enclosing_anchor, editing_state);
         if (editing_state->IsAborted())
           return original;
@@ -1940,8 +1944,10 @@ Position CompositeEditCommand::PositionAvoidingSpecialElementBoundary(
     if (visible_pos.DeepEquivalent() == first_in_anchor.DeepEquivalent()) {
       // Make sure anchors are pushed down before avoiding them so that we don't
       // also avoid structural elements like lists and blocks (5142012).
-      if (original.AnchorNode() != enclosing_anchor &&
-          original.AnchorNode()->parentNode() != enclosing_anchor) {
+      Element* enclosing_block = EnclosingBlock(original.AnchorNode());
+      if (enclosing_block &&
+          enclosing_block->IsDescendantOf(enclosing_anchor)) {
+        // Only push down anchor element if there are block elements inside it.
         PushAnchorElementDown(enclosing_anchor, editing_state);
         if (editing_state->IsAborted())
           return original;

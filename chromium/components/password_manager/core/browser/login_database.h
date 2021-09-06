@@ -106,7 +106,7 @@ class LoginDatabase : public PasswordStoreSync::MetadataStore {
 
   // Removes the form with |primary_key| from the list of remembered password
   // forms. Returns true if the form was successfully removed from the database.
-  bool RemoveLoginByPrimaryKey(int primary_key,
+  bool RemoveLoginByPrimaryKey(FormPrimaryKey primary_key,
                                PasswordStoreChangeList* changes)
       WARN_UNUSED_RESULT;
 
@@ -148,10 +148,11 @@ class LoginDatabase : public PasswordStoreSync::MetadataStore {
   FormRetrievalResult GetAllLogins(PrimaryKeyToFormMap* key_to_form_map)
       WARN_UNUSED_RESULT;
 
-  // Gets the complete list of all compromised credentials for the password form
-  // with primary key `parent_key`.
-  std::vector<CompromisedCredentials> GetCompromisedCredentials(
-      FormPrimaryKey parent_key) WARN_UNUSED_RESULT;
+  // Gets list of logins which match |signon_realm| and |username|.
+  FormRetrievalResult GetLoginsBySignonRealmAndUsername(
+      const std::string& signon_realm,
+      const base::string16& username,
+      PrimaryKeyToFormMap& key_to_form_map) WARN_UNUSED_RESULT;
 
   // Gets the complete list of not blocklisted credentials.
   bool GetAutofillableLogins(std::vector<std::unique_ptr<PasswordForm>>* forms)
@@ -357,6 +358,7 @@ class LoginDatabase : public PasswordStoreSync::MetadataStore {
   std::string get_statement_psl_;
   std::string get_statement_federated_;
   std::string get_statement_psl_federated_;
+  std::string get_statement_username_;
   std::string created_statement_;
   std::string blocklisted_statement_;
   std::string encrypted_password_statement_by_id_;

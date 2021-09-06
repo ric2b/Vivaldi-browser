@@ -8,6 +8,7 @@
 <translation id="1088300314857992706"><ph name="USER_EMAIL_ADDRESS" /> estava a utilizar o Chrome</translation>
 <translation id="1097330777386562916">Limpar os cookies e os dados do site quando sair do Chrome</translation>
 <translation id="110877069173485804">Este é o seu Chrome</translation>
+<translation id="1125124144982679672">Quem está a utilizar o Chrome?</translation>
 <translation id="1142745911746664600">Não é possível atualizar o Chrome</translation>
 <translation id="1154147086299354128">&amp;Abrir no Chrome</translation>
 <translation id="123620459398936149">O Chrome OS não conseguiu sincronizar os dados. Atualize a sua frase de acesso de sincronização.</translation>
@@ -17,7 +18,10 @@
 <translation id="1399397803214730675">Este computador já tem uma versão mais recente do Google Chrome. Se o software não estiver a funcionar, desinstale o Google Chrome e tente novamente.</translation>
 <translation id="1434626383986940139">Apps do Chrome para o Canary</translation>
 <translation id="147727933880789532">O Chrome recomenda a desativação desta extensão porque não cumpre atualmente os padrões da Navegação segura melhorada.</translation>
+<translation id="1516530951338665275">O Google Chrome necessita do acesso ao Bluetooth para continuar 
+a sincronização. <ph name="IDS_BLUETOOTH_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK" /></translation>
 <translation id="1553358976309200471">Atualizar o Chrome</translation>
+<translation id="1583073672411044740"><ph name="EXISTING_USER" /> já tem sessão iniciada neste perfil do Chrome. Esta ação cria um novo perfil do Chrome para <ph name="USER_EMAIL_ADDRESS" />.</translation>
 <translation id="1587223624401073077">O Google Chrome está a utilizar a câmara.</translation>
 <translation id="1587325591171447154"><ph name="FILE_NAME" /> é perigoso, por isso o Chrome bloqueou-o.</translation>
 <translation id="1597911401261118146">Para verificar se as suas palavras-passe estão protegidas contra violação de dados e outros problemas de segurança, <ph name="BEGIN_LINK" />inicie sessão no Chrome<ph name="END_LINK" />.</translation>
@@ -85,6 +89,7 @@
 <translation id="3065168410429928842">Separador do Chrome</translation>
 <translation id="3080151273017101988">Continuar a executar aplicações em segundo plano quando o Google Chrome está fechado</translation>
 <translation id="3089968997497233615">Está disponível uma versão nova e mais segura do Google Chrome.</translation>
+<translation id="3100998948628680988">Atribua um nome ao seu perfil do Chrome</translation>
 <translation id="3114643501466072395">Para verificar se as suas outras palavras-passe estão protegidas contra violação de dados e outros problemas de segurança, <ph name="BEGIN_LINK" />inicie sessão no Chrome<ph name="END_LINK" />.</translation>
 <translation id="3127818369811890733">O Chrome OS não conseguiu sincronizar os seus dados.</translation>
 <translation id="3140883423282498090">As alterações terão efeito da próxima vez que voltar a iniciar o Google Chrome.</translation>
@@ -109,6 +114,7 @@
 <translation id="3735758079232443276">A extensão "<ph name="EXTENSION_NAME" />" alterou a página apresentada quando inicia o Chrome.</translation>
 <translation id="3779473566290487688">Para obter atualizações futuras do Google Chrome, precisará do OS X 10.11 ou superior. Este computador está a utilizar o OS X 10.10.</translation>
 <translation id="3780814664026482060">Chrome – <ph name="PAGE_TITLE" /></translation>
+<translation id="3835168907083856002">Esta ação cria um novo perfil do Chrome para <ph name="USER_EMAIL_ADDRESS" />.</translation>
 <translation id="386202838227397562">Feche todas as janelas do Google Chrome e tente novamente.</translation>
 <translation id="3865754807470779944">A versão <ph name="PRODUCT_VERSION" /> do Chrome está instalada.</translation>
 <translation id="3873044882194371212">Abrir link numa janela de nave&amp;gação anónima do Chrome</translation>
@@ -116,7 +122,6 @@
 <translation id="4050175100176540509">Estão disponíveis na versão mais recente melhorias de segurança importantes e novas funcionalidades.</translation>
 <translation id="4053720452172726777">Personalizar e controlar o Google Chrome</translation>
 <translation id="4110895483821904099">Configure o seu novo perfil do Chrome</translation>
-<translation id="4143243756087420366">Nome e imagem do Chrome</translation>
 <translation id="4147555960264124640">Está a iniciar sessão com uma conta gerida e a permitir que o gestor controle o seu perfil do Google Chrome. Os seus dados do Chrome, como aplicações, marcadores, histórico, palavras-passe e outras definições, ficarão associados definitivamente a <ph name="USER_NAME" />. Poderá eliminar estes dados através do Painel de Controlo das Contas Google, mas não poderá associá-los a outra conta. <ph name="LEARN_MORE" /></translation>
 <translation id="4149882025268051530">Houve uma falha no programa de instalação ao descompactar o arquivo. Descarregue de novo o Google Chrome.</translation>
 <translation id="4191857738314598978">{0,plural, =1{Reinicie o Chrome dentro de um dia}other{Reinicie o Chrome dentro de # dias}}</translation>
@@ -145,7 +150,6 @@
 <translation id="4633000520311261472">Para tornar o Chrome mais seguro, desativámos algumas extensões que não estão listadas na <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> e é possível que tenham sido adicionadas sem o seu conhecimento.</translation>
 <translation id="4666328473657283332">Para aceder aos seus itens do Chrome em todos os seus dispositivos, inicie sessão para ativar a sincronização.</translation>
 <translation id="4728575227883772061">Houve uma falha na instalação devido a um erro não especificado. Se o Google Chrome estiver atualmente em execução, feche-o e tente de novo.</translation>
-<translation id="4750550185319565338">Reinicie o Chrome para ativar o <ph name="PLUGIN_NAME" /></translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
 <translation id="4771048833395599659">Este ficheiro pode ser perigoso. Como tal, o Chrome bloqueou-o.</translation>
 <translation id="479167709087336770">Utiliza o mesmo corretor ortográfico utilizado na Pesquisa Google. O texto que introduzir no navegador é enviado à Google. Pode alterar este comportamento nas definições.</translation>
@@ -167,10 +171,9 @@
 <translation id="5386244825306882791">Também controla a página apresentada quando inicia o Chrome ou pesquisa a partir da Caixa geral.</translation>
 <translation id="5394833366792865639">Partilhe um separador do Chrome</translation>
 <translation id="5430073640787465221">O ficheiro de preferências está danificado ou não é válido. O Google Chrome não consegue recuperar as suas definições.</translation>
+<translation id="5434383153637353914">Esta página permite-lhe gerir Contas Google com sessão iniciada. Estas contas estarão disponíveis no navegador Chrome e nas apps da Play Store, bem como em serviços como o Gmail, o Drive e o YouTube. <ph name="LINK_BEGIN" />Saiba mais<ph name="LINK_END" /></translation>
 <translation id="556024056938947818">O Google Chrome está a tentar mostrar palavras-passe.</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
-<translation id="5655746611259367388">Pode gerir esta e outras Contas Google que adicionou para <ph name="USER_NAME" /> num só local nas <ph name="LINK_BEGIN" />Definições<ph name="LINK_END" />.
-          As autorizações que concedeu aos Websites no navegador Chrome e nas apps do Google Play podem aplicar-se a todas as contas.</translation>
 <translation id="5657226924540934362">Se não encontrar uma definição nesta página, procure nas <ph name="LINK_BEGIN" />
       Definições do Chrome OS<ph name="LINK_END" />.</translation>
 <translation id="565744775970812598"><ph name="FILE_NAME" /> pode ser perigoso, por isso o Chrome bloqueou-o.</translation>
@@ -179,6 +182,7 @@
 <translation id="5690427481109656848">Google LLC</translation>
 <translation id="5715063361988620182">{SECONDS,plural, =1{O Google Chrome será reiniciado dentro de 1 segundo}other{O Google Chrome será reiniciado dentro de # segundos}}</translation>
 <translation id="573759479754913123">Acerca do Chrome OS</translation>
+<translation id="5756509061973259733">Já existe um perfil do Chrome com esta conta neste dispositivo.</translation>
 <translation id="5795887333006832406"><ph name="PAGE_TITLE" /> – Google Chrome Canary</translation>
 <translation id="5804318322022881572">Não foi possível iniciar o Chrome. Tente novamente.</translation>
 <translation id="5867197326698922595">O Google Chrome está a tentar editar palavras-passe.</translation>
@@ -251,7 +255,6 @@
 <translation id="7930071585467473040">O Google Chrome está a tentar copiar palavras-passe.</translation>
 <translation id="7962410387636238736">Este computador deixará de receber atualizações do Google Chrome, uma vez que o Windows XP e o Windows Vista já não são suportados.</translation>
 <translation id="8008534537613507642">Reinstalar Chrome</translation>
-<translation id="8009904340233602924">Utilizar o Chrome sem uma conta</translation>
 <translation id="8013993649590906847">Se uma imagem não tiver uma descrição útil, o Chrome tenta fornecer uma. Para criar as descrições, são enviadas imagens para a Google.</translation>
 <translation id="8129812357326543296">Acerca do &amp;Google Chrome</translation>
 <translation id="8255190535488645436">O Google Chrome está a utilizar a câmara e o microfone.</translation>
@@ -292,6 +295,5 @@
 <translation id="9138603949443464873">Para aplicar as alterações, reinicie o Chrome.</translation>
 <translation id="919706545465235479">Atualize o Chrome para iniciar a sincronização</translation>
 <translation id="940313311831216333">Para aceder aos seus itens do Chrome em todos os seus dispositivos, inicie sessão e, em seguida, ative a sincronização.</translation>
-<translation id="94743460404517794">Se tiver várias Contas Google, pode adicioná-las ao dispositivo <ph name="DEVICE_TYPE" />. As suas contas estarão disponíveis no navegador Chrome e na Play Store, bem como em serviços como o Gmail, o Drive e o YouTube. <ph name="LINK_BEGIN" />Saiba mais<ph name="LINK_END" /></translation>
 <translation id="989369509083708165">O Google Chrome é o seu navegador predefinido</translation>
 </translationbundle>

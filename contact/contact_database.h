@@ -45,14 +45,12 @@ class ContactDatabase : public ContactTable,
   // public ContactTable,
   // public RecurrrenceTable {
  public:
-  ContactDatabase() {}
-
+  ContactDatabase();
   ~ContactDatabase() override;
 
   // Call before Init() to set the error callback to be used for the
   // underlying database connection.
-  void set_error_callback(
-      const sql::Database::ErrorCallback& error_callback) {
+  void set_error_callback(const sql::Database::ErrorCallback& error_callback) {
     db_.set_error_callback(error_callback);
   }
 

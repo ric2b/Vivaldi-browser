@@ -10,6 +10,7 @@
 #include "chrome/browser/apps/app_service/app_icon_factory.h"
 #include "chrome/browser/apps/app_service/menu_util.h"
 #include "chrome/browser/chromeos/borealis/borealis_app_launcher.h"
+#include "chrome/browser/chromeos/borealis/borealis_app_uninstaller.h"
 #include "chrome/browser/chromeos/borealis/borealis_context_manager.h"
 #include "chrome/browser/chromeos/borealis/borealis_features.h"
 #include "chrome/browser/chromeos/borealis/borealis_service.h"
@@ -149,7 +150,8 @@ void BorealisApps::Connect(
 
   mojo::Remote<apps::mojom::Subscriber> subscriber(
       std::move(subscriber_remote));
-  subscriber->OnApps(std::move(apps));
+  subscriber->OnApps(std::move(apps), apps::mojom::AppType::kBorealis,
+                     true /* should_notify_initialized */);
   subscribers_.Add(std::move(subscriber));
 }
 
@@ -168,9 +170,18 @@ void BorealisApps::LoadIcon(const std::string& app_id,
 void BorealisApps::Launch(const std::string& app_id,
                           int32_t event_flags,
                           apps::mojom::LaunchSource launch_source,
-                          int64_t display_id) {
+                          apps::mojom::WindowInfoPtr window_info) {
   borealis::BorealisService::GetForProfile(profile_)->AppLauncher().Launch(
       app_id, base::DoNothing());
+}
+
+void BorealisApps::Uninstall(const std::string& app_id,
+                             apps::mojom::UninstallSource uninstall_source,
+                             bool clear_site_data,
+                             bool report_abuse) {
+  borealis::BorealisService::GetForProfile(profile_)
+      ->AppUninstaller()
+      .Uninstall(app_id, base::DoNothing());
 }
 
 void BorealisApps::GetMenuModel(const std::string& app_id,
@@ -178,6 +189,14 @@ void BorealisApps::GetMenuModel(const std::string& app_id,
                                 int64_t display_id,
                                 GetMenuModelCallback callback) {
   apps::mojom::MenuItemsPtr menu_items = apps::mojom::MenuItems::New();
+
+  // TODO(b/171353248): Uninstall for individual apps (not just the parent one).
+  if (app_id == borealis::kBorealisAppId &&
+      borealis::BorealisService::GetForProfile(profile_)
+          ->Features()
+          .IsEnabled()) {
+    AddCommandItem(ash::UNINSTALL, IDS_APP_LIST_UNINSTALL_ITEM, &menu_items);
+  }
 
   // TODO(b/170677773): Show shutdown in another app.
   if (app_id == borealis::kBorealisAppId &&

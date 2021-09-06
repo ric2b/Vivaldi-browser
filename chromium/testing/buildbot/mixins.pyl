@@ -314,6 +314,13 @@
       'enable': True,
     },
   },
+  'femu-additional-ram': {
+    '$mixin_append': {
+      'args': [
+        '--ram-size-mb=16384',
+      ],
+    },
+  },
   'flame': {
     # Pixel 4
     'swarming': {
@@ -340,6 +347,14 @@
         'device_type': 'foster',
         'os': 'Android',
       },
+    },
+  },
+  'fuchsia-code-coverage': {
+    '$mixin_append': {
+      'args': [
+        '--code-coverage',
+        '--code-coverage-dir=${ISOLATED_OUTDIR}'
+      ],
     },
   },
   'fuchsia_runner_logs': {
@@ -429,15 +444,6 @@
     'swarming': {
       'dimensions': {
         'os': 'Ubuntu-16.04',
-      },
-    },
-  },
-  'linux_amd_r7_240': {
-    'swarming': {
-      'dimensions': {
-        'gpu': '1002:6613',
-        'os': 'Ubuntu',
-        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -553,6 +559,13 @@
     'swarming': {
       'dimensions': {
         'os': 'Mac-10.15',
+      },
+    },
+  },
+  'mac_11': {
+    'swarming': {
+      'dimensions': {
+        'os': 'Mac-11.0|Mac-10.16',
       },
     },
   },
@@ -697,7 +710,7 @@
         {
           "cipd_package": 'infra/tools/mac_toolchain/${platform}',
           'location': '.',
-          'revision': 'git_revision:796d2b92cff93fc2059623ce0a66284373ceea0a',
+          'revision': 'git_revision:8811b82233df02ee372cae1e19e379ca8c6a2776',
         },
       ],
     },
@@ -1067,8 +1080,8 @@
       ],
     },
   },
-  # (default) xcode 12 gm seed
-  'xcode_12a7209': {
+  # (default in other projects) xcode 12.0 gm seed
+    'xcode_12a7209': {
     '$mixin_append': {
       'args': [
         '--xcode-build-version',
@@ -1084,18 +1097,18 @@
       ],
     },
   },
-  # latest Xcode 12 beta version.
-  'xcode_12c33': {
+  # (default in Chromium iOS) xcode 12.4 gm seed
+  'xcode_12d4e': {
     '$mixin_append': {
       'args': [
         '--xcode-build-version',
-        '12c33'
+        '12d4e'
       ],
     },
     'swarming': {
       'named_caches': [
         {
-          'name': 'xcode_ios_12c33',
+          'name': 'xcode_ios_12d4e',
           'path': 'Xcode.app',
         },
       ],

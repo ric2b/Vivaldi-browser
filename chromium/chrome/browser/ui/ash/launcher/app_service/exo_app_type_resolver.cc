@@ -8,7 +8,9 @@
 #include "base/strings/string_piece.h"
 #include "chrome/browser/chromeos/borealis/borealis_window_manager.h"
 #include "chromeos/crosapi/cpp/crosapi_constants.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "components/arc/arc_util.h"
+#include "components/exo/permission.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/base/class_property.h"
 
@@ -29,6 +31,11 @@ void ExoAppTypeResolver::PopulateProperties(
   if (IsLacrosAppId(app_id)) {
     out_properties_container.SetProperty(
         aura::client::kAppType, static_cast<int>(ash::AppType::LACROS));
+    // Lacros is trusted not to abuse window activation, so grant it a
+    // non-expiring permission to activate.
+    out_properties_container.SetProperty(
+        exo::kPermissionKey,
+        new exo::Permission(exo::Permission::Capability::kActivate));
   } else if (arc::GetTaskIdFromWindowAppId(app_id) != arc::kNoTaskId) {
     out_properties_container.SetProperty(
         aura::client::kAppType, static_cast<int>(ash::AppType::ARC_APP));
@@ -37,5 +44,9 @@ void ExoAppTypeResolver::PopulateProperties(
     // TODO(b/165865831): Stop using CROSTINI_APP for borealis windows.
     out_properties_container.SetProperty(
         aura::client::kAppType, static_cast<int>(ash::AppType::CROSTINI_APP));
+
+    // Auto-maximize causes compatibility issues, and we don't need it anyway.
+    out_properties_container.SetProperty(chromeos::kAutoMaximizeXdgShellEnabled,
+                                         false);
   }
 }

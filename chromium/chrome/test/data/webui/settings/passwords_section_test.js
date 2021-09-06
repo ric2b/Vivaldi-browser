@@ -29,7 +29,12 @@ const PasswordCheckState = chrome.passwordsPrivate.PasswordCheckState;
  * @private
  */
 function validateMultiStorePasswordList(passwordsSection, expectedPasswords) {
-  assertDeepEquals(expectedPasswords, passwordsSection.$.passwordList.items);
+  // `passwordList.items` will always contain all items, even when there is a
+  // filter to be applied. Thus apply `passwordList.filter` to obtain the list
+  // of items that are user visible.
+  const passwordList = passwordsSection.$.passwordList;
+  assertDeepEquals(
+      expectedPasswords, passwordList.items.filter(passwordList.filter));
   const listItems =
       passwordsSection.shadowRoot.querySelectorAll('password-list-item');
   for (let index = 0; index < expectedPasswords.length; ++index) {
@@ -239,6 +244,7 @@ async function openPasswordEditDialogHelper(
   passwordListItem.$$('#showPasswordButton').click();
   flush();
   await passwordManager.whenCalled('requestPlaintextPassword');
+  passwordManager.resetResolver('requestPlaintextPassword');
   flush();
 
   assertEquals('text', passwordListItem.$$('#password').type);
@@ -252,11 +258,10 @@ async function openPasswordEditDialogHelper(
   flush();
   if (isEditDialog) {
     await passwordManager.whenCalled('requestPlaintextPassword');
+    passwordManager.resetResolver('requestPlaintextPassword');
     flush();
-  }
-
-  // Verify that list item password is hidden.
-  if (!isEditDialog) {
+  } else {
+    // Verify that list item password is hidden.
     assertEquals('', passwordListItem.entry.password);
   }
   assertEquals('password', passwordListItem.$$('#password').type);
@@ -275,6 +280,7 @@ async function openPasswordEditDialogHelper(
   flush();
   if (!isEditDialog) {
     await passwordManager.whenCalled('requestPlaintextPassword');
+    passwordManager.resetResolver('requestPlaintextPassword');
     flush();
   }
 
@@ -467,6 +473,7 @@ suite('PasswordsSection', function() {
     passwordListItems[0].$$('#showPasswordButton').click();
     flush();
     await passwordManager.whenCalled('requestPlaintextPassword');
+    passwordManager.resetResolver('requestPlaintextPassword');
     flush();
 
     passwordListItems[1].$$('#showPasswordButton').click();

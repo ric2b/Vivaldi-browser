@@ -70,6 +70,7 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ApplicationStatus.ActivityStateListener;
+import org.chromium.base.IntentUtils;
 import org.chromium.base.ObserverList.RewindableIterator;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordHistogram;
@@ -82,6 +83,7 @@ import org.chromium.base.test.util.CriteriaNotSatisfiedException;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
+import org.chromium.base.test.util.ScalableTimeout;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -89,6 +91,7 @@ import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.TabsOpenedFromExternalAppTest;
 import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.app.metrics.LaunchCauseMetrics;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider.CustomTabsUiType;
 import org.chromium.chrome.browser.browserservices.SessionDataHolder;
@@ -105,7 +108,6 @@ import org.chromium.chrome.browser.history.BrowsingHistoryBridge;
 import org.chromium.chrome.browser.history.HistoryItem;
 import org.chromium.chrome.browser.history.TestBrowsingHistoryObserver;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
-import org.chromium.chrome.browser.metrics.LaunchCauseMetrics;
 import org.chromium.chrome.browser.metrics.PageLoadMetrics;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
@@ -327,8 +329,8 @@ public class CustomTabActivityTest {
 
     private Bundle makeBottomBarBundle(int id, Bitmap icon, String description) {
         Bundle bundle = new Bundle();
-        PendingIntent pi = PendingIntent.getBroadcast(
-                InstrumentationRegistry.getTargetContext(), 0, new Intent(), 0);
+        PendingIntent pi = PendingIntent.getBroadcast(InstrumentationRegistry.getTargetContext(), 0,
+                new Intent(), IntentUtils.getPendingIntentMutabilityFlag(true));
 
         bundle.putInt(CustomTabsIntent.KEY_ID, sIdToIncrement++);
         bundle.putString(CustomTabsIntent.KEY_DESCRIPTION, description);
@@ -780,7 +782,7 @@ public class CustomTabActivityTest {
         IntentFilter filter = new IntentFilter(Intent.ACTION_VIEW);
         filter.addDataScheme(Uri.parse(mTestServer.getURL("/")).getScheme());
         final ActivityMonitor monitor =
-                InstrumentationRegistry.getInstrumentation().addMonitor(filter, null, true);
+                InstrumentationRegistry.getInstrumentation().addMonitor(filter, null, false);
         openAppMenuAndAssertMenuShown();
         PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
             MenuItem item =
@@ -789,15 +791,18 @@ public class CustomTabActivityTest {
             Assert.assertNotNull(item);
             getActivity().onMenuOrKeyboardAction(R.id.open_in_browser_id, false);
         });
-        CriteriaHelper.pollInstrumentationThread(() -> {
-            return InstrumentationRegistry.getInstrumentation().checkMonitorHit(monitor, 1);
-        });
+        final Activity activity =
+                monitor.waitForActivityWithTimeout(CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL);
 
         callbackTriggered.waitForCallback(0);
-        // No additional LaunchCauses should have been recorded.
-        assertEquals(1,
-                RecordHistogram.getHistogramTotalCountForTesting(
-                        LaunchCauseMetrics.LAUNCH_CAUSE_HISTOGRAM));
+
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            Criteria.checkThat(RecordHistogram.getHistogramValueCountForTesting(
+                                       LaunchCauseMetrics.LAUNCH_CAUSE_HISTOGRAM,
+                                       LaunchCauseMetrics.LaunchCause.OPEN_IN_BROWSER_FROM_MENU),
+                    Matchers.is(1));
+        }, ScalableTimeout.scaleTimeout(5000L), CriteriaHelper.DEFAULT_POLLING_INTERVAL);
+        activity.finish();
     }
 
     /**
@@ -812,10 +817,10 @@ public class CustomTabActivityTest {
                         LaunchCauseMetrics.LAUNCH_CAUSE_HISTOGRAM,
                         LaunchCauseMetrics.LaunchCause.CUSTOM_TAB));
         reparentAndVerifyTab();
-        // No additional LaunchCauses should have been recorded.
         assertEquals(1,
-                RecordHistogram.getHistogramTotalCountForTesting(
-                        LaunchCauseMetrics.LAUNCH_CAUSE_HISTOGRAM));
+                RecordHistogram.getHistogramValueCountForTesting(
+                        LaunchCauseMetrics.LAUNCH_CAUSE_HISTOGRAM,
+                        LaunchCauseMetrics.LaunchCause.OPEN_IN_BROWSER_FROM_MENU));
     }
 
     /**
@@ -963,13 +968,15 @@ public class CustomTabActivityTest {
         Assert.assertTrue(IntentHandler.wasIntentSenderChrome(intent));
 
         ArrayList<Bundle> toolbarItems = new ArrayList<>(2);
-        final PendingIntent pi1 = PendingIntent.getBroadcast(
-                InstrumentationRegistry.getTargetContext(), 0, new Intent(), 0);
+        final PendingIntent pi1 =
+                PendingIntent.getBroadcast(InstrumentationRegistry.getTargetContext(), 0,
+                        new Intent(), IntentUtils.getPendingIntentMutabilityFlag(true));
         final OnFinishedForTest onFinished1 = new OnFinishedForTest(pi1);
         toolbarItems.add(CustomTabsTestUtils.makeToolbarItemBundle(
                 expectedIcon1, "Good test", pi1, sIdToIncrement++));
-        final PendingIntent pi2 = PendingIntent.getBroadcast(
-                InstrumentationRegistry.getTargetContext(), 1, new Intent(), 0);
+        final PendingIntent pi2 =
+                PendingIntent.getBroadcast(InstrumentationRegistry.getTargetContext(), 1,
+                        new Intent(), IntentUtils.getPendingIntentMutabilityFlag(true));
         Assert.assertThat(pi2, not(equalTo(pi1)));
         final OnFinishedForTest onFinished2 = new OnFinishedForTest(pi2);
         toolbarItems.add(CustomTabsTestUtils.makeToolbarItemBundle(
@@ -1110,8 +1117,8 @@ public class CustomTabActivityTest {
         remoteViews.setImageViewResource(R.id.icon, R.drawable.ic_email_googblue_36dp);
         intent.putExtra(CustomTabsIntent.EXTRA_REMOTEVIEWS, remoteViews);
         intent.putExtra(CustomTabsIntent.EXTRA_REMOTEVIEWS_VIEW_IDS, new int[] {R.id.icon});
-        PendingIntent pi2 = PendingIntent.getBroadcast(
-                InstrumentationRegistry.getTargetContext(), 0, new Intent(), 0);
+        PendingIntent pi2 = PendingIntent.getBroadcast(InstrumentationRegistry.getTargetContext(),
+                0, new Intent(), IntentUtils.getPendingIntentMutabilityFlag(true));
         intent.putExtra(CustomTabsIntent.EXTRA_REMOTEVIEWS_PENDINGINTENT, pi2);
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
         mScreenShooter.shoot("Remote Views");
@@ -1195,6 +1202,7 @@ public class CustomTabActivityTest {
 
     @Test
     @SmallTest
+    @DisabledTest(message = "https://crbug.com/1148544")
     public void testCreateNewTab() throws Exception {
         launchIntentThatOpensPopup(null);
     }
@@ -1868,6 +1876,7 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
+    @DisabledTest(message = "https://crbug.com/1148544")
     public void testHiddenTabAndChangingFragmentDontWait() throws Exception {
         startHiddenTabAndChangeFragment(true, false);
     }
@@ -2366,6 +2375,7 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     @EnableFeatures({ChromeFeatureList.OMNIBOX_HIDE_VISITS_FROM_CCT})
+    @DisabledTest(message = "https://crbug.com/1148544")
     public void testOmniboxHideVisitsFromCctTransitionAppliesToPopups() throws Exception {
         Bundle extras = new Bundle();
         extras.putBoolean(
@@ -2788,6 +2798,7 @@ public class CustomTabActivityTest {
 
     @Test
     @SmallTest
+    @DisabledTest(message = "https://crbug.com/1148544")
     public void closeButton_navigatesToLandingPage() throws TimeoutException {
         Context context = InstrumentationRegistry.getInstrumentation()
                 .getTargetContext()
@@ -2816,6 +2827,7 @@ public class CustomTabActivityTest {
 
     @Test
     @SmallTest
+    @DisabledTest(message = "https://crbug.com/1148544")
     public void closeButton_closesActivityIfNoLandingPage() throws TimeoutException {
         Context context = InstrumentationRegistry.getInstrumentation()
                 .getTargetContext()

@@ -10,6 +10,7 @@
 
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "base/callback.h"
 #include "base/containers/flat_map.h"
 #include "base/feature_list.h"
@@ -19,15 +20,14 @@
 #include "base/process/process_handle.h"
 #include "base/strings/string_util.h"
 #include "base/system/sys_info.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/crosapi/cpp/crosapi_constants.h"
 #include "chromeos/crosapi/mojom/cert_database.mojom.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
@@ -93,42 +93,11 @@ void AddVersion(InterfaceVersions* map) {
   (*map)[T::Uuid_] = T::Version_;
 }
 
-mojom::LacrosInitParamsPtr GetLacrosInitParams(
-    EnvironmentProvider* environment_provider) {
-  auto params = mojom::LacrosInitParams::New();
-  params->ash_chrome_service_version =
-      crosapi::mojom::AshChromeService::Version_;
-  params->deprecated_ash_metrics_enabled_has_value = true;
-  PrefService* local_state = g_browser_process->local_state();
-  params->ash_metrics_enabled =
-      local_state->GetBoolean(metrics::prefs::kMetricsReportingEnabled);
-  params->ash_metrics_managed =
-      local_state->IsManagedPreference(metrics::prefs::kMetricsReportingEnabled)
-          ? mojom::MetricsReportingManaged::kManaged
-          : mojom::MetricsReportingManaged::kNotManaged;
-
-  params->session_type = environment_provider->GetSessionType();
-  params->device_mode = environment_provider->GetDeviceMode();
-  params->interface_versions = GetInterfaceVersions();
-  params->default_paths = environment_provider->GetDefaultPaths();
-  params->device_account_gaia_id =
-      environment_provider->GetDeviceAccountGaiaId();
-  // TODO(crbug.com/1093194): This should be updated to a new value when
-  // the long term fix is made in ash-chrome, atomically.
-  params->exo_ime_support =
-      crosapi::mojom::ExoImeSupport::kConsumedByImeWorkaround;
-  params->cros_user_id_hash = chromeos::ProfileHelper::GetUserIdHashFromProfile(
-      ProfileManager::GetPrimaryUserProfile());
-  params->device_account_policy = GetDeviceAccountPolicy(environment_provider);
-
-  return params;
-}
-
 }  // namespace
 
 // When this feature is enabled, Lacros will be available on stable channel.
 const base::Feature kLacrosAllowOnStableChannel{
-    "LacrosAllowOnStableChannel", base::FEATURE_DISABLED_BY_DEFAULT};
+    "LacrosAllowOnStableChannel", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const char kLacrosStabilitySwitch[] = "lacros-stability";
 const char kLacrosStabilityLessStable[] = "less-stable";
@@ -207,6 +176,10 @@ void SetLacrosEnabledForTest(bool force_enabled) {
   g_lacros_enabled_for_test = force_enabled;
 }
 
+bool IsLacrosAllowedToLaunch() {
+  return user_manager::UserManager::Get()->GetLoggedInUsers().size() <= 1;
+}
+
 bool IsLacrosWindow(const aura::Window* window) {
   const std::string* app_id = exo::GetShellApplicationId(window);
   if (!app_id)
@@ -216,13 +189,15 @@ bool IsLacrosWindow(const aura::Window* window) {
 
 base::flat_map<base::Token, uint32_t> GetInterfaceVersions() {
   static_assert(
-      crosapi::mojom::AshChromeService::Version_ == 12,
+      crosapi::mojom::Crosapi::Version_ == 15,
       "if you add a new crosapi, please add it to the version map here");
   InterfaceVersions versions;
+  AddVersion<chromeos::sensors::mojom::SensorHalClient>(&versions);
   AddVersion<crosapi::mojom::AccountManager>(&versions);
-  AddVersion<crosapi::mojom::AshChromeService>(&versions);
+  AddVersion<crosapi::mojom::BrowserServiceHost>(&versions);
   AddVersion<crosapi::mojom::CertDatabase>(&versions);
   AddVersion<crosapi::mojom::Clipboard>(&versions);
+  AddVersion<crosapi::mojom::Crosapi>(&versions);
   AddVersion<crosapi::mojom::DeviceAttributes>(&versions);
   AddVersion<crosapi::mojom::Feedback>(&versions);
   AddVersion<crosapi::mojom::FileManager>(&versions);
@@ -233,6 +208,7 @@ base::flat_map<base::Token, uint32_t> GetInterfaceVersions() {
   AddVersion<crosapi::mojom::ScreenManager>(&versions);
   AddVersion<crosapi::mojom::SnapshotCapturer>(&versions);
   AddVersion<crosapi::mojom::TestController>(&versions);
+  AddVersion<crosapi::mojom::UrlHandler>(&versions);
   AddVersion<device::mojom::HidConnection>(&versions);
   AddVersion<device::mojom::HidManager>(&versions);
   AddVersion<media_session::mojom::MediaControllerManager>(&versions);
@@ -241,40 +217,40 @@ base::flat_map<base::Token, uint32_t> GetInterfaceVersions() {
   return versions;
 }
 
-mojo::Remote<crosapi::mojom::LacrosChromeService>
-SendMojoInvitationToLacrosChrome(
-    EnvironmentProvider* environment_provider,
-    mojo::PlatformChannelEndpoint local_endpoint,
-    base::OnceClosure mojo_disconnected_callback,
-    base::OnceCallback<
-        void(mojo::PendingReceiver<crosapi::mojom::AshChromeService>)>
-        ash_chrome_service_callback) {
-  mojo::OutgoingInvitation invitation;
-  mojo::Remote<crosapi::mojom::LacrosChromeService> lacros_chrome_service;
-  lacros_chrome_service.Bind(
-      mojo::PendingRemote<crosapi::mojom::LacrosChromeService>(
-          invitation.AttachMessagePipe(0 /* token */), /*version=*/0));
-  lacros_chrome_service.set_disconnect_handler(
-      std::move(mojo_disconnected_callback));
+mojom::BrowserInitParamsPtr GetBrowserInitParams(
+    EnvironmentProvider* environment_provider) {
+  auto params = mojom::BrowserInitParams::New();
+  params->crosapi_version = crosapi::mojom::Crosapi::Version_;
+  params->deprecated_ash_metrics_enabled_has_value = true;
+  PrefService* local_state = g_browser_process->local_state();
+  params->ash_metrics_enabled =
+      local_state->GetBoolean(metrics::prefs::kMetricsReportingEnabled);
+  params->ash_metrics_managed =
+      local_state->IsManagedPreference(metrics::prefs::kMetricsReportingEnabled)
+          ? mojom::MetricsReportingManaged::kManaged
+          : mojom::MetricsReportingManaged::kNotManaged;
 
-  // This is for backward compatibility.
-  // TODO(crbug.com/1156033): Remove InitDeprecated() invocation when lacros
-  // becomes mature enough.
-  lacros_chrome_service->InitDeprecated(
-      GetLacrosInitParams(environment_provider));
+  params->session_type = environment_provider->GetSessionType();
+  params->device_mode = environment_provider->GetDeviceMode();
+  params->interface_versions = GetInterfaceVersions();
+  params->default_paths = environment_provider->GetDefaultPaths();
+  params->device_account_gaia_id =
+      environment_provider->GetDeviceAccountGaiaId();
+  // TODO(crbug.com/1093194): This should be updated to a new value when
+  // the long term fix is made in ash-chrome, atomically.
+  params->exo_ime_support =
+      crosapi::mojom::ExoImeSupport::kConsumedByImeWorkaround;
+  params->cros_user_id_hash = chromeos::ProfileHelper::GetUserIdHashFromProfile(
+      ProfileManager::GetPrimaryUserProfile());
+  params->device_account_policy = GetDeviceAccountPolicy(environment_provider);
 
-  lacros_chrome_service->RequestAshChromeServiceReceiver(
-      std::move(ash_chrome_service_callback));
-  mojo::OutgoingInvitation::Send(std::move(invitation),
-                                 base::kNullProcessHandle,
-                                 std::move(local_endpoint));
-  return lacros_chrome_service;
+  return params;
 }
 
 base::ScopedFD CreateStartupData(EnvironmentProvider* environment_provider) {
-  auto data = GetLacrosInitParams(environment_provider);
+  auto data = GetBrowserInitParams(environment_provider);
   std::vector<uint8_t> serialized =
-      crosapi::mojom::LacrosInitParams::Serialize(&data);
+      crosapi::mojom::BrowserInitParams::Serialize(&data);
 
   base::ScopedFD fd(memfd_create("startup_data", 0));
   if (!fd.is_valid()) {

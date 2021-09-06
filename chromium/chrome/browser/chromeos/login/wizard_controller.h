@@ -17,42 +17,48 @@
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
-#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
-#include "chrome/browser/chromeos/login/enrollment/auto_enrollment_controller.h"
-#include "chrome/browser/chromeos/login/enrollment/enrollment_screen.h"
+#include "chrome/browser/ash/accessibility/accessibility_manager.h"
+// TODO(https://crbug.com/1164001): move KioskAppType to forward declaration
+// when moved to chrome/browser/ash/.
+#include "chrome/browser/ash/app_mode/kiosk_app_types.h"
+#include "chrome/browser/ash/login/demo_mode/demo_session.h"
+#include "chrome/browser/ash/login/enrollment/auto_enrollment_controller.h"
+#include "chrome/browser/ash/login/enrollment/enrollment_screen.h"
+#include "chrome/browser/ash/login/screens/active_directory_login_screen.h"
+#include "chrome/browser/ash/login/screens/arc_terms_of_service_screen.h"
+#include "chrome/browser/ash/login/screens/assistant_optin_flow_screen.h"
+#include "chrome/browser/ash/login/screens/demo_preferences_screen.h"
+#include "chrome/browser/ash/login/screens/demo_setup_screen.h"
+#include "chrome/browser/ash/login/screens/edu_coexistence_login_screen.h"
+#include "chrome/browser/ash/login/screens/enable_adb_sideloading_screen.h"
+#include "chrome/browser/ash/login/screens/enable_debugging_screen.h"
+#include "chrome/browser/ash/login/screens/eula_screen.h"
+#include "chrome/browser/ash/login/screens/family_link_notice_screen.h"
+#include "chrome/browser/ash/login/screens/fingerprint_setup_screen.h"
+#include "chrome/browser/ash/login/screens/gaia_password_changed_screen.h"
+#include "chrome/browser/ash/login/screens/gaia_screen.h"
+#include "chrome/browser/ash/login/screens/gesture_navigation_screen.h"
+#include "chrome/browser/ash/login/screens/hid_detection_screen.h"
+#include "chrome/browser/ash/login/screens/kiosk_autolaunch_screen.h"
+#include "chrome/browser/ash/login/screens/locale_switch_screen.h"
+#include "chrome/browser/ash/login/screens/marketing_opt_in_screen.h"
+#include "chrome/browser/ash/login/screens/multidevice_setup_screen.h"
+#include "chrome/browser/ash/login/screens/network_screen.h"
+#include "chrome/browser/ash/login/screens/offline_login_screen.h"
+#include "chrome/browser/ash/login/screens/packaged_license_screen.h"
+#include "chrome/browser/ash/login/screens/parental_handoff_screen.h"
+#include "chrome/browser/ash/login/screens/pin_setup_screen.h"
+#include "chrome/browser/ash/login/screens/recommend_apps_screen.h"
+#include "chrome/browser/ash/login/screens/signin_fatal_error_screen.h"
+#include "chrome/browser/ash/login/screens/sync_consent_screen.h"
+#include "chrome/browser/ash/login/screens/terms_of_service_screen.h"
+#include "chrome/browser/ash/login/screens/update_screen.h"
+#include "chrome/browser/ash/login/screens/user_creation_screen.h"
+#include "chrome/browser/ash/login/screens/welcome_screen.h"
 #include "chrome/browser/chromeos/login/screen_manager.h"
-#include "chrome/browser/chromeos/login/screens/active_directory_login_screen.h"
-#include "chrome/browser/chromeos/login/screens/arc_terms_of_service_screen.h"
-#include "chrome/browser/chromeos/login/screens/assistant_optin_flow_screen.h"
-#include "chrome/browser/chromeos/login/screens/demo_preferences_screen.h"
-#include "chrome/browser/chromeos/login/screens/demo_setup_screen.h"
-#include "chrome/browser/chromeos/login/screens/edu_coexistence_login_screen.h"
-#include "chrome/browser/chromeos/login/screens/enable_adb_sideloading_screen.h"
-#include "chrome/browser/chromeos/login/screens/enable_debugging_screen.h"
-#include "chrome/browser/chromeos/login/screens/eula_screen.h"
-#include "chrome/browser/chromeos/login/screens/family_link_notice_screen.h"
-#include "chrome/browser/chromeos/login/screens/fingerprint_setup_screen.h"
-#include "chrome/browser/chromeos/login/screens/gaia_password_changed_screen.h"
-#include "chrome/browser/chromeos/login/screens/gaia_screen.h"
-#include "chrome/browser/chromeos/login/screens/gesture_navigation_screen.h"
-#include "chrome/browser/chromeos/login/screens/hid_detection_screen.h"
-#include "chrome/browser/chromeos/login/screens/kiosk_autolaunch_screen.h"
-#include "chrome/browser/chromeos/login/screens/locale_switch_screen.h"
-#include "chrome/browser/chromeos/login/screens/marketing_opt_in_screen.h"
-#include "chrome/browser/chromeos/login/screens/multidevice_setup_screen.h"
-#include "chrome/browser/chromeos/login/screens/network_screen.h"
-#include "chrome/browser/chromeos/login/screens/offline_login_screen.h"
-#include "chrome/browser/chromeos/login/screens/packaged_license_screen.h"
-#include "chrome/browser/chromeos/login/screens/parental_handoff_screen.h"
-#include "chrome/browser/chromeos/login/screens/pin_setup_screen.h"
-#include "chrome/browser/chromeos/login/screens/recommend_apps_screen.h"
-#include "chrome/browser/chromeos/login/screens/signin_fatal_error_screen.h"
-#include "chrome/browser/chromeos/login/screens/sync_consent_screen.h"
-#include "chrome/browser/chromeos/login/screens/terms_of_service_screen.h"
-#include "chrome/browser/chromeos/login/screens/update_screen.h"
-#include "chrome/browser/chromeos/login/screens/user_creation_screen.h"
-#include "chrome/browser/chromeos/login/screens/welcome_screen.h"
+// TODO(https://crbug.com/1164001): move LoginDisplayHost to forward
+// declaration when moved to chrome/browser/ash/.
+#include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/policy/enrollment_config.h"
 #include "components/account_id/account_id.h"
 
@@ -67,8 +73,6 @@ class NetworkStateHelper;
 class DemoSetupController;
 class ErrorScreen;
 struct Geoposition;
-enum class KioskAppType;
-class LoginDisplayHost;
 class SimpleGeolocationProvider;
 class TimeZoneProvider;
 struct TimeZoneResponseData;
@@ -155,6 +159,10 @@ class WizardController {
   // screens can be skipped.
   void SimulateDemoModeSetupForTesting(
       base::Optional<DemoSession::DemoModeConfig> demo_config = base::nullopt);
+
+  // Stores authorization data that will be used to configure extra auth factors
+  // during user onboarding.
+  void SetAuthSessionForOnboarding(const UserContext& auth_session);
 
   // Advances to login/update screen. Should be used in for testing only.
   void SkipToLoginForTesting();
@@ -403,7 +411,7 @@ class WizardController {
 
   // Returns true if callback has been installed.
   // Returns false if timezone has already been resolved.
-  bool SetOnTimeZoneResolvedForTesting(const base::Closure& callback);
+  bool SetOnTimeZoneResolvedForTesting(base::OnceClosure callback);
 
   // Start the enrollment screen using the config from
   // `prescribed_enrollment_config_`. If `force_interactive` is true,
@@ -496,7 +504,7 @@ class WizardController {
 
   // Tests check result of timezone resolve.
   bool timezone_resolved_ = false;
-  base::Closure on_timezone_resolved_for_testing_;
+  base::OnceClosure on_timezone_resolved_for_testing_;
 
   bool is_initialized_ = false;
 
@@ -508,5 +516,9 @@ class WizardController {
 };
 
 }  // namespace chromeos
+
+// TODO(https://crbug.com/1164001): remove after //chrome/browser/chromeos
+// source migration is finished.
+using ::chromeos::WizardController;
 
 #endif  // CHROME_BROWSER_CHROMEOS_LOGIN_WIZARD_CONTROLLER_H_

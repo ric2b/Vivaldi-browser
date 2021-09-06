@@ -10,17 +10,15 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/path_service.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "chrome/browser/chromeos/crosapi/ash_chrome_service_impl.h"
 #include "chrome/browser/chromeos/crosapi/browser_util.h"
+#include "chrome/browser/chromeos/crosapi/crosapi_manager.h"
+#include "chrome/browser/chromeos/crosapi/environment_provider.h"
 #include "chrome/common/chrome_paths.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "mojo/public/cpp/platform/named_platform_channel.h"
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "mojo/public/cpp/platform/socket_utils_posix.h"
-#include "mojo/public/cpp/system/invitation.h"
 
 namespace crosapi {
 
@@ -97,15 +95,20 @@ void TestMojoConnectionManager::OnTestingSocketAvailable() {
     return;
   }
 
-  // TODO(crbug.com/1124490): Support multiple mojo connections from lacros.
+  mojo::PlatformChannel legacy_channel;
+  CrosapiManager::Get()->SendLegacyInvitation(
+      environment_provider_.get(), legacy_channel.TakeLocalEndpoint(),
+      base::BindOnce([]() {
+        // Called when the Mojo connection to lacros-chrome is disconnected.
+        // It may be "just a Mojo error" or "test is finished".
+        LOG(WARNING) << "Legacy Mojo to lacros-chrome is disconnected.";
+      }));
+
   mojo::PlatformChannel channel;
-  lacros_chrome_service_ = browser_util::SendMojoInvitationToLacrosChrome(
-      environment_provider_.get(), channel.TakeLocalEndpoint(),
-      base::BindOnce(&TestMojoConnectionManager::OnMojoDisconnected,
-                     weak_factory_.GetWeakPtr()),
-      base::BindOnce(
-          &TestMojoConnectionManager::OnAshChromeServiceReceiverReceived,
-          weak_factory_.GetWeakPtr()));
+  CrosapiManager::Get()->SendInvitation(
+      channel.TakeLocalEndpoint(), base::BindOnce([]() {
+        LOG(WARNING) << "Mojo to lacros-chrome is disconnected";
+      }));
 
   base::ScopedFD startup_fd =
       browser_util::CreateStartupData(environment_provider_.get());
@@ -115,8 +118,10 @@ void TestMojoConnectionManager::OnTestingSocketAvailable() {
   }
 
   std::vector<base::ScopedFD> fds;
-  fds.push_back(channel.TakeRemoteEndpoint().TakePlatformHandle().TakeFD());
+  fds.push_back(
+      legacy_channel.TakeRemoteEndpoint().TakePlatformHandle().TakeFD());
   fds.push_back(std::move(startup_fd));
+  fds.push_back(channel.TakeRemoteEndpoint().TakePlatformHandle().TakeFD());
 
   // Version of protocol Chrome is using.
   uint8_t protocol_version = 0;
@@ -127,19 +132,6 @@ void TestMojoConnectionManager::OnTestingSocketAvailable() {
     PLOG(ERROR) << "Failed to send file descriptors to the socket";
     return;
   }
-}
-
-void TestMojoConnectionManager::OnAshChromeServiceReceiverReceived(
-    mojo::PendingReceiver<crosapi::mojom::AshChromeService> pending_receiver) {
-  ash_chrome_service_ =
-      std::make_unique<AshChromeServiceImpl>(std::move(pending_receiver));
-  LOG(INFO) << "Connection to lacros-chrome is established.";
-}
-
-void TestMojoConnectionManager::OnMojoDisconnected() {
-  lacros_chrome_service_.reset();
-  ash_chrome_service_ = nullptr;
-  LOG(WARNING) << "Mojo to lacros-chrome is disconnected.";
 }
 
 }  // namespace crosapi

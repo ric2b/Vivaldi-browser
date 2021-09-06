@@ -93,7 +93,7 @@ def _LoadEnvFromBat(args):
   return variables.decode(errors='ignore')
 
 
-def _LoadToolchainEnv(cpu, sdk_dir, target_store, options):
+def _LoadToolchainEnv(cpu, toolchain_root, sdk_dir, target_store, options):
   """Returns a dictionary with environment variables that must be set while
   running binaries from the toolchain (e.g. INCLUDE and PATH for cl.exe)."""
   # Check if we are running in the SDK command line environment and use
@@ -108,9 +108,8 @@ def _LoadToolchainEnv(cpu, sdk_dir, target_store, options):
       # Old-style paths were relative to the win_sdk\bin directory.
       json_relative_dir = os.path.join(sdk_dir, 'bin')
     else:
-      # New-style paths are relative to the toolchain directory, which is the
-      # parent of the SDK directory.
-      json_relative_dir = os.path.split(sdk_dir)[0]
+      # New-style paths are relative to the toolchain directory.
+      json_relative_dir = toolchain_root
     for k in env:
       entries = [os.path.join(*([json_relative_dir] + e)) for e in env[k]]
       # clang-cl wants INCLUDE to be ;-separated even on non-Windows,
@@ -221,7 +220,7 @@ def main():
                       help="Path to JSON file specifying the hash and URL of "
                            "the managed toolchain to use")
 
-  parser.add_argument("visual_studio_path", help="Path to Visual Studio")
+  parser.add_argument("toolchain_root", help="Path to Visual Studio")
   parser.add_argument("win_sdk_path", help="Path to Windows SDK")
   parser.add_argument("runtime_dirs", help="Path to exectuables")
   parser.add_argument("target_os", help="Target OS")
@@ -243,6 +242,7 @@ def main():
   options.use_managed_toolchain = (options.toolchain_hash or
                     bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', 1))))
 
+  toolchain_root = options.toolchain_root
   win_sdk_path = options.win_sdk_path
   runtime_dirs = options.runtime_dirs
   target_os = options.target_os
@@ -268,10 +268,19 @@ def main():
   # TODO(scottmg|goma): Do we need an equivalent of
   # ninja_use_custom_environment_files?
 
+  def relflag(s):  # Make s relative to builddir when cwd and sdk on same drive.
+    try:
+      return os.path.relpath(s)
+    except ValueError:
+      return s
+
+  def q(s):  # Quote s if it contains spaces or other weird characters.
+    return s if re.match(r'^[a-zA-Z0-9._/\\:-]*$', s) else '"' + s + '"'
+
   for cpu in cpus:
     if cpu == target_cpu:
       # Extract environment variables for subprocesses.
-      env = _LoadToolchainEnv(cpu, win_sdk_path, target_store, options)
+      env = _LoadToolchainEnv(cpu, toolchain_root, win_sdk_path, target_store, options)
       env['PATH'] = runtime_dirs + os.pathsep + env['PATH']
 
       vc_bin_dir = FindFileInEnvList(env, 'PATH', os.pathsep, 'cl.exe')
@@ -283,22 +292,11 @@ def main():
       # The separator for INCLUDE here must match the one used in
       # _LoadToolchainEnv() above.
       include = [p.replace('"', r'\"') for p in env['INCLUDE'].split(';') if p]
-
-      # Make include path relative to builddir when cwd and sdk in same drive.
-      try:
-        include = list(map(os.path.relpath, include))
-      except ValueError:
-        pass
+      include = list(map(relflag, include))
 
       lib = [p.replace('"', r'\"') for p in env['LIB'].split(';') if p]
-      # Make lib path relative to builddir when cwd and sdk in same drive.
-      try:
-        lib = list(map(os.path.relpath, lib))
-      except ValueError:
-        pass
+      lib = list(map(relflag, lib))
 
-      def q(s):  # Quote s if it contains spaces or other weird characters.
-        return s if re.match(r'^[a-zA-Z0-9._/\\:-]*$', s) else '"' + s + '"'
       include_I = ' '.join([q('/I' + i) for i in include])
       include_imsvc = ' '.join([q('-imsvc' + i) for i in include])
       libpath_flags = ' '.join([q('-libpath:' + i) for i in lib])
@@ -319,7 +317,11 @@ def main():
   assert include_I
   print('include_flags_I = ' + gn_helpers.ToGNString(include_I))
   assert include_imsvc
-  print('include_flags_imsvc = ' + gn_helpers.ToGNString(include_imsvc))
+  if bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', 1))) and win_sdk_path:
+    print('include_flags_imsvc = ' +
+          gn_helpers.ToGNString(q('/winsysroot' + relflag(toolchain_root).replace("\\","/"))))
+  else:
+    print('include_flags_imsvc = ' + gn_helpers.ToGNString(include_imsvc))
   print('vc_lib_path = ' + gn_helpers.ToGNString(vc_lib_path))
   # Possible atlmfc library path gets introduced in the future for store thus
   # output result if a result exists.

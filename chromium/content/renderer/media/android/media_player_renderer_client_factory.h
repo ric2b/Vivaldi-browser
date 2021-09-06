@@ -41,8 +41,7 @@ class CONTENT_EXPORT MediaPlayerRendererClientFactory
       media::AudioRendererSink* audio_renderer_sink,
       media::VideoRendererSink* video_renderer_sink,
       media::RequestOverlayInfoCB request_surface_cb,
-      const gfx::ColorSpace& target_color_space,
-      bool use_platform_media_pipeline = false) override;
+      const gfx::ColorSpace& target_color_space) override;
 
   // The MediaPlayerRenderer uses a Type::URL.
   media::MediaResource::Type GetRequiredMediaResourceType() override;

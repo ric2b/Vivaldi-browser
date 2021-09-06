@@ -75,15 +75,6 @@ class TestTitledUrlNode : public TitledUrlNode {
     return {ancestor_title_};
   }
 
-  // <--- Vivaldi
-  const base::string16 GetTitledUrlNodeNickName() const override {
-    return base::string16();
-  }
-  const base::string16 GetTitledUrlNodeDescription() const override {
-    return base::string16();
-  }
-  // Vivaldi --->
-
  private:
   base::string16 title_;
   GURL url_;

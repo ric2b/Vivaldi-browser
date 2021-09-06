@@ -18,6 +18,7 @@
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/app_service_test.h"
+#include "chrome/browser/apps/icon_standardizer.h"
 #include "chrome/browser/chromeos/borealis/borealis_features.h"
 #include "chrome/browser/chromeos/borealis/borealis_service.h"
 #include "chrome/browser/chromeos/borealis/borealis_util.h"
@@ -35,7 +36,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_test_util.h"
 #include "chrome/browser/ui/app_list/chrome_app_list_item.h"
-#include "chrome/browser/ui/app_list/icon_standardizer.h"
 #include "chrome/browser/ui/app_list/internal_app/internal_app_metadata.h"
 #include "chrome/browser/ui/app_list/md_icon_normalizer.h"
 #include "chrome/browser/ui/app_list/test/fake_app_list_model_updater.h"
@@ -274,7 +274,7 @@ class ExtensionAppTest : public AppServiceAppModelBuilderTest {
     run_loop.Run();
 
     if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon)) {
-      output_image_skia = app_list::CreateStandardIconImage(output_image_skia);
+      output_image_skia = apps::CreateStandardIconImage(output_image_skia);
     } else {
       extensions::ChromeAppIcon::ApplyEffects(
           size_in_dip,
@@ -670,6 +670,7 @@ class CrostiniAppTest : public AppServiceAppModelBuilderTest {
   CrostiniAppTest& operator=(const CrostiniAppTest&) = delete;
 
   void SetUp() override {
+    chromeos::DBusThreadManager::Initialize();
     AppServiceAppModelBuilderTest::SetUp();
     test_helper_ = std::make_unique<CrostiniTestHelper>(testing_profile());
     test_helper_->ReInitializeAppServiceIntegration();
@@ -680,6 +681,13 @@ class CrostiniAppTest : public AppServiceAppModelBuilderTest {
     ResetBuilder();
     test_helper_.reset();
     AppListTestBase::TearDown();
+
+    // |profile_| is initialized in AppListTestBase::SetUp but not destroyed in
+    // the ::TearDown method, but we need it to go away before shutting down
+    // DBusThreadManager to ensure all keyed services that might rely on DBus
+    // clients are destroyed.
+    profile_.reset();
+    chromeos::DBusThreadManager::Shutdown();
   }
 
  protected:

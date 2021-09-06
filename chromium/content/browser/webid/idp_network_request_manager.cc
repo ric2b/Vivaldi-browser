@@ -22,7 +22,6 @@ namespace content {
 namespace {
 // TODO(kenrb): These need to be defined in the explainer or draft spec and
 // referenced here.
-constexpr char kWellKnownFilePath[] = ".well-known/webid";
 
 // Well-known configuration keys.
 constexpr char kIdpEndpointKey[] = "idp_endpoint";
@@ -36,7 +35,7 @@ constexpr char kAcceptMimeType[] = "application/json";
 // `Sec-` prefix makes this a forbidden header and cannot be added by
 // JavaScript.
 // See https://fetch.spec.whatwg.org/#forbidden-header-name
-constexpr char kSecWebIDHeader[] = "Sec-WebID";
+constexpr char kSecWebIdHeader[] = "Sec-WebID";
 
 // 1 MiB is an arbitrary upper bound that should account for any reasonable
 // response size that is a part of this protocol.
@@ -81,6 +80,9 @@ scoped_refptr<network::SharedURLLoaderFactory> GetUrlLoaderFactory(
 }  // namespace
 
 // static
+constexpr char IdpNetworkRequestManager::kWellKnownFilePath[];
+
+// static
 std::unique_ptr<IdpNetworkRequestManager> IdpNetworkRequestManager::Create(
     const GURL& provider,
     RenderFrameHost* host) {
@@ -97,7 +99,7 @@ IdpNetworkRequestManager::IdpNetworkRequestManager(const GURL& provider,
 
 IdpNetworkRequestManager::~IdpNetworkRequestManager() = default;
 
-void IdpNetworkRequestManager::FetchIDPWellKnown(
+void IdpNetworkRequestManager::FetchIdpWellKnown(
     FetchWellKnownCallback callback) {
   DCHECK(!url_loader_);
   DCHECK(!idp_well_known_callback_);
@@ -105,7 +107,8 @@ void IdpNetworkRequestManager::FetchIDPWellKnown(
   idp_well_known_callback_ = std::move(callback);
 
   const url::Origin& idp_origin = url::Origin::Create(provider_);
-  GURL target_url = idp_origin.GetURL().Resolve(kWellKnownFilePath);
+  GURL target_url =
+      idp_origin.GetURL().Resolve(IdpNetworkRequestManager::kWellKnownFilePath);
 
   net::NetworkTrafficAnnotationTag traffic_annotation =
       CreateTrafficAnnotation();
@@ -181,7 +184,7 @@ void IdpNetworkRequestManager::SendSigninRequest(
   // This header is present mostly for CSRF resistance, but the value could
   // provide a protocol version. This might change if something more useful
   // is needed.
-  resource_request->headers.SetHeader(kSecWebIDHeader, "1.0");
+  resource_request->headers.SetHeader(kSecWebIdHeader, "1.0");
   resource_request->credentials_mode =
       network::mojom::CredentialsMode::kInclude;
   resource_request->trusted_params = network::ResourceRequest::TrustedParams();
@@ -205,8 +208,9 @@ void IdpNetworkRequestManager::SendSigninRequest(
 void IdpNetworkRequestManager::OnWellKnownLoaded(
     std::unique_ptr<std::string> response_body) {
   int response_code = -1;
-  if (url_loader_->ResponseInfo() && url_loader_->ResponseInfo()->headers)
-    response_code = url_loader_->ResponseInfo()->headers->response_code();
+  auto* response_info = url_loader_->ResponseInfo();
+  if (response_info && response_info->headers)
+    response_code = response_info->headers->response_code();
 
   url_loader_.reset();
 

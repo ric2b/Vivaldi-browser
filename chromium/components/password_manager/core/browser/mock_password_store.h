@@ -68,22 +68,23 @@ class MockPasswordStore : public PasswordStore {
                bool(std::vector<std::unique_ptr<PasswordForm>>*));
   MOCK_METHOD0(DeleteUndecryptableLogins, DatabaseCleanupResult());
   MOCK_METHOD1(NotifyLoginsChanged, void(const PasswordStoreChangeList&));
+  MOCK_METHOD0(NotifyInsecureCredentialsChanged, void());
   MOCK_METHOD0(GetAllSiteStatsImpl, std::vector<InteractionsStats>());
   MOCK_METHOD1(GetSiteStatsImpl,
                std::vector<InteractionsStats>(const GURL& origin_domain));
   MOCK_METHOD1(AddSiteStatsImpl, void(const InteractionsStats&));
   MOCK_METHOD1(RemoveSiteStatsImpl, void(const GURL&));
-  MOCK_METHOD1(AddCompromisedCredentialsImpl,
-               PasswordStoreChangeList(const CompromisedCredentials&));
-  MOCK_METHOD3(RemoveCompromisedCredentialsImpl,
+  MOCK_METHOD1(AddInsecureCredentialImpl,
+               PasswordStoreChangeList(const InsecureCredential&));
+  MOCK_METHOD3(RemoveInsecureCredentialsImpl,
                PasswordStoreChangeList(const std::string&,
                                        const base::string16&,
-                                       RemoveCompromisedCredentialsReason));
-  MOCK_METHOD0(GetAllCompromisedCredentialsImpl,
-               std::vector<CompromisedCredentials>());
+                                       RemoveInsecureCredentialsReason));
+  MOCK_METHOD0(GetAllInsecureCredentialsImpl,
+               std::vector<InsecureCredential>());
   MOCK_METHOD1(
-      GetMatchingCompromisedCredentialsImpl,
-      std::vector<CompromisedCredentials>(const std::string& signon_realm));
+      GetMatchingInsecureCredentialsImpl,
+      std::vector<InsecureCredential>(const std::string& signon_realm));
   MOCK_METHOD3(RemoveCompromisedCredentialsByUrlAndTimeImpl,
                bool(const base::RepeatingCallback<bool(const GURL&)>&,
                     base::Time,
@@ -117,8 +118,9 @@ class MockPasswordStore : public PasswordStore {
   MOCK_METHOD0(CommitTransaction, bool());
   MOCK_METHOD1(ReadAllLogins, FormRetrievalResult(PrimaryKeyToFormMap*));
   MOCK_METHOD1(ReadSecurityIssues,
-               std::vector<CompromisedCredentials>(FormPrimaryKey));
-  MOCK_METHOD1(RemoveLoginByPrimaryKeySync, PasswordStoreChangeList(int));
+               std::vector<InsecureCredential>(FormPrimaryKey));
+  MOCK_METHOD1(RemoveLoginByPrimaryKeySync,
+               PasswordStoreChangeList(FormPrimaryKey));
   MOCK_METHOD0(GetMetadataStore, PasswordStoreSync::MetadataStore*());
   MOCK_CONST_METHOD0(IsAccountStore, bool());
   MOCK_METHOD0(DeleteAndRecreateDatabaseFile, bool());

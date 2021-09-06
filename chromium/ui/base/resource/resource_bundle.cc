@@ -396,22 +396,8 @@ base::FilePath ResourceBundle::GetLocaleFilePath(
 
   base::FilePath locale_file_path;
   if (base::PathService::Get(ui::DIR_LOCALES, &locale_file_path)) {
-#if defined(OS_ANDROID)
-    if (locale_file_path.value().find("chromium_tests") == std::string::npos) {
-      std::string extracted_file_suffix =
-          base::android::BuildInfo::GetInstance()->extracted_file_suffix();
-      locale_file_path = locale_file_path.AppendASCII(
-          app_locale + kPakFileExtension + extracted_file_suffix);
-    } else {
-      // TODO(agrieve): Update tests to not side-load pak files and remove
-      //     this special-case. https://crbug.com/691719
-      locale_file_path =
-          locale_file_path.AppendASCII(app_locale + kPakFileExtension);
-    }
-#else
     locale_file_path =
         locale_file_path.AppendASCII(app_locale + kPakFileExtension);
-#endif
   }
 
   // Note: The delegate GetPathForLocalePack() override is currently only used
@@ -480,6 +466,7 @@ std::string ResourceBundle::LoadLocaleResources(const std::string& pref_locale,
   } else {
     secondary_locale_resources_data_ = std::move(data_pack);
   }
+  loaded_locale_ = pref_locale;
   return app_locale;
 }
 #endif  // defined(OS_ANDROID)
@@ -1111,11 +1098,15 @@ base::string16 ResourceBundle::GetLocalizedStringImpl(int resource_id) const {
       // Fall back on the main data pack (shouldn't be any strings here except
       // in unittests).
       data = GetRawDataResource(resource_id);
+#if defined(OS_FUCHSIA)
+      CHECK(!data.empty());
+#else   // !defined(OS_FUCHSIA)
       if (data.empty()) {
         LOG(WARNING) << "unable to find resource: " << resource_id;
         NOTREACHED();
         return base::string16();
       }
+#endif  // !defined(OS_FUCHSIA)
     }
   }
 

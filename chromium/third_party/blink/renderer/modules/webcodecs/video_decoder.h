@@ -91,6 +91,9 @@ class MODULES_EXPORT VideoDecoder : public DecoderTemplate<VideoDecoderTraits> {
                                          const VideoDecoderConfig*,
                                          ExceptionState&);
 
+  static HardwarePreference GetHardwareAccelerationPreference(
+      const ConfigType& config);
+
   // For use by MediaSource and by ::MakeMediaConfig.
   static CodecConfigEval MakeMediaVideoDecoderConfig(
       const ConfigType& config,
@@ -112,10 +115,19 @@ class MODULES_EXPORT VideoDecoder : public DecoderTemplate<VideoDecoderTraits> {
   media::StatusOr<scoped_refptr<media::DecoderBuffer>> MakeDecoderBuffer(
       const InputType& input) override;
 
+  static ScriptPromise IsAcceleratedConfigSupported(ScriptState* script_state,
+                                                    const VideoDecoderConfig*,
+                                                    ExceptionState&);
+
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
   std::unique_ptr<media::H264ToAnnexBBitstreamConverter> h264_converter_;
   std::unique_ptr<media::mp4::AVCDecoderConfigurationRecord> h264_avcc_;
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
+
+ private:
+  // DecoderTemplate implementation.
+  HardwarePreference GetHardwarePreference(const ConfigType& config) override;
+  void SetHardwarePreference(HardwarePreference preference) override;
 };
 
 }  // namespace blink

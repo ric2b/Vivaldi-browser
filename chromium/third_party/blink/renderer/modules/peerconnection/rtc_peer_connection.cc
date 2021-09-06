@@ -50,12 +50,12 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_void_function.h"
 #include "third_party/blink/renderer/bindings/modules/v8/media_stream_track_or_string.h"
-#include "third_party/blink/renderer/bindings/modules/v8/rtc_ice_candidate_init_or_rtc_ice_candidate.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_media_stream_track.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_answer_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_certificate.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_configuration.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_data_channel_init.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_ice_candidate_init.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_ice_server.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_offer_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_peer_connection_error_callback.h"
@@ -178,17 +178,10 @@ bool CallErrorCallbackIfSignalingStateClosed(
   return false;
 }
 
-bool IsIceCandidateMissingSdp(
-    const RTCIceCandidateInitOrRTCIceCandidate& candidate) {
-  if (candidate.IsRTCIceCandidateInit()) {
-    const RTCIceCandidateInit* ice_candidate_init =
-        candidate.GetAsRTCIceCandidateInit();
-    return ice_candidate_init->sdpMid().IsNull() &&
-           !ice_candidate_init->hasSdpMLineIndexNonNull();
-  }
-
-  DCHECK(candidate.IsRTCIceCandidate());
-  return false;
+bool IsIceCandidateMissingSdpMidAndMLineIndex(
+    const RTCIceCandidateInit* candidate) {
+  return (candidate->sdpMid().IsNull() &&
+          !candidate->hasSdpMLineIndexNonNull());
 }
 
 RTCOfferOptionsPlatform* ConvertToRTCOfferOptionsPlatform(
@@ -214,26 +207,18 @@ RTCAnswerOptionsPlatform* ConvertToRTCAnswerOptionsPlatform(
 
 RTCIceCandidatePlatform* ConvertToRTCIceCandidatePlatform(
     ExecutionContext* context,
-    const RTCIceCandidateInitOrRTCIceCandidate& candidate) {
-  DCHECK(!candidate.IsNull());
-  if (candidate.IsRTCIceCandidateInit()) {
-    const RTCIceCandidateInit* ice_candidate_init =
-        candidate.GetAsRTCIceCandidateInit();
-    // TODO(guidou): Change default value to -1. crbug.com/614958.
-    uint16_t sdp_m_line_index = 0;
-    if (ice_candidate_init->hasSdpMLineIndexNonNull()) {
-      sdp_m_line_index = ice_candidate_init->sdpMLineIndexNonNull();
-    } else {
-      UseCounter::Count(context,
-                        WebFeature::kRTCIceCandidateDefaultSdpMLineIndex);
-    }
-    return MakeGarbageCollected<RTCIceCandidatePlatform>(
-        ice_candidate_init->candidate(), ice_candidate_init->sdpMid(),
-        sdp_m_line_index, ice_candidate_init->usernameFragment());
+    const RTCIceCandidateInit* candidate) {
+  // TODO(guidou): Change default value to -1. crbug.com/614958.
+  uint16_t sdp_m_line_index = 0;
+  if (candidate->hasSdpMLineIndexNonNull()) {
+    sdp_m_line_index = candidate->sdpMLineIndexNonNull();
+  } else {
+    UseCounter::Count(context,
+                      WebFeature::kRTCIceCandidateDefaultSdpMLineIndex);
   }
-
-  DCHECK(candidate.IsRTCIceCandidate());
-  return candidate.GetAsRTCIceCandidate()->PlatformCandidate();
+  return MakeGarbageCollected<RTCIceCandidatePlatform>(
+      candidate->candidate(), candidate->sdpMid(), sdp_m_line_index,
+      candidate->usernameFragment());
 }
 
 enum SdpSemanticRequested {
@@ -324,8 +309,22 @@ webrtc::PeerConnectionInterface::RTCConfiguration ParseConfiguration(
   if (configuration->hasSdpSemantics()) {
     if (configuration->sdpSemantics() == "plan-b") {
       web_configuration.sdp_semantics = webrtc::SdpSemantics::kPlanB;
-      Deprecation::CountDeprecation(
-          context, WebFeature::kRTCPeerConnectionSdpSemanticsPlanB);
+      if (!RuntimeEnabledFeatures::RTCExtendDeadlineForPlanBRemovalEnabled(
+              context)) {
+        // TODO(https://crbug.com/857004): In M93, replace this deprecation
+        // warning with the throwing of an exception (Reverse Origin Trial is
+        // required to continue to use Plan B).
+        Deprecation::CountDeprecation(
+            context, WebFeature::kRTCPeerConnectionSdpSemanticsPlanB);
+      } else {
+        // TODO(https://crbug.com/857004): In M96, replace this deprecation
+        // warning with the throwing of an exception (Reverse Origin Trial has
+        // ended).
+        Deprecation::CountDeprecation(
+            context,
+            WebFeature::
+                kRTCPeerConnectionSdpSemanticsPlanBWithReverseOriginTrial);
+      }
     } else {
       DCHECK_EQ(configuration->sdpSemantics(), "unified-plan");
       web_configuration.sdp_semantics = webrtc::SdpSemantics::kUnifiedPlan;
@@ -776,12 +775,8 @@ RTCPeerConnection::RTCPeerConnection(
       peer_handler_unregistered_(true),
       closed_(true),
       suppress_events_(true),
-      has_data_channels_(false),
       sdp_semantics_(configuration.sdp_semantics),
       sdp_semantics_specified_(sdp_semantics_specified),
-      blink_webrtc_time_diff_(
-          base::TimeTicks::Now() - base::TimeTicks() -
-          base::TimeDelta::FromMicroseconds(rtc::TimeMicros())),
       force_encoded_audio_insertable_streams_(
           force_encoded_audio_insertable_streams),
       force_encoded_video_insertable_streams_(
@@ -1907,18 +1902,13 @@ ScriptPromise RTCPeerConnection::generateCertificate(
 
 ScriptPromise RTCPeerConnection::addIceCandidate(
     ScriptState* script_state,
-    const RTCIceCandidateInitOrRTCIceCandidate& candidate,
+    const RTCIceCandidateInit* candidate,
     ExceptionState& exception_state) {
+  DCHECK(script_state->ContextIsValid());
   if (signaling_state_ ==
       webrtc::PeerConnectionInterface::SignalingState::kClosed) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       kSignalingStateClosedMessage);
-    return ScriptPromise();
-  }
-
-  if (IsIceCandidateMissingSdp(candidate)) {
-    exception_state.ThrowTypeError(
-        "Candidate missing values for both sdpMid and sdpMLineIndex");
     return ScriptPromise();
   }
 
@@ -1927,11 +1917,17 @@ ScriptPromise RTCPeerConnection::addIceCandidate(
                                        candidate);
 
   // Temporary mitigation to avoid throwing an exception when candidate is
-  // empty.
+  // empty or nothing was passed.
   // TODO(crbug.com/978582): Remove this mitigation when the WebRTC layer
-  // handles the empty candidate field correctly.
+  // handles the empty candidate field or the null candidate correctly.
   if (platform_candidate->Candidate().IsEmpty())
     return ScriptPromise::CastUndefined(script_state);
+
+  if (IsIceCandidateMissingSdpMidAndMLineIndex(candidate)) {
+    exception_state.ThrowTypeError(
+        "Candidate missing values for both sdpMid and sdpMLineIndex");
+    return ScriptPromise();
+  }
 
   DisableBackForwardCache(GetExecutionContext());
 
@@ -1945,17 +1941,18 @@ ScriptPromise RTCPeerConnection::addIceCandidate(
 
 ScriptPromise RTCPeerConnection::addIceCandidate(
     ScriptState* script_state,
-    const RTCIceCandidateInitOrRTCIceCandidate& candidate,
+    const RTCIceCandidateInit* candidate,
     V8VoidFunction* success_callback,
     V8RTCPeerConnectionErrorCallback* error_callback,
     ExceptionState& exception_state) {
+  DCHECK(script_state->ContextIsValid());
   DCHECK(success_callback);
   DCHECK(error_callback);
 
   if (CallErrorCallbackIfSignalingStateClosed(signaling_state_, error_callback))
     return ScriptPromise::CastUndefined(script_state);
 
-  if (IsIceCandidateMissingSdp(candidate)) {
+  if (IsIceCandidateMissingSdpMidAndMLineIndex(candidate)) {
     exception_state.ThrowTypeError(
         "Candidate missing values for both sdpMid and sdpMLineIndex");
     return ScriptPromise();
@@ -1968,7 +1965,7 @@ ScriptPromise RTCPeerConnection::addIceCandidate(
   // Temporary mitigation to avoid throwing an exception when candidate is
   // empty.
   // TODO(crbug.com/978582): Remove this mitigation when the WebRTC layer
-  // handles the empty candidate field correctly.
+  // handles the empty candidate field or the null candidate correctly.
   if (platform_candidate->Candidate().IsEmpty())
     return ScriptPromise::CastUndefined(script_state);
 
@@ -2609,7 +2606,6 @@ RTCDataChannel* RTCPeerConnection::createDataChannel(
   }
   auto* channel = MakeGarbageCollected<RTCDataChannel>(
       GetExecutionContext(), std::move(webrtc_channel), peer_handler_.get());
-  has_data_channels_ = true;
 
   return channel;
 }
@@ -2868,7 +2864,7 @@ void RTCPeerConnection::NoteSdpCreated(const RTCSessionDescription& desc) {
 void RTCPeerConnection::OnStreamAddTrack(MediaStream* stream,
                                          MediaStreamTrack* track) {
   ExceptionState exception_state(v8::Isolate::GetCurrent(),
-                                 ExceptionState::kExecutionContext, nullptr,
+                                 ExceptionState::kUnknownContext, nullptr,
                                  nullptr);
   MediaStreamVector streams;
   streams.push_back(stream);
@@ -2884,7 +2880,7 @@ void RTCPeerConnection::OnStreamRemoveTrack(MediaStream* stream,
   auto* sender = FindSenderForTrackAndStream(track, stream);
   if (sender) {
     ExceptionState exception_state(v8::Isolate::GetCurrent(),
-                                   ExceptionState::kExecutionContext, nullptr,
+                                   ExceptionState::kUnknownContext, nullptr,
                                    nullptr);
     removeTrack(sender, exception_state);
     // If removeTrack() failed most likely the connection is closed. The
@@ -3347,7 +3343,6 @@ void RTCPeerConnection::DidAddRemoteDataChannel(
 
   auto* blink_channel = MakeGarbageCollected<RTCDataChannel>(
       GetExecutionContext(), std::move(channel), peer_handler_.get());
-  has_data_channels_ = true;
   blink_channel->SetStateToOpenWithoutEvent();
   MaybeDispatchEvent(MakeGarbageCollected<RTCDataChannelEvent>(
       event_type_names::kDatachannel, blink_channel));
@@ -3680,11 +3675,6 @@ void RTCPeerConnection::Trace(Visitor* visitor) const {
   EventTargetWithInlineData::Trace(visitor);
   ExecutionContextLifecycleObserver::Trace(visitor);
   MediaStreamObserver::Trace(visitor);
-}
-
-base::TimeTicks RTCPeerConnection::WebRtcTimestampToBlinkTimestamp(
-    base::TimeTicks webrtc_monotonic_time) const {
-  return webrtc_monotonic_time + blink_webrtc_time_diff_;
 }
 
 // static

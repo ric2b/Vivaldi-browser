@@ -4,19 +4,18 @@
 
 #include "chrome/browser/chromeos/policy/extension_install_event_log_collector.h"
 
+#include "ash/constants/ash_switches.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/run_loop.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/forced_extensions/force_installed_tracker.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/dbus/shill/shill_service_client.h"
@@ -253,6 +252,7 @@ TEST_F(ExtensionInstallEventLogCollectorTest, LoginLogout) {
   user_manager::ScopedUserManager scoped_user_manager(
       base::WrapUnique(fake_user_manager));
   AccountId account_id = AccountId::FromUserEmailGaiaId(kEmailId, kGaiaId);
+  profile()->SetIsNewProfile(true);
   user_manager::User* user =
       fake_user_manager->AddUserWithAffiliationAndTypeAndProfile(
           account_id, false /*is_affiliated*/, user_manager::USER_TYPE_REGULAR,
@@ -284,6 +284,7 @@ TEST_F(ExtensionInstallEventLogCollectorTest, LoginTypes) {
   user_manager::ScopedUserManager scoped_user_manager(
       base::WrapUnique(fake_user_manager));
   AccountId account_id = AccountId::FromUserEmailGaiaId(kEmailId, kGaiaId);
+  profile()->SetIsNewProfile(true);
   user_manager::User* user =
       fake_user_manager->AddUserWithAffiliationAndTypeAndProfile(
           account_id, false /*is_affiliated*/, user_manager::USER_TYPE_REGULAR,
@@ -368,6 +369,7 @@ TEST_F(ExtensionInstallEventLogCollectorTest, ConnectivityChanges) {
   user_manager::ScopedUserManager scoped_user_manager(
       base::WrapUnique(fake_user_manager));
   AccountId account_id = AccountId::FromUserEmailGaiaId(kEmailId, kGaiaId);
+  profile()->SetIsNewProfile(true);
   user_manager::User* user =
       fake_user_manager->AddUserWithAffiliationAndTypeAndProfile(
           account_id, false /*is_affiliated*/, user_manager::USER_TYPE_REGULAR,

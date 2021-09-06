@@ -49,7 +49,6 @@ public class SyncTest {
     @Test
     @LargeTest
     @Feature({"Sync"})
-    @DisabledTest(message = "crbug.com/1144221")
     public void testSignInAndOut() {
         CoreAccountInfo accountInfo = mSyncTestRule.setUpAccountAndEnableSyncForTesting();
 
@@ -59,7 +58,7 @@ public class SyncTest {
 
         // Signing back in should re-enable sync.
         mSyncTestRule.signinAndEnableSync(accountInfo);
-        Assert.assertTrue("Sync should be re-enabled.", SyncTestUtil.isSyncActive());
+        Assert.assertTrue("Sync should be re-enabled.", SyncTestUtil.isSyncFeatureActive());
     }
 
     @Test
@@ -132,7 +131,7 @@ public class SyncTest {
             Criteria.checkThat(mSyncTestRule.getCurrentSignedInAccount().getEmail(),
                     Matchers.is(newAccount.name));
         });
-        SyncTestUtil.waitForSyncActive();
+        SyncTestUtil.waitForSyncFeatureActive();
     }
 
     @Test
@@ -166,7 +165,7 @@ public class SyncTest {
 
         // Enabling Android sync should turn Chrome sync engine on.
         mSyncTestRule.getSyncContentResolver().setSyncAutomatically(account, authority, true);
-        SyncTestUtil.waitForSyncActive();
+        SyncTestUtil.waitForSyncFeatureActive();
     }
 
     @Test
@@ -187,7 +186,7 @@ public class SyncTest {
 
         // Enabling Android's master sync should turn Chrome sync engine on.
         mSyncTestRule.getSyncContentResolver().setMasterSyncAutomatically(true);
-        SyncTestUtil.waitForSyncActive();
+        SyncTestUtil.waitForSyncFeatureActive();
     }
 
     @Test
@@ -223,7 +222,7 @@ public class SyncTest {
         // But then re-enabling Chrome sync should.
         mSyncTestRule.getSyncContentResolver().setSyncAutomatically(account, authority, true);
         Assert.assertTrue(SyncTestUtil.canSyncFeatureStart());
-        SyncTestUtil.waitForSyncActive();
+        SyncTestUtil.waitForSyncFeatureActive();
     }
 
     @Test
@@ -258,7 +257,7 @@ public class SyncTest {
         // But then re-enabling master sync should.
         mSyncTestRule.getSyncContentResolver().setMasterSyncAutomatically(true);
         Assert.assertTrue(SyncTestUtil.canSyncFeatureStart());
-        SyncTestUtil.waitForSyncActive();
+        SyncTestUtil.waitForSyncFeatureActive();
     }
 
     @Test

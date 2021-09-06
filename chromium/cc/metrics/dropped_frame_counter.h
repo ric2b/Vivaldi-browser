@@ -12,10 +12,10 @@
 #include "base/containers/ring_buffer.h"
 #include "cc/cc_export.h"
 #include "cc/metrics/frame_sorter.h"
+#include "cc/metrics/ukm_smoothness_data.h"
 
 namespace cc {
 class TotalFrameCounter;
-struct UkmSmoothnessDataShared;
 
 // This class maintains a counter for produced/dropped frames, and can be used
 // to estimate the recent throughput.
@@ -67,7 +67,7 @@ class CC_EXPORT DroppedFrameCounter {
   void AddDroppedFrame();
   void ReportFrames();
 
-  void OnBeginFrame(const viz::BeginFrameArgs& args);
+  void OnBeginFrame(const viz::BeginFrameArgs& args, bool is_scroll_active);
   void OnEndFrame(const viz::BeginFrameArgs& args, bool is_dropped);
   void SetUkmSmoothnessDestination(UkmSmoothnessDataShared* smoothness_data);
   void OnFcpReceived();
@@ -119,10 +119,21 @@ class CC_EXPORT DroppedFrameCounter {
   size_t total_smoothness_dropped_ = 0;
   bool fcp_received_ = false;
   double sliding_window_max_percent_dropped_ = 0;
-
+  base::TimeTicks time_fcp_received_;
+  base::TimeDelta time_max_delta_;
   UkmSmoothnessDataShared* ukm_smoothness_data_ = nullptr;
   FrameSorter frame_sorter_;
   TotalFrameCounter* total_counter_ = nullptr;
+
+  struct ScrollStartInfo {
+    // The timestamp of when the scroll started.
+    base::TimeTicks timestamp;
+
+    // The vsync corresponding to the scroll-start.
+    viz::BeginFrameId frame_id;
+  };
+  base::Optional<ScrollStartInfo> scroll_start_;
+  std::map<viz::BeginFrameId, ScrollStartInfo> scroll_start_per_frame_;
 };
 
 CC_EXPORT std::ostream& operator<<(

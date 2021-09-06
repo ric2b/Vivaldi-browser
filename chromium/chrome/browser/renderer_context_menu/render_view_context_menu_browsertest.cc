@@ -85,6 +85,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/context_menu_data/context_menu_data.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/mojom/context_menu/context_menu.mojom.h"
@@ -251,13 +252,13 @@ class ContextMenuBrowserTest : public InProcessBrowserTest {
     auto callback =
         [](std::vector<uint8_t>* response_image_data,
            gfx::Size* response_original_size,
-           std::string* response_file_extension, const base::Closure& quit,
+           std::string* response_file_extension, base::OnceClosure quit,
            const std::vector<uint8_t>& image_data,
            const gfx::Size& original_size, const std::string& file_extension) {
           *response_image_data = image_data;
           *response_original_size = original_size;
           *response_file_extension = file_extension;
-          quit.Run();
+          std::move(quit).Run();
         };
 
     base::RunLoop run_loop;
@@ -266,8 +267,8 @@ class ContextMenuBrowserTest : public InProcessBrowserTest {
     std::string response_file_extension;
     chrome_render_frame->RequestImageForContextNode(
         0, request_size, request_image_format,
-        base::Bind(callback, &response_image_data, &response_original_size,
-                   &response_file_extension, run_loop.QuitClosure()));
+        base::BindOnce(callback, &response_image_data, &response_original_size,
+                       &response_file_extension, run_loop.QuitClosure()));
     run_loop.Run();
 
     ASSERT_EQ(expected_original_size.width(), response_original_size.width());
@@ -337,7 +338,7 @@ class PdfPluginContextMenuBrowserTest : public InProcessBrowserTest {
     params.page_url = page_url;
     params.frame_url = frame->GetLastCommittedURL();
     params.media_type = blink::mojom::ContextMenuDataMediaType::kPlugin;
-    params.media_flags |= blink::WebContextMenuData::kMediaCanRotate;
+    params.media_flags |= blink::ContextMenuData::kMediaCanRotate;
     auto menu = std::make_unique<TestRenderViewContextMenu>(frame, params);
     menu->Init();
     return menu;
@@ -355,7 +356,7 @@ class PdfPluginContextMenuBrowserTest : public InProcessBrowserTest {
         browser()->tab_strip_model()->GetActiveWebContents();
     // Prepare to load a pdf plugin inside.
     test_guest_view_manager_->RegisterTestGuestViewType<MimeHandlerViewGuest>(
-        base::Bind(&TestMimeHandlerViewGuest::Create));
+        base::BindRepeating(&TestMimeHandlerViewGuest::Create));
     ASSERT_TRUE(
         content::ExecuteScript(web_contents,
                                "var l = document.getElementById('link1');"
@@ -916,7 +917,13 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenIncognitoNoneReferrer) {
 }
 
 // Verify that "Open link in [App Name]" opens a new App window.
-IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenLinkInWebApp) {
+// TODO(crbug.com/1180790): Test is flaky on Linux and Windows.
+#if defined(OS_LINUX) || defined(OS_WIN)
+#define MAYBE_OpenLinkInWebApp DISABLED_OpenLinkInWebApp
+#else
+#define MAYBE_OpenLinkInWebApp OpenLinkInWebApp
+#endif
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, MAYBE_OpenLinkInWebApp) {
   InstallTestWebApp(GURL(kAppUrl1));
 
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -1266,12 +1273,13 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, MAYBE_OpenLinkInProfile) {
   std::vector<Profile*> profiles_in_menu;
   for (int i = 0; i < num_profiles; ++i) {
     Profile* profile = CreateSecondaryProfile(i);
-    ProfileAttributesEntry* entry;
-    ASSERT_TRUE(
-        storage.GetProfileAttributesWithPath(profile->GetPath(), &entry));
+    ProfileAttributesEntry* entry =
+        storage.GetProfileAttributesWithPath(profile->GetPath());
+    ASSERT_NE(entry, nullptr);
     // Open a browser window for the profile if and only if the profile is not
     // omitted nor needing signin.
     if (std::binary_search(profiles_omit.begin(), profiles_omit.end(), i)) {
+      entry->SetIsEphemeral(true);
       entry->SetIsOmitted(true);
     } else if (std::binary_search(profiles_signin_required.begin(),
                                   profiles_signin_required.end(), i)) {
@@ -1336,6 +1344,14 @@ class SearchByImageBrowserTest : public InProcessBrowserTest {
     // |menu_observer_| will cause the search-by-image menu item to be clicked.
     menu_observer_ = std::make_unique<ContextMenuNotificationObserver>(
         IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE);
+    RightClickImage();
+  }
+
+  void AttemptLensImageSearch() {
+    // |menu_observer_| will cause the search lens for image menu item to be
+    // clicked.
+    menu_observer_ = std::make_unique<ContextMenuNotificationObserver>(
+        IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE);
     RightClickImage();
   }
 
@@ -1414,12 +1430,12 @@ IN_PROC_BROWSER_TEST_F(SearchByImageBrowserTest, ImageSearchWithCorruptImage) {
       ->GetRemoteAssociatedInterfaces()
       ->GetInterface(&chrome_render_frame);
 
-  auto callback = [](bool* response_received, const base::Closure& quit,
+  auto callback = [](bool* response_received, base::OnceClosure quit,
                      const std::vector<uint8_t>& thumbnail_data,
                      const gfx::Size& original_size,
                      const std::string& file_extension) {
     *response_received = true;
-    quit.Run();
+    std::move(quit).Run();
   };
 
   base::RunLoop run_loop;
@@ -1432,6 +1448,21 @@ IN_PROC_BROWSER_TEST_F(SearchByImageBrowserTest, ImageSearchWithCorruptImage) {
   // The browser should receive a response from the renderer, because the
   // renderer should not crash.
   ASSERT_TRUE(response_received);
+}
+
+// TODO(http://crbug.com/1177587): Resolve flake and re-enable test.
+IN_PROC_BROWSER_TEST_F(SearchByImageBrowserTest,
+                       DISABLED_LensImageSearchWithValidImage) {
+  static const char kValidImage[] = "/image_search/valid.png";
+  SetupAndLoadImagePage(kValidImage);
+
+  ui_test_utils::AllBrowserTabAddedWaiter add_tab;
+  AttemptLensImageSearch();
+
+  // The browser should open a new tab for an image search.
+  content::WebContents* new_tab = add_tab.Wait();
+  content::WaitForLoadStop(new_tab);
+  EXPECT_EQ(GetImageSearchURL(), new_tab->GetURL());
 }
 
 IN_PROC_BROWSER_TEST_F(PdfPluginContextMenuBrowserTest,
@@ -1563,7 +1594,7 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
                        ContextMenuForVideoNotInPictureInPicture) {
   content::ContextMenuParams params;
   params.media_type = blink::mojom::ContextMenuDataMediaType::kVideo;
-  params.media_flags |= blink::WebContextMenuData::kMediaCanPictureInPicture;
+  params.media_flags |= blink::ContextMenuData::kMediaCanPictureInPicture;
 
   TestRenderViewContextMenu menu(
       browser()->tab_strip_model()->GetActiveWebContents()->GetMainFrame(),
@@ -1578,8 +1609,8 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
                        ContextMenuForVideoInPictureInPicture) {
   content::ContextMenuParams params;
   params.media_type = blink::mojom::ContextMenuDataMediaType::kVideo;
-  params.media_flags |= blink::WebContextMenuData::kMediaCanPictureInPicture;
-  params.media_flags |= blink::WebContextMenuData::kMediaPictureInPicture;
+  params.media_flags |= blink::ContextMenuData::kMediaCanPictureInPicture;
+  params.media_flags |= blink::ContextMenuData::kMediaPictureInPicture;
 
   TestRenderViewContextMenu menu(
       browser()->tab_strip_model()->GetActiveWebContents()->GetMainFrame(),

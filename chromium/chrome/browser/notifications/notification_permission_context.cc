@@ -32,7 +32,6 @@
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "ui/message_center/public/cpp/notifier_id.h"
-#include "extensions/api/tabs/tabs_private_api.h"
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 namespace {
@@ -214,28 +213,3 @@ bool NotificationPermissionContext::IsRestrictedToSecureOrigins() const {
 }
 
 /* Vivaldi specific */
-void NotificationPermissionContext::UpdateTabContext(
-    const permissions::PermissionRequestID& id,
-    const GURL& requesting_frame,
-    bool allowed) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  content::WebContents* web_contents =
-      content::WebContents::FromRenderFrameHost(
-          content::RenderFrameHost::FromID(id.render_process_id(),
-                                           id.render_frame_id()));
-
-  if (web_contents) {
-    extensions::VivaldiPrivateTabObserver* private_tab =
-        extensions::VivaldiPrivateTabObserver::FromWebContents(web_contents);
-
-    ContentSetting content_setting =
-        allowed ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK;
-
-    if (private_tab) {
-      private_tab->OnPermissionAccessed(ContentSettingsType::NOTIFICATIONS,
-                                        requesting_frame.spec(),
-                                        content_setting);
-    }
-  }
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
-}

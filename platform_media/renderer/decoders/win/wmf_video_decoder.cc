@@ -40,4 +40,9 @@ void WMFVideoDecoder::Reset(base::OnceClosure closure) {
   impl_.Reset(std::move(closure));
 }
 
+
+VideoDecoderType WMFVideoDecoder::GetDecoderType() const {
+  return VideoDecoderType::kDecrypting;
+}
+
 }  // namespace media

@@ -7,6 +7,7 @@
 
 #include "base/memory/singleton.h"
 #include "base/no_destructor.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/enterprise/connectors/connectors_manager.h"
@@ -100,6 +101,22 @@ const char kServiceProviderConfig[] = R"({
           }
         }
       }
+    },
+    {
+      "name": "box",
+      "display_name": "Box",
+      "version":  {
+        "1": {
+          "file_system": {
+            "home": "https://box.com",
+            "authorization_endpoint": "https://account.box.com/api/oauth2/authorize",
+            "token_endpoint": "https://api.box.com/oauth2/token",
+            "max_direct_size": 20971520,
+            "scopes": [],
+            "disable": [ "box.com" ]
+          }
+        }
+      }
     }
   ]
 })";
@@ -164,6 +181,20 @@ base::Optional<AnalysisSettings> ConnectorsService::GetAnalysisSettings(
   return settings;
 }
 
+base::Optional<FileSystemSettings> ConnectorsService::GetFileSystemSettings(
+    const GURL& url,
+    FileSystemConnector connector) {
+  if (!ConnectorsEnabled())
+    return base::nullopt;
+
+  base::Optional<FileSystemSettings> settings =
+      connectors_manager_->GetFileSystemSettings(url, connector);
+  if (!settings.has_value())
+    return base::nullopt;
+
+  return settings;
+}
+
 bool ConnectorsService::IsConnectorEnabled(AnalysisConnector connector) const {
   if (!ConnectorsEnabled())
     return false;
@@ -178,11 +209,41 @@ bool ConnectorsService::IsConnectorEnabled(ReportingConnector connector) const {
   return connectors_manager_->IsConnectorEnabled(connector);
 }
 
+bool ConnectorsService::IsConnectorEnabled(
+    FileSystemConnector connector) const {
+  if (!ConnectorsEnabled())
+    return false;
+
+  return connectors_manager_->IsConnectorEnabled(connector);
+}
+
+std::vector<std::string> ConnectorsService::GetReportingServiceProviderNames(
+    ReportingConnector connector) {
+  if (!ConnectorsEnabled())
+    return {};
+
+  if (!GetDmToken(ConnectorScopePref(connector)).has_value())
+    return {};
+
+  return connectors_manager_->GetReportingServiceProviderNames(connector);
+}
+
 bool ConnectorsService::DelayUntilVerdict(AnalysisConnector connector) {
   if (!ConnectorsEnabled())
     return false;
 
   return connectors_manager_->DelayUntilVerdict(connector);
+}
+
+std::vector<std::string> ConnectorsService::GetAnalysisServiceProviderNames(
+    AnalysisConnector connector) {
+  if (!ConnectorsEnabled())
+    return {};
+
+  if (!GetDmToken(ConnectorScopePref(connector)).has_value())
+    return {};
+
+  return connectors_manager_->GetAnalysisServiceProviderNames(connector);
 }
 
 base::Optional<std::string> ConnectorsService::GetDMTokenForRealTimeUrlCheck()
@@ -204,6 +265,19 @@ base::Optional<std::string> ConnectorsService::GetDMTokenForRealTimeUrlCheck()
   return base::nullopt;
 }
 
+safe_browsing::EnterpriseRealTimeUrlCheckMode
+ConnectorsService::GetAppliedRealTimeUrlCheck() const {
+  if (!ConnectorsEnabled() ||
+      !GetDmToken(prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckScope)
+           .has_value()) {
+    return safe_browsing::REAL_TIME_CHECK_DISABLED;
+  }
+
+  return static_cast<safe_browsing::EnterpriseRealTimeUrlCheckMode>(
+      Profile::FromBrowserContext(context_)->GetPrefs()->GetInteger(
+          prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckMode));
+}
+
 ConnectorsManager* ConnectorsService::ConnectorsManagerForTesting() {
   return connectors_manager_.get();
 }
@@ -218,7 +292,7 @@ ConnectorsService::DmToken::~DmToken() = default;
 
 base::Optional<ConnectorsService::DmToken> ConnectorsService::GetDmToken(
     const char* scope_pref) const {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // On CrOS, the device must be affiliated to use the DM token for
   // scanning/reporting so we always use the browser DM token.
   return GetBrowserDmToken();
@@ -240,7 +314,7 @@ ConnectorsService::GetBrowserDmToken() const {
   return DmToken(dm_token.value(), policy::POLICY_SCOPE_MACHINE);
 }
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 base::Optional<ConnectorsService::DmToken>
 ConnectorsService::GetProfileDmToken() const {
   if (!base::FeatureList::IsEnabled(kPerProfileConnectorsEnabled))
@@ -264,20 +338,11 @@ bool ConnectorsService::CanUseProfileDmToken() const {
   if (!policy::BrowserDMTokenStorage::Get()->RetrieveDMToken().is_valid())
     return true;
 
-  policy::UserCloudPolicyManager* profile_policy_manager =
-      Profile::FromBrowserContext(context_)->GetUserCloudPolicyManager();
-  policy::MachineLevelUserCloudPolicyManager* browser_policy_manager =
-      g_browser_process->browser_policy_connector()
-          ->machine_level_user_cloud_policy_manager();
-
-  if (!profile_policy_manager || !browser_policy_manager ||
-      !profile_policy_manager->IsClientRegistered() ||
-      !browser_policy_manager->IsClientRegistered()) {
-    return false;
-  }
-
-  auto* profile_policy = profile_policy_manager->core()->store()->policy();
-  auto* browser_policy = browser_policy_manager->core()->store()->policy();
+  const enterprise_management::PolicyData* profile_policy =
+      chrome::enterprise_util::GetProfilePolicyData(
+          Profile::FromBrowserContext(context_));
+  const enterprise_management::PolicyData* browser_policy =
+      chrome::enterprise_util::GetBrowserPolicyData();
 
   if (!profile_policy || !browser_policy)
     return false;
@@ -285,7 +350,7 @@ bool ConnectorsService::CanUseProfileDmToken() const {
   return chrome::enterprise_util::IsProfileAffiliated(*profile_policy,
                                                       *browser_policy);
 }
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 policy::PolicyScope ConnectorsService::GetPolicyScope(
     const char* scope_pref) const {

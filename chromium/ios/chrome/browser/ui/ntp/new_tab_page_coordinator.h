@@ -59,6 +59,9 @@ class WebState;
 // Called when a snapshot of the content will be taken.
 - (void)willUpdateSnapshot;
 
+// Stop any scrolling in the scroll view.
+- (void)stopScrolling;
+
 // The content offset of the scroll view.
 - (CGPoint)contentOffset;
 
@@ -76,10 +79,6 @@ class WebState;
 
 // Constrains the named layout guide for the Discover header menu button.
 - (void)constrainDiscoverHeaderMenuButtonNamedGuide;
-
-// Handles device rotation logic.
-// TODO(crbug.com/1177953): Detect device rotation in NewTabPageViewController.
-- (void)handleDeviceRotation;
 
 @end
 

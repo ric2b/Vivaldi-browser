@@ -38,7 +38,7 @@ public class LocationBarFocusScrimHandler implements UrlFocusChangeListener {
     private final Context mContext;
 
     // Vivaldi
-    private final int mTopMargin;
+    private int mTopMargin;
 
     /**
      *
@@ -73,8 +73,6 @@ public class LocationBarFocusScrimHandler implements UrlFocusChangeListener {
                               .with(ScrimProperties.VISIBILITY_CALLBACK, visibilityChangeCallback)
                               .with(ScrimProperties.BACKGROUND_COLOR, ScrimProperties.INVALID_COLOR)
                               .build();
-        // Vivaldi
-        mTopMargin = topMargin;
     }
 
     @Override
@@ -86,9 +84,8 @@ public class LocationBarFocusScrimHandler implements UrlFocusChangeListener {
                 useLightColor ? mLightScrimColor : ScrimProperties.INVALID_COLOR);
 
         if (hasFocus && !showScrimAfterAnimationCompletes()) {
-            // Note(david@vivaldi.com): Handle the correct top margin.
-            mScrimModel.set(
-                    ScrimProperties.TOP_MARGIN, VivaldiUtils.isTopToolbarOn() ? mTopMargin : 0);
+            // Note(david@vivaldi.com): Apply the correct top margin.
+            mScrimModel.set(ScrimProperties.TOP_MARGIN, mTopMargin);
             mScrimCoordinator.showScrim(mScrimModel);
             mScrimShown = true;
         } else if (!hasFocus && mScrimShown) {
@@ -111,5 +108,10 @@ public class LocationBarFocusScrimHandler implements UrlFocusChangeListener {
      */
     private boolean showScrimAfterAnimationCompletes() {
         return mLocationBarDataProvider.getNewTabPageDelegate().isLocationBarShown();
+    }
+
+    /** Vivaldi: Sets the top margin of the scrim view */
+    public void setTopMargin(int margin) {
+        mTopMargin = margin;
     }
 }

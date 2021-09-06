@@ -16,6 +16,8 @@ namespace features {
 // Keep sorted!
 
 COMPONENT_EXPORT(UI_BASE_FEATURES)
+extern const base::Feature kClipboardFilenames;
+COMPONENT_EXPORT(UI_BASE_FEATURES)
 extern const base::Feature kColorProviderRedirection;
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 extern const base::Feature kCompositorThreadedScrollbarScrolling;
@@ -47,8 +49,6 @@ COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsUiGpuRasterizationEnabled();
 #if defined(OS_WIN)
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 extern const base::Feature kCalculateNativeWinOcclusion;
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-extern const base::Feature kCalculateNativeWinOcclusionCheckVirtualDesktopUsed;
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 extern const base::Feature kElasticOverscrollWin;
 COMPONENT_EXPORT(UI_BASE_FEATURES)
@@ -93,6 +93,11 @@ COMPONENT_EXPORT(UI_BASE_FEATURES)
 extern const base::Feature kUseCommonSelectPopup;
 COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsUseCommonSelectPopupEnabled();
 
+// Used to enable keyboard accessible tooltips.
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+extern const base::Feature kKeyboardAccessibleTooltip;
+COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsKeyboardAccessibleTooltipEnabled();
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 extern const base::Feature kHandwritingGesture;
@@ -102,6 +107,14 @@ extern const base::Feature kNewShortcutMapping;
 
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 bool IsNewShortcutMappingEnabled();
+
+// This flag is intended to supercede kNewShortcutMapping above.
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+extern const base::Feature kImprovedKeyboardShortcuts;
+
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+bool IsImprovedKeyboardShortcutsEnabled();
+
 #endif
 
 // Indicates whether DrmOverlayManager should used the synchronous API to
@@ -165,6 +178,9 @@ COMPONENT_EXPORT(UI_BASE_FEATURES) extern const char kFilterNameOneEuro[];
 // Android only feature, for swipe to move cursor.
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 extern const base::Feature kSwipeToMoveCursor;
+
+// Enables UI debugging tools such as shortcuts.
+COMPONENT_EXPORT(UI_BASE_FEATURES) extern const base::Feature kUIDebugTools;
 
 COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsSwipeToMoveCursorEnabled();
 

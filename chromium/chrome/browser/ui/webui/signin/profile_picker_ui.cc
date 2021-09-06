@@ -11,6 +11,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_shortcut_manager.h"
+#include "chrome/browser/signin/account_consistency_mode_manager.h"
 #include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/ui/profile_picker.h"
 #include "chrome/browser/ui/ui_features.h"
@@ -72,9 +73,13 @@ bool IsBrowserSigninAllowed() {
          policy::BrowserSigninMode::kDisabled;
 }
 
+bool IsSignInProfileCreationFlowSupported() {
+  return AccountConsistencyModeManager::IsDiceSignInAllowed() &&
+         base::FeatureList::IsEnabled(features::kSignInProfileCreation);
+}
+
 void AddStrings(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
-      {"mainViewTitle", IDS_PROFILE_PICKER_MAIN_VIEW_TITLE},
       {"mainViewSubtitle", IDS_PROFILE_PICKER_MAIN_VIEW_SUBTITLE},
       {"addSpaceButton", IDS_PROFILE_PICKER_ADD_SPACE_BUTTON},
       {"askOnStartupCheckboxText", IDS_PROFILE_PICKER_ASK_ON_STARTUP},
@@ -136,7 +141,12 @@ void AddStrings(content::WebUIDataSource* html_source) {
       {"thirdPartyThemeDescription", IDS_NTP_CUSTOMIZE_3PT_THEME_DESC},
       {"uninstallThirdPartyThemeButton", IDS_NTP_CUSTOMIZE_3PT_THEME_UNINSTALL},
   };
-  AddLocalizedStringsBulk(html_source, kLocalizedStrings);
+  html_source->AddLocalizedStrings(kLocalizedStrings);
+  html_source->AddLocalizedString("mainViewTitle",
+                                  ProfilePicker::Shown()
+                                      ? IDS_PROFILE_PICKER_MAIN_VIEW_TITLE_V2
+                                      : IDS_PROFILE_PICKER_MAIN_VIEW_TITLE);
+
   ProfilePicker::AvailabilityOnStartup availability_on_startup =
       static_cast<ProfilePicker::AvailabilityOnStartup>(
           g_browser_process->local_state()->GetInteger(
@@ -149,9 +159,8 @@ void AddStrings(content::WebUIDataSource* html_source) {
   html_source->AddBoolean("askOnStartup",
                           g_browser_process->local_state()->GetBoolean(
                               prefs::kBrowserShowProfilePickerOnStartup));
-  html_source->AddBoolean(
-      "signInProfileCreationFlowSupported",
-      base::FeatureList::IsEnabled(features::kSignInProfileCreation));
+  html_source->AddBoolean("signInProfileCreationFlowSupported",
+                          IsSignInProfileCreationFlowSupported());
 
   html_source->AddString("minimumPickerSize",
                          base::StringPrintf("%ipx", kMinimumPickerSizePx));

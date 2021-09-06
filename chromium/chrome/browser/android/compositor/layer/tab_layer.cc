@@ -29,9 +29,6 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/transform.h"
 
-// Vivaldi
-#include "chrome/browser/android/compositor/resources/toolbar_resource.h"
-
 namespace android {
 
 // static
@@ -145,6 +142,7 @@ void TabLayer::SetProperties(int id,
                              int toolbar_textbox_resource_id,
                              int toolbar_textbox_background_color,
                              float toolbar_alpha,
+                             float toolbar_y_offset,
                              float content_offset,
                              float side_border_scale,
                              bool inset_border) {
@@ -228,27 +226,11 @@ void TabLayer::SetProperties(int id,
   // Update Resource Ids For Layers That Impact Layout
   //--------------------------------------------------------------------------
 
-  //** Vivaldi
-  float toolbar_offset = content_offset;
-  ToolbarResource* resource =
-      ToolbarResource::From(resource_manager_->GetResource(
-          ui::ANDROID_RESOURCE_TYPE_DYNAMIC, toolbar_resource_id));
-  if (resource) {
-    toolbar_layer_->ShouldPositionToolbar(true);
-    // (Note:david@vivaldi.com): When |content_offset| is 0 toolbar is at the
-    // bottom
-    if (content_offset == 0)
-      toolbar_offset = height - resource->size().height();
-    else
-      toolbar_offset -= resource->size().height();
-  }
-  //** Vivaldi
-
   // TODO(kkimlabs): Tab switcher doesn't show the progress bar.
   toolbar_layer_->PushResource(
       toolbar_resource_id, toolbar_background_color, anonymize_toolbar,
       toolbar_textbox_background_color, toolbar_textbox_resource_id,
-      toolbar_offset, false, false);
+      content_offset, false, false);
   toolbar_layer_->UpdateProgressBar(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
   float toolbar_impact_height = 0;

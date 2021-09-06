@@ -252,7 +252,10 @@ class RequestFilterManager : public KeyedService {
           forwarding_header_client);
 
   static void ProxiedProxyWebSocket(
-      content::RenderFrameHost* frame,
+      content::BrowserContext* context,
+      int process_id,
+      int frame_id,
+      const url::Origin& frame_origin,
       content::ContentBrowserClient::WebSocketFactory factory,
       const GURL& site_for_cookies,
       const base::Optional<std::string>& user_agent,
@@ -260,13 +263,15 @@ class RequestFilterManager : public KeyedService {
       std::vector<network::mojom::HttpHeaderPtr> additional_headers,
       mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
           handshake_client,
-      mojo::PendingRemote<network::mojom::AuthenticationHandler>
+      mojo::PendingRemote<network::mojom::WebSocketAuthenticationHandler>
           authentication_handler,
       mojo::PendingRemote<network::mojom::TrustedHeaderClient> header_client);
 
   // Starts proxying the connection with |factory|.
   void ProxyWebSocket(
-      content::RenderFrameHost* frame,
+      int process_id,
+      int frame_id,
+      const url::Origin& frame_origin,
       content::ContentBrowserClient::WebSocketFactory factory,
       const GURL& site_for_cookies,
       const base::Optional<std::string>& user_agent,
@@ -274,7 +279,7 @@ class RequestFilterManager : public KeyedService {
       std::vector<network::mojom::HttpHeaderPtr> additional_headers,
       mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
           handshake_client,
-      mojo::PendingRemote<network::mojom::AuthenticationHandler>
+      mojo::PendingRemote<network::mojom::WebSocketAuthenticationHandler>
           authentication_handler,
       mojo::PendingRemote<network::mojom::TrustedHeaderClient> header_client);
 

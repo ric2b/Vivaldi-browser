@@ -16,9 +16,22 @@
 #include "extensions/test/result_catcher.h"
 #include "third_party/blink/public/common/security/protocol_handler_security_level.h"
 
+#if defined(OS_MAC)
+#include "chrome/test/base/launchservices_utils_mac.h"
+#endif
+
 namespace extensions {
 
-using ProtocolHandlerApiTest = ExtensionApiTest;
+class ProtocolHandlerApiTest : public ExtensionApiTest {
+ public:
+  void SetUpOnMainThread() override {
+    ExtensionApiTest::SetUpOnMainThread();
+
+#if defined(OS_MAC)
+    ASSERT_TRUE(test::RegisterAppWithLaunchServices());
+#endif
+  }
+};
 
 class ProtocolHandlerChangeWaiter : public ProtocolHandlerRegistry::Observer {
  public:
@@ -54,8 +67,7 @@ IN_PROC_BROWSER_TEST_F(ProtocolHandlerApiTest, Registration) {
   // Load the extension test page.
   base::FilePath extension_path =
       test_data_dir_.AppendASCII("protocol_handler");
-  const Extension* extension =
-      LoadExtensionWithFlags(extension_path, kFlagNone);
+  const Extension* extension = LoadExtension(extension_path);
   ASSERT_TRUE(extension);
   GURL url = extension->GetResourceURL("test_registration.html");
   ui_test_utils::NavigateToURL(browser(), url);

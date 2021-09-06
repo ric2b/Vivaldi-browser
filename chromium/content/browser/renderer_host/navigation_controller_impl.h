@@ -30,8 +30,10 @@
 #include "content/public/browser/navigation_type.h"
 #include "content/public/browser/reload_type.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 
 namespace content {
+class FrameTree;
 class FrameTreeNode;
 class NavigationRequest;
 class RenderFrameHostImpl;
@@ -70,8 +72,9 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
     DISALLOW_COPY_AND_ASSIGN(PendingEntryRef);
   };
 
-  NavigationControllerImpl(NavigationControllerDelegate* delegate,
-                           BrowserContext* browser_context);
+  NavigationControllerImpl(BrowserContext* browser_context,
+                           FrameTree& frame_tree,
+                           NavigationControllerDelegate* delegate);
   ~NavigationControllerImpl() override;
 
   // NavigationController implementation:
@@ -155,7 +158,7 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
   void NavigateFromFrameProxy(
       RenderFrameHostImpl* render_frame_host,
       const GURL& url,
-      const base::UnguessableToken* initiator_frame_token,
+      const blink::LocalFrameToken* initiator_frame_token,
       int initiator_process_id,
       const base::Optional<url::Origin>& initiator_origin,
       bool is_renderer_initiated,
@@ -163,7 +166,7 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
       const Referrer& referrer,
       ui::PageTransition page_transition,
       bool should_replace_current_entry,
-      NavigationDownloadPolicy download_policy,
+      blink::NavigationDownloadPolicy download_policy,
       const std::string& method,
       scoped_refptr<network::ResourceRequestBody> post_body,
       const std::string& extra_headers,
@@ -283,6 +286,8 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
 
   // Random data ---------------------------------------------------------------
 
+  FrameTree& frame_tree() { return frame_tree_; }
+
   SSLManager* ssl_manager() { return &ssl_manager_; }
 
   // Maximum number of entries before we start removing entries from the front.
@@ -317,6 +322,14 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
   // NavigationRequest. Callers are responsible for only calling this for
   // requests corresponding to the current pending entry.
   std::unique_ptr<PendingEntryRef> ReferencePendingEntry();
+
+  // Another page accessed the initial empty main document, which means it
+  // is no longer safe to display a pending URL without risking a URL spoof.
+  void DidAccessInitialMainDocument();
+
+  // The state for the page changed and should be updated in session history.
+  void UpdateStateForFrame(RenderFrameHostImpl* render_frame_host,
+                           const blink::PageState& page_state);
 
   // Like NavigationController::CreateNavigationEntry, but takes extra arguments
   // like |source_site_instance| and |should_replace_entry|. |web_contents| is
@@ -460,7 +473,7 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
       bool override_user_agent,
       bool should_replace_current_entry,
       bool has_user_gesture,
-      NavigationDownloadPolicy download_policy,
+      blink::NavigationDownloadPolicy download_policy,
       ReloadType reload_type,
       NavigationEntryImpl* entry,
       FrameNavigationEntry* frame_entry,
@@ -517,11 +530,6 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
       bool was_restored,
       NavigationRequest* request,
       bool keep_pending_entry);
-  void RendererDidNavigateToSameEntry(
-      RenderFrameHostImpl* rfh,
-      const mojom::DidCommitProvisionalLoadParams& params,
-      bool is_same_document,
-      NavigationRequest* request);
   void RendererDidNavigateNewSubframe(
       RenderFrameHostImpl* rfh,
       const mojom::DidCommitProvisionalLoadParams& params,
@@ -609,14 +617,23 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
   // pending NavigationEntry.
   void PendingEntryRefDeleted(PendingEntryRef* ref);
 
-  // Compute the document policies to be stored in the FrameNavigationEntry by
-  // RendererDidNavigate.
-  std::unique_ptr<PolicyContainerHost::DocumentPolicies>
-  ComputeDocumentPoliciesForFrameEntry(RenderFrameHostImpl* rfh,
-                                       bool is_same_document,
-                                       NavigationRequest* request);
+  // Computes the policy container policies to be stored in the
+  // FrameNavigationEntry by RendererDidNavigate.
+  std::unique_ptr<PolicyContainerPolicies>
+  ComputePolicyContainerPoliciesForFrameEntry(RenderFrameHostImpl* rfh,
+                                              bool is_same_document,
+                                              NavigationRequest* request);
+
+  // Sets the history to |history_length| entries, with an offset of
+  // |history_offset|. This notifies all renderers involved in rendering the
+  // current page about the new offset and length.
+  void SetHistoryOffsetAndLength(int history_offset, int history_length);
 
   // ---------------------------------------------------------------------------
+
+  // The FrameTree this instance belongs to. Each FrameTree gets its own
+  // NavigationController.
+  FrameTree& frame_tree_;
 
   // The user browser context associated with this controller.
   BrowserContext* const browser_context_;

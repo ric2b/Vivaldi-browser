@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -31,7 +31,7 @@ void CreateAssistantStructureAndRunCallback(
     ax::mojom::AssistantExtraPtr assistant_extra,
     const ui::AXTreeUpdate& update) {
   std::move(callback).Run(std::move(assistant_extra),
-                          ui::CreateAssistantTree(update, false));
+                          ui::CreateAssistantTree(update));
 }
 
 ax::mojom::AssistantExtraPtr CreateAssistantExtra(

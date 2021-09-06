@@ -42,6 +42,7 @@ import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.url.GURL;
 import org.chromium.url.Origin;
 
 import java.net.URISyntaxException;
@@ -1305,6 +1306,18 @@ public class ExternalNavigationHandlerTest {
 
     @Test
     @SmallTest
+    public void testBackgroundTabNavigationWithIntentLaunchesInBackgroundTabsAllowed() {
+        mDelegate.add(new IntentActivity(YOUTUBE_URL, YOUTUBE_PACKAGE_NAME));
+
+        checkUrl(YOUTUBE_URL)
+                .withIsBackgroundTabNavigation(true)
+                .withAllowIntentLaunchesInBackgroundTabs(true)
+                .expecting(OverrideUrlLoadingResultType.OVERRIDE_WITH_EXTERNAL_INTENT,
+                        START_OTHER_ACTIVITY);
+    }
+
+    @Test
+    @SmallTest
     public void testPdfDownloadHappensInChrome() {
         mDelegate.add(new IntentActivity(CALENDAR_URL, "calendar"));
 
@@ -1376,8 +1389,8 @@ public class ExternalNavigationHandlerTest {
                 .expecting(OverrideUrlLoadingResultType.OVERRIDE_WITH_EXTERNAL_INTENT,
                         START_OTHER_ACTIVITY);
 
-        mUrlHandler.mLastCommittedUrl = "https://refertest.com";
-        checkUrl("http://refertest.com")
+        mUrlHandler.mLastCommittedUrl = new GURL("https://refertest.com");
+        checkUrl("https://refertest.com")
                 .expecting(OverrideUrlLoadingResultType.NO_OVERRIDE, IGNORE);
     }
 
@@ -1933,6 +1946,24 @@ public class ExternalNavigationHandlerTest {
                         .size());
     }
 
+    @Test
+    @SmallTest
+    public void testExceptions() {
+        // Test that we don't crash under various bad intent URIs.
+        String numberFormatException = "intent://foo#Intent;scheme=https;i.FOO=0.1;end";
+        String uriSyntaxException = "intent://foo#Intent;scheme=https;invalid=asdf;end";
+        String indexOutOfBoundsException = "intent://foo#Intent;scheme=https;c.%;end";
+
+        checkUrl(numberFormatException).expecting(OverrideUrlLoadingResultType.NO_OVERRIDE, IGNORE);
+        checkUrl(uriSyntaxException).expecting(OverrideUrlLoadingResultType.NO_OVERRIDE, IGNORE);
+        checkUrl(indexOutOfBoundsException)
+                .expecting(OverrideUrlLoadingResultType.NO_OVERRIDE, IGNORE);
+
+        Assert.assertFalse(mUrlHandler.canExternalAppHandleUrl(numberFormatException));
+        Assert.assertFalse(mUrlHandler.canExternalAppHandleUrl(uriSyntaxException));
+        Assert.assertFalse(mUrlHandler.canExternalAppHandleUrl(indexOutOfBoundsException));
+    }
+
     private static List<ResolveInfo> makeResolveInfos(ResolveInfo... infos) {
         return Arrays.asList(infos);
     }
@@ -1980,7 +2011,7 @@ public class ExternalNavigationHandlerTest {
 
     private static class ExternalNavigationHandlerForTesting extends ExternalNavigationHandler {
         public String defaultSmsPackageName;
-        public String mLastCommittedUrl;
+        public GURL mLastCommittedUrl;
         public boolean mIsSerpReferrer;
         public boolean mShouldRequestFileAccess;
         public String mNewUrlAfterClobbering;
@@ -2018,7 +2049,7 @@ public class ExternalNavigationHandlerTest {
         }
 
         @Override
-        protected String getLastCommittedUrl() {
+        protected GURL getLastCommittedUrl() {
             return mLastCommittedUrl;
         }
 
@@ -2332,6 +2363,7 @@ public class ExternalNavigationHandlerTest {
         private boolean mIsRedirect;
         private boolean mChromeAppInForegroundRequired = true;
         private boolean mIsBackgroundTabNavigation;
+        private boolean mIntentLaunchesAllowedInBackgroundTabs;
         private boolean mHasUserGesture;
         private RedirectHandler mRedirectHandler;
         private boolean mIsRendererInitiated;
@@ -2378,6 +2410,12 @@ public class ExternalNavigationHandlerTest {
             return this;
         }
 
+        public ExternalNavigationTestParams withAllowIntentLaunchesInBackgroundTabs(
+                boolean allowIntentLaunchesInBackgroundTabs) {
+            mIntentLaunchesAllowedInBackgroundTabs = allowIntentLaunchesInBackgroundTabs;
+            return this;
+        }
+
         public ExternalNavigationTestParams withRedirectHandler(RedirectHandler handler) {
             mRedirectHandler = handler;
             return this;
@@ -2420,6 +2458,8 @@ public class ExternalNavigationHandlerTest {
                             .setApplicationMustBeInForeground(mChromeAppInForegroundRequired)
                             .setRedirectHandler(mRedirectHandler)
                             .setIsBackgroundTabNavigation(mIsBackgroundTabNavigation)
+                            .setIntentLaunchesAllowedInBackgroundTabs(
+                                    mIntentLaunchesAllowedInBackgroundTabs)
                             .setIsMainFrame(mIsMainFrame)
                             .setNativeClientPackageName(mDelegate.getReferrerWebappPackageName())
                             .setHasUserGesture(mHasUserGesture)

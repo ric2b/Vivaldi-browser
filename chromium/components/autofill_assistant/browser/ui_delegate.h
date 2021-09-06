@@ -98,7 +98,8 @@ class UiDelegate {
   // Returns true if the action was triggered, false if the index did not
   // correspond to any enabled actions.
   bool PerformUserAction(int index) {
-    return PerformUserActionWithContext(index, TriggerContext::CreateEmpty());
+    return PerformUserActionWithContext(index,
+                                        std::make_unique<TriggerContext>());
   }
 
   // If the controller is waiting for user data, this field contains a non-null
@@ -260,9 +261,6 @@ class UiDelegate {
 
   // Notifies the UI delegate that it should shut down.
   virtual void ShutdownIfNecessary() = 0;
-
-  // Returns whether the UI delegate is currently running a lite script or not.
-  virtual bool IsRunningLiteScript() const = 0;
 
   // Called when the visibility of the keyboard has changed.
   virtual void OnKeyboardVisibilityChanged(bool visible) = 0;

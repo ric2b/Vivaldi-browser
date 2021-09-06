@@ -312,7 +312,7 @@ HitTestResult HitTestResultForRootFramePos(
 }
 
 RemoteFrame* SourceFrameForOptionalToken(
-    const base::Optional<base::UnguessableToken>& source_frame_token) {
+    const base::Optional<RemoteFrameToken>& source_frame_token) {
   if (!source_frame_token)
     return nullptr;
   return RemoteFrame::FromFrameToken(source_frame_token.value());
@@ -426,16 +426,10 @@ class ActiveURLMessageFilter : public mojo::MessageFilter {
 template class CORE_TEMPLATE_EXPORT Supplement<LocalFrame>;
 
 // static
-LocalFrame* LocalFrame::FromFrameToken(
-    const base::UnguessableToken& frame_token) {
-  LocalFramesByTokenMap& local_frames_map = GetLocalFramesMap();
-  auto it = local_frames_map.find(base::UnguessableTokenHash()(frame_token));
-  return it == local_frames_map.end() ? nullptr : it->value.Get();
-}
-
-// static
 LocalFrame* LocalFrame::FromFrameToken(const LocalFrameToken& frame_token) {
-  return FromFrameToken(frame_token.value());
+  LocalFramesByTokenMap& local_frames_map = GetLocalFramesMap();
+  auto it = local_frames_map.find(LocalFrameToken::Hasher()(frame_token));
+  return it == local_frames_map.end() ? nullptr : it->value.Get();
 }
 
 void LocalFrame::Init(Frame* opener) {
@@ -848,6 +842,14 @@ bool LocalFrame::CanAccessEvent(
 
 bool LocalFrame::IsTransientAllowFullscreenActive() const {
   return transient_allow_fullscreen_.IsActive();
+}
+
+bool LocalFrame::IsPaymentRequestTokenActive() const {
+  return payment_request_token_.IsActive();
+}
+
+bool LocalFrame::ConsumePaymentRequestToken() {
+  return payment_request_token_.ConsumeIfActive();
 }
 
 void LocalFrame::SetOptimizationGuideHints(
@@ -1345,7 +1347,7 @@ void LocalFrame::MediaQueryAffectingValueChangedForLocalSubtree(
 }
 
 void LocalFrame::WindowSegmentsChanged(
-    const WebVector<WebRect>& window_segments) {
+    const WebVector<gfx::Rect>& window_segments) {
   if (!RuntimeEnabledFeatures::CSSFoldablesEnabled())
     return;
 
@@ -1361,7 +1363,7 @@ void LocalFrame::WindowSegmentsChanged(
 }
 
 void LocalFrame::UpdateCSSFoldEnvironmentVariables(
-    const WebVector<WebRect>& window_segments) {
+    const WebVector<gfx::Rect>& window_segments) {
   DCHECK(RuntimeEnabledFeatures::CSSFoldablesEnabled());
 
   // Update the variable values on the root instance so that documents that
@@ -1378,16 +1380,16 @@ void LocalFrame::UpdateCSSFoldEnvironmentVariables(
     // describes the fold area (note that this may have a zero width or height,
     // but not negative).
     gfx::Rect fold_rect;
-    if (window_segments[0].y == window_segments[1].y) {
-      int fold_width = window_segments[1].x - window_segments[0].width;
+    if (window_segments[0].y() == window_segments[1].y()) {
+      int fold_width = window_segments[1].x() - window_segments[0].width();
       DCHECK_GE(fold_width, 0);
-      fold_rect.SetRect(window_segments[0].width, window_segments[0].y,
-                        fold_width, window_segments[0].height);
-    } else if (window_segments[0].x == window_segments[1].x) {
-      int fold_height = window_segments[1].y - window_segments[0].height;
+      fold_rect.SetRect(window_segments[0].width(), window_segments[0].y(),
+                        fold_width, window_segments[0].height());
+    } else if (window_segments[0].x() == window_segments[1].x()) {
+      int fold_height = window_segments[1].y() - window_segments[0].height();
       DCHECK_GE(fold_height, 0);
-      fold_rect.SetRect(window_segments[0].x, window_segments[0].height,
-                        window_segments[0].width, fold_height);
+      fold_rect.SetRect(window_segments[0].x(), window_segments[0].height(),
+                        window_segments[0].width(), fold_height);
     }
 
     vars.SetVariable(UADefinedVariable::kFoldTop,
@@ -1497,7 +1499,7 @@ LocalFrame::LocalFrame(LocalFrameClient* client,
                        Frame* parent,
                        Frame* previous_sibling,
                        FrameInsertType insert_type,
-                       const base::UnguessableToken& frame_token,
+                       const LocalFrameToken& frame_token,
                        WindowAgentFactory* inheriting_agent_factory,
                        InterfaceRegistry* interface_registry,
                        std::unique_ptr<PolicyContainer> policy_container,
@@ -1538,8 +1540,8 @@ LocalFrame::LocalFrame(LocalFrameClient* client,
       lifecycle_state_(mojom::FrameLifecycleState::kRunning),
       policy_container_(policy_container ? std::move(policy_container)
                                          : PolicyContainer::CreateEmpty()) {
-  auto frame_tracking_result = GetLocalFramesMap().insert(
-      base::UnguessableTokenHash()(frame_token), this);
+  auto frame_tracking_result =
+      GetLocalFramesMap().insert(FrameToken::Hasher()(GetFrameToken()), this);
   CHECK(frame_tracking_result.stored_value) << "Inserting a duplicate item.";
   if (IsLocalRoot()) {
     probe_sink_ = MakeGarbageCollected<CoreProbeSink>();
@@ -1565,11 +1567,11 @@ LocalFrame::LocalFrame(LocalFrameClient* client,
   idleness_detector_ = MakeGarbageCollected<IdlenessDetector>(this, clock);
   inspector_task_runner_->InitIsolate(V8PerIsolateData::MainThreadIsolate());
 
-  if (ad_tracker_) {
-    SetIsAdSubframeIfNecessary();
-  }
   DCHECK(ad_tracker_ ? RuntimeEnabledFeatures::AdTaggingEnabled()
                      : !RuntimeEnabledFeatures::AdTaggingEnabled());
+  is_subframe_created_by_ad_script_ =
+      !IsMainFrame() && ad_tracker_ &&
+      ad_tracker_->IsAdScriptInStack(AdTracker::StackType::kBottomAndTop);
   if (IsMainFrame()) {
     text_fragment_selector_generator_ =
         MakeGarbageCollected<TextFragmentSelectorGenerator>();
@@ -1796,24 +1798,6 @@ bool LocalFrame::CanNavigate(const Frame& target_frame,
                                 "nor is it the target's parent or opener.");
   }
   return false;
-}
-
-void LocalFrame::SetIsAdSubframeIfNecessary() {
-  DCHECK(ad_tracker_);
-  if (IsAdSubframe())
-    return;
-
-  Frame* parent = Tree().Parent();
-  if (!parent)
-    return;
-
-  bool parent_is_ad = parent->IsAdSubframe();
-
-  if (parent_is_ad ||
-      ad_tracker_->IsAdScriptInStack(AdTracker::StackType::kBottomAndTop)) {
-    SetIsAdSubframe(parent_is_ad ? blink::mojom::AdFrameType::kChildAd
-                                 : blink::mojom::AdFrameType::kRootAd);
-  }
 }
 
 ContentCaptureManager* LocalFrame::GetContentCaptureManager() {
@@ -2043,6 +2027,9 @@ bool LocalFrame::ClipsContent() const {
   if (GetDocument()->IsPaintingPreview())
     return false;
 
+  if (ShouldUsePrintingLayout())
+    return false;
+
   if (IsMainFrame())
     return GetSettings()->GetMainFrameClipsContent();
   // By default clip to viewport.
@@ -2111,9 +2098,10 @@ void LocalFrame::SetOpener(Frame* opener_frame) {
   auto* web_frame = WebFrame::FromCoreFrame(this);
   if (web_frame && Opener() != opener_frame) {
     GetLocalFrameHostRemote().DidChangeOpener(
-        opener_frame ? base::Optional<base::UnguessableToken>(
-                           opener_frame->GetFrameToken())
-                     : base::nullopt);
+        opener_frame
+            ? base::Optional<blink::LocalFrameToken>(
+                  opener_frame->GetFrameToken().GetAs<LocalFrameToken>())
+            : base::nullopt);
   }
   SetOpenerDoNotNotify(opener_frame);
 }
@@ -2606,6 +2594,9 @@ void LocalFrame::WasAttachedAsLocalMainFrame() {
 
 void LocalFrame::EvictFromBackForwardCache(
     mojom::blink::RendererEvictionReason reason) {
+  if (!GetPage()->GetPageScheduler()->IsInBackForwardCache())
+    return;
+  UMA_HISTOGRAM_ENUMERATION("BackForwardCache.Eviction.Renderer", reason);
   GetBackForwardCacheControllerHostRemote().EvictFromBackForwardCache(reason);
 }
 
@@ -2637,6 +2628,9 @@ void LocalFrame::SetScaleFactor(float scale_factor) {
 void LocalFrame::ClosePage(
     mojom::blink::LocalMainFrame::ClosePageCallback completion_callback) {
   SECURITY_CHECK(IsMainFrame());
+
+  // TODO(crbug.com/1161996): Remove this VLOG once the investigation is done.
+  VLOG(1) << "LocalFrame::ClosePage() URL = " << GetDocument()->Url();
 
   // There are two ways to close a page:
   //
@@ -2703,8 +2697,7 @@ void LocalFrame::EnablePreferredSizeChangedMode() {
 }
 
 void LocalFrame::ZoomToFindInPageRect(const gfx::Rect& rect_in_root_frame) {
-  GetPage()->GetChromeClient().ZoomToFindInPageRect(
-      WebRect(rect_in_root_frame));
+  GetPage()->GetChromeClient().ZoomToFindInPageRect(rect_in_root_frame);
 }
 
 #if defined(OS_MAC)
@@ -2724,15 +2717,13 @@ void LocalFrame::GetFirstRectForRange(const gfx::Range& range) {
     return;
 
   if (!client->GetCaretBoundsFromFocusedPlugin(rect)) {
-    blink::WebRect web_rect;
     // When request range is invalid we will try to obtain it from current
     // frame selection. The fallback value will be 0.
     uint32_t start =
         range.IsValid() ? range.start() : GetCurrentCursorPositionInFrame(this);
 
     WebLocalFrameImpl::FromFrame(this)->FirstRectForCharacterRange(
-        start, range.length(), web_rect);
-    rect.SetRect(web_rect.x, web_rect.y, web_rect.width, web_rect.height);
+        start, range.length(), rect);
   }
 
   GetTextInputHost().GotFirstRectForRange(rect);
@@ -2753,7 +2744,7 @@ void LocalFrame::GetStringForRange(const gfx::Range& range,
 
 void LocalFrame::InstallCoopAccessMonitor(
     network::mojom::blink::CoopAccessReportType report_type,
-    const base::UnguessableToken& accessed_window,
+    const FrameToken& accessed_window,
     mojo::PendingRemote<network::mojom::blink::CrossOriginOpenerPolicyReporter>
         reporter,
     bool endpoint_defined,
@@ -2823,6 +2814,24 @@ void LocalFrame::UpdateBrowserControlsState(
 
   GetWidgetForLocalRoot()->UpdateBrowserControlsState(constraints, current,
                                                       animate);
+}
+
+void LocalFrame::UpdateWindowControlsOverlay(
+    const gfx::Rect& window_controls_overlay_rect,
+    const gfx::Insets& insets) {
+  is_window_controls_overlay_visible_ = !window_controls_overlay_rect.IsEmpty();
+  window_controls_overlay_rect_ = window_controls_overlay_rect;
+
+  DocumentStyleEnvironmentVariables& vars =
+      GetDocument()->GetStyleEngine().EnsureEnvironmentVariables();
+  vars.SetVariable(UADefinedVariable::kTitlebarAreaInsetTop,
+                   StyleEnvironmentVariables::FormatPx(insets.top()));
+  vars.SetVariable(UADefinedVariable::kTitlebarAreaInsetLeft,
+                   StyleEnvironmentVariables::FormatPx(insets.left()));
+  vars.SetVariable(UADefinedVariable::kTitlebarAreaInsetBottom,
+                   StyleEnvironmentVariables::FormatPx(insets.bottom()));
+  vars.SetVariable(UADefinedVariable::kTitlebarAreaInsetRight,
+                   StyleEnvironmentVariables::FormatPx(insets.right()));
 }
 
 void LocalFrame::RequestFullscreenVideoElement() {
@@ -3243,7 +3252,7 @@ void LocalFrame::MediaPlayerActionAt(
 
 void LocalFrame::AdvanceFocusInFrame(
     mojom::blink::FocusType focus_type,
-    const base::Optional<base::UnguessableToken>& source_frame_token) {
+    const base::Optional<RemoteFrameToken>& source_frame_token) {
   RemoteFrame* source_frame = SourceFrameForOptionalToken(source_frame_token);
   if (!source_frame) {
     SetInitialFocus(focus_type == mojom::blink::FocusType::kBackward);
@@ -3320,7 +3329,7 @@ void LocalFrame::OnScreensChange() {
 }
 
 void LocalFrame::PostMessageEvent(
-    const base::Optional<base::UnguessableToken>& source_frame_token,
+    const base::Optional<RemoteFrameToken>& source_frame_token,
     const String& source_origin,
     const String& target_origin,
     BlinkTransferableMessage message) {
@@ -3349,9 +3358,16 @@ void LocalFrame::PostMessageEvent(
         message.user_activation->has_been_active,
         message.user_activation->was_active);
   }
+
+  if (RuntimeEnabledFeatures::CapabilityDelegationPaymentRequestEnabled() &&
+      message.delegate_payment_request) {
+    payment_request_token_.Activate();
+  }
+
   message_event->initMessageEvent(
       "message", false, false, std::move(message.message), source_origin,
-      "" /*lastEventId*/, window, ports, user_activation);
+      "" /*lastEventId*/, window, ports, user_activation,
+      message.delegate_payment_request);
 
   // If the agent cluster id had a value it means this was locked when it
   // was serialized.
@@ -3372,7 +3388,7 @@ void LocalFrame::BindReportingObserver(
 }
 
 void LocalFrame::UpdateOpener(
-    const base::Optional<base::UnguessableToken>& opener_frame_token) {
+    const base::Optional<blink::FrameToken>& opener_frame_token) {
   if (auto* web_frame = WebFrame::FromCoreFrame(this)) {
     Frame* opener_frame = nullptr;
     if (opener_frame_token)

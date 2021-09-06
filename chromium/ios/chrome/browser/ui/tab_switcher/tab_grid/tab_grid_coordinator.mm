@@ -14,6 +14,9 @@
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/policy/policy_features.h"
+#import "ios/chrome/browser/policy/policy_util.h"
+#include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
 #import "ios/chrome/browser/ui/activity_services/activity_params.h"
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
@@ -22,6 +25,7 @@
 #import "ios/chrome/browser/ui/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/ui/gestures/view_controller_trait_collection_observer.h"
 #import "ios/chrome/browser/ui/gestures/view_revealing_vertical_pan_handler.h"
 #import "ios/chrome/browser/ui/history/history_coordinator.h"
 #import "ios/chrome/browser/ui/history/public/history_presentation_delegate.h"
@@ -41,7 +45,6 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_paging.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_view_controller.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/tab_grid_transition_handler.h"
-#import "ios/chrome/browser/ui/thumb_strip/thumb_strip_attacher.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_coordinator.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
@@ -61,7 +64,8 @@
                                   RecentTabsPresentationDelegate,
                                   TabGridMediatorDelegate,
                                   TabPresentationDelegate,
-                                  TabGridViewControllerDelegate> {
+                                  TabGridViewControllerDelegate,
+                                  ViewControllerTraitCollectionObserver> {
   // Use an explicit ivar instead of synthesizing as the setter isn't using the
   // ivar.
   Browser* _incognitoBrowser;
@@ -101,6 +105,9 @@
 // The timestamp of the user exiting the tab grid.
 @property(nonatomic, assign) base::TimeTicks tabGridExitTime;
 
+// The page configuration used when create the tab grid view controller;
+@property(nonatomic, assign) TabGridPageConfiguration pageConfiguration;
+
 @end
 
 @implementation TabGridCoordinator
@@ -130,6 +137,16 @@
                               forProtocol:@protocol(BrowsingDataCommands)];
     _regularBrowser = regularBrowser;
     _incognitoBrowser = incognitoBrowser;
+
+    if (IsIncognitoModeDisabled(
+            _regularBrowser->GetBrowserState()->GetPrefs())) {
+      _pageConfiguration = TabGridPageConfiguration::kIncognitoPageDisabled;
+    } else if (IsIncognitoModeForced(
+                   _incognitoBrowser->GetBrowserState()->GetPrefs())) {
+      _pageConfiguration = TabGridPageConfiguration::kIncognitoPageOnly;
+    } else {
+      _pageConfiguration = TabGridPageConfiguration::kAllPagesEnabled;
+    }
   }
   return self;
 }
@@ -154,16 +171,38 @@
   DCHECK(self.incognitoTabsMediator);
   self.incognitoTabsMediator.browser = incognitoBrowser;
   self.thumbStripCoordinator.incognitoBrowser = incognitoBrowser;
+
+  if ([self isThumbStripEnabled]) {
+    // Update the incognito popup menu handler. This is only used in Thumb
+    // Strip mode.
+    if (incognitoBrowser) {
+      self.baseViewController.incognitoPopupMenuHandler = HandlerForProtocol(
+          incognitoBrowser->GetCommandDispatcher(), PopupMenuCommands);
+    } else {
+      self.baseViewController.incognitoPopupMenuHandler = nil;
+    }
+    // If the tab grid is currently on the
+    // incognito page, make sure to update the shown state as it would be
+    // visible onscreen at this point.
+    if (self.baseViewController.activePage == TabGridPageIncognitoTabs) {
+      if (incognitoBrowser) {
+        [self showActiveTabInPage:TabGridPageIncognitoTabs
+                     focusOmnibox:NO
+                     closeTabGrid:NO];
+      } else {
+        [self showTabViewController:nil shouldCloseTabGrid:NO completion:nil];
+      }
+    }
+  }
 }
 
-- (void)setIncognitoThumbStripAttacher:
-    (id<ThumbStripAttacher>)incognitoThumbStripAttacher {
-  if (incognitoThumbStripAttacher == _incognitoThumbStripAttacher) {
-    return;
+- (void)setIncognitoThumbStripSupporting:
+    (id<ThumbStripSupporting>)incognitoThumbStripSupporting {
+  _incognitoThumbStripSupporting = incognitoThumbStripSupporting;
+  if (self.isThumbStripEnabled) {
+    [self.incognitoThumbStripSupporting
+        thumbStripEnabledWithPanHandler:self.thumbStripCoordinator.panHandler];
   }
-  _incognitoThumbStripAttacher = incognitoThumbStripAttacher;
-  self.incognitoThumbStripAttacher.thumbStripPanHandler =
-      self.thumbStripCoordinator.panHandler;
 }
 
 - (void)stopChildCoordinatorsWithCompletion:(ProceduralBlock)completion {
@@ -185,10 +224,20 @@
 
 - (UIViewController*)activeViewController {
   if (self.bvcContainer) {
-    DCHECK(self.bvcContainer.currentBVC);
-    return self.bvcContainer.currentBVC;
+    // When installing the thumb strip while the tab grid is opened, there is no
+    // |currentBVC|.
+    DCHECK(self.bvcContainer.currentBVC || [self isThumbStripEnabled]);
+    return self.bvcContainer.currentBVC ?: self.bvcContainer;
   }
   return self.baseViewController;
+}
+
+- (BOOL)isTabGridActive {
+  if (self.isThumbStripEnabled) {
+    return self.thumbStripCoordinator.panHandler.currentState ==
+           ViewRevealState::Revealed;
+  }
+  return self.bvcContainer == nil && !self.firstPresentation;
 }
 
 - (void)prepareToShowTabGrid {
@@ -202,9 +251,11 @@
 - (void)showTabGrid {
   BOOL animated = !self.animationsDisabledForTesting;
 
-  if (IsThumbStripEnabled()) {
-    [self.thumbStripCoordinator.panHandler setState:ViewRevealState::Revealed
-                                           animated:animated];
+  if (ShowThumbStripInTraitCollection(
+          self.baseViewController.traitCollection)) {
+    [self.thumbStripCoordinator.panHandler
+        setNextState:ViewRevealState::Revealed
+            animated:animated];
     [self.baseViewController contentWillAppearAnimated:animated];
     return;
   }
@@ -254,7 +305,8 @@
 - (void)showTabViewController:(UIViewController*)viewController
            shouldCloseTabGrid:(BOOL)shouldCloseTabGrid
                    completion:(ProceduralBlock)completion {
-  DCHECK(viewController || (IsThumbStripEnabled() && self.bvcContainer));
+  bool thumbStripEnabled = self.isThumbStripEnabled;
+  DCHECK(viewController || (thumbStripEnabled && self.bvcContainer));
 
   if (shouldCloseTabGrid) {
     self.tabGridExitTime = base::TimeTicks::Now();
@@ -264,21 +316,23 @@
     [self reportTabGridUsageTime];
   }
 
-  // If thumb strip is enabled, this will always be true except during initial
-  // setup before the BVC container has been created.
-  if (IsThumbStripEnabled() && self.bvcContainer) {
+  if (thumbStripEnabled) {
     self.bvcContainer.currentBVC = viewController;
     self.baseViewController.childViewControllerForStatusBarStyle =
         viewController;
     [self.baseViewController setNeedsStatusBarAppearanceUpdate];
     if (shouldCloseTabGrid) {
-      [self.thumbStripCoordinator.panHandler setState:ViewRevealState::Hidden
-                                             animated:YES];
+      [self.baseViewController contentWillDisappearAnimated:YES];
+      [self.thumbStripCoordinator.panHandler
+          setNextState:ViewRevealState::Hidden
+              animated:YES];
     }
 
     if (completion) {
       completion();
     }
+    self.firstPresentation = NO;
+
     return;
   }
 
@@ -297,6 +351,7 @@
 
   self.bvcContainer = [[BVCContainerViewController alloc] init];
   self.bvcContainer.currentBVC = viewController;
+
   BOOL animated = !self.animationsDisabledForTesting;
   // Never animate the first time.
   if (self.firstPresentation)
@@ -336,6 +391,86 @@
              }];
 }
 
+#pragma mark - Private (Thumb Strip)
+
+// Whether the thumb strip is enabled.
+- (BOOL)isThumbStripEnabled {
+  return self.thumbStripCoordinator != nil;
+}
+
+// Installs the thumb strip and informs this object dependencies.
+- (void)installThumbStrip {
+  DCHECK(!self.isThumbStripEnabled);
+  ViewRevealState initialState = self.isTabGridActive
+                                     ? ViewRevealState::Revealed
+                                     : ViewRevealState::Hidden;
+  self.thumbStripCoordinator = [[ThumbStripCoordinator alloc]
+      initWithBaseViewController:self.baseViewController
+                         browser:self.browser
+                    initialState:initialState];
+  ThumbStripCoordinator* thumbStripCoordinator = self.thumbStripCoordinator;
+  thumbStripCoordinator.regularBrowser = self.regularBrowser;
+  thumbStripCoordinator.incognitoBrowser = self.incognitoBrowser;
+  [thumbStripCoordinator start];
+
+  ViewRevealingVerticalPanHandler* panHandler =
+      thumbStripCoordinator.panHandler;
+  DCHECK(panHandler);
+  panHandler.layoutSwitcherProvider = self.baseViewController;
+
+  // Create a BVC add it to this view controller if not present. The thumb strip
+  // always needs a BVC container on screen.
+  self.bvcContainer =
+      self.bvcContainer ?: [[BVCContainerViewController alloc] init];
+  if (!self.bvcContainer.view.superview) {
+    [self.baseViewController addChildViewController:self.bvcContainer];
+    self.bvcContainer.view.frame = self.baseViewController.view.bounds;
+    [self.baseViewController.view addSubview:self.bvcContainer.view];
+    self.bvcContainer.view.accessibilityViewIsModal = YES;
+    [self.bvcContainer didMoveToParentViewController:self.baseViewController];
+  }
+
+  DCHECK(self.incognitoThumbStripSupporting);
+  DCHECK(self.regularThumbStripSupporting);
+  // Enable first on BVCContainer, so it is ready to show another BVC.
+  [self.bvcContainer thumbStripEnabledWithPanHandler:panHandler];
+  [self.baseViewController thumbStripEnabledWithPanHandler:panHandler];
+  [self.incognitoThumbStripSupporting
+      thumbStripEnabledWithPanHandler:panHandler];
+  [self.regularThumbStripSupporting thumbStripEnabledWithPanHandler:panHandler];
+
+  self.baseViewController.regularPopupMenuHandler = HandlerForProtocol(
+      self.regularBrowser->GetCommandDispatcher(), PopupMenuCommands);
+  self.baseViewController.incognitoPopupMenuHandler = HandlerForProtocol(
+      self.incognitoBrowser->GetCommandDispatcher(), PopupMenuCommands);
+
+  [self.baseViewController setNeedsStatusBarAppearanceUpdate];
+}
+
+// Uninstalls the thumb strip and informs this object dependencies.
+- (void)uninstallThumbStrip {
+  DCHECK(self.isThumbStripEnabled);
+
+  BOOL showGridAfterUninstall = self.isTabGridActive;
+
+  [self.regularThumbStripSupporting thumbStripDisabled];
+  [self.incognitoThumbStripSupporting thumbStripDisabled];
+  [self.bvcContainer thumbStripDisabled];
+  [self.baseViewController thumbStripDisabled];
+
+  self.thumbStripCoordinator.panHandler.layoutSwitcherProvider = nil;
+  [self.thumbStripCoordinator stop];
+  self.thumbStripCoordinator = nil;
+
+  if (showGridAfterUninstall) {
+    [self.bvcContainer willMoveToParentViewController:nil];
+    [self.bvcContainer.view removeFromSuperview];
+    [self.bvcContainer removeFromParentViewController];
+    self.bvcContainer = nil;
+  }
+  [self.baseViewController setNeedsStatusBarAppearanceUpdate];
+}
+
 #pragma mark - ChromeCoordinator
 
 - (void)start {
@@ -346,8 +481,9 @@
   [self.dispatcher startDispatchingToTarget:reauthAgent
                                 forProtocol:@protocol(IncognitoReauthCommands)];
 
-  TabGridViewController* baseViewController =
-      [[TabGridViewController alloc] init];
+  TabGridViewController* baseViewController;
+  baseViewController = [[TabGridViewController alloc]
+      initWithPageConfiguration:_pageConfiguration];
   baseViewController.handler =
       HandlerForProtocol(self.dispatcher, ApplicationCommands);
   baseViewController.reauthHandler =
@@ -430,21 +566,10 @@
     [self.remoteTabsMediator refreshSessionsView];
   }
 
-  if (IsThumbStripEnabled()) {
-    self.thumbStripCoordinator = [[ThumbStripCoordinator alloc]
-        initWithBaseViewController:baseViewController
-                           browser:self.browser];
-    self.thumbStripCoordinator.regularBrowser = _regularBrowser;
-    self.thumbStripCoordinator.incognitoBrowser = _incognitoBrowser;
-    [self.thumbStripCoordinator start];
-    self.thumbStripCoordinator.panHandler.layoutSwitcherProvider =
-        baseViewController;
-    [self.thumbStripCoordinator.panHandler addAnimatee:baseViewController];
-
-    self.incognitoThumbStripAttacher.thumbStripPanHandler =
-        self.thumbStripCoordinator.panHandler;
-    self.regularThumbStripAttacher.thumbStripPanHandler =
-        self.thumbStripCoordinator.panHandler;
+  baseViewController.traitCollectionObserver = self;
+  if (ShowThumbStripInTraitCollection(
+          self.baseViewController.traitCollection)) {
+    [self installThumbStrip];
   }
 
   // Once the mediators are set up, stop keeping pointers to the browsers used
@@ -454,6 +579,9 @@
 }
 
 - (void)stop {
+  if ([self isThumbStripEnabled]) {
+    [self uninstallThumbStrip];
+  }
   // The TabGridViewController may still message its application commands
   // handler after this coordinator has stopped; make this action a no-op by
   // setting the handler to nil.
@@ -477,9 +605,6 @@
   self.remoteTabsMediator = nil;
   [self.actionSheetCoordinator stop];
   self.actionSheetCoordinator = nil;
-
-  [self.thumbStripCoordinator stop];
-  self.thumbStripCoordinator = nil;
 }
 
 #pragma mark - TabPresentationDelegate
@@ -488,12 +613,13 @@
                focusOmnibox:(BOOL)focusOmnibox
                closeTabGrid:(BOOL)closeTabGrid {
   DCHECK(self.regularBrowser && self.incognitoBrowser);
-  DCHECK(closeTabGrid || IsThumbStripEnabled());
+  DCHECK(closeTabGrid || ShowThumbStripInTraitCollection(
+                             self.baseViewController.traitCollection));
   Browser* activeBrowser = nullptr;
   switch (page) {
     case TabGridPageIncognitoTabs:
       if (self.incognitoBrowser->GetWebStateList()->count() == 0) {
-        DCHECK(IsThumbStripEnabled());
+        DCHECK([self isThumbStripEnabled]);
         [self showTabViewController:nil
                  shouldCloseTabGrid:closeTabGrid
                          completion:nil];
@@ -503,7 +629,7 @@
       break;
     case TabGridPageRegularTabs:
       if (self.regularBrowser->GetWebStateList()->count() == 0) {
-        DCHECK(IsThumbStripEnabled());
+        DCHECK([self isThumbStripEnabled]);
         [self showTabViewController:nil
                  shouldCloseTabGrid:closeTabGrid
                          completion:nil];
@@ -512,7 +638,7 @@
       activeBrowser = self.regularBrowser;
       break;
     case TabGridPageRemoteTabs:
-      if (IsThumbStripEnabled()) {
+      if ([self isThumbStripEnabled]) {
         [self showTabViewController:nil
                  shouldCloseTabGrid:closeTabGrid
                          completion:nil];
@@ -589,6 +715,12 @@
 - (void)tabGridViewControllerDidDismiss:
     (TabGridViewController*)tabGridViewController {
   [self.delegate tabGridDismissTransitionDidEnd:self];
+}
+
+- (void)openLinkWithURL:(const GURL&)URL {
+  id<ApplicationCommands> handler =
+      HandlerForProtocol(self.dispatcher, ApplicationCommands);
+  [handler openURLInNewTab:[OpenNewTabCommand commandWithURLFromChrome:URL]];
 }
 
 #pragma mark - RecentTabsPresentationDelegate
@@ -677,6 +809,21 @@
     (NSInteger)sectionIdentifier {
   return [self.baseViewController.remoteTabsViewController
       sessionForSectionIdentifier:sectionIdentifier];
+}
+
+#pragma mark - ViewControllerTraitCollectionObserver
+
+- (void)viewController:(UIViewController*)viewController
+    traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
+  BOOL canShowThumbStrip =
+      ShowThumbStripInTraitCollection(viewController.traitCollection);
+  if (canShowThumbStrip != [self isThumbStripEnabled]) {
+    if (canShowThumbStrip) {
+      [self installThumbStrip];
+    } else {
+      [self uninstallThumbStrip];
+    }
+  }
 }
 
 @end

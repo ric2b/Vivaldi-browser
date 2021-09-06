@@ -31,7 +31,6 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.document.ChromeIntentUtil;
 import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactory;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -134,8 +133,10 @@ public class DownloadUtils {
                 // the ChromeTabbedActivity.
                 tab.loadUrl(params);
 
-                // Bring Chrome to the foreground, if possible.
-                Intent intent = ChromeIntentUtil.createBringTabToFrontIntent(tab.getId());
+                // Bring Chrome to the foreground, if possible. Unless Chrome is already in the
+                // foreground, this request is most likely coming from a notification.
+                Intent intent = IntentHandler.createTrustedBringTabToFrontIntent(
+                        tab.getId(), IntentHandler.BringToFrontSource.NOTIFICATION);
                 if (intent != null) {
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     IntentUtils.safeStartActivity(appContext, intent);
@@ -166,7 +167,6 @@ public class DownloadUtils {
                 // Sits on top of another Activity.
                 intent.addFlags(
                         Intent.FLAG_ACTIVITY_MULTIPLE_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                intent.putExtra(IntentHandler.EXTRA_PARENT_COMPONENT, activity.getComponentName());
                 activity.startActivity(intent);
             }
         }
@@ -180,7 +180,7 @@ public class DownloadUtils {
             Tracker tracker = TrackerFactory.getTrackerForProfile(profile);
             tracker.notifyEvent(EventConstants.DOWNLOAD_HOME_OPENED);
         }
-        DownloadMetrics.recordDownloadPageOpen(source);
+        DownloadMetrics.recordDownloadPageOpen(source, tab);
         return true;
     }
 
@@ -358,18 +358,18 @@ public class DownloadUtils {
      * @param source The location from which the download was opened.
      */
     public static void openItem(
-            ContentId contentId, boolean isOffTheRecord, @DownloadOpenSource int source) {
+            ContentId contentId, OTRProfileID otrProfileID, @DownloadOpenSource int source) {
         if (LegacyHelpers.isLegacyAndroidDownload(contentId)) {
             ContextUtils.getApplicationContext().startActivity(
                     new Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         } else if (LegacyHelpers.isLegacyOfflinePage(contentId)) {
             OpenParams openParams = new OpenParams(LaunchLocation.PROGRESS_BAR);
-            openParams.openInIncognito = isOffTheRecord;
+            openParams.openInIncognito = OTRProfileID.isOffTheRecord(otrProfileID);
             OfflineContentAggregatorFactory.get().openItem(openParams, contentId);
         } else {
             DownloadManagerService.getDownloadManagerService().openDownload(
-                    contentId, isOffTheRecord, source);
+                    contentId, otrProfileID, source);
         }
     }
 

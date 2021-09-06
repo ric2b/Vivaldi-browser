@@ -11,6 +11,7 @@ Aquí tienes algunas cosas que puedes probar para empezar.</translation>
 <translation id="1037492556044956303">Se ha añadido <ph name="DEVICE_NAME" /></translation>
 <translation id="1047017786576569492">parcial</translation>
 <translation id="1047773237499189053">Hay una nueva función disponible. Utiliza la flecha hacia arriba para obtener más información.</translation>
+<translation id="1052916631016577720">Analizar elemento</translation>
 <translation id="1056775291175587022">No hay redes</translation>
 <translation id="1059194134494239015"><ph name="DISPLAY_NAME" />: <ph name="RESOLUTION" /></translation>
 <translation id="108486256082349153">Móvil: <ph name="ADDRESS" /></translation>
@@ -24,6 +25,7 @@ Aquí tienes algunas cosas que puedes probar para empezar.</translation>
 <translation id="1165712434476988950">Se debe reiniciar el dispositivo para aplicar la actualización.</translation>
 <translation id="1175572348579024023">Desplazarse</translation>
 <translation id="1178581264944972037">Pausar</translation>
+<translation id="1181037720776840403">Quitar</translation>
 <translation id="118532027333893379">Toca en cualquier sitio para hacer una captura de la pantalla completa</translation>
 <translation id="1190609913194133056">Centro de notificaciones</translation>
 <translation id="1195412055398077112">reajustar</translation>
@@ -147,6 +149,7 @@ Aquí tienes algunas cosas que puedes probar para empezar.</translation>
 <translation id="2220572644011485463">PIN o contraseña</translation>
 <translation id="2222338659135520253">Debes iniciar sesión</translation>
 <translation id="2222841058024245321">Escritorio 7</translation>
+<translation id="2224075387478458881">La grabación de pantalla no está permitida cuando se muestra contenido protegido</translation>
 <translation id="225680501294068881">Buscando dispositivos...</translation>
 <translation id="2268130516524549846">Bluetooth inhabilitado</translation>
 <translation id="2268813581635650749">Cerrar sesiones</translation>
@@ -239,7 +242,6 @@ Aquí tienes algunas cosas que puedes probar para empezar.</translation>
 <translation id="3038571455154067151">Para iniciar sesión, introduce tu código de acceso parental de Family Link</translation>
 <translation id="3039939407102840004">La batería del lápiz óptico está al <ph name="PERCENTAGE" /> por ciento.</translation>
 <translation id="3045488863354895414">Buenas tardes,</translation>
-<translation id="3051128274746680507">Tu perfil de usuario supervisado se eliminará pronto. Inicia sesión para obtener más información.</translation>
 <translation id="3055162170959710888">Hoy has utilizado este dispositivo durante <ph name="USED_TIME" /></translation>
 <translation id="3077734595579995578">mayús</translation>
 <translation id="3081696990447829002">Mostrar menú</translation>
@@ -252,13 +254,11 @@ Aquí tienes algunas cosas que puedes probar para empezar.</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
 <translation id="3126069444801937830">Reinicia el sistema para actualizarlo.</translation>
 <translation id="3139942575505304791">Escritorio 1</translation>
-<translation id="3147157020428159854">Grabación de pantalla detenida</translation>
 <translation id="315116470104423982">Redes móviles</translation>
 <translation id="3151786313568798007">Orientación</translation>
 <translation id="3153444934357957346">Solo puedes tener un máximo de <ph name="MULTI_PROFILE_USER_LIMIT" /> cuentas en el inicio de sesión múltiple.</translation>
 <translation id="3154351730702813399">Es posible que el administrador del dispositivo supervise tu actividad de navegación.</translation>
 <translation id="3181441307743005334">El reinicio puede tardar un poco</translation>
-<translation id="3190230207529484457">No está permitido hacer capturas de pantalla cuando se muestra contenido protegido</translation>
 <translation id="3202010236269062730">{NUM_DEVICES,plural, =1{Conectado a 1 dispositivo}other{Conectado a # dispositivos}}</translation>
 <translation id="320207200541803018">Poner un temporizador</translation>
 <translation id="3203405173652969239">Accesibilidad con interruptores habilitada</translation>
@@ -267,7 +267,6 @@ Aquí tienes algunas cosas que puedes probar para empezar.</translation>
 <translation id="3226991577105957773">y <ph name="COUNT" /> más</translation>
 <translation id="3236488194889173876">No hay ninguna red móvil disponible</translation>
 <translation id="3249513730522716925">La ventana <ph name="WINDOW_TITLE" /> se ha movido del escritorio <ph name="ACTIVE_DESK" /> al escritorio <ph name="TARGET_DESK" /></translation>
-<translation id="3252068179161473151"><ph name="WIRELESS_PROVIDER" />; intensidad de la señal: <ph name="SIGNAL_STRENGTH" /> %.</translation>
 <translation id="3255483164551725916">¿Qué puedes hacer?</translation>
 <translation id="3269597722229482060">Clic derecho</translation>
 <translation id="3289674678944039601">Cargando mediante adaptador de CA</translation>
@@ -306,6 +305,7 @@ Aquí tienes algunas cosas que puedes probar para empezar.</translation>
 <translation id="3571734092741541777">Configurar</translation>
 <translation id="3573179567135747900">Cambiar de nuevo por "<ph name="FROM_LOCALE" />" (requiere reiniciar)</translation>
 <translation id="3576141592585647168">Cambiar zona horaria</translation>
+<translation id="3593039967545720377">Pulsa <ph name="SHORTCUT_KEY_NAME" /> + V para ver el historial del portapapeles. Copia un elemento para empezar.</translation>
 <translation id="3593646411856133110">Desliza el dedo hacia arriba y no lo levantes para ver las aplicaciones abiertas</translation>
 <translation id="3595596368722241419">Batería al máximo</translation>
 <translation id="3604801046548457007">Se ha creado el escritorio <ph name="DESK_TITILE" /></translation>
@@ -350,6 +350,7 @@ Todos los usuarios deben cerrar sesión para continuar.</translation>
 <translation id="3901991538546252627">Conectando con: <ph name="NAME" /></translation>
 <translation id="3943857333388298514">Pegar</translation>
 <translation id="394485226368336402">Configuración de audio</translation>
+<translation id="3945319193631853098">Toca para completar la configuración</translation>
 <translation id="3945867833895287237">Conectándose al punto de acceso...</translation>
 <translation id="3962859241508114581">Pista anterior</translation>
 <translation id="3969043077941541451">Desactivado</translation>
@@ -394,10 +395,12 @@ Todos los usuarios deben cerrar sesión para continuar.</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4321776623976362024">Has pulsado la combinación de teclas que activa el contraste alto. ¿Quieres activarlo?</translation>
 <translation id="4331809312908958774">SO de Chrome</translation>
+<translation id="4333628967105022692">No es posible lanzar Lacros si varios usuarios han iniciado sesión.</translation>
 <translation id="4338109981321384717">Lupa</translation>
 <translation id="4351433414020964307">El Asistente se está cargando...</translation>
 <translation id="4356930093361201197">modo de contraste alto</translation>
 <translation id="4371348193907997655">Configuración de envío</translation>
+<translation id="4378479437904450384"><ph name="WIRELESS_PROVIDER" />; intensidad de la señal: <ph name="SIGNAL_STRENGTH" /> %</translation>
 <translation id="4378551569595875038">Conectando...</translation>
 <translation id="4379531060876907730">Estas son las herramientas del lápiz óptico</translation>
 <translation id="4389184120735010762">Has pulsado la combinación de teclas que activa la lupa fijada. ¿Quieres activarla?</translation>
@@ -405,6 +408,7 @@ Todos los usuarios deben cerrar sesión para continuar.</translation>
 <translation id="4421231901400348175">Compartiendo control de la pantalla con <ph name="HELPER_NAME" /> a través de Asistencia remota.</translation>
 <translation id="4424159417645388645">Escritorio 5</translation>
 <translation id="4430019312045809116">Volumen</translation>
+<translation id="4449692009715125625">{NUM_NOTIFICATIONS,plural, =1{1 notificación importante}other{# notificaciones importantes}}</translation>
 <translation id="4450893287417543264">No volver a mostrar</translation>
 <translation id="445864333228800152">Buenas noches,</translation>
 <translation id="4458688154122353284">Detener grabación de pantalla</translation>
@@ -476,6 +480,10 @@ Todos los usuarios deben cerrar sesión para continuar.</translation>
 <translation id="4961318399572185831">Enviar pantalla</translation>
 <translation id="4969092041573468113"><ph name="HOURS" /> h <ph name="MINUTES" /> min <ph name="SECONDS" /> s</translation>
 <translation id="4975771730019223894">Insignias de aplicaciones</translation>
+<translation id="4977493774330778463"><ph name="NUM_IMPORTANT_NOTIFICATION" />:
+        <ph name="NOTIFICATION_1" />,
+        <ph name="NOTIFICATION_2" />,
+        <ph name="NUM_OTHER_NOTIFICATION" /></translation>
 <translation id="5003993274120026347">Siguiente frase</translation>
 <translation id="5030687792513154421">Se ha agotado el tiempo</translation>
 <translation id="5033299697334913360">Haz clic en cualquier parte de la pantalla para hacer una captura de la pantalla completa</translation>
@@ -489,6 +497,7 @@ Todos los usuarios deben cerrar sesión para continuar.</translation>
 <translation id="5168181903108465623">Dispositivos de transmisión disponibles</translation>
 <translation id="5170568018924773124">Mostrar en carpeta</translation>
 <translation id="5176318573511391780">Grabar una parte de la pantalla</translation>
+<translation id="5206057955438543357">{NUM_NOTIFICATIONS,plural, =1{1 notificación más}other{# notificaciones más}}</translation>
 <translation id="5207949376430453814">Resaltar el símbolo de intercalación del texto</translation>
 <translation id="5208059991603368177">Sí</translation>
 <translation id="5222676887888702881">Cerrar sesión</translation>
@@ -557,6 +566,7 @@ Todos los usuarios deben cerrar sesión para continuar.</translation>
 <translation id="5825969630400862129">Configuración de dispositivos conectados</translation>
 <translation id="5837036133683224804">Parar <ph name="ROUTE_TITLE" /> en <ph name="RECEIVER_NAME" /></translation>
 <translation id="5860033963881614850">Desactivado</translation>
+<translation id="5860491529813859533">Activar</translation>
 <translation id="5876666360658629066">Introduce el código parental</translation>
 <translation id="5881540930187678962">Configurar Mi teléfono más tarde</translation>
 <translation id="5895138241574237353">Reiniciar</translation>
@@ -588,6 +598,7 @@ Todos los usuarios deben cerrar sesión para continuar.</translation>
 <translation id="6043212731627905357">Este monitor no se puede utilizar con tu <ph name="DEVICE_TYPE" /> (el monitor no es compatible).</translation>
 <translation id="6043994281159824495">Salir ahora</translation>
 <translation id="6047696787498798094">Cuando cambies de usuario, la pantalla dejará de compartirse. ¿Quieres continuar?</translation>
+<translation id="6050368268239407309">Herramientas para presentaciones</translation>
 <translation id="6054305421211936131">Iniciar sesión con tarjeta inteligente</translation>
 <translation id="6059276912018042191">Pestañas de Chrome recientes</translation>
 <translation id="6062360702481658777">Tu sesión se cerrará automáticamente en <ph name="LOGOUT_TIME_LEFT" />.</translation>
@@ -598,10 +609,10 @@ Todos los usuarios deben cerrar sesión para continuar.</translation>
 <translation id="612734058257491180">El Asistente de Google no está disponible en las sesiones de invitado.</translation>
 <translation id="6137566720514957455">Abre el cuadro de diálogo para quitar la cuenta de <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="615957422585914272">Mostrar teclado en pantalla</translation>
-<translation id="6164005077879661055">Todos los archivos y datos locales asociados al usuario supervisado se eliminarán de forma permanente una vez que se haya eliminado este usuario supervisado. Es posible que el administrador pueda seguir viendo la configuración y los sitios web visitados de este usuario supervisado en la página <ph name="MANAGEMENT_URL" />.</translation>
 <translation id="6165508094623778733">Más información</translation>
 <translation id="6179832488876878285">Puedes fijar tus archivos importantes aquí. Abre la aplicación Archivos para empezar.</translation>
 <translation id="622484624075952240">Flecha hacia abajo</translation>
+<translation id="6231419273573514727">Es posible que el rendimiento de los periféricos esté limitado</translation>
 <translation id="6236290670123303279">Gestionar configuración</translation>
 <translation id="6237231532760393653">1X</translation>
 <translation id="6254629735336163724">Bloqueada en horizontal</translation>
@@ -618,6 +629,7 @@ Todos los usuarios deben cerrar sesión para continuar.</translation>
 <translation id="6376931439017688372">El Bluetooth está activado</translation>
 <translation id="6381109794406942707">Para desbloquear el dispositivo, introduce tu PIN.</translation>
 <translation id="639644700271529076">Bloqueo de mayúsculas desactivado</translation>
+<translation id="6396835948284782440">Mantén pulsado [Esc] para salir.</translation>
 <translation id="6406704438230478924">Alt Gr</translation>
 <translation id="6424520630891723617"><ph name="SECURITY_STATUS" />, intensidad de la señal: <ph name="SIGNAL_STRENGTH" /></translation>
 <translation id="642644398083277086">Borrar todas las notificaciones</translation>
@@ -662,6 +674,7 @@ Todos los usuarios deben cerrar sesión para continuar.</translation>
 <translation id="6715542151869432661">No se han encontrado dispositivos móviles.</translation>
 <translation id="6723839937902243910">Batería</translation>
 <translation id="6727969043791803658">Conectado, <ph name="BATTERY_PERCENTAGE" /> % de batería</translation>
+<translation id="6732800389263199929"><ph name="COUNT" /> +</translation>
 <translation id="6751052314767925245">Esta función la gestiona tu administrador</translation>
 <translation id="6751826523481687655">El control del rendimiento está activado</translation>
 <translation id="6752912906630585008">Se ha quitado el escritorio <ph name="REMOVED_DESK" /> y se ha combinado con el escritorio <ph name="RECEIVE_DESK" /></translation>
@@ -673,6 +686,7 @@ Todos los usuarios deben cerrar sesión para continuar.</translation>
 <translation id="6818242057446442178">Retroceder por palabra</translation>
 <translation id="6820676911989879663">Haz una pausa</translation>
 <translation id="6850010208275816200">La aplicación actual está en pantalla completa. Si la aplicación te pide la contraseña, primero sal del modo de pantalla completa.</translation>
+<translation id="6852052252232534364">Clic para activar</translation>
 <translation id="6857725247182211756"><ph name="SECONDS" /> s</translation>
 <translation id="6857811139397017780">Activar <ph name="NETWORKSERVICE" /></translation>
 <translation id="685782768769951078">{NUM_DIGITS,plural, =1{Falta 1 dígito}other{Faltan # dígitos}}</translation>
@@ -696,6 +710,7 @@ Todos los usuarios deben cerrar sesión para continuar.</translation>
 <translation id="7029814467594812963">Cerrar sesión</translation>
 <translation id="703425375924687388"><ph name="QUERY_NAME" />, Asistente de Google</translation>
 <translation id="7042322267639375032">Comprimir área de estado</translation>
+<translation id="7055910611768509537">El lápiz óptico no se ha usado en más de una semana</translation>
 <translation id="7066646422045619941">El administrador ha inhabilitado esta red.</translation>
 <translation id="7067196344162293536">Rotación automática</translation>
 <translation id="7068360136237591149">Abrir un archivo</translation>
@@ -721,6 +736,7 @@ Todos los usuarios deben cerrar sesión para continuar.</translation>
 <translation id="7346909386216857016">Entendido</translation>
 <translation id="7348093485538360975">Teclado en pantalla</translation>
 <translation id="735745346212279324">VPN desconectada</translation>
+<translation id="7360036564632145207">Si cambias la protección de acceso a datos desde periféricos, puedes optimizar el rendimiento</translation>
 <translation id="7371404428569700291">Grabar ventana</translation>
 <translation id="7377169924702866686">El bloqueo de mayúsculas está activado.</translation>
 <translation id="7378203170292176219">Arrastra para seleccionar un área de grabación</translation>
@@ -729,17 +745,19 @@ Todos los usuarios deben cerrar sesión para continuar.</translation>
 <translation id="7392563512730092880">Puedes configurarlo en cualquier momento desde Ajustes.</translation>
 <translation id="7398254312354928459">Se ha cambiado la conexión de red</translation>
 <translation id="7405710164030118432">Para desbloquear el dispositivo, introduce tu código de acceso parental de Family Link</translation>
+<translation id="7406608787870898861">Termina de configurar tu red móvil</translation>
 <translation id="741244894080940828">conversión</translation>
 <translation id="7413851974711031813">Pulsa Esc para cerrar</translation>
 <translation id="742594950370306541">La cámara se está utilizando.</translation>
 <translation id="742608627846767349">Buenos días,</translation>
 <translation id="743058460480092004">La cámara y el micrófono se están utilizando.</translation>
+<translation id="7434543979546293336">Marcada como idea clave</translation>
 <translation id="7452560014878697800">Una aplicación está usando tu cámara</translation>
 <translation id="7456049842111127849">Modo de captura, establecido en <ph name="TYPE" /> <ph name="SOURCE" />.</translation>
 <translation id="7461924472993315131">Fijar</translation>
 <translation id="746232733191930409">Modo de grabación de pantalla</translation>
 <translation id="7466449121337984263">Toca el sensor</translation>
-<translation id="7477793887173910789">Controla tu música, tus vídeos y mucho más</translation>
+<translation id="7477793887173910789">Controla tu música, tus vídeos y más</translation>
 <translation id="7483025031359818980">Área de selección establecida en pantalla completa</translation>
 <translation id="7497767806359279797">Seleccionar idioma y teclado</translation>
 <translation id="7509246181739783082">Verifica tu identidad</translation>
@@ -777,6 +795,7 @@ Todos los usuarios deben cerrar sesión para continuar.</translation>
 <translation id="7780159184141939021">Girar pantalla</translation>
 <translation id="7796353162336583443">Toca el botón del lápiz óptico situado en la estantería para tomar una nota, hacer una captura de pantalla o utilizar el Asistente de Google, el puntero láser o la lupa.</translation>
 <translation id="7798302898096527229">Pulsa la tecla de búsqueda o Mayús para cancelarlo.</translation>
+<translation id="7807966291075028781">Periférico no compatible en el Modo invitados por motivos de seguridad</translation>
 <translation id="7814236020522506259"><ph name="HOUR" /> y <ph name="MINUTE" /></translation>
 <translation id="7829386189513694949">Señal fuerte</translation>
 <translation id="7837740436429729974">Tiempo agotado</translation>
@@ -845,6 +864,7 @@ Todos los usuarios deben cerrar sesión para continuar.</translation>
 <translation id="8345019317483336363">Ventana <ph name="WINDOW_TITLE" /> seleccionada</translation>
 <translation id="8351131234907093545">Crear nota</translation>
 <translation id="8371779926711439835">Avanzar por carácter</translation>
+<translation id="8371991222807690464">Es posible que el rendimiento de los periféricos esté limitado en el Modo invitados</translation>
 <translation id="8375916635258623388">Este <ph name="DEVICE_NAME" /> y tu teléfono se conectarán automáticamente</translation>
 <translation id="8380784334203145311">Buenas noches,</translation>
 <translation id="8388750414311082622">No se puede quitar el último escritorio.</translation>
@@ -947,6 +967,8 @@ Todos los usuarios deben cerrar sesión para continuar.</translation>
 <translation id="9091626656156419976">Se ha quitado la pantalla <ph name="DISPLAY_NAME" /></translation>
 <translation id="9098969848082897657">Silenciar teléfono</translation>
 <translation id="9099154003160514616">Actualización de Lacros disponible</translation>
+<translation id="9105450214093926548">No es posible que un segundo usuario inicie sesión mientras el navegador Lacros se está ejecutando. Utiliza un perfil del navegador secundario en Lacros o cierra Lacros y vuelve a intentarlo.</translation>
+<translation id="9133335900048457298">No se puede grabar contenido protegido</translation>
 <translation id="9151726767154816831">Reinicia y aplica la función Powerwash para actualizar el sistema</translation>
 <translation id="9166331175924255663">Activa o desactiva la alta visibilidad de Compartir con Nearby.</translation>
 <translation id="9168436347345867845">En otro momento</translation>

@@ -22,20 +22,24 @@
 
 namespace feed {
 
-LoadMoreTask::LoadMoreTask(FeedStream* stream,
+LoadMoreTask::LoadMoreTask(const StreamType& stream_type,
+                           FeedStream* stream,
                            base::OnceCallback<void(Result)> done_callback)
-    : stream_(stream), done_callback_(std::move(done_callback)) {}
+    : stream_type_(stream_type),
+      stream_(stream),
+      done_callback_(std::move(done_callback)) {}
 
 LoadMoreTask::~LoadMoreTask() = default;
 
 void LoadMoreTask::Run() {
   // Check prerequisites.
-  StreamModel* model = stream_->GetModel();
+  // TODO(crbug/1152592): Parameterize stream loading by stream type.
+  StreamModel* model = stream_->GetModel(stream_type_);
   if (!model)
     return Done(LoadStreamStatus::kLoadMoreModelIsNotLoaded);
 
   LoadStreamStatus final_status =
-      stream_->ShouldMakeFeedQueryRequest(/*is_load_more=*/true);
+      stream_->ShouldMakeFeedQueryRequest(stream_type_, /*is_load_more=*/true);
   if (final_status != LoadStreamStatus::kNoStatus)
     return Done(final_status);
 
@@ -46,7 +50,8 @@ void LoadMoreTask::Run() {
 }
 
 void LoadMoreTask::UploadActionsComplete(UploadActionsTask::Result result) {
-  StreamModel* model = stream_->GetModel();
+  // TODO(crbug/1152592): Parameterize stream loading by stream type.
+  StreamModel* model = stream_->GetModel(stream_type_);
   DCHECK(model) << "Model was unloaded outside of a Task";
 
   // Determine whether the load more request should be forced signed-out
@@ -64,18 +69,20 @@ void LoadMoreTask::UploadActionsComplete(UploadActionsTask::Result result) {
   bool force_signed_out_request = !model->signed_in();
   // Send network request.
   fetch_start_time_ = base::TimeTicks::Now();
+  // TODO(crbug/1152592): Send a different network request type for WebFeeds.
   stream_->GetNetwork()->SendQueryRequest(
+      NetworkRequestType::kNextPage,
       CreateFeedQueryLoadMoreRequest(
-          stream_->GetRequestMetadata(/*is_for_next_page=*/true),
+          stream_->GetRequestMetadata(stream_type_, /*is_for_next_page=*/true),
           stream_->GetMetadata()->GetConsistencyToken(),
-          stream_->GetModel()->GetNextPageToken()),
+          stream_->GetModel(stream_type_)->GetNextPageToken()),
       force_signed_out_request,
       base::BindOnce(&LoadMoreTask::QueryRequestComplete, GetWeakPtr()));
 }
 
 void LoadMoreTask::QueryRequestComplete(
     FeedNetwork::QueryRequestResult result) {
-  StreamModel* model = stream_->GetModel();
+  StreamModel* model = stream_->GetModel(stream_type_);
   DCHECK(model) << "Model was unloaded outside of a Task";
 
   if (!result.response_body)
@@ -105,6 +112,7 @@ void LoadMoreTask::QueryRequestComplete(
 
 void LoadMoreTask::Done(LoadStreamStatus status) {
   Result result;
+  result.stream_type = stream_type_;
   result.final_status = status;
   result.loaded_new_content_from_network = loaded_new_content_from_network_;
   std::move(done_callback_).Run(result);

@@ -44,7 +44,8 @@ const char kAccountsPrefDeviceLocalAccountAutoLoginBailoutEnabled[] =
     "cros.accounts.deviceLocalAccountAutoLoginBailoutEnabled";
 const char kAccountsPrefDeviceLocalAccountPromptForNetworkWhenOffline[] =
     "cros.accounts.deviceLocalAccountPromptForNetworkWhenOffline";
-// TODO(crbug.com/866790): Check it is not used anymore and remove it.
+// TODO(crbug/1155729): Check it is not used anymore for deprecated supervised
+// users and remove it.
 const char kAccountsPrefSupervisedUsersEnabled[] =
     "cros.accounts.supervisedUsersEnabled";
 const char kAccountsPrefTransferSAMLCookies[] =
@@ -487,4 +488,16 @@ const char kDeviceCrostiniArcAdbSideloadingAllowed[] =
 // A boolean pref controlling showing the low disk space notification.
 const char kDeviceShowLowDiskSpaceNotification[] =
     "cros.device.show_low_disk_space_notification";
+
+// Boolean pref indicating whether data access is enabled for
+// Thunderbolt/USB4 peripherals. Enabling this pref disables the data access
+// protection and will allow the aforementioned peripheral devices to be fully
+// connected via PCIe tunneling.
+const char kDevicePeripheralDataAccessEnabled[] =
+    "cros.device.peripheral_data_access_enabled";
+
+// A list of dictionaries indicating USB devices that may be used by chrome.usb.
+const char kUsbDetachableAllowlist[] = "cros.device.usb_detachable_allowlist";
+const char kUsbDetachableAllowlistKeyVid[] = "vid";
+const char kUsbDetachableAllowlistKeyPid[] = "pid";
 }  // namespace chromeos

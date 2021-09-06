@@ -7,6 +7,8 @@
 
 #include "cc/input/layer_selection_bound.h"
 #include "mojo/public/mojom/base/text_direction.mojom-blink.h"
+#include "services/viz/public/mojom/compositing/delegated_ink_metadata.mojom-blink.h"
+#include "services/viz/public/mojom/compositing/frame_sink_id.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/input_handler.mojom-blink.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-blink.h"
 #include "third_party/blink/public/platform/web_text_input_info.h"
@@ -23,7 +25,9 @@ enum class EventListenerClass;
 enum class EventListenerProperties;
 class Layer;
 class LayerTreeSettings;
+class LayerTreeDebugState;
 class PaintImage;
+struct ElementId;
 }  // namespace cc
 
 namespace ui {
@@ -256,6 +260,11 @@ class PLATFORM_EXPORT FrameWidget {
   // Returns the raster scale factor for the local root frame associated with
   // this widget, taking into account its transform to main frame space.
   virtual float GetCompositingScaleFactor() = 0;
+
+  // Get and set the configuration for the debugging overlay managed by the
+  // underlaying LayerTreeHost.
+  virtual const cc::LayerTreeDebugState& GetLayerTreeDebugState() = 0;
+  virtual void SetLayerTreeDebugState(const cc::LayerTreeDebugState& state) = 0;
 };
 
 }  // namespace blink

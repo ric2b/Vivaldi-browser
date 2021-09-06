@@ -16,7 +16,6 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
-#include "chrome/browser/ui/views/hats/hats_bubble_view.h"
 #include "chrome/browser/ui/webui/chrome_web_contents_handler.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_isolated_world_ids.h"
@@ -34,6 +33,8 @@
 #include "ui/views/controls/webview/web_dialog_view.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/metadata/metadata_header_macros.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/web_dialogs/web_dialog_delegate.h"
 
 constexpr gfx::Size HatsNextWebDialog::kMinSize;
@@ -42,6 +43,7 @@ constexpr gfx::Size HatsNextWebDialog::kMaxSize;
 // WebView which contains the WebContents displaying the HaTS Next survey.
 class HatsNextWebDialog::HatsWebView : public views::WebView {
  public:
+  METADATA_HEADER(HatsWebView);
   HatsWebView(content::BrowserContext* browser_context,
               Browser* browser,
               HatsNextWebDialog* dialog)
@@ -112,6 +114,9 @@ class HatsNextWebDialog::HatsWebView : public views::WebView {
   HatsNextWebDialog* dialog_;
   Browser* browser_;
 };
+
+BEGIN_METADATA(HatsNextWebDialog, HatsWebView, views::WebView)
+END_METADATA
 
 HatsNextWebDialog::HatsNextWebDialog(Browser* browser,
                                      const std::string& trigger_id,
@@ -270,3 +275,7 @@ void HatsNextWebDialog::UpdateWidgetSize() {
 bool HatsNextWebDialog::IsWaitingForSurveyForTesting() {
   return loading_timer_.IsRunning();
 }
+
+BEGIN_METADATA(HatsNextWebDialog, views::BubbleDialogDelegateView)
+ADD_READONLY_PROPERTY_METADATA(GURL, ParameterizedHatsURL)
+END_METADATA

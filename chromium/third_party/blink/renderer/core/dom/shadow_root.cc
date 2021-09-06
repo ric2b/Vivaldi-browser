@@ -63,6 +63,7 @@ ShadowRoot::ShadowRoot(Document& document, ShadowRootType type)
       registered_with_parent_shadow_root_(false),
       delegates_focus_(false),
       slot_assignment_mode_(static_cast<unsigned>(SlotAssignmentMode::kAuto)),
+      needs_dir_auto_attribute_update_(false),
       unused_(0) {}
 
 ShadowRoot::~ShadowRoot() = default;
@@ -124,6 +125,9 @@ void ShadowRoot::setInnerHTML(const String& html,
           html, &host(), kAllowScriptingContent, "innerHTML",
           /*include_shadow_roots=*/false, exception_state)) {
     ReplaceChildrenWithFragment(this, fragment, exception_state);
+    auto* element = DynamicTo<HTMLElement>(host());
+    if (element && !element->NeedsInheritDirectionalityFromParent())
+      element->UpdateDescendantDirectionality(element->CachedDirectionality());
   }
 }
 
@@ -131,6 +135,20 @@ void ShadowRoot::RebuildLayoutTree(WhitespaceAttacher& whitespace_attacher) {
   DCHECK(!NeedsReattachLayoutTree());
   DCHECK(!ChildNeedsReattachLayoutTree());
   RebuildChildrenLayoutTrees(whitespace_attacher);
+}
+
+void ShadowRoot::DetachLayoutTree(bool performing_reattach) {
+  ContainerNode::DetachLayoutTree(performing_reattach);
+
+  // Shadow host may contain unassigned light dom children that need detaching.
+  // Assigned nodes are detached by the slot element.
+  for (Node& child : NodeTraversal::ChildrenOf(host())) {
+    if (!child.IsSlotable() || child.AssignedSlotWithoutRecalc())
+      continue;
+
+    if (child.GetDocument() == GetDocument())
+      child.DetachLayoutTree(performing_reattach);
+  }
 }
 
 Node::InsertionNotificationRequest ShadowRoot::InsertedInto(

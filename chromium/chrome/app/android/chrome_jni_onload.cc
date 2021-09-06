@@ -4,8 +4,13 @@
 
 #include "chrome/app/android/chrome_jni_onload.h"
 
-#include "chrome/app/android/chrome_android_initializer.h"
+#include "base/android/library_loader/library_loader_hooks.h"
+#include "chrome/app/android/chrome_main_delegate_android.h"
+#include "components/version_info/version_info.h"
 #include "content/public/app/content_jni_onload.h"
+#include "content/public/app/content_main.h"
+
+#include "extraparts/vivaldi_main_delegate.h"
 
 namespace android {
 
@@ -13,7 +18,18 @@ bool OnJNIOnLoadInit() {
   if (!content::android::OnJNIOnLoadInit())
     return false;
 
-  return RunChrome();
+  // Pass the library version number to content so that we can check it from the
+  // Java side before continuing initialization.
+  base::android::SetVersionNumber(version_info::GetVersionNumber().c_str());
+  content::SetContentMainDelegate(
+#if defined(VIVALDI_BUILD)
+      new VivaldiMainDelegate
+#else
+    new ChromeMainDelegateAndroid()
+#endif
+  );
+
+  return true;
 }
 
 }  // namespace android

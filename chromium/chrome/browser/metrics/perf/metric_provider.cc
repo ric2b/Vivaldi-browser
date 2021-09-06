@@ -4,16 +4,16 @@
 
 #include "chrome/browser/metrics/perf/metric_provider.h"
 
+#include "ash/constants/ash_features.h"
 #include "base/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/sync/base/user_selectable_type.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_user_settings.h"

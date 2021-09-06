@@ -5,9 +5,11 @@
 #include <string>
 #include <vector>
 #include "base/lazy_instance.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/infobars/infobar_service.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
 #include "components/renderer_context_menu/context_menu_delegate.h"
 #include "content/public/browser/browser_context.h"
@@ -72,9 +74,12 @@ void DevtoolsConnectorAPI::RemoveDevtoolsConnectorItem(int tab_id) {
 }
 
 // static
-void DevtoolsConnectorAPI::CloseAllDevtools(
-    content::BrowserContext* browser_context) {
-  CloseDevtoolsForBrowser(browser_context, nullptr);
+void DevtoolsConnectorAPI::CloseAllDevtools() {
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  for (Profile* profile : profile_manager->GetLoadedProfiles()) {
+    DCHECK(profile);
+    CloseDevtoolsForBrowser(profile, nullptr);
+  }
 }
 
 // static

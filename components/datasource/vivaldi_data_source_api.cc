@@ -122,8 +122,7 @@ class VivaldiDataSourcesAPIFactory : public BrowserContextKeyedServiceFactory {
 }  //namespace
 
 const char* VivaldiDataSourcesAPI::kDataMappingPrefs[] = {
-    vivaldiprefs::kThemeWindowBackgroundImageUrl,
-    vivaldiprefs::kStartpageImagePathCustom,
+    vivaldiprefs::kThemeBackgroundUserImage,
 };
 
 namespace {

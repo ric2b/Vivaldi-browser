@@ -16,7 +16,6 @@
     {webview::kEventTargetURLChanged, events::VIVALDI_EXTENSION_EVENT},
     {webview::kEventCreateSearch, events::VIVALDI_EXTENSION_EVENT},
     {webview::kEventPasteAndGo, events::VIVALDI_EXTENSION_EVENT},
-    {webview::kEventSimpleAction, events::VIVALDI_EXTENSION_EVENT},
     {webview::kEventContentAllowed, events::VIVALDI_EXTENSION_EVENT},
     {webview::kEventContentBlocked, events::VIVALDI_EXTENSION_EVENT},
     {webview::kEventWebContentsCreated, events::VIVALDI_EXTENSION_EVENT},

@@ -8,6 +8,8 @@
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/time/time.h"
+#include "components/memories/core/visit_data.h"
+#include "components/page_load_metrics/browser/page_load_metrics_event.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
 #include "content/public/browser/site_instance_process_assignment.h"
 #include "net/http/http_response_info.h"
@@ -106,6 +108,8 @@ class UkmPageLoadMetricsObserver
   void OnLoadingBehaviorObserved(content::RenderFrameHost* rfh,
                                  int behavior_flags) override;
 
+  void OnEventOccurred(page_load_metrics::PageLoadMetricsEvent event) override;
+
   void DidActivatePortal(base::TimeTicks activation_time) override;
 
   void OnFirstContentfulPaintInPage(
@@ -151,6 +155,8 @@ class UkmPageLoadMetricsObserver
       const page_load_metrics::mojom::PageLoadTiming& timing,
       base::TimeTicks page_end_time,
       ukm::builders::PageLoad* builder);
+
+  void RecordMemoriesMetrics(ukm::builders::PageLoad& builder);
 
   void RecordInputTimingMetrics();
   void RecordSmoothnessMetrics();
@@ -283,6 +289,13 @@ class UkmPageLoadMetricsObserver
   base::Optional<net::HttpResponseInfo::ConnectionInfo> connection_info_;
 
   base::ReadOnlySharedMemoryMapping ukm_smoothness_data_;
+
+  // Collected by this observer during the page lifetime. Shipped to UKM and
+  // History. Also save the URL and commit timestamp to align with History.
+  GURL committed_url_;
+  // Meant to correspond with the timestamp recorded in HistoryService.
+  base::Time committed_history_timestamp_;
+  memories::VisitContextSignals memories_signals_;
 
   DISALLOW_COPY_AND_ASSIGN(UkmPageLoadMetricsObserver);
 };

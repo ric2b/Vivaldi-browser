@@ -38,7 +38,7 @@
 #include "components/blocklist/opt_out_blocklist/opt_out_blocklist_item.h"
 #include "components/blocklist/opt_out_blocklist/opt_out_store.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_switches.h"
-#include "components/optimization_guide/content/test_optimization_guide_decider.h"
+#include "components/optimization_guide/content/browser/test_optimization_guide_decider.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/previews/content/previews_ui_service.h"
 #include "components/previews/content/previews_user_data.h"
@@ -507,15 +507,8 @@ TEST_F(PreviewsDeciderImplTest, DeferAllScriptDefaultBehavior) {
   content::MockNavigationHandle navigation_handle;
   navigation_handle.set_url(GURL("https://www.google.com"));
 
-#if defined(OS_ANDROID)
-  bool expected = true;
-#else   // !defined(OS_ANDROID)
-  bool expected = false;
-#endif  // defined(OS_ANDROID)
-  EXPECT_EQ(expected,
-            previews_decider_impl()->ShouldAllowPreviewAtNavigationStart(
-                &user_data, &navigation_handle, false,
-                PreviewsType::DEFER_ALL_SCRIPT));
+  EXPECT_FALSE(previews_decider_impl()->ShouldAllowPreviewAtNavigationStart(
+      &user_data, &navigation_handle, false, PreviewsType::DEFER_ALL_SCRIPT));
 }
 
 TEST_F(PreviewsDeciderImplTest,

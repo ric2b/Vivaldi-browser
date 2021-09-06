@@ -31,6 +31,8 @@
 <translation id="2486841023299517366">Тварина 4</translation>
 <translation id="2612127540243995147">Оновлення готове до встановлення. Vivaldi буде перезапущено.</translation>
 <translation id="2613387515621326337">Показати сторінку оновлення</translation>
+<translation id="2647368062414805334">На жаль, налаштування Edge недоступні, коли браузер працює. Для того, щоб імортувати налаштування до Vivaldi, збережіть вашу роботу та закрийте всі вікна Edge. Потім продовжіть процес імпорту.</translation>
+<translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Тварина 3</translation>
 <translation id="2873951654529031587">Кошик</translation>
 <translation id="292258461174562431">Монстр 4</translation>
@@ -61,6 +63,7 @@
 <translation id="3732157130969736834">Помістити посилання в закладки</translation>
 <translation id="3732388226447288666">Тварина 2</translation>
 <translation id="3732439195215136813">Тварина 5</translation>
+<translation id="3795800845758778870">На жаль, налаштування Brave недоступні, коли браузер працює. Для того, щоб імортувати налаштування до Vivaldi, збережіть вашу роботу та закрийте всі вікна Brave. Потім продовжіть процес імпорту.</translation>
 <translation id="3832132597516774400">Краєвид 5</translation>
 <translation id="3914946330804881301">Імпортовано з Opera</translation>
 <translation id="3921292902397893431">Монстр 8</translation>
@@ -115,6 +118,8 @@
 <translation id="6551219277044048123">Додати як новий пошук...</translation>
 <translation id="6630781781151951863">Краєвид 18</translation>
 <translation id="6635049669875534328">Що нового:</translation>
+<translation id="6693585104974197539">Виберіть профіль Edge для імпорту</translation>
+<translation id="6726279523566323394">Виберіть профіль Brave для імпорту</translation>
 <translation id="6804831687363620480">На жаль, налаштування Opera 15+ недоступні при працюючому браузері. Для імпортування цих налаштувань до Vivaldi, збережіть свої дані і закрийте всі вікна Opera 15+. Потім натисніть "Продовжити".</translation>
 <translation id="6892812721183419409">Відкрити посилання як <ph name="USER" /></translation>
 <translation id="6896758677409633944">Копіювати</translation>
@@ -160,5 +165,6 @@
 <translation id="912022491595344261">Відкрити зображення як <ph name="USER" /></translation>
 <translation id="9157539936604258187">Відкрити посилання</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Краєвид 16</translation>
 </translationbundle>

@@ -252,10 +252,9 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
   self.cancelItem = cancelItem;
 
   UIBarButtonItem* doneItem = [[UIBarButtonItem alloc]
-      initWithTitle:l10n_util::GetNSString(IDS_IOS_BOOKMARK_DONE_BUTTON)
-              style:UIBarButtonItemStylePlain
-             target:self
-             action:@selector(save)];
+      initWithBarButtonSystemItem:UIBarButtonSystemItemDone
+                           target:self
+                           action:@selector(save)];
   doneItem.accessibilityIdentifier =
       kBookmarkEditNavigationBarDoneButtonIdentifier;
   self.navigationItem.rightBarButtonItem = doneItem;
@@ -273,12 +272,15 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
       initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
                            target:nil
                            action:nil];
-
   deleteButton.tintColor = [UIColor colorNamed:kRedColor];
-  // Setting the image to nil will cause the default shadowImage to be used,
-  // we need to create a new one.
-  [self.navigationController.toolbar setShadowImage:[UIImage new]
-                                 forToolbarPosition:UIBarPositionAny];
+
+  if (!base::FeatureList::IsEnabled(kSettingsRefresh)) {
+    // Setting the image to nil will cause the default shadowImage to be used,
+    // we need to create a new one.
+    [self.navigationController.toolbar setShadowImage:[UIImage new]
+                                   forToolbarPosition:UIBarPositionAny];
+  }
+
   [self setToolbarItems:@[ spaceButton, deleteButton, spaceButton ]
                animated:NO];
 

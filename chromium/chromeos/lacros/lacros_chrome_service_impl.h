@@ -13,6 +13,7 @@
 #include "base/optional.h"
 #include "base/sequence_checker.h"
 #include "base/sequenced_task_runner.h"
+#include "chromeos/components/sensors/mojom/cros_sensor_service.mojom.h"
 #include "chromeos/crosapi/mojom/account_manager.mojom.h"
 #include "chromeos/crosapi/mojom/cert_database.mojom.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
@@ -25,6 +26,7 @@
 #include "chromeos/crosapi/mojom/screen_manager.mojom.h"
 #include "chromeos/crosapi/mojom/select_file.mojom.h"
 #include "chromeos/crosapi/mojom/test_controller.mojom.h"
+#include "chromeos/crosapi/mojom/url_handler.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -43,7 +45,7 @@ class LacrosChromeServiceNeverBlockingState;
 // This class is responsible for receiving and routing mojo messages from
 // ash-chrome via the mojo::Receiver |sequenced_state_.receiver_|. This class is
 // responsible for sending and routing messages to ash-chrome via the
-// mojo::Remote |sequenced_state_.ash_chrome_service_|. Messages are sent and
+// mojo::Remote |sequenced_state_.crosapi_|. Messages are sent and
 // received on a dedicated, never-blocking sequence to avoid deadlocks.
 //
 // This object is constructed, destroyed, and mostly used on an "affine
@@ -74,7 +76,7 @@ class COMPONENT_EXPORT(CHROMEOS_LACROS) LacrosChromeServiceImpl {
   // This can be called on any thread. This call allows LacrosChromeServiceImpl
   // to start receiving messages from ash-chrome.
   void BindReceiver(
-      mojo::PendingReceiver<crosapi::mojom::LacrosChromeService> receiver);
+      mojo::PendingReceiver<crosapi::mojom::BrowserService> receiver);
 
   // Called during tests on affine sequence to disable all crosapi
   // functionality.
@@ -82,100 +84,33 @@ class COMPONENT_EXPORT(CHROMEOS_LACROS) LacrosChromeServiceImpl {
   // this functional for tests without modifying production code
   static void DisableCrosapiForTests();
 
+  // Each of these functions guards usage of access to the corresponding remote.
+  // Keep these in alphabetical order.
+  bool IsAccountManagerAvailable() const;
+  bool IsCertDbAvailable() const;
+  bool IsClipboardAvailable() const;
+  bool IsDeviceAttributesAvailable() const;
+  bool IsFeedbackAvailable() const;
+  bool IsFileManagerAvailable() const;
+  bool IsHidManagerAvailable() const;
+  bool IsKeystoreServiceAvailable() const;
+  bool IsMediaSessionAudioFocusAvailable() const;
+  bool IsMediaSessionAudioFocusDebugAvailable() const;
+  bool IsMediaSessionControllerAvailable() const;
+  bool IsMessageCenterAvailable() const;
+  bool IsMetricsReportingAvailable() const;
+  bool IsPrefsAvailable() const;
+  bool IsScreenManagerAvailable() const;
+  bool IsSelectFileAvailable() const;
+  bool IsSensorHalClientAvailable() const;
+  bool IsTestControllerAvailable() const;
+  bool IsUrlHandlerAvailable() const;
+
   // --------------------------------------------------------------------------
   // mojo::Remote is sequence affine. The following methods are convenient
   // helpers that expose pre-established Remotes that can only be used from the
   // affine sequence (main thread).
   // --------------------------------------------------------------------------
-
-  // message_center_remote() can only be used if this method returns true.
-  bool IsMessageCenterAvailable() const;
-
-  // This must be called on the affine sequence.
-  mojo::Remote<crosapi::mojom::MessageCenter>& message_center_remote() {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
-    DCHECK(IsMessageCenterAvailable());
-    return message_center_remote_;
-  }
-
-  // select_file_remote() can only be used if this method returns true.
-  bool IsSelectFileAvailable() const;
-
-  // This must be called on the affine sequence. It exposes a remote that can
-  // be used to show a select-file dialog.
-  mojo::Remote<crosapi::mojom::SelectFile>& select_file_remote() {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
-    DCHECK(IsSelectFileAvailable());
-    return select_file_remote_;
-  }
-
-  // keystore_service_remote() can only be used if this method returns true.
-  bool IsKeystoreServiceAvailable() const;
-
-  // This must be called on the affine sequence. It exposes a remote that can
-  // be used to query the system keystores.
-  mojo::Remote<crosapi::mojom::KeystoreService>& keystore_service_remote() {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
-    DCHECK(IsKeystoreServiceAvailable());
-    return keystore_service_remote_;
-  }
-
-  // hid_manager_remote() can only be used if this method returns true.
-  bool IsHidManagerAvailable() const;
-
-  // This must be called on the affine sequence. It exposes a remote that can
-  // be used to support HID devices.
-  mojo::Remote<device::mojom::HidManager>& hid_manager_remote() {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
-    DCHECK(IsHidManagerAvailable());
-    return hid_manager_remote_;
-  }
-
-  // feedback_remote() can only be used when this method returns true;
-  bool IsFeedbackAvailable() const;
-
-  // This must be called on the affine sequence.
-  mojo::Remote<crosapi::mojom::Feedback>& feedback_remote() {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
-    DCHECK(IsFeedbackAvailable());
-    return feedback_remote_;
-  }
-
-  // media_session_audio_focus_remote() can only be used when this method
-  // returns true;
-  bool IsMediaSessionAudioFocusAvailable() const;
-
-  // This must be called on the affine sequence.
-  void BindAudioFocusManager(
-      mojo::PendingReceiver<media_session::mojom::AudioFocusManager> remote);
-
-  // media_session_audio_focus_debug_remote() can only be used when this method
-  // returns true;
-  bool IsMediaSessionAudioFocusDebugAvailable() const;
-
-  // This must be called on the affine sequence.
-  void BindAudioFocusManagerDebug(
-      mojo::PendingReceiver<media_session::mojom::AudioFocusManagerDebug>
-          remote);
-
-  // media_session_controller_remote() can only be used when this method returns
-  // true;
-  bool IsMediaSessionControllerAvailable() const;
-
-  // This must be called on the affine sequence.
-  void BindMediaControllerManager(
-      mojo::PendingReceiver<media_session::mojom::MediaControllerManager>
-          remote);
-
-  // Whether the MetricsReporting API is available.
-  bool IsMetricsReportingAvailable() const;
-
-  // Binds a receiver for the MetricsReporting API. May be called on any thread.
-  void BindMetricsReporting(
-      mojo::PendingReceiver<crosapi::mojom::MetricsReporting> receiver);
-
-  // cert_database_remote() can only be used when this method returns true;
-  bool IsCertDbAvailable() const;
 
   // This must be called on the affine sequence.
   mojo::Remote<crosapi::mojom::CertDatabase>& cert_database_remote() {
@@ -183,40 +118,6 @@ class COMPONENT_EXPORT(CHROMEOS_LACROS) LacrosChromeServiceImpl {
     DCHECK(IsCertDbAvailable());
     return cert_database_remote_;
   }
-
-  // Whether the DeviceAttributes API is available.
-  bool IsDeviceAttributesAvailable() const;
-
-  // This must be called on the affine sequence. It exposes a remote that can
-  // be used to interface with DeviceAttributes.
-  mojo::Remote<crosapi::mojom::DeviceAttributes>& device_attributes_remote() {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
-    DCHECK(IsDeviceAttributesAvailable());
-    return device_attributes_remote_;
-  }
-
-  // file_manager_remote() can only be used if this method returns true.
-  bool IsFileManagerAvailable() const;
-
-  // Must be called on the affine sequence.
-  mojo::Remote<crosapi::mojom::FileManager>& file_manager_remote() {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
-    DCHECK(IsFileManagerAvailable());
-    return file_manager_remote_;
-  }
-
-  // test_controller_remote() can only be used if this method returns true.
-  bool IsTestControllerAvailable() const;
-
-  // Must be called on the affine sequence.
-  mojo::Remote<crosapi::mojom::TestController>& test_controller_remote() {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
-    DCHECK(IsTestControllerAvailable());
-    return test_controller_remote_;
-  }
-
-  // clipboard_remote() can only be used if this method returns true.
-  bool IsClipboardAvailable() const;
 
   // This must be called on the affine sequence. It exposes a remote that can
   // be used to interface with the clipboard
@@ -226,8 +127,50 @@ class COMPONENT_EXPORT(CHROMEOS_LACROS) LacrosChromeServiceImpl {
     return clipboard_remote_;
   }
 
-  // Whether the Prefs API is available.
-  bool IsPrefsAvailable() const;
+  // This must be called on the affine sequence. It exposes a remote that can
+  // be used to interface with DeviceAttributes.
+  mojo::Remote<crosapi::mojom::DeviceAttributes>& device_attributes_remote() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
+    DCHECK(IsDeviceAttributesAvailable());
+    return device_attributes_remote_;
+  }
+
+  // This must be called on the affine sequence.
+  mojo::Remote<crosapi::mojom::Feedback>& feedback_remote() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
+    DCHECK(IsFeedbackAvailable());
+    return feedback_remote_;
+  }
+
+  // Must be called on the affine sequence.
+  mojo::Remote<crosapi::mojom::FileManager>& file_manager_remote() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
+    DCHECK(IsFileManagerAvailable());
+    return file_manager_remote_;
+  }
+
+  // This must be called on the affine sequence. It exposes a remote that can
+  // be used to support HID devices.
+  mojo::Remote<device::mojom::HidManager>& hid_manager_remote() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
+    DCHECK(IsHidManagerAvailable());
+    return hid_manager_remote_;
+  }
+
+  // This must be called on the affine sequence. It exposes a remote that can
+  // be used to query the system keystores.
+  mojo::Remote<crosapi::mojom::KeystoreService>& keystore_service_remote() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
+    DCHECK(IsKeystoreServiceAvailable());
+    return keystore_service_remote_;
+  }
+
+  // This must be called on the affine sequence.
+  mojo::Remote<crosapi::mojom::MessageCenter>& message_center_remote() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
+    DCHECK(IsMessageCenterAvailable());
+    return message_center_remote_;
+  }
 
   // This must be called on the affine sequence. It exposes a remote that can
   // be used to interface with Prefs.
@@ -237,6 +180,29 @@ class COMPONENT_EXPORT(CHROMEOS_LACROS) LacrosChromeServiceImpl {
     return prefs_remote_;
   }
 
+  // This must be called on the affine sequence. It exposes a remote that can
+  // be used to show a select-file dialog.
+  mojo::Remote<crosapi::mojom::SelectFile>& select_file_remote() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
+    DCHECK(IsSelectFileAvailable());
+    return select_file_remote_;
+  }
+
+  // Must be called on the affine sequence.
+  mojo::Remote<crosapi::mojom::TestController>& test_controller_remote() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
+    DCHECK(IsTestControllerAvailable());
+    return test_controller_remote_;
+  }
+
+  // This must be called on the affine sequence. It exposes a remote that can
+  // be used to interface with UrlHandler.
+  mojo::Remote<crosapi::mojom::UrlHandler>& url_handler_remote() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
+    DCHECK(IsUrlHandlerAvailable());
+    return url_handler_remote_;
+  }
+
   // --------------------------------------------------------------------------
   // Some clients will want to use mojo::Remotes on arbitrary sequences (e.g.
   // background threads). The following methods allow the client to construct a
@@ -244,27 +210,43 @@ class COMPONENT_EXPORT(CHROMEOS_LACROS) LacrosChromeServiceImpl {
   // the Remote (mojo::PendingReceiver) to ash to set up the interface.
   // --------------------------------------------------------------------------
 
-  // BindScreenManagerReceiver() can only be used if this method returns true.
-  bool IsScreenManagerAvailable() const;
+  // This may be called on any thread.
+  void BindAccountManagerReceiver(
+      mojo::PendingReceiver<crosapi::mojom::AccountManager> pending_receiver);
+
+  // This may be called on any thread.
+  void BindAudioFocusManager(
+      mojo::PendingReceiver<media_session::mojom::AudioFocusManager> remote);
+
+  // This may be called on any thread.
+  void BindAudioFocusManagerDebug(
+      mojo::PendingReceiver<media_session::mojom::AudioFocusManagerDebug>
+          remote);
+
+  // This may be called on any thread.
+  void BindMediaControllerManager(
+      mojo::PendingReceiver<media_session::mojom::MediaControllerManager>
+          remote);
+
+  // This may be called on any thread.
+  void BindMetricsReporting(
+      mojo::PendingReceiver<crosapi::mojom::MetricsReporting> receiver);
 
   // This may be called on any thread.
   void BindScreenManagerReceiver(
       mojo::PendingReceiver<crosapi::mojom::ScreenManager> pending_receiver);
 
-  // BindAccountManagerReceiver() can only be used if this method returns true.
-  bool IsAccountManagerAvailable() const;
-
   // This may be called on any thread.
-  void BindAccountManagerReceiver(
-      mojo::PendingReceiver<crosapi::mojom::AccountManager> pending_receiver);
+  void BindSensorHalClient(
+      mojo::PendingRemote<chromeos::sensors::mojom::SensorHalClient> remote);
 
-  // OnLacrosStartup method of AshChromeService crosapi can only be called
-  // if this method returns true.
-  bool IsOnLacrosStartupAvailable() const;
+  // OnLacrosStartup method of Crosapi can only be called if this method
+  // returns true.
+  bool IsOnBrowserStartupAvailable() const;
 
-  // Returns LacrosInitParams which is passed from ash-chrome. On launching
+  // Returns BrowserInitParams which is passed from ash-chrome. On launching
   // lacros-chrome from ash-chrome, ash-chrome creates a memory backed file
-  // serializes the LacrosInitParams to it, and the forked/executed
+  // serializes the BrowserInitParams to it, and the forked/executed
   // lacros-chrome process inherits the file descriptor. The data is read
   // in the constructor so is available from the beginning.
   // Note that, in older versions, ash-chrome passes the data via
@@ -272,7 +254,7 @@ class COMPONENT_EXPORT(CHROMEOS_LACROS) LacrosChromeServiceImpl {
   // handled for backward compatibility, and planned to be removed in the
   // future (crbug.com/1156033). Though, until the removal, it is recommended
   // to consider both cases, specifically, at least not to cause a crash.
-  const crosapi::mojom::LacrosInitParams* init_params() const {
+  const crosapi::mojom::BrowserInitParams* init_params() const {
     return init_params_.get();
   }
 
@@ -285,7 +267,7 @@ class COMPONENT_EXPORT(CHROMEOS_LACROS) LacrosChromeServiceImpl {
   // Sets `init_params_` to the provided value.
   // Useful for tests that cannot setup a full Lacros test environment with a
   // working Mojo connection to Ash.
-  void SetInitParamsForTests(crosapi::mojom::LacrosInitParamsPtr init_params);
+  void SetInitParamsForTests(crosapi::mojom::BrowserInitParamsPtr init_params);
 
  private:
   // LacrosChromeServiceNeverBlockingState is an implementation detail of this
@@ -308,31 +290,32 @@ class COMPONENT_EXPORT(CHROMEOS_LACROS) LacrosChromeServiceImpl {
   // Gets Url of the active tab on the affine sequence.
   void GetActiveTabUrlAffineSequence(GetActiveTabUrlCallback callback);
 
-  // Returns ash's version of the AshChromeService mojo interface version. This
+  // Returns ash's version of the Crosapi mojo interface version. This
   // determines which interface methods are available. This is safe to call from
   // any sequence. This can only be called after BindReceiver().
-  base::Optional<uint32_t> AshChromeServiceVersion() const;
+  base::Optional<uint32_t> CrosapiVersion() const;
 
   // Delegate instance to inject Chrome dependent code. Must only be used on the
   // affine sequence.
   std::unique_ptr<LacrosChromeServiceDelegate> delegate_;
 
   // Parameters passed from ash-chrome.
-  crosapi::mojom::LacrosInitParamsPtr init_params_;
+  crosapi::mojom::BrowserInitParamsPtr init_params_;
 
   // These members are affine to the affine sequence. They are initialized in
   // the constructor and are immediately available for use.
-  mojo::Remote<crosapi::mojom::MessageCenter> message_center_remote_;
-  mojo::Remote<crosapi::mojom::SelectFile> select_file_remote_;
-  mojo::Remote<device::mojom::HidManager> hid_manager_remote_;
-  mojo::Remote<crosapi::mojom::Feedback> feedback_remote_;
   mojo::Remote<crosapi::mojom::CertDatabase> cert_database_remote_;
-  mojo::Remote<crosapi::mojom::DeviceAttributes> device_attributes_remote_;
-  mojo::Remote<crosapi::mojom::KeystoreService> keystore_service_remote_;
-  mojo::Remote<crosapi::mojom::FileManager> file_manager_remote_;
-  mojo::Remote<crosapi::mojom::TestController> test_controller_remote_;
   mojo::Remote<crosapi::mojom::Clipboard> clipboard_remote_;
+  mojo::Remote<crosapi::mojom::DeviceAttributes> device_attributes_remote_;
+  mojo::Remote<crosapi::mojom::Feedback> feedback_remote_;
+  mojo::Remote<crosapi::mojom::FileManager> file_manager_remote_;
+  mojo::Remote<device::mojom::HidManager> hid_manager_remote_;
+  mojo::Remote<crosapi::mojom::KeystoreService> keystore_service_remote_;
+  mojo::Remote<crosapi::mojom::MessageCenter> message_center_remote_;
   mojo::Remote<crosapi::mojom::Prefs> prefs_remote_;
+  mojo::Remote<crosapi::mojom::SelectFile> select_file_remote_;
+  mojo::Remote<crosapi::mojom::TestController> test_controller_remote_;
+  mojo::Remote<crosapi::mojom::UrlHandler> url_handler_remote_;
 
   // This member is instantiated on the affine sequence alongside the
   // constructor. All subsequent invocations of this member, including

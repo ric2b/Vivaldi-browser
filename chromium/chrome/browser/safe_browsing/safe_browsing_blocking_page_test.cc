@@ -65,7 +65,7 @@
 #include "components/safe_browsing/content/renderer/threat_dom_details.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/core/db/database_manager.h"
-#include "components/safe_browsing/core/db/test_database_manager.h"
+#include "components/safe_browsing/core/db/fake_database_manager.h"
 #include "components/safe_browsing/core/db/util.h"
 #include "components/safe_browsing/core/db/v4_protocol_manager_util.h"
 #include "components/safe_browsing/core/features.h"
@@ -104,6 +104,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/url_request/url_request_mock_http_job.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/mojom/fetch_api.mojom.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "third_party/blink/public/common/features.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -139,6 +140,8 @@ const char kCrossOriginMaliciousIframeHost[] = "malware.test";
 const char kMaliciousIframe[] = "/safe_browsing/malware_iframe.html";
 const char kUnrelatedUrl[] = "https://www.google.com";
 const char kEnhancedProtectionUrl[] = "chrome://settings/security?q=enhanced";
+const char kMaliciousJsPage[] = "/safe_browsing/malware_js.html";
+const char kMaliciousJs[] = "/safe_browsing/script.js";
 
 }  // namespace
 
@@ -241,70 +244,6 @@ bool ClickAndWaitForDetach(Browser* browser, const std::string& node_id) {
   observer.WaitForNavigationFinished();
   return true;
 }
-
-// A SafeBrowsingDatabaseManager class that allows us to inject the malicious
-// URLs.
-class FakeSafeBrowsingDatabaseManager : public TestSafeBrowsingDatabaseManager {
- public:
-  FakeSafeBrowsingDatabaseManager() {}
-
-  // Called on the IO thread to check if the given url is safe or not.  If we
-  // can synchronously determine that the url is safe, CheckUrl returns true.
-  // Otherwise it returns false, and "client" is called asynchronously with the
-  // result when it is ready.
-  // Overrides SafeBrowsingDatabaseManager::CheckBrowseUrl.
-  bool CheckBrowseUrl(const GURL& gurl,
-                      const SBThreatTypeSet& threat_types,
-                      Client* client) override {
-    if (badurls_.find(gurl.spec()) == badurls_.end() ||
-        badurls_[gurl.spec()] == SB_THREAT_TYPE_SAFE)
-      return true;
-
-    content::GetIOThreadTaskRunner({})->PostTask(
-        FROM_HERE,
-        base::BindOnce(&FakeSafeBrowsingDatabaseManager::OnCheckBrowseURLDone,
-                       this, gurl, client));
-    return false;
-  }
-
-  void OnCheckBrowseURLDone(const GURL& gurl, Client* client) {
-    if (badurls_.find(gurl.spec()) != badurls_.end())
-      client->OnCheckBrowseUrlResult(gurl, badurls_[gurl.spec()],
-                                     ThreatMetadata());
-    else
-      NOTREACHED();
-  }
-
-  void SetURLThreatType(const GURL& url, SBThreatType threat_type) {
-    badurls_[url.spec()] = threat_type;
-  }
-
-  void ClearBadURL(const GURL& url) { badurls_.erase(url.spec()); }
-
-  // These are called when checking URLs, so we implement them.
-  bool IsSupported() const override { return true; }
-  bool ChecksAreAlwaysAsync() const override { return false; }
-  bool CanCheckResourceType(
-      blink::mojom::ResourceType /* resource_type */) const override {
-    return true;
-  }
-
-  // Called during startup, so must not check-fail.
-  bool CheckExtensionIDs(const std::set<std::string>& extension_ids,
-                         Client* client) override {
-    return true;
-  }
-
-  safe_browsing::ThreatSource GetThreatSource() const override {
-    return safe_browsing::ThreatSource::LOCAL_PVER3;
-  }
-
- private:
-  ~FakeSafeBrowsingDatabaseManager() override {}
-
-  std::map<std::string, SBThreatType> badurls_;
-  DISALLOW_COPY_AND_ASSIGN(FakeSafeBrowsingDatabaseManager);
-};
 
 // A SafeBrowingUIManager class that allows intercepting malware details.
 class FakeSafeBrowsingUIManager : public TestSafeBrowsingUIManager {
@@ -548,7 +487,7 @@ class SafeBrowsingBlockingPageBrowserTest
 
     static_cast<FakeSafeBrowsingDatabaseManager*>(
         service->database_manager().get())
-        ->SetURLThreatType(url, threat_type);
+        ->AddDangerousUrl(url, threat_type);
   }
 
   void ClearBadURL(const GURL& url) {
@@ -557,7 +496,7 @@ class SafeBrowsingBlockingPageBrowserTest
 
     static_cast<FakeSafeBrowsingDatabaseManager*>(
         service->database_manager().get())
-        ->ClearBadURL(url);
+        ->ClearDangerousUrl(url);
   }
 
   // The basic version of this method, which uses an HTTP test URL.
@@ -1375,7 +1314,7 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
       security_interstitials::MetricsHelper::SHOW_ENHANCED_PROTECTION, 1);
 }
 
-IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest, WhitelistRevisit) {
+IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest, AllowlistRevisit) {
   GURL url = SetupWarningAndNavigate(browser());
 
   EXPECT_TRUE(ClickAndWaitForDetach("proceed-link"));
@@ -1383,17 +1322,17 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest, WhitelistRevisit) {
   EXPECT_EQ(url,
             browser()->tab_strip_model()->GetActiveWebContents()->GetURL());
 
-  // Unrelated pages should not be whitelisted now.
+  // Unrelated pages should not be allowlisted now.
   ui_test_utils::NavigateToURL(browser(), GURL(kUnrelatedUrl));
   AssertNoInterstitial(false);
 
-  // The whitelisted page should remain whitelisted.
+  // The allowlisted page should remain allowlisted.
   ui_test_utils::NavigateToURL(browser(), url);
   AssertNoInterstitial(false);
 }
 
 IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
-                       WhitelistIframeRevisit) {
+                       AllowlistIframeRevisit) {
   GURL url = SetupThreatIframeWarningAndNavigate();
 
   EXPECT_TRUE(ClickAndWaitForDetach("proceed-link"));
@@ -1401,23 +1340,23 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
   EXPECT_EQ(url,
             browser()->tab_strip_model()->GetActiveWebContents()->GetURL());
 
-  // Unrelated pages should not be whitelisted now.
+  // Unrelated pages should not be allowlisted now.
   ui_test_utils::NavigateToURL(browser(), GURL(kUnrelatedUrl));
   AssertNoInterstitial(false);
 
-  // The whitelisted page should remain whitelisted.
+  // The allowlisted page should remain allowlisted.
   ui_test_utils::NavigateToURL(browser(), url);
   AssertNoInterstitial(false);
 }
 
-IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest, WhitelistUnsaved) {
+IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest, AllowlistUnsaved) {
   GURL url = SetupWarningAndNavigate(browser());
 
   // Navigate without making a decision.
   ui_test_utils::NavigateToURL(browser(), GURL(kUnrelatedUrl));
   AssertNoInterstitial(false);
 
-  // The non-whitelisted page should now show an interstitial.
+  // The non-allowlisted page should now show an interstitial.
   ui_test_utils::NavigateToURL(browser(), url);
   EXPECT_TRUE(WaitForReady(browser()));
   EXPECT_TRUE(ClickAndWaitForDetach("proceed-link"));
@@ -1611,7 +1550,7 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
   // The security indicator should be downgraded while the interstitial
   // shows. Load a cross-origin iframe to be sure that the main frame origin
   // (rather than the subresource origin) is being added and removed from the
-  // whitelist; this is a regression test for https://crbug.com/710955.
+  // allowlist; this is a regression test for https://crbug.com/710955.
   GURL bad_iframe_url;
   GURL main_url =
       SetupCrossOriginThreatIframeWarningAndNavigate(&bad_iframe_url);
@@ -1714,17 +1653,40 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
 }
 
 // Test that no safe browsing interstitial will be shown, if URL matches
-// enterprise safe browsing whitelist domains.
+// enterprise safe browsing allowlist domains.
 IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
-                       VerifyEnterpriseWhitelist) {
+                       VerifyEnterpriseAllowlist) {
   GURL url = embedded_test_server()->GetURL(kEmptyPage);
-  // Add test server domain into the enterprise whitelist.
-  base::ListValue whitelist;
-  whitelist.AppendString(url.host());
-  browser()->profile()->GetPrefs()->Set(prefs::kSafeBrowsingWhitelistDomains,
-                                        whitelist);
+  // Add test server domain into the enterprise allowlist.
+  base::ListValue allowlist;
+  allowlist.AppendString(url.host());
+  browser()->profile()->GetPrefs()->Set(prefs::kSafeBrowsingAllowlistDomains,
+                                        allowlist);
 
   SetURLThreatType(url, testing::get<0>(GetParam()));
+  ui_test_utils::NavigateToURL(browser(), url);
+  base::RunLoop().RunUntilIdle();
+  WebContents* contents = browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_TRUE(content::WaitForRenderFrameReady(contents->GetMainFrame()));
+  EXPECT_FALSE(IsShowingInterstitial(contents));
+}
+
+// Test that no safe browsing interstitial will be shown, if the subresource URL
+// matches enterprise safe browsing allowlist domains. Regression test for
+// https://crbug.com/1179276.
+IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
+                       VerifyEnterpriseAllowlistSubresource) {
+  GURL url = embedded_test_server()->GetURL(kMaliciousJsPage);
+  GURL js_url = embedded_test_server()->GetURL(kMaliciousJs);
+  // Add test server domain into the enterprise allowlist.
+  base::ListValue allowlist;
+  allowlist.AppendString(url.host());
+  browser()->profile()->GetPrefs()->Set(prefs::kSafeBrowsingAllowlistDomains,
+                                        allowlist);
+
+  SetURLThreatType(js_url, testing::get<0>(GetParam()));
+  // Open a new tab to rebind the allowlist to the renderer.
+  chrome::NewTab(browser());
   ui_test_utils::NavigateToURL(browser(), url);
   base::RunLoop().RunUntilIdle();
   WebContents* contents = browser()->tab_strip_model()->GetActiveWebContents();
@@ -1966,7 +1928,7 @@ class SafeBrowsingBlockingPageDelayedWarningBrowserTest
 
     static_cast<FakeSafeBrowsingDatabaseManager*>(
         service->database_manager().get())
-        ->SetURLThreatType(url, threat_type);
+        ->AddDangerousUrl(url, threat_type);
   }
 
  protected:
@@ -2744,7 +2706,7 @@ class SafeBrowsingBlockingPageIDNTest
   security_interstitials::SecurityInterstitialPage* CreateInterstitial(
       content::WebContents* contents,
       const GURL& request_url) const override {
-    SafeBrowsingUIManager::CreateWhitelistForTesting(contents);
+    SafeBrowsingUIManager::CreateAllowlistForTesting(contents);
     const bool is_subresource = testing::get<0>(GetParam());
 
     SafeBrowsingService* sb_service =
@@ -2757,7 +2719,7 @@ class SafeBrowsingBlockingPageIDNTest
     resource.web_contents_getter = security_interstitials::GetWebContentsGetter(
         contents->GetMainFrame()->GetProcess()->GetID(),
         contents->GetMainFrame()->GetRoutingID());
-    resource.threat_source = safe_browsing::ThreatSource::LOCAL_PVER3;
+    resource.threat_source = safe_browsing::ThreatSource::LOCAL_PVER4;
 
     return SafeBrowsingBlockingPage::CreateBlockingPage(
         sb_service->ui_manager().get(), contents,
@@ -2866,7 +2828,7 @@ class SafeBrowsingBlockingPageEnhancedProtectionMessageTest
 
     static_cast<FakeSafeBrowsingDatabaseManager*>(
         service->database_manager().get())
-        ->SetURLThreatType(url, SB_THREAT_TYPE_URL_MALWARE);
+        ->AddDangerousUrl(url, SB_THREAT_TYPE_URL_MALWARE);
 
     ui_test_utils::NavigateToURL(browser, url);
     EXPECT_TRUE(WaitForReady(browser));

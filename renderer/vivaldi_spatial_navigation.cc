@@ -4,7 +4,6 @@
 
 #include <string>
 
-#include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/web/web_element.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -14,12 +13,13 @@
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace vivaldi {
 
-bool IsCovered(blink::Document* document, blink::WebRect& rect) {
-  int x = rect.x + rect.width / 2;
-  int y = rect.y + rect.height / 2;
+bool IsCovered(blink::Document* document, gfx::Rect& rect) {
+  int x = rect.x() + rect.width() / 2;
+  int y = rect.y() + rect.height() / 2;
 
   blink::Element* cover_elm = document->ElementFromPoint((double)x, (double)y);
 
@@ -30,26 +30,26 @@ bool IsCovered(blink::Document* document, blink::WebRect& rect) {
 }
 
 bool IsInViewport(blink::Document* document,
-                  blink::WebRect& rect,
+                  gfx::Rect& rect,
                   int window_height) {
-  int right = rect.x + rect.width;
-  int bottom = rect.y + rect.height;
+  int right = rect.x() + rect.width();
+  int bottom = rect.y() + rect.height();
   int clientWidth = document->documentElement()->clientWidth();
   int clientHeight = document->documentElement()->clientHeight();
 
   int maxAbove = window_height;
   int maxBelow = maxAbove * 2;
 
-  if (bottom > -maxAbove && rect.y <= maxBelow && rect.x >= 0 &&
-    right <= clientWidth && right >= 0 && rect.width <= clientWidth &&
-    rect.height <= clientHeight) {
+  if (bottom > -maxAbove && rect.y() <= maxBelow && rect.x() >= 0 &&
+      right <= clientWidth && right >= 0 && rect.width() <= clientWidth &&
+      rect.height() <= clientHeight) {
     return true;
   }
   return false;
 }
 
-bool IsTooSmall(blink::WebRect& rect) {
-  if (rect.width < 2 || rect.height < 2) {
+bool IsTooSmall(gfx::Rect& rect) {
+  if (rect.width() < 2 || rect.height() < 2) {
     return true;
   }
   return false;
@@ -148,12 +148,9 @@ bool IsNavigableElement(blink::WebElement& element) {
 
 // Used For HiDPI displays. We need the unscaled version of the coordinates.
 // See VB-63938.
-blink::WebRect RevertDeviceScaling(blink::WebRect rect, float scale) {
-  rect.x /= scale;
-  rect.y /= scale;
-  rect.width /= scale;
-  rect.height /= scale;
-  return rect;
+gfx::Rect RevertDeviceScaling(gfx::Rect rect, float scale) {
+  return gfx::Rect(rect.x() / scale, rect.y() / scale, rect.width() / scale,
+                   rect.height() / scale);
 }
 
 // If a link contains an image, use the image rect.

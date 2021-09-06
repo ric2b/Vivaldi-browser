@@ -210,7 +210,7 @@ Polymer({
 
   /** @private */
   onSidebarFocus_() {
-    this.$.previewArea.hideToolbars();
+    this.$.previewArea.hideToolbar();
   },
 
   /**
@@ -401,7 +401,8 @@ Polymer({
     switch (this.destinationState_) {
       case DestinationState.SELECTED:
       case DestinationState.SET:
-        if (this.state !== State.NOT_READY) {
+        if (this.state !== State.NOT_READY &&
+            this.state !== State.FATAL_ERROR) {
           this.$.state.transitTo(State.NOT_READY);
         }
         break;

@@ -10,6 +10,7 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
+#include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/common/buildflags.h"
@@ -21,6 +22,12 @@ namespace features {
 // alongside the definition of their values in the .cc file.
 
 extern const base::Feature kChromeLabs;
+
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+extern const base::Feature kChromeTipsInMainMenu;
+#endif
+
+extern const base::Feature kCommander;
 
 extern const base::Feature kEvDetailsInPageInfo;
 
@@ -39,6 +46,7 @@ extern const base::Feature kNewTabstripAnimation;
 extern const base::Feature kProminentDarkModeActiveTabTitle;
 
 extern const base::Feature kScrollableTabStrip;
+extern const char kMinimumTabWidthFeatureParameterName[];
 
 extern const base::Feature kScrollableTabStripButtons;
 
@@ -48,9 +56,9 @@ extern const base::Feature kSyncConfirmationUpdatedText;
 
 extern const base::Feature kSignInProfileCreation;
 
-extern const base::Feature kTabGroupsAutoCreate;
+extern const base::Feature kSignInProfileCreationEnterprise;
 
-extern const base::Feature kTabGroupsCollapse;
+extern const base::Feature kTabGroupsAutoCreate;
 
 extern const base::Feature kTabGroupsCollapseFreezing;
 
@@ -96,12 +104,17 @@ extern const base::FeatureParam<bool> kTabSearchMoveActiveTabToBottom;
 
 extern const base::Feature kWebFooterExperiment;
 
+extern const base::Feature kWebUIBubblePerProfilePersistence;
+
 extern const base::Feature kWebUITabStrip;
+
+extern const base::Feature kWebUIFeedback;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 extern const base::Feature kHiddenNetworkWarning;
 extern const base::Feature kSeparatePointingStickSettings;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
 }  // namespace features
 
 #endif  // CHROME_BROWSER_UI_UI_FEATURES_H_

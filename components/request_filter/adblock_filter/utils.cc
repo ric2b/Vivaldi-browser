@@ -21,7 +21,7 @@ constexpr int kRulesListFormatVersion = 4;
 
 // Increment this whenever an incompatible change is made to
 // adblock_rules_index.fbs
-constexpr int kIndexFormatVersion = 3;
+constexpr int kIndexFormatVersion = 4;
 
 const base::FilePath::CharType kParsedRulesFolder[] =
     FILE_PATH_LITERAL("AdBlockRules");
@@ -142,7 +142,7 @@ bool ContentInjectionRuleBodyCompare::operator()(
                                   rhs_argument->begin());
     if (mismatch.first != lhs_argument->end())
       return *mismatch.first < *mismatch.second;
-    DCHECK(mismatch.second != rhs_argument->end());
+    DCHECK(mismatch.second == rhs_argument->end());
 
     lhs_argument++;
     rhs_argument++;

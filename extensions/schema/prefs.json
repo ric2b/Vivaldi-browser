@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2017-2021 Vivaldi Technologies AS. All rights reserved
 
 [
   {
@@ -37,6 +37,25 @@
           "default_value": {
             "type": "any",
             "description": "Preference default value."
+          }
+        }
+      },
+      {
+        "id": "TranslateLanguageSettings",
+        "type": "object",
+        "description": "Current settings active for the given language pair or just the source language.",
+        "properties": {
+          "isLanguagePairOnAlwaysTranslateList": {
+            "type": "boolean",
+            "description": "Is the given language pair on the always translate list."
+          },
+          "isLanguageInNeverTranslateList":  {
+            "type": "boolean",
+            "description": "Is the given language source language on the never translate list."
+          },
+          "isSiteOnNeverTranslateList": {
+            "type": "boolean",
+            "description": "Is the given site on the never translate list."
           }
         }
       }
@@ -112,6 +131,199 @@
             ]
           }
         ]
+      },
+      {
+        "name": "setLanguagePairToAlwaysTranslate",
+        "type": "function",
+        "description": "Translate: Add or remove a pair of languages to the preference for automatic translation.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 1,
+            "description": "The tab id used to look up the translate manager stored in the WebContents data. Not used for anything else."
+          },
+          {
+            "name": "enable",
+            "type": "boolean",
+            "description": "true to add the language pair to the list, false to remove it from the list."
+          },
+          {
+            "name": "original_language",
+            "type": "string",
+            "description": "Original language to translate from."
+          },
+          {
+            "name": "target_language",
+            "type": "string",
+            "description": "Target language to translate to."
+          }
+        ],
+        "returns_async": {
+          "type": "function",
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "results",
+              "type": "boolean",
+              "description": "true on success, otherwise if the pair has already been set, this is false."
+            }
+          ]
+        }
+      },
+      {
+        "name": "setLanguageToNeverTranslate",
+        "type": "function",
+        "description": "Translate: Add or remove a pair of languages to the preference for never doing automatic translation.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 1,
+            "description": "The tab id used to look up the translate manager stored in the WebContents data. Not used for anything else."
+          },
+          {
+            "name": "block",
+            "type": "boolean",
+            "description": "true to add the language to the blocked list, false to remove it from the list."
+          },
+          {
+            "name": "original_language",
+            "type": "string",
+            "description": "Original language to never translate from."
+          },
+          {
+            "name": "target_language",
+            "type": "string",
+            "description": "Target language to never translate to."
+          }
+        ],
+        "returns_async": {
+          "type": "function",
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "results",
+              "type": "boolean",
+              "description": "true on success, otherwise if the pair has already been set, this is false."
+            }
+          ]
+        }
+      },
+      {
+        "name": "setSiteToNeverTranslate",
+        "type": "function",
+        "description": "Translate: Add or remove a site to the preference for never doing automatic translation.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 1,
+            "description": "The tab id used to look up the translate manager stored in the WebContents data and the site to block."
+          },
+          {
+            "name": "block",
+            "type": "boolean",
+            "description": "true to add the language to the blocked list, false to remove it from the list."
+          },
+          {
+            "name": "original_language",
+            "type": "string",
+            "description": "Original language to never translate from."
+          },
+          {
+            "name": "target_language",
+            "type": "string",
+            "description": "Target language to never translate to."
+          }
+        ],
+        "returns_async": {
+          "type": "function",
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "results",
+              "type": "boolean",
+              "description": "true on success, otherwise if the block has already been set or site for tabId is empty, this is false."
+            }
+          ]
+        }
+      },
+      {
+        "name": "getTranslateSettings",
+        "type": "function",
+        "description": "Translate: Get settings for the given language pair.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 1,
+            "description": "The tab id used to look up the translate manager stored in the WebContents data. Not used for anything else."
+          },
+          {
+            "name": "original_language",
+            "type": "string",
+            "description": "Original language to never translate from."
+          },
+          {
+            "name": "target_language",
+            "type": "string",
+            "description": "Target language to never translate to."
+          }
+        ],
+        "returns_async": {
+          "type": "function",
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "settings",
+              "$ref": "TranslateLanguageSettings",
+              "description": "Settings tied to the source/target or just source language."
+            }
+          ]
+        }
+      },
+      {
+        "name": "setTranslationDeclined",
+        "type": "function",
+        "description": "Translate: Translation dialog was closed without being used, record that fact.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 1,
+            "description": "The tab id used to look up the translate manager stored in the WebContents data. Not used for anything else."
+          },
+          {
+            "name": "explicitly_closed",
+            "type": "boolean",
+            "description": "true if the dialog was closed explicitly (from close button), otherwise false if it was closed from clicking outside it or similar."
+          },
+          {
+            "name": "original_language",
+            "type": "string",
+            "description": "Original language of the page."
+          },
+          {
+            "name": "target_language",
+            "type": "string",
+            "description": "Target language selected."
+          }
+        ],
+        "returns_async": {
+          "type": "function",
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "boolean",
+              "description": "true on success and setting was updated, otherwise false."
+            }
+          ]
+        }
       }
     ],
     "events": [

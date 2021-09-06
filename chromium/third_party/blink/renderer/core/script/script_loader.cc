@@ -228,7 +228,7 @@ ScriptLoader::ScriptTypeAtPrepare ScriptLoader::GetScriptTypeAtPrepare(
     return ScriptTypeAtPrepare::kModule;
   }
 
-  if (type == "importmap") {
+  if (EqualIgnoringASCIICase(type, "importmap")) {
     return ScriptTypeAtPrepare::kImportMap;
   }
 
@@ -487,13 +487,17 @@ bool ScriptLoader::PrepareScript(const TextPosition& script_start_position,
 
   DCHECK(!prepared_pending_script_);
 
+  RenderBlockingBehavior render_blocking_behavior =
+      non_blocking_ ? RenderBlockingBehavior::kNonBlocking
+                    : RenderBlockingBehavior::kBlocking;
+
   // <spec step="22">Let options be a script fetch options whose cryptographic
   // nonce is cryptographic nonce, integrity metadata is integrity metadata,
   // parser metadata is parser metadata, credentials mode is module script
   // credentials mode, and referrer policy is referrer policy.</spec>
   ScriptFetchOptions options(nonce, integrity_metadata, integrity_attr,
                              parser_state, credentials_mode, referrer_policy,
-                             importance);
+                             importance, render_blocking_behavior);
 
   // <spec step="23">Let settings object be the element's node document's
   // relevant settings object.</spec>
@@ -969,9 +973,9 @@ void ScriptLoader::FetchClassicScript(const KURL& url,
                                       const WTF::TextEncoding& encoding) {
   FetchParameters::DeferOption defer = FetchParameters::kNoDefer;
   if (!parser_inserted_ || element_->AsyncAttributeValue() ||
-      element_->DeferAttributeValue())
+      element_->DeferAttributeValue()) {
     defer = FetchParameters::kLazyLoad;
-
+  }
   ClassicPendingScript* pending_script = ClassicPendingScript::Fetch(
       url, document, options, cross_origin, encoding, element_, defer);
   prepared_pending_script_ = pending_script;
@@ -990,7 +994,8 @@ void ScriptLoader::FetchModuleScriptTree(
   // options.</spec>
   auto* module_tree_client =
       MakeGarbageCollected<ModulePendingScriptTreeClient>();
-  modulator->FetchTree(url, fetch_client_settings_object_fetcher,
+  modulator->FetchTree(url, ModuleType::kJavaScript,
+                       fetch_client_settings_object_fetcher,
                        mojom::blink::RequestContextType::SCRIPT,
                        network::mojom::RequestDestination::kScript, options,
                        ModuleScriptCustomFetchType::kNone, module_tree_client);
@@ -1002,7 +1007,6 @@ PendingScript* ScriptLoader::TakePendingScript(
     ScriptSchedulingType scheduling_type) {
   CHECK(prepared_pending_script_);
 
-  UMA_HISTOGRAM_ENUMERATION("Blink.Script.SchedulingType", scheduling_type);
   PendingScript* pending_script = prepared_pending_script_;
   prepared_pending_script_ = nullptr;
   pending_script->SetSchedulingType(scheduling_type);

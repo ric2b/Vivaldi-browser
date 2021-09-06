@@ -17,7 +17,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/notreached.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
@@ -27,7 +27,7 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
-#include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/compositor/clip_recorder.h"
 #include "ui/compositor/compositor.h"
@@ -160,7 +160,7 @@ class VIEWS_EXPORT ViewMaskLayer : public ui::LayerDelegate,
   // views::ViewObserver:
   void OnViewBoundsChanged(View* observed_view) override;
 
-  ScopedObserver<View, ViewObserver> observed_view_{this};
+  base::ScopedObservation<View, ViewObserver> observed_view_{this};
 
   SkPath path_;
   ui::Layer layer_;
@@ -171,7 +171,7 @@ ViewMaskLayer::ViewMaskLayer(const SkPath& path, View* observed_view)
   layer_.set_delegate(this);
   layer_.SetFillsBoundsOpaquely(false);
   layer_.SetName("ViewMaskLayer");
-  observed_view_.Add(observed_view);
+  observed_view_.Observe(observed_view);
   OnViewBoundsChanged(observed_view);
 }
 
@@ -249,6 +249,8 @@ View::~View() {
   // called at the end so observers can examine properties inside
   // OnViewIsDeleting(), for instance.
   ClearProperties();
+
+  life_cycle_state_ = LifeCycleState::kDestroyed;
 }
 
 // Tree operations -------------------------------------------------------------
@@ -1058,6 +1060,8 @@ void View::SchedulePaintInRect(const gfx::Rect& rect) {
 }
 
 void View::Paint(const PaintInfo& parent_paint_info) {
+  CHECK_EQ(life_cycle_state_, LifeCycleState::kAlive);
+
   if (!ShouldPaint())
     return;
 
@@ -1157,6 +1161,8 @@ void View::Paint(const PaintInfo& parent_paint_info) {
     OnPaint(canvas);
   }
 
+  CHECK_EQ(life_cycle_state_, LifeCycleState::kAlive);
+
   // View::Paint() recursion over the subtree.
   PaintChildren(paint_info);
 }
@@ -1164,6 +1170,10 @@ void View::Paint(const PaintInfo& parent_paint_info) {
 void View::SetBackground(std::unique_ptr<Background> b) {
   background_ = std::move(b);
   SchedulePaint();
+}
+
+Background* View::GetBackground() const {
+  return background_.get();
 }
 
 void View::SetBorder(std::unique_ptr<Border> b) {
@@ -1181,6 +1191,10 @@ void View::SetBorder(std::unique_ptr<Border> b) {
     InvalidateLayout();
 
   SchedulePaint();
+}
+
+Border* View::GetBorder() const {
+  return border_.get();
 }
 
 const ui::ThemeProvider* View::GetThemeProvider() const {
@@ -1286,14 +1300,7 @@ View* View::GetTooltipHandlerForPoint(const gfx::Point& point) {
 }
 
 gfx::NativeCursor View::GetCursor(const ui::MouseEvent& event) {
-#if defined(OS_WIN)
-  static ui::Cursor arrow;
-  if (!arrow.platform())
-    arrow.SetPlatformCursor(LoadCursor(nullptr, IDC_ARROW));
-  return arrow;
-#else
   return gfx::kNullCursor;
-#endif
 }
 
 bool View::HitTestPoint(const gfx::Point& point) const {
@@ -1338,10 +1345,10 @@ void View::OnMouseEntered(const ui::MouseEvent& event) {}
 
 void View::OnMouseExited(const ui::MouseEvent& event) {}
 
-void View::SetMouseHandler(View* new_mouse_handler) {
-  // |new_mouse_handler| may be nullptr.
+void View::SetMouseAndGestureHandler(View* new_handler) {
+  // |new_handler| may be nullptr.
   if (parent_)
-    parent_->SetMouseHandler(new_mouse_handler);
+    parent_->SetMouseAndGestureHandler(new_handler);
 }
 
 bool View::OnKeyPressed(const ui::KeyEvent& event) {
@@ -1622,7 +1629,7 @@ View::FocusBehavior View::GetFocusBehavior() const {
 }
 
 void View::SetFocusBehavior(FocusBehavior focus_behavior) {
-  if (focus_behavior_ == focus_behavior)
+  if (GetFocusBehavior() == focus_behavior)
     return;
 
   focus_behavior_ = focus_behavior;
@@ -1632,11 +1639,12 @@ void View::SetFocusBehavior(FocusBehavior focus_behavior) {
 }
 
 bool View::IsFocusable() const {
-  return focus_behavior_ == FocusBehavior::ALWAYS && GetEnabled() && IsDrawn();
+  return GetFocusBehavior() == FocusBehavior::ALWAYS && GetEnabled() &&
+         IsDrawn();
 }
 
 bool View::IsAccessibilityFocusable() const {
-  return focus_behavior_ != FocusBehavior::NEVER && GetEnabled() && IsDrawn();
+  return GetViewAccessibility().IsAccessibilityFocusable();
 }
 
 FocusManager* View::GetFocusManager() {
@@ -1720,8 +1728,8 @@ int View::OnDragUpdated(const ui::DropTargetEvent& event) {
 
 void View::OnDragExited() {}
 
-int View::OnPerformDrop(const ui::DropTargetEvent& event) {
-  return ui::DragDropTypes::DRAG_NONE;
+ui::mojom::DragOperation View::OnPerformDrop(const ui::DropTargetEvent& event) {
+  return ui::mojom::DragOperation::kNone;
 }
 
 void View::OnDragDone() {}
@@ -1734,9 +1742,9 @@ bool View::ExceededDragThreshold(const gfx::Vector2d& delta) {
 
 // Accessibility----------------------------------------------------------------
 
-ViewAccessibility& View::GetViewAccessibility() {
+ViewAccessibility& View::GetViewAccessibility() const {
   if (!view_accessibility_)
-    view_accessibility_ = ViewAccessibility::Create(this);
+    view_accessibility_ = ViewAccessibility::Create(const_cast<View*>(this));
   return *view_accessibility_;
 }
 
@@ -1787,6 +1795,12 @@ gfx::NativeViewAccessible View::GetNativeViewAccessible() {
 
 void View::NotifyAccessibilityEvent(ax::mojom::Event event_type,
                                     bool send_native_event) {
+  // If it belongs to a widget but its native widget is already destructed, do
+  // not send such accessibility event as it's unexpected to send such events
+  // during destruction, and is likely to lead to crashes/problems.
+  if (GetWidget() && !GetWidget()->GetNativeView())
+    return;
+
   AXEventManager::Get()->NotifyViewEvent(this, event_type);
 
   if (send_native_event && GetWidget())
@@ -3216,6 +3230,8 @@ DEFINE_ENUM_CONVERTERS(View::FocusBehavior,
 // This block requires the existence of METADATA_HEADER(View) in the class
 // declaration for View.
 BEGIN_METADATA_BASE(View)
+ADD_PROPERTY_METADATA(std::unique_ptr<Background>, Background)
+ADD_PROPERTY_METADATA(std::unique_ptr<Border>, Border)
 ADD_READONLY_PROPERTY_METADATA(const char*, ClassName)
 ADD_PROPERTY_METADATA(bool, Enabled)
 ADD_PROPERTY_METADATA(View::FocusBehavior, FocusBehavior)
@@ -3235,6 +3251,10 @@ ADD_PROPERTY_METADATA(bool, UseDefaultFillLayout)
 ADD_PROPERTY_METADATA(int, Width)
 ADD_PROPERTY_METADATA(int, X)
 ADD_PROPERTY_METADATA(int, Y)
+ADD_CLASS_PROPERTY_METADATA(gfx::Insets, kMarginsKey)
+ADD_CLASS_PROPERTY_METADATA(gfx::Insets, kInternalPaddingKey)
+ADD_CLASS_PROPERTY_METADATA(LayoutAlignment, kCrossAxisAlignmentKey)
+ADD_CLASS_PROPERTY_METADATA(bool, kViewIgnoredByLayoutKey)
 END_METADATA
 
 }  // namespace views

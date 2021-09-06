@@ -31,6 +31,8 @@
 <translation id="2486841023299517366">Pes (Zviera 4)</translation>
 <translation id="2612127540243995147">Pripravené na inštaláciu. Prehliadač Vivaldi bude zatvorený a znova spustený.</translation>
 <translation id="2613387515621326337">Zobraziť stránku aktualizácie</translation>
+<translation id="2647368062414805334">Ľutujeme, ale nemôžeme získať nastavenia prehliadača Edge, ak je práve spustený. Pre importovanie týchto nastavení do prehliadača Vivaldi si najprv uložte všetku prácu a zatvorte všetky okná prehliadača Edge. Potom kliknite na Pokračovať.</translation>
+<translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Panda červená (Zviera 3)</translation>
 <translation id="2873951654529031587">Kôš</translation>
 <translation id="292258461174562431">Nezbedník (Príšerka 4)</translation>
@@ -61,6 +63,7 @@
 <translation id="3732157130969736834">Pridať odkaz do záložiek</translation>
 <translation id="3732388226447288666">Líška (Zviera 2)</translation>
 <translation id="3732439195215136813">Koala (Zviera 5)</translation>
+<translation id="3795800845758778870">Ľutujeme, ale nemôžeme získať nastavenia prehliadača Brave, ak je práve spustený. Pre importovanie týchto nastavení do prehliadača Vivaldi si najprv uložte všetku prácu a zatvorte všetky okná prehliadača Brave. Potom kliknite na Pokračovať.</translation>
 <translation id="3832132597516774400">Prímorský súmrak (Krajina 5)</translation>
 <translation id="3914946330804881301">Importované z prehliadača Opera</translation>
 <translation id="3921292902397893431">Nafúkanec (Príšerka 8)</translation>
@@ -115,6 +118,8 @@
 <translation id="6551219277044048123">Pridať ako &amp;vyhľadávač</translation>
 <translation id="6630781781151951863">Palmy (Krajina 18)</translation>
 <translation id="6635049669875534328">Čo je nové:</translation>
+<translation id="6693585104974197539">Zvoľte profilový priečinok prehliadača Edge pre import</translation>
+<translation id="6726279523566323394">Zvoľte profilový priečinok prehliadača Brave pre import</translation>
 <translation id="6804831687363620480">Ľutujeme, nastavenia prehliadača Opera 15+ nie sú k dispozícii, kým je tento prehliadač otvorený. Ak chcete importovať tieto nastavenia do prehliadača Vivaldi, uložte svoju prácu a zatvorte všetky okná prehliadača Opera 15+. Potom kliknite na tlačidlo Pokračovať.</translation>
 <translation id="6892812721183419409">Otvoriť odkaz ako <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopírovať</translation>
@@ -160,5 +165,6 @@
 <translation id="912022491595344261">Otvoriť obrázok ako <ph name="USER" /></translation>
 <translation id="9157539936604258187">Otvoriť odkaz v súčasnom liste</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Zámok (Krajina 16)</translation>
 </translationbundle>

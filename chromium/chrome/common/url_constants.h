@@ -51,6 +51,12 @@ extern const char kCastNoDestinationFoundURL[];
 // Chooser.
 extern const char kChooserBluetoothOverviewURL[];
 
+// The URL for the WebHID API help center article.
+extern const char kChooserHidOverviewUrl[];
+
+// The URL for the Web Serial API help center article.
+extern const char kChooserSerialOverviewUrl[];
+
 // The URL for the WebUsb help center article.
 extern const char kChooserUsbOverviewURL[];
 
@@ -172,11 +178,6 @@ extern const char kGooglePhotosURL[];
 // first run dialog.
 extern const char kLearnMoreReportingURL[];
 
-// Management URL for Chrome Supervised Users - version without scheme, used
-// for display.
-// TODO(crbug/1164090): Remove this.
-extern const char kLegacySupervisedUserManagementDisplayURL[];
-
 // The URL for the Learn More page about policies and enterprise enrollment.
 extern const char kManagedUiLearnMoreUrl[];
 
@@ -207,9 +208,6 @@ extern const char kPaymentMethodsLearnMoreURL[];
 
 // "Learn more" URL for the Privacy section under Options.
 extern const char kPrivacyLearnMoreURL[];
-
-// "Learn more" URL for the privacy sandbox.
-extern const char kPrivacySandboxURL[];
 
 // The URL for the Learn More link of the non-CWS bubble.
 extern const char kRemoveNonCWSExtensionURL[];
@@ -251,10 +249,6 @@ extern const char kNearbyShareLearnMoreURL[];
 
 // Help center URL for who the account administrator is.
 extern const char kWhoIsMyAdministratorHelpURL[];
-
-#if defined(OS_ANDROID)
-extern const char kAndroidAppScheme[];
-#endif
 
 #if defined(OS_ANDROID) || BUILDFLAG(IS_CHROMEOS_ASH)
 // "Learn more" URL for the enhanced playback notification dialog.
@@ -356,6 +350,10 @@ extern const char kOemEulaURLPath[];
 
 // Help URL for the OS settings page's search feature.
 extern const char kOsSettingsSearchHelpURL[];
+
+// The URL for the "Learn more" link in the peripheral data access protection
+// settings.
+extern const char kPeripheralDataAccessHelpURL[];
 
 // The URL path to offline ARC++ Terms of Service.
 extern const char kArcTermsURLPath[];

@@ -4,8 +4,12 @@
 
 #include <Windows.h>
 
+#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/vivaldi_switches.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
@@ -22,13 +26,60 @@
 
 namespace extensions {
 
+namespace {
+
+void StartManualUpdateCheck() {
+  base::CommandLine update_notifier_command =
+      ::vivaldi::GetCommonUpdateNotifierCommand(nullptr);
+  update_notifier_command.AppendSwitch(
+      ::vivaldi_update_notifier::kCheckForUpdates);
+  ::vivaldi::LaunchNotifierProcess(update_notifier_command);
+}
+
+bool IsUpdateNotifierEnabledFromBrowser() {
+  base::CommandLine cmdline =
+      ::vivaldi::GetCommonUpdateNotifierCommand(nullptr);
+  cmdline.AppendSwitch(vivaldi_update_notifier::kIsEnabled);
+  int exit_code = ::vivaldi::RunNotifierSubaction(cmdline);
+  if (exit_code != 0 &&
+      exit_code !=
+          static_cast<int>(vivaldi_update_notifier::ExitCode::kDisabled)) {
+    LOG(ERROR)
+        << "Failed to query update notifier for enabled status, exit_code="
+        << exit_code;
+    return false;
+  }
+  return exit_code == 0;
+}
+
+bool DisableUpdateNotifierFromBrowser() {
+  base::CommandLine cmdline =
+      ::vivaldi::GetCommonUpdateNotifierCommand(nullptr);
+  cmdline.AppendSwitch(vivaldi_update_notifier::kDisable);
+  int exit_code = ::vivaldi::RunNotifierSubaction(cmdline);
+  if (exit_code != 0) {
+    LOG(ERROR) << "Failed to disable update notifier, exit_code=" << exit_code;
+    return false;
+  }
+  return true;
+}
+
+bool EnableUpdateNotifierFromBrowser() {
+  base::CommandLine cmdline =
+      ::vivaldi::GetCommonUpdateNotifierCommand(nullptr);
+  cmdline.AppendSwitch(vivaldi_update_notifier::kEnable);
+  int exit_code = ::vivaldi::RunNotifierSubaction(cmdline);
+  if (exit_code != 0) {
+    LOG(ERROR) << "Failed to enable update notifier, exit_code=" << exit_code;
+    return false;
+  }
+  return true;
+}
+
+}  // namespace
+
 class AutoUpdateObserver : public BuildStateObserver {
  public:
-  AutoUpdateObserver()
-      : installed_version_poller_(g_browser_process->GetBuildState()) {
-    g_browser_process->GetBuildState()->AddObserver(this);
-  }
-
   static AutoUpdateObserver& GetInstance() {
     static base::NoDestructor<AutoUpdateObserver> instance;
     return *instance;
@@ -39,12 +90,20 @@ class AutoUpdateObserver : public BuildStateObserver {
     extensions::AutoUpdateAPI::SendWillInstallUpdateOnQuit();
   }
 
-  InstalledVersionPoller installed_version_poller_;
+  InstalledVersionPoller installed_version_poller_{
+      g_browser_process->GetBuildState()};
 };
 
 // static
 void AutoUpdateAPI::InitUpgradeDetection() {
-  AutoUpdateObserver::GetInstance();
+  g_browser_process->GetBuildState()->AddObserver(
+      &AutoUpdateObserver::GetInstance());
+}
+
+// static
+void AutoUpdateAPI::ShutdownUpgradeDetection() {
+  g_browser_process->GetBuildState()->RemoveObserver(
+      &AutoUpdateObserver::GetInstance());
 }
 
 ExtensionFunction::ResponseAction AutoUpdateCheckForUpdatesFunction::Run() {
@@ -53,38 +112,90 @@ ExtensionFunction::ResponseAction AutoUpdateCheckForUpdatesFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  base::CommandLine update_notifier_command =
-      ::vivaldi::GetCommonUpdateNotifierCommand(profile);
-  update_notifier_command.AppendSwitch(
-      ::vivaldi_update_notifier::kCheckForUpdates);
-  ::vivaldi::LaunchNotifierProcess(update_notifier_command);
+  base::ThreadPool::PostTaskAndReply(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN,
+       base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(&StartManualUpdateCheck),
+      base::BindOnce(&AutoUpdateCheckForUpdatesFunction::DeliverResult, this));
+  return RespondLater();
+}
 
-  return RespondNow(NoArguments());
+void AutoUpdateCheckForUpdatesFunction::DeliverResult() {
+  Respond(NoArguments());
 }
 
 ExtensionFunction::ResponseAction
 AutoUpdateIsUpdateNotifierEnabledFunction::Run() {
+  if (::vivaldi::IsStandaloneBrowser()) {
+    bool enabled = ::vivaldi::IsStandaloneAutoUpdateEnabled();
+    DeliverResult(enabled);
+    return AlreadyResponded();
+  }
+
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::WithBaseSyncPrimitives(),
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN,
+       base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(&IsUpdateNotifierEnabledFromBrowser),
+      base::BindOnce(&AutoUpdateIsUpdateNotifierEnabledFunction::DeliverResult,
+                     this));
+  return RespondLater();
+}
+
+void AutoUpdateIsUpdateNotifierEnabledFunction::DeliverResult(bool enabled) {
   namespace Results = vivaldi::auto_update::IsUpdateNotifierEnabled::Results;
 
-  bool enabled = ::vivaldi::IsUpdateNotifierEnabled(nullptr);
-  return RespondNow(ArgumentList(Results::Create(enabled)));
+  Respond(ArgumentList(Results::Create(enabled)));
 }
 
 ExtensionFunction::ResponseAction
 AutoUpdateEnableUpdateNotifierFunction::Run() {
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  base::CommandLine update_notifier_command =
-      ::vivaldi::GetCommonUpdateNotifierCommand(profile);
-  ::vivaldi::EnableUpdateNotifier(update_notifier_command);
-  ::vivaldi::LaunchNotifierProcess(update_notifier_command);
-  return RespondNow(NoArguments());
+  if (::vivaldi::IsStandaloneBrowser()) {
+    ::vivaldi::EnableStandaloneAutoUpdate();
+    DeliverResult(true);
+    return AlreadyResponded();
+  }
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::WithBaseSyncPrimitives(),
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN,
+       base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(&EnableUpdateNotifierFromBrowser),
+      base::BindOnce(&AutoUpdateEnableUpdateNotifierFunction::DeliverResult,
+                     this));
+  return RespondLater();
+}
+
+void AutoUpdateEnableUpdateNotifierFunction::DeliverResult(bool success) {
+  namespace Results = vivaldi::auto_update::EnableUpdateNotifier::Results;
+
+  Respond(ArgumentList(Results::Create(success)));
 }
 
 ExtensionFunction::ResponseAction
 AutoUpdateDisableUpdateNotifierFunction::Run() {
-  ::vivaldi::DisableUpdateNotifier(nullptr);
-  return RespondNow(NoArguments());
+  if (::vivaldi::IsStandaloneBrowser()) {
+    ::vivaldi::DisableStandaloneAutoUpdate();
+    DeliverResult(true);
+    return AlreadyResponded();
+  }
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::WithBaseSyncPrimitives(),
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN,
+       base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(&DisableUpdateNotifierFromBrowser),
+      base::BindOnce(&AutoUpdateDisableUpdateNotifierFunction::DeliverResult,
+                     this));
+  return RespondLater();
+}
+
+void AutoUpdateDisableUpdateNotifierFunction::DeliverResult(bool success) {
+  namespace Results = vivaldi::auto_update::DisableUpdateNotifier::Results;
+
+  Respond(ArgumentList(Results::Create(success)));
 }
 
 ExtensionFunction::ResponseAction

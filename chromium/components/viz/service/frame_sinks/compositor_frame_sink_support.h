@@ -15,6 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/time/time.h"
+#include "components/power_scheduler/power_mode_voter.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/frame_timing_details_map.h"
 #include "components/viz/common/quads/compositor_frame.h"
@@ -26,6 +27,7 @@
 #include "components/viz/service/frame_sinks/video_capture/capturable_frame_sink.h"
 #include "components/viz/service/hit_test/hit_test_aggregator.h"
 #include "components/viz/service/surfaces/surface_client.h"
+#include "components/viz/service/transitions/surface_animation_manager.h"
 #include "components/viz/service/viz_service_export.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
 #include "services/viz/public/mojom/hit_test/hit_test_region_list.mojom.h"
@@ -355,6 +357,13 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
   base::TimeDelta preferred_frame_interval_ = BeginFrameArgs::MinInterval();
   mojom::CompositorFrameSinkType frame_sink_type_ =
       mojom::CompositorFrameSinkType::kUnspecified;
+
+  // This is responsible for transitioning between two frames of the same
+  // surface. In part implements "Shared Element Transition" feature for
+  // single-page-app transitions.
+  SurfaceAnimationManager surface_animation_manager_;
+
+  std::unique_ptr<power_scheduler::PowerModeVoter> animation_power_mode_voter_;
 
   base::WeakPtrFactory<CompositorFrameSinkSupport> weak_factory_{this};
 

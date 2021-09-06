@@ -1,5 +1,6 @@
 declare_args() {
   is_vivaldi = true
+  is_vivaldi_polestar = false
 }
 assert (is_vivaldi)
 

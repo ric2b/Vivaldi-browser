@@ -138,6 +138,8 @@ if (!is_android && !is_mac) {
   }
 
   executable("chrome_initial") {
+    configs -= [ "//build/config/compiler:thinlto_optimize_default" ]
+    configs += [ "//build/config/compiler:thinlto_optimize_max" ]
     if (is_win) {
       output_name = "initialexe/chrome"
     } else {
@@ -331,6 +333,8 @@ if (!is_android && !is_mac) {
 if (is_win) {
   shared_library("chrome_dll") {
     configs += [ "//build/config/compiler:wexit_time_destructors" ]
+    configs -= [ "//build/config/compiler:thinlto_optimize_default" ]
+    configs += [ "//build/config/compiler:thinlto_optimize_max" ]
     defines = []
 
     sources = [
@@ -1003,6 +1007,8 @@ if (is_win) {
     ]
 
     configs += [ "//build/config/compiler:wexit_time_destructors" ]
+    configs -= [ "//build/config/compiler:thinlto_optimize_default" ]
+    configs += [ "//build/config/compiler:thinlto_optimize_max" ]
   }
 
   mac_framework_bundle("chrome_framework") {
@@ -1253,9 +1259,9 @@ group("browser_dependencies") {
 
   if (is_chromeos_ash) {
     public_deps += [
+      "//ash/constants",
       "//chrome/browser/chromeos",
       "//chromeos",
-      "//chromeos/constants",
       "//chromeos/dbus/constants",
       "//chromeos/memory",
     ]
@@ -1507,8 +1513,6 @@ if (is_android) {
 
   source_set("chrome_android_core") {
     sources = [
-      "app/android/chrome_android_initializer.cc",
-      "app/android/chrome_android_initializer.h",
       "app/android/chrome_jni_onload.cc",
       "app/android/chrome_jni_onload.h",
       "app/android/chrome_main_delegate_android.cc",

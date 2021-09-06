@@ -7,6 +7,7 @@
 #include <tuple>
 #include <vector>
 
+#include "ash/constants/ash_switches.h"
 #include "base/bind.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
@@ -22,6 +23,7 @@
 #include "base/test/scoped_command_line.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/values.h"
+#include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/chromeos/arc/arc_optin_uma.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/optin/arc_terms_of_service_oobe_negotiator.h"
@@ -34,8 +36,6 @@
 #include "chrome/browser/chromeos/login/ui/fake_login_display_host.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/policy/powerwash_requirements_checker.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
@@ -45,7 +45,6 @@
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/webui/chromeos/login/arc_terms_of_service_screen_handler.h"
 #include "chrome/test/base/testing_profile.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/cryptohome/fake_cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power/power_manager_client.h"
@@ -219,6 +218,19 @@ TEST_F(ArcSessionManagerInLoginScreenTest, EmitLoginPromptVisible_NoOp) {
   EXPECT_FALSE(arc_session());
   EXPECT_EQ(ArcSessionManager::State::NOT_INITIALIZED,
             arc_session_manager()->state());
+}
+
+// We expect that StopMiniArcIfNecessary stops mini-ARC when it is running.
+TEST_F(ArcSessionManagerInLoginScreenTest, StopMiniArcIfNecessary) {
+  EXPECT_FALSE(arc_session());
+
+  SetArcAvailableCommandLineForTesting(base::CommandLine::ForCurrentProcess());
+
+  chromeos::SessionManagerClient::Get()->EmitLoginPromptVisible();
+  EXPECT_TRUE(arc_session());
+
+  arc_session_manager()->StopMiniArcIfNecessary();
+  EXPECT_FALSE(arc_session());
 }
 
 class ArcSessionManagerTestBase : public testing::Test {
@@ -1208,10 +1220,10 @@ constexpr ProvisioningErrorDisplayTestParam
          ArcSupportHost::Error::SIGN_IN_NETWORK_ERROR,
          1 /*GMS_SIGN_IN_NETWORK_ERROR*/},
         {arc::mojom::GMSSignInError::GMS_SIGN_IN_TIMEOUT,
-         ArcSupportHost::Error::SIGN_IN_SERVICE_UNAVAILABLE_ERROR,
+         ArcSupportHost::Error::SIGN_IN_GMS_SIGNIN_ERROR,
          5 /*GMS_SIGN_IN_TIMEOUT*/},
         {arc::mojom::GMSCheckInError::GMS_CHECK_IN_TIMEOUT,
-         ArcSupportHost::Error::SIGN_IN_GMS_NOT_AVAILABLE_ERROR,
+         ArcSupportHost::Error::SIGN_IN_GMS_CHECKIN_ERROR,
          2 /*GMS_CHECK_IN_TIMEOUT*/}};
 
 class ProvisioningErrorDisplayTest

@@ -63,6 +63,7 @@
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_frame_toolbar_view.h"
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_menu_button.h"
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_toolbar_button_container.h"
+#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/system_web_app_manager.h"
@@ -311,13 +312,13 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewChromeOSTestNoWebUiTabStrip,
   BrowserNonClientFrameViewChromeOS* frame_view = GetFrameViewAsh(browser_view);
 
   // Frame paints by default.
-  EXPECT_TRUE(frame_view->ShouldPaint());
+  EXPECT_TRUE(frame_view->GetShouldPaint());
 
   // No painting should occur in non-immersive fullscreen. (We enter into tab
   // fullscreen here because tab fullscreen is non-immersive even on ChromeOS).
   EnterFullscreenModeForTabAndWait(browser(), web_contents);
   EXPECT_FALSE(browser_view->immersive_mode_controller()->IsEnabled());
-  EXPECT_FALSE(frame_view->ShouldPaint());
+  EXPECT_FALSE(frame_view->GetShouldPaint());
 
   // The client view abuts top of the window.
   EXPECT_EQ(0, frame_view->GetBoundsForClientView().y());
@@ -325,7 +326,7 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewChromeOSTestNoWebUiTabStrip,
   // The frame should be painted again when fullscreen is exited and the caption
   // buttons should be visible.
   ToggleFullscreenModeAndWait(browser());
-  EXPECT_TRUE(frame_view->ShouldPaint());
+  EXPECT_TRUE(frame_view->GetShouldPaint());
 }
 
 // Tests that Avatar icon should show on the top left corner of the teleported
@@ -417,6 +418,11 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewChromeOSTest,
   // Open a settings window.
   auto* settings_manager = chrome::SettingsWindowManager::GetInstance();
   settings_manager->ShowOSSettings(browser()->profile());
+
+  // The above ShowOSSettings() should trigger an asynchronous call to launch
+  // OS Settings SWA. Flush Mojo calls so the browser window is created.
+  web_app::FlushSystemWebAppLaunchesForTesting(browser()->profile());
+
   Browser* settings_browser =
       settings_manager->FindBrowserForProfile(browser()->profile());
 
@@ -438,10 +444,8 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewChromeOSTest,
   Profile* profile = browser()->profile();
   SessionStartupPref::SetStartupPref(profile, pref);
 
-  SessionServiceTestHelper helper(
-      SessionServiceFactory::GetForProfile(profile));
+  SessionServiceTestHelper helper(profile);
   helper.SetForceBrowserNotAliveWithNoWindows(true);
-  helper.ReleaseService();
 
   // Do not exit from test when last browser is closed.
   ScopedKeepAlive keep_alive(KeepAliveOrigin::SESSION_RESTORE,
@@ -517,7 +521,7 @@ IN_PROC_BROWSER_TEST_P(ImmersiveModeBrowserViewTestNoWebUiTabStrip,
   EXPECT_FALSE(immersive_mode_controller->IsEnabled());
 
   // Frame paints by default.
-  EXPECT_TRUE(frame_view->ShouldPaint());
+  EXPECT_TRUE(frame_view->GetShouldPaint());
   EXPECT_LT(0, frame_view
                    ->GetBoundsForTabStripRegion(
                        browser_view->tab_strip_region_view()->GetMinimumSize())
@@ -534,13 +538,13 @@ IN_PROC_BROWSER_TEST_P(ImmersiveModeBrowserViewTestNoWebUiTabStrip,
       immersive_mode_controller->GetRevealedLock(
           ImmersiveModeController::ANIMATE_REVEAL_NO));
   EXPECT_TRUE(immersive_mode_controller->IsRevealed());
-  EXPECT_TRUE(frame_view->ShouldPaint());
+  EXPECT_TRUE(frame_view->GetShouldPaint());
 
   // End the reveal. When in both immersive browser fullscreen and tab
   // fullscreen.
   revealed_lock.reset();
   EXPECT_FALSE(immersive_mode_controller->IsRevealed());
-  EXPECT_FALSE(frame_view->ShouldPaint());
+  EXPECT_FALSE(frame_view->GetShouldPaint());
   EXPECT_EQ(0, frame_view
                    ->GetBoundsForTabStripRegion(
                        browser_view->tab_strip_region_view()->GetMinimumSize())
@@ -553,7 +557,7 @@ IN_PROC_BROWSER_TEST_P(ImmersiveModeBrowserViewTestNoWebUiTabStrip,
   revealed_lock.reset(immersive_mode_controller->GetRevealedLock(
       ImmersiveModeController::ANIMATE_REVEAL_NO));
   EXPECT_TRUE(immersive_mode_controller->IsRevealed());
-  EXPECT_TRUE(frame_view->ShouldPaint());
+  EXPECT_TRUE(frame_view->GetShouldPaint());
   EXPECT_LT(0, frame_view
                    ->GetBoundsForTabStripRegion(
                        browser_view->tab_strip_region_view()->GetMinimumSize())
@@ -562,7 +566,7 @@ IN_PROC_BROWSER_TEST_P(ImmersiveModeBrowserViewTestNoWebUiTabStrip,
   // Ending the reveal. Immersive browser should have the same behavior as full
   // screen, i.e., having an origin of (0,0).
   revealed_lock.reset();
-  EXPECT_FALSE(frame_view->ShouldPaint());
+  EXPECT_FALSE(frame_view->GetShouldPaint());
   EXPECT_EQ(0, frame_view
                    ->GetBoundsForTabStripRegion(
                        browser_view->tab_strip_region_view()->GetMinimumSize())
@@ -576,7 +580,7 @@ IN_PROC_BROWSER_TEST_P(ImmersiveModeBrowserViewTestNoWebUiTabStrip,
     waiter.Wait();
   }
   EXPECT_FALSE(immersive_mode_controller->IsEnabled());
-  EXPECT_TRUE(frame_view->ShouldPaint());
+  EXPECT_TRUE(frame_view->GetShouldPaint());
   EXPECT_LT(0, frame_view
                    ->GetBoundsForTabStripRegion(
                        browser_view->tab_strip_region_view()->GetMinimumSize())
@@ -692,7 +696,7 @@ IN_PROC_BROWSER_TEST_P(ImmersiveModeBrowserViewTest,
   // Toggle fullscreen mode.
   chrome::ToggleFullscreenMode(browser);
   EXPECT_TRUE(browser_view->immersive_mode_controller()->IsEnabled());
-  EXPECT_FALSE(browser_view->IsTabStripVisible());
+  EXPECT_FALSE(browser_view->GetTabStripVisible());
 
   EXPECT_TRUE(browser->window()->IsFullscreen());
   EXPECT_FALSE(browser->window()->IsMaximized());
@@ -1227,7 +1231,7 @@ IN_PROC_BROWSER_TEST_P(WebAppNonClientFrameViewAshTest, BrowserActions) {
       browser_actions_container_->toolbar_actions_bar();
   LoadExtensions();
   toolbar_model()->SetVisibleIconCount(2);
-  EXPECT_EQ(0u, browser_actions_container_->VisibleBrowserActions());
+  EXPECT_EQ(0u, browser_actions_container_->GetVisibleBrowserActions());
 
   // Show the menu.
   SimulateClickOnView(web_app_menu_button_);
@@ -1236,12 +1240,12 @@ IN_PROC_BROWSER_TEST_P(WebAppNonClientFrameViewAshTest, BrowserActions) {
   EXPECT_EQ(3u, GetAppMenu()
                     ->extension_toolbar_for_testing()
                     ->container_for_testing()
-                    ->VisibleBrowserActions());
+                    ->GetVisibleBrowserActions());
 
   // Popping out an extension makes its action show in the bar.
   toolbar_actions_bar->PopOutAction(toolbar_actions_bar->GetActions()[2], false,
                                     base::DoNothing());
-  EXPECT_EQ(1u, browser_actions_container_->VisibleBrowserActions());
+  EXPECT_EQ(1u, browser_actions_container_->GetVisibleBrowserActions());
 }
 
 // Regression test for https://crbug.com/839955

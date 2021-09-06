@@ -17,6 +17,8 @@
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/command_updater.h"
 #include "chrome/browser/extensions/api/omnibox/omnibox_api.h"
 #include "chrome/browser/extensions/extension_ui_util.h"
@@ -65,6 +67,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/content_settings/core/common/features.h"
 #include "components/dom_distiller/core/dom_distiller_features.h"
@@ -85,6 +88,7 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/feature_switch.h"
@@ -162,10 +166,15 @@ LocationBarView::LocationBarView(Browser* browser,
 
     focus_ring_->SetPathGenerator(
         std::make_unique<views::PillHighlightPathGenerator>());
+
+#if defined(OS_MAC)
+    geolocation_permission_observation_.Observe(
+        g_browser_process->platform_part()->location_permission_manager());
+#endif
   }
 }
 
-LocationBarView::~LocationBarView() {}
+LocationBarView::~LocationBarView() = default;
 
 void LocationBarView::Init() {
   // We need to be in a Widget, otherwise GetNativeTheme() may change and we're
@@ -219,18 +228,9 @@ void LocationBarView::Init() {
 
   // Initiate the Omnibox additional-text label.
   if (OmniboxFieldTrial::RichAutocompletionShowAdditionalText()) {
-    // TODO (manukh) When the titles UI is disabled,
-    // |omnibox_additional_text_view| will only contain URLs and never page
-    // titles. It can safely be styled with STYLE_LINK. When the titles UI is
-    // enabled, it can contain either URLs or page titles. Ideally, its style
-    // would be updated appropriately, but given early consensus suggests titles
-    // UI is unlikely to launch, we don't have to worry about this case for now.
-    auto style = OmniboxFieldTrial::RichAutocompletionShowTitles()
-                     ? views::style::STYLE_PRIMARY
-                     : views::style::STYLE_LINK;
     auto omnibox_additional_text_view = std::make_unique<views::Label>(
         base::string16(), ChromeTextContext::CONTEXT_OMNIBOX_DEEMPHASIZED,
-        style);
+        views::style::STYLE_LINK);
     omnibox_additional_text_view->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     omnibox_additional_text_view_ =
         AddChildView(std::move(omnibox_additional_text_view));
@@ -279,11 +279,16 @@ void LocationBarView::Init() {
     params.types_enabled.push_back(PageActionIconType::kTranslate);
     params.types_enabled.push_back(PageActionIconType::kZoom);
     params.types_enabled.push_back(PageActionIconType::kFileSystemAccess);
+    if (base::FeatureList::IsEnabled(features::kWebAuthConditionalUI)) {
+      params.types_enabled.push_back(PageActionIconType::kWebAuthn);
+    }
 
     if (dom_distiller::IsDomDistillerEnabled() && browser_->is_type_normal()) {
       params.types_enabled.push_back(PageActionIconType::kReaderMode);
     }
     params.types_enabled.push_back(PageActionIconType::kCookieControls);
+    params.types_enabled.push_back(
+        PageActionIconType::kPaymentsOfferNotification);
   }
   // Add icons only when feature is not enabled. Otherwise icons will
   // be added to the ToolbarPageActionIconContainerView.
@@ -291,6 +296,12 @@ void LocationBarView::Init() {
           autofill::features::kAutofillEnableToolbarStatusChip)) {
     params.types_enabled.push_back(PageActionIconType::kSaveCard);
     params.types_enabled.push_back(PageActionIconType::kLocalCardMigration);
+    if (base::FeatureList::IsEnabled(
+            autofill::features::kAutofillAddressProfileSavePrompt)) {
+      // TODO(crbug.com/1167060): Place this in the proper order upon having
+      // final mocks.
+      params.types_enabled.push_back(PageActionIconType::kSaveAutofillAddress);
+    }
   }
   if (browser_ && !is_popup_mode_)
     params.types_enabled.push_back(PageActionIconType::kBookmarkStar);
@@ -554,7 +565,7 @@ void LocationBarView::Layout() {
       }
       selected_keyword_view_->SetCustomImage(image);
     }
-  } else if (location_icon_view_->ShouldShowText()) {
+  } else if (location_icon_view_->GetShowText()) {
     leading_decorations.AddDecoration(vertical_padding, location_height, false,
                                       kLeadingDecorationMaxFraction,
                                       edge_padding, location_icon_view_);
@@ -602,17 +613,12 @@ void LocationBarView::Layout() {
   int location_needed_width = omnibox_view_->GetTextWidth();
   if (OmniboxFieldTrial::RichAutocompletionShowAdditionalText()) {
     // Calculate location_needed_width based on the omnibox view and omnibox
-    // additional text widths. If RichAutocompletionTwoLineOmnibox is enabled,
-    // location_needed_width only needs to be large enough to contain the
-    // larger; otherwise, it must be large enough to contain both in addition to
-    // the padding in between.
+    // additional text widths. |location_needed_width| must be large enough to
+    // contain both in addition to the padding in between.
     int omnibox_additional_text_needed_width =
         omnibox_additional_text_view_->CalculatePreferredSize().width();
     location_needed_width =
-        OmniboxFieldTrial::RichAutocompletionTwoLineOmnibox()
-            ? std::max(location_needed_width,
-                       omnibox_additional_text_needed_width)
-            : location_needed_width + omnibox_additional_text_needed_width + 10;
+        location_needed_width + omnibox_additional_text_needed_width + 10;
     // TODO (manukh): If we launch rich autocompletion with the current
     //  iteration of 1 line UI, the padding (10) should  be moved to
     //  layout_constants.cc. Likewise below.
@@ -651,23 +657,10 @@ void LocationBarView::Layout() {
         std::min(width, entry_width), location_bounds.height());
   }
 
-  // If rich autocompletion is enabled, split |location_bounds| for the
-  // |omnibox_view_| and |omnibox_additional_text_view_|.
+  // If rich autocompletion is enabled, split |location_bounds| horizontally for
+  // the |omnibox_view_| and |omnibox_additional_text_view_|.
   if (OmniboxFieldTrial::RichAutocompletionShowAdditionalText() &&
-      OmniboxFieldTrial::RichAutocompletionTwoLineOmnibox()) {
-    // Split vertically.
-    auto omnibox_bounds = location_bounds;
-    omnibox_bounds.set_height(location_bounds.height() / 2);
-    omnibox_view_->SetBoundsRect(omnibox_bounds);
-    auto omnibox_additional_text_bounds = omnibox_bounds;
-    omnibox_additional_text_bounds.set_x(location_bounds.x() + 3);
-    omnibox_additional_text_bounds.set_y(omnibox_bounds.bottom());
-    omnibox_additional_text_view_->SetBoundsRect(
-        omnibox_additional_text_bounds);
-
-  } else if (OmniboxFieldTrial::RichAutocompletionShowAdditionalText() &&
-             !omnibox_view_->GetText().empty()) {
-    // Split horizontally.
+      !omnibox_view_->GetText().empty()) {
     auto omnibox_bounds = location_bounds;
     omnibox_bounds.set_width(std::min(
         omnibox_view_->GetUnelidedTextWidth() + 10, location_bounds.width()));
@@ -797,6 +790,11 @@ LocationBarView::GetContentSettingBubbleModelDelegate() {
   return delegate_->GetContentSettingBubbleModelDelegate();
 }
 
+void LocationBarView::OnSystemPermissionUpdate(
+    device::LocationSystemPermissionStatus new_status) {
+  UpdateContentSettingsIcons();
+}
+
 WebContents* LocationBarView::GetWebContentsForPageActionIconView() {
   return GetWebContents();
 }
@@ -844,7 +842,7 @@ int LocationBarView::GetMinimumLeadingWidth() const {
   if (ShouldShowKeywordBubble())
     return 0;
 
-  if (location_icon_view_->ShouldShowText())
+  if (location_icon_view_->GetShowText())
     return location_icon_view_->GetMinimumLabelTextWidth();
 
   return GetLayoutConstant(LOCATION_BAR_ELEMENT_PADDING) +
@@ -1269,16 +1267,8 @@ void LocationBarView::OnLocationIconPressed(const ui::MouseEvent& event) {
       ui::Clipboard::IsSupportedClipboardBuffer(
           ui::ClipboardBuffer::kSelection)) {
     base::string16 text;
-
-    // Since ReadText() runs a nested message loop, |this| may be deleted before
-    // it returns. See https://crbug.com/1161143
-    auto weak_this = weak_factory_.GetWeakPtr();
     ui::Clipboard::GetForCurrentThread()->ReadText(
         ui::ClipboardBuffer::kSelection, /* data_dst = */ nullptr, &text);
-    if (!weak_this) {
-      return;
-    }
-
     text = OmniboxView::SanitizeTextForPaste(text);
 
     if (!GetOmniboxView()->model()->CanPasteAndGo(text)) {
@@ -1329,7 +1319,7 @@ ui::ImageModel LocationBarView::GetLocationIcon(
 }
 
 void LocationBarView::UpdatePermissionChipVisibility() {
-  if (!permission_chip()->HasActiveRequest()) {
+  if (!permission_chip()->GetActiveRequest()) {
     DCHECK(!permission_chip()->GetVisible());
     return;
   }
@@ -1354,13 +1344,17 @@ bool LocationBarView::GetPopupMode() const {
 
 BEGIN_METADATA(LocationBarView, views::View)
 ADD_READONLY_PROPERTY_METADATA(int, BorderRadius)
-ADD_READONLY_PROPERTY_METADATA(SkColor, OpaqueBorderColor)
+ADD_READONLY_PROPERTY_METADATA(SkColor,
+                               OpaqueBorderColor,
+                               views::metadata::SkColorConverter)
 ADD_READONLY_PROPERTY_METADATA(gfx::Point, OmniboxViewOrigin)
 ADD_PROPERTY_METADATA(base::string16, ImeInlineAutocompletion)
 ADD_PROPERTY_METADATA(base::string16, OmniboxAdditionalText)
 ADD_READONLY_PROPERTY_METADATA(int, MinimumLeadingWidth)
 ADD_READONLY_PROPERTY_METADATA(int, MinimumTrailingWidth)
-ADD_READONLY_PROPERTY_METADATA(SkColor, BorderColor)
+ADD_READONLY_PROPERTY_METADATA(SkColor,
+                               BorderColor,
+                               views::metadata::SkColorConverter)
 ADD_READONLY_PROPERTY_METADATA(gfx::Rect, LocalBoundsWithoutEndcaps)
 ADD_READONLY_PROPERTY_METADATA(bool, PopupMode)
 END_METADATA

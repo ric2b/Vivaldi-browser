@@ -5,14 +5,13 @@
 #include "ui/compositor/transform_animation_curve_adapter.h"
 
 #include "base/memory/ptr_util.h"
-#include "cc/base/math_util.h"
 
 namespace ui {
 
 namespace {
 
-static cc::TransformOperations WrapTransform(const gfx::Transform& transform) {
-  cc::TransformOperations operations;
+static gfx::TransformOperations WrapTransform(const gfx::Transform& transform) {
+  gfx::TransformOperations operations;
   operations.AppendMatrix(transform);
   return operations;
 }
@@ -44,13 +43,13 @@ base::TimeDelta TransformAnimationCurveAdapter::Duration() const {
   return duration_;
 }
 
-std::unique_ptr<cc::AnimationCurve> TransformAnimationCurveAdapter::Clone()
+std::unique_ptr<gfx::AnimationCurve> TransformAnimationCurveAdapter::Clone()
     const {
   return base::WrapUnique(new TransformAnimationCurveAdapter(
       tween_type_, initial_value_, target_value_, duration_));
 }
 
-cc::TransformOperations TransformAnimationCurveAdapter::GetValue(
+gfx::TransformOperations TransformAnimationCurveAdapter::GetValue(
     base::TimeDelta t) const {
   if (t >= duration_)
     return target_wrapped_value_;
@@ -72,11 +71,9 @@ bool TransformAnimationCurveAdapter::PreservesAxisAlignment() const {
 bool TransformAnimationCurveAdapter::MaximumScale(float* max_scale) const {
   constexpr float kInvalidScale = 0.f;
   gfx::Vector2dF initial_scales =
-      cc::MathUtil::ComputeTransform2dScaleComponents(initial_value_,
-                                                      kInvalidScale);
+      gfx::ComputeTransform2dScaleComponents(initial_value_, kInvalidScale);
   gfx::Vector2dF target_scales =
-      cc::MathUtil::ComputeTransform2dScaleComponents(target_value_,
-                                                      kInvalidScale);
+      gfx::ComputeTransform2dScaleComponents(target_value_, kInvalidScale);
   *max_scale = std::max({initial_scales.x(), initial_scales.y(),
                          target_scales.x(), target_scales.y()});
   return *max_scale != kInvalidScale;

@@ -864,6 +864,19 @@ TEST_F(MetricsWebContentsObserverTest, OutOfOrderCrossFrameTiming2) {
   CheckNoErrorEvents();
 }
 
+TEST_F(MetricsWebContentsObserverTest, FlushBufferOnAppBackground) {
+  mojom::PageLoadTiming timing;
+  PopulatePageLoadTiming(&timing);
+  timing.paint_timing->first_paint = base::TimeDelta::FromMilliseconds(100000);
+  content::NavigationSimulator::NavigateAndCommitFromBrowser(
+      web_contents(), GURL(kDefaultTestUrl));
+  SimulateTimingUpdateWithoutFiringDispatchTimer(timing, main_rfh());
+
+  ASSERT_EQ(0, CountUpdatedTimingReported());
+  observer()->FlushMetricsOnAppEnterBackground();
+  ASSERT_EQ(1, CountUpdatedTimingReported());
+}
+
 TEST_F(MetricsWebContentsObserverTest,
        FirstInputDelayMissingFirstInputTimestamp) {
   mojom::PageLoadTiming timing;
@@ -1488,7 +1501,8 @@ class MetricsWebContentsObserverBackForwardCacheTest
     feature_list_.InitWithFeaturesAndParameters(
         {{features::kBackForwardCache,
           {{"TimeToLiveInBackForwardCacheInSeconds", "3600"}}}},
-        {});
+        // Allow BackForwardCache for all devices regardless of their memory.
+        {features::kBackForwardCacheMemoryControls});
   }
 
   ~MetricsWebContentsObserverBackForwardCacheTest() override = default;

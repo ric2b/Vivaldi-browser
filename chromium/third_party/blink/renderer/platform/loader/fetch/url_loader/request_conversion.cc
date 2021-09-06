@@ -8,6 +8,7 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/data_pipe.h"
+#include "net/base/load_flags.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_util.h"
@@ -147,6 +148,7 @@ mojom::ResourceType RequestContextToResourceType(
     case mojom::blink::RequestContextType::DOWNLOAD:
     case mojom::blink::RequestContextType::MANIFEST:
     case mojom::blink::RequestContextType::SUBRESOURCE:
+    case mojom::blink::RequestContextType::SUBRESOURCE_WEBBUNDLE:
       return mojom::ResourceType::kSubResource;
 
     // TextTrack
@@ -320,22 +322,21 @@ void PopulateResourceRequest(const ResourceRequestHead& src,
   if (src.GetWebBundleTokenParams().has_value()) {
     dest->web_bundle_token_params =
         base::make_optional(network::ResourceRequest::WebBundleTokenParams(
+            src.GetWebBundleTokenParams()->bundle_url,
             src.GetWebBundleTokenParams()->token,
             src.GetWebBundleTokenParams()->CloneHandle()));
   }
 
-  mojom::ResourceType resource_type =
-      RequestContextToResourceType(src.GetRequestContext());
-
   // TODO(kinuko): Deprecate this.
-  dest->resource_type = static_cast<int>(resource_type);
+  dest->resource_type =
+      static_cast<int>(RequestContextToResourceType(src.GetRequestContext()));
 
-  if (resource_type == mojom::ResourceType::kXhr &&
+  if (src.IsFetchLikeAPI() &&
       (dest->url.has_username() || dest->url.has_password())) {
     dest->do_not_prompt_for_login = true;
   }
-  if (resource_type == mojom::ResourceType::kPrefetch ||
-      resource_type == mojom::ResourceType::kFavicon) {
+  if (src.GetRequestContext() == mojom::blink::RequestContextType::PREFETCH ||
+      src.IsFavicon()) {
     dest->do_not_prompt_for_login = true;
   }
 
@@ -369,6 +370,8 @@ void PopulateResourceRequest(const ResourceRequestHead& src,
 
   dest->is_fetch_like_api = src.IsFetchLikeAPI();
 
+  dest->is_favicon = src.IsFavicon();
+
   dest->request_body = NetworkResourceRequestBodyFor(
       std::move(src_body), src.AllowHTTP1ForStreamingUpload());
   if (dest->request_body) {
@@ -376,11 +379,14 @@ void PopulateResourceRequest(const ResourceRequestHead& src,
     DCHECK_NE(dest->method, net::HttpRequestHeaders::kHeadMethod);
   }
 
-  if (resource_type == mojom::ResourceType::kStylesheet) {
+  network::mojom::RequestDestination request_destination =
+      src.GetRequestDestination();
+  if (request_destination == network::mojom::RequestDestination::kStyle ||
+      request_destination == network::mojom::RequestDestination::kXslt) {
     dest->headers.SetHeader(net::HttpRequestHeaders::kAccept,
                             kStylesheetAcceptHeader);
-  } else if (resource_type == mojom::ResourceType::kImage ||
-             resource_type == mojom::ResourceType::kFavicon) {
+  } else if (request_destination ==
+             network::mojom::RequestDestination::kImage) {
     dest->headers.SetHeaderIfMissing(net::HttpRequestHeaders::kAccept,
                                      kImageAcceptHeader);
   } else {

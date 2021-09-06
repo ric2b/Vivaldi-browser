@@ -19,7 +19,6 @@
 <translation id="1125564390852150847">ສ້າງ​ແຖບ​ໃໝ່.</translation>
 <translation id="1145536944570833626">ລຶບຂໍ້ມູນທີ່ມີຢູ່.</translation>
 <translation id="1147031633655575115">ເຂົ້າສູ່ລະບົບເປັນ <ph name="USER" /></translation>
-<translation id="1154690515305205900">ບໍ່ສາມາດສ້າງລິ້ງເຊື່ອມໂຍງໄປຍັງຂໍ້ຄວາມທີ່ໄຮໄລ້ໄວ້ໄດ້.</translation>
 <translation id="1154984953698510061">ເບິ່ງແຖບອື່ນ</translation>
 <translation id="1157749421655780457">ອະນຸຍາດສະຖານທີ່...</translation>
 <translation id="1165039591588034296">ຜິດພາດ</translation>
@@ -103,6 +102,7 @@
 <translation id="1952172573699511566">ເວັບໄຊຈະສະແດງຂໍ້ຄວາມໃນພາສາທີ່ທ່ານເລືອກ ເມື່ອເປັນໄປໄດ້.</translation>
 <translation id="1952728750904661634">ເຂົ້າສູ່ລະບົບດ້ວຍບັນຊີທີ່ຖືກຈັດການ</translation>
 <translation id="1965935827552890526">ສຳເລັດສິ່ງທີ່ທ່ານກຳລັງເຮັດໃນໜ້າຈໍອື່ນຂອງ Chrome ທີ່ີເປີດຢູ່.</translation>
+<translation id="1973912524893600642">ຮັກສາຂໍ້ມູນໄວ້</translation>
 <translation id="1974060860693918893">ຂັ້ນສູງ</translation>
 <translation id="1989112275319619282">ເປີດ​ເບິ່ງ</translation>
 <translation id="2015722694326466240">ເພື່ອເບິ່ງລະຫັດຜ່ານ, ກ່ອນອື່ນທາງຕ້ອງຕັ້ງລະຫັດຜ່ານໃນອຸປະກອນຂອງທ່ານ.</translation>
@@ -174,6 +174,7 @@
 <translation id="2780046210906776326">ບໍ່​ມີ​ບັນ​ຊີ​ອີ​ເມວ</translation>
 <translation id="2781331604911854368">ເປີດ</translation>
 <translation id="2781692009645368755">Google Pay</translation>
+<translation id="2783054063075604403">ບໍ່ສາມາດສ້າງລິ້ງໄດ້</translation>
 <translation id="2800683595868705743">ອອກ​ໄປ​ຈາກ​ປຸ່ມ​ຕົວ​ສະ​ຫຼັບ​ແຖບ</translation>
 <translation id="2815198996063984598">2. ແຕະແອັບໂປຣແກຣມທ່ອງເວັບເລີ່ມຕົ້ນ</translation>
 <translation id="2830972654601096923">ຈັດການທີ່ຢູ່...</translation>
@@ -197,6 +198,7 @@
 <translation id="2964349545761222050">ບລັອກຄຸກກີ້ພາກສ່ວນທີສາມ</translation>
 <translation id="2969979262385602596">ເຂົ້າ​ສູ່​ລະ​ບົບບໍ່ໄດ້, ກະລຸນາລອງໃໝ່ພາຍຫຼັງ.</translation>
 <translation id="2975121486251958312">ມີແຕ່ໂໝດບໍ່ເປີດເຜີຍຕົວຕົນພ້ອມໃຫ້ນຳໃຊ້</translation>
+<translation id="2982481275546140226">ລຶບລ້າງຂໍ້ມູນ</translation>
 <translation id="298306318844797842">ເພີ່ມວິທີການຈ່າຍເງິນ...</translation>
 <translation id="2989805286512600854">ເປີດຢູ່ໃນແຖບໃໝ່</translation>
 <translation id="3037605927509011580">ອ່າ, ຖ່າຍຮູບ!</translation>
@@ -257,6 +259,7 @@
 <translation id="3533436815740441613">ແຖບໃໝ່</translation>
 <translation id="3551320343578183772">ປິດແຖບ</translation>
 <translation id="3581564640715911333">ໃຫ້ການແປໜ້າຕ່າງໆເປັນພາສາອື່ນ</translation>
+<translation id="3588492282865875287">ອອກຈາກລະບົບບໍ?</translation>
 <translation id="3588820906588687999">ຮູບເປີດຢູ່ໃນແຖບໃໝ່</translation>
 <translation id="359441731697487922">ທ່ານສາມາດເປີດລິ້ງຕ່າງໆໃນ Chrome ໂດຍອັດຕະໂນມັດໂດຍການເຮັດໃຫ້ມັນເປັນແອັບໂປຣແກຣມທ່ອງເວັບເລີ່ມຕົ້ນຂອງທ່ານ.
       
@@ -297,6 +300,7 @@
 <translation id="4038354071007134711">ບໍ່​ມີ​ແອັບ​ພ​ລິ​ເຄ​ຊັນ​ໃດ​ຢູ່​ໃນ​ອຸ​ປະ​ກອນ​ນີ້​ສາ​ມາດ​ເປີດ​ໄຟ​ລ໌​ໄດ້.</translation>
 <translation id="4042870976416480368">ຊອກຫາໃນໜ້າ</translation>
 <translation id="4049507953662678203">ກະລຸນາກວດສອບວ່າທ່ານມີການເຊື່ອມຕໍ່ເຄືອຂ່າຍ ແລ້ວລອງອີກຄັ້ງ.</translation>
+<translation id="4079195788735381731">ອົງການຂອງທ່ານໄດ້ນຳທ່ານອອກຈາກລະບົບແລ້ວ</translation>
 <translation id="4082688844002261427">ຄວບຄຸມວ່າຈະໃຫ້ໃຊ້ປະຫວັດການທ່ອງເວັບຂອງທ່ານແນວໃດເພື່ອປັບແຕ່ງການຊອກຫາ, ໂຄສະນາ ແລະ ອື່ນໆອີກໃຫ້ເປັນແບບສ່ວນຕົວ</translation>
 <translation id="408404951701638773">ດຽວນີ້ເຂົ້າຫາແຖບຊອກຫາໄດ້ງ່າຍກວ່າ</translation>
 <translation id="411254640334432676">ດາວ​ໂຫລດ​ບໍ່​ສໍາ​ເລັດ​.</translation>
@@ -305,7 +309,6 @@
 <translation id="4121993058175073134">ເພື່ອສົ່ງຂໍ້ມູນສົ່ງອອກເຄືອຂ່າຍ, ກະລຸນາປັບຕັ້ງຄ່າບັນຊີອີເມວຂອງທ່ານຢູ່ໃນແອັບການຕັ້ງຄ່າ.</translation>
 <translation id="4124987746317609294">ຂອບເຂດເວລາ</translation>
 <translation id="4152011295694446843">ທ່ານຈະເຫັນບຸກມາກຂອງທ່ານຢູ່ບ່ອນນີ້</translation>
-<translation id="4152093603141133546">ອົງການຂອງທ່ານໄດ້ນຳທ່ານອອກຈາກລະບົບແລ້ວ.</translation>
 <translation id="4172051516777682613">ສະ​ແດງ​ຢູ່ສະ​ເຫມີ​</translation>
 <translation id="418156467088430727">ເບິ່ງເວີຊັນອອບລາຍຢູ່ໃນແຖບໃໝ່</translation>
 <translation id="4181841719683918333">ພາສາ</translation>
@@ -410,9 +413,9 @@
 <translation id="5317780077021120954">ບັນທຶກ</translation>
 <translation id="5327248766486351172">ຊື່</translation>
 <translation id="5339316356165661760">ເປີດການຊິ້ງຂໍ້ມູນ</translation>
+<translation id="5360976571138293719">ສຳລັບການຕັ້ງຄ່າເພີ່ມເຕີມທີ່ກ່ຽວຂ້ອງກັບຄວາມເປັນສ່ວນຕົວ, ຄວາມປອດໄພ ແລະ ການເກັບກຳຂໍ້ມູນ, ກະລຸນາເບິ່ງ <ph name="BEGIN_LINK" />ການບໍລິການຂອງ Google<ph name="END_LINK" />.</translation>
 <translation id="5388358297987318779">ຮູບເປີດ</translation>
 <translation id="5407969256130905701">ຍົກເລີກການປ່ຽນແປງ</translation>
-<translation id="5409365236829784218">ບໍ່​ມີ​ແອັບ​ພ​ລິ​ເຄ​ຊັນ​ຕິດ​ຕັ້ງ​ໄວ້​ທີ່​ສາ​ມາດ​ເປີດ​ໄຟ​ລ໌​ນີ້​ໄດ້.</translation>
 <translation id="5416022985862681400">7 ມື້ຫຼ້າສຸດ</translation>
 <translation id="543338862236136125">ແກ້ໄຂລະຫັດຜ່ານ</translation>
 <translation id="5433691172869980887">ສຳເນົາຊື່ຜູ້ໃຊ້ແລ້ວ</translation>
@@ -465,6 +468,7 @@ Handoff ຍັງ​ຕ້ອງ​ໄດ້​ເປີດ​ໃຊ້​ງາ
 <translation id="5948291296578561264">ນີ້ອະນຸຍາດໃຫ້ທ່ານບັນທຶກຮູບຖ່າຍໄວ້ໃນຫ້ອງສະໝຸດຮູບ.</translation>
 <translation id="5955891643922670672">ກຳລັງເບິ່ງເວີຊັນອອບລາຍ</translation>
 <translation id="5957613098218939406">ໂຕ​ເລືອກ​ເພີ່ມ​ເຕີມ</translation>
+<translation id="5963939892571022323">ສ້າງລິ້ງໄປຍັງໄຮໄລ້ບໍ່ໄດ້.</translation>
 <translation id="5964480694698977962">ສ້າງ​ແຖບ​ທີ່ບໍ່​ເຜີຍ​​ຕົວຕົນ​ໃໝ່.</translation>
 <translation id="5965679971710331625">ທ່ານເຂົ້າສູ່ລະບົບແລ້ວ</translation>
 <translation id="5979837087407522202">ຊອກຫາລະຫັດຜ່ານ</translation>
@@ -496,6 +500,7 @@ Handoff ຍັງ​ຕ້ອງ​ໄດ້​ເປີດ​ໃຊ້​ງາ
 <translation id="6254066287920239840">ເປີດລິ້ງຕ່າງໆໃນແອັບແທນໂປຣແກຣມທ່ອງເວັບ.</translation>
 <translation id="6255097610484507482">ແກ້ໄຂບັດເຄຣດິດ</translation>
 <translation id="6284652193729350524">ສະເໜີແປ <ph name="LANGUAGE" /></translation>
+<translation id="6293101329759844770">ເພື່ອເປີດ Safe Browsing, ກະລຸນາເປີດ <ph name="BEGIN_LINK" />ການບໍລິການ Google<ph name="END_LINK" /> ແລະ ແຕະ Safe Browsing.</translation>
 <translation id="6303969859164067831">ອອກຈາກລະບົບ ແລະ ປິດການຊິ້ງຂໍ້ມູນ</translation>
 <translation id="6308436439357671616">ນີ້ອະນຸຍາດໃຫ້ທ່ານຖ່າຍຮູບ ແລະ ອັບໂຫຼດຮູບຖ່າຍ.</translation>
 <translation id="6324528485781869530">ປ່ຽນບັນຊີ Sync</translation>
@@ -563,7 +568,6 @@ Handoff ຍັງ​ຕ້ອງ​ໄດ້​ເປີດ​ໃຊ້​ງາ
 <translation id="6807889908376551050">ສະ​ແດງ​ທັງ​ຫມົດ...</translation>
 <translation id="681368974849482173">ສ້າງ​ລາຍ​ການ​ຂຶ້ນ​ແລ້ວ</translation>
 <translation id="6831043979455480757">ແປພາສາ</translation>
-<translation id="6841409746189899007">ລິ້ງຫາຂໍ້ຄວາມ</translation>
 <translation id="6851516051005285358">ຮ້ອງຂໍເວັບໄຊເດັສທັອບ</translation>
 <translation id="6858855187367714033">ສະແກນແລ້ວ</translation>
 <translation id="6859944681507688231">ເພື່ອສະແກນລະຫັດ QR ຫຼື ບັດເຄຣດິດ, ກະລຸນາເປີດນຳໃຊ້ກ້ອງຖ່າຍຮູບຈາກການຕັ້ງຄ່າ.</translation>
@@ -613,6 +617,7 @@ Handoff ຍັງ​ຕ້ອງ​ໄດ້​ເປີດ​ໃຊ້​ງາ
 <translation id="734758817008927353">ຕົວເລືອກໃນການບັນທຶກບັດ</translation>
 <translation id="7348502496356775519">ບຸກມາກ</translation>
 <translation id="7383797227493018512">ລາຍການທີ່ຈະອ່ານ</translation>
+<translation id="7398893703713203428">ສ້າງລິ້ງ</translation>
 <translation id="739941347996872055">ແຖບກ່ອນໜ້າ</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7409985198648820906"><ph name="UNREAD_COUNT" /> ບົດຄວາມທີ່ຍັງບໍ່ໄດ້ອ່ານ.</translation>
@@ -641,8 +646,8 @@ Handoff ຍັງ​ຕ້ອງ​ໄດ້​ເປີດ​ໃຊ້​ງາ
 <translation id="7658239707568436148">ຍົກ​ເລີກ​</translation>
 <translation id="766891008101699113">ເພື່ອທ່ອງເວັບແບບເປັນສ່ວນຕົວ, ກະລຸນາເພີ່ມແຖບໃໝ່.</translation>
 <translation id="7671141431838911305">​ຕິດ​ຕັ້ງ</translation>
-<translation id="7690812411882623730">ບໍ່ສາມາດເຊື່ອມໂຍງກັບຂໍ້ຄວາມໄດ້</translation>
 <translation id="7701040980221191251">ບໍ່​ມີ​</translation>
+<translation id="7741325291586284254">ໜ້າແຖບບໍ່ເປີດເຜີຍຕົວຕົນໃໝ່</translation>
 <translation id="7765158879357617694">ຍ້າຍ</translation>
 <translation id="7771470029643830783">ໂດຍການນຳອອກຈາກລະບົບ, ບຸກມາກ, ປະຫວັດ, ລະຫັດຜ່ານ ແລະ ຂໍ້ມູນອື່ນໆໃນ Chrome ຂອງທ່ານຈະບໍ່ຊິ້ງຂໍ້ມູນກັບບັນຊີ Google ຂອງທ່ານອີກຕໍ່ໄປ.
 
@@ -650,6 +655,7 @@ Handoff ຍັງ​ຕ້ອງ​ໄດ້​ເປີດ​ໃຊ້​ງາ
 <translation id="7772032839648071052">ຢືນ​ຢັນວະລີຜ່ານ</translation>
 <translation id="7778472311864276518">ລຶບບັນຊີອອກຈາກອຸປະກອນນີ້</translation>
 <translation id="7781011649027948662">ແປໜ້າບໍ?</translation>
+<translation id="7781069478569868053">ໜ້າແຖບໃໝ່</translation>
 <translation id="7781829728241885113">ມື້​ວານ​ນີ້</translation>
 <translation id="778855399387580014">ເລີ່ມການຊອກຫາໃນແຖບ Chrome ໃໝ່.</translation>
 <translation id="7791543448312431591">ເພີ່ມ</translation>

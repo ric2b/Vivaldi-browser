@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
+#include "chrome/browser/ash/accessibility/accessibility_manager.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/chrome_pages.h"
@@ -16,6 +16,8 @@
 #include "ui/base/ui_base_features.h"
 
 namespace extensions {
+
+using ::ash::AccessibilityManager;
 
 class AccessibilityPrivateApiTest : public ExtensionApiTest {
  public:
@@ -48,7 +50,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityPrivateApiTest,
 #define MAYBE_OpenSettingsSubpage OpenSettingsSubpage
 #endif
 IN_PROC_BROWSER_TEST_F(AccessibilityPrivateApiTest, MAYBE_OpenSettingsSubpage) {
-  Profile* profile = chromeos::AccessibilityManager::Get()->profile();
+  Profile* profile = AccessibilityManager::Get()->profile();
 
   // Install the Settings App.
   web_app::WebAppProvider::Get(profile)
@@ -76,7 +78,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityPrivateApiTest, MAYBE_OpenSettingsSubpage) {
 
 IN_PROC_BROWSER_TEST_F(AccessibilityPrivateApiTest,
                        OpenSettingsSubpage_InvalidSubpage) {
-  Profile* profile = chromeos::AccessibilityManager::Get()->profile();
+  Profile* profile = AccessibilityManager::Get()->profile();
 
   // Install the Settings App.
   web_app::WebAppProvider::Get(profile)

@@ -9,6 +9,7 @@
 // #import {flush, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 // #import {assertTrue} from '../../../chai_assert.js';
 // #import {FakeMediaDevices} from './fake_media_devices.m.js';
+// #import {FakeBarcodeDetector} from './fake_barcode_detector.m.js';
 // clang-format on
 
 suite('CrComponentsActivationCodePageTest', function() {
@@ -25,15 +26,22 @@ suite('CrComponentsActivationCodePageTest', function() {
 
   setup(function() {
     activationCodePage = document.createElement('activation-code-page');
+    activationCodePage.barcodeDetectorClass_ = FakeBarcodeDetector;
+    activationCodePage.initBarcodeDetector();
     document.body.appendChild(activationCodePage);
     Polymer.dom.flush();
 
     mediaDevices = new cellular_setup.FakeMediaDevices();
     mediaDevices.addDevice();
     activationCodePage.setMediaDevices(mediaDevices);
+    Polymer.dom.flush();
   });
 
   test('UI states', async function() {
+    await flushAsync();
+    let qrCodeDetectorContainer = activationCodePage.$$('#esimQrCodeDetection');
+    const activationCodeContainer =
+        activationCodePage.$$('#activationCodeContainer');
     const video = activationCodePage.$$('#video');
     const startScanningContainer =
         activationCodePage.$$('#startScanningContainer');
@@ -44,6 +52,8 @@ suite('CrComponentsActivationCodePageTest', function() {
     const scanFailureContainer = activationCodePage.$$('#scanFailureContainer');
     const spinner = activationCodePage.$$('paper-spinner-lite');
 
+    assertTrue(!!qrCodeDetectorContainer);
+    assertTrue(!!activationCodeContainer);
     assertTrue(!!video);
     assertTrue(!!startScanningContainer);
     assertTrue(!!startScanningButton);
@@ -55,6 +65,7 @@ suite('CrComponentsActivationCodePageTest', function() {
 
     // Initial state should only be showing the start scanning UI.
     assertFalse(startScanningContainer.hidden);
+    assertFalse(activationCodeContainer.hidden);
     assertTrue(video.hidden);
     assertTrue(scanFinishContainer.hidden);
     assertTrue(switchCameraButton.hidden);
@@ -117,11 +128,22 @@ suite('CrComponentsActivationCodePageTest', function() {
     assertTrue(scanSuccessContainer.hidden);
     assertFalse(scanFailureContainer.hidden);
 
-    activationCodePage.showLoadingIndicator = true;
+    activationCodePage.showBusy = true;
     assertFalse(spinner.hidden);
+
+    // Mock, no media devices present
+    mediaDevices.removeDevice();
+    await flushAsync();
+
+    // When no camera device is present qrCodeDetector container should
+    // not be shown
+    qrCodeDetectorContainer = activationCodePage.$$('#esimQrCodeDetection');
+
+    assertFalse(!!qrCodeDetectorContainer);
   });
 
   test('Switch camera button states', async function() {
+    await flushAsync();
     const video = activationCodePage.$$('#video');
     const startScanningButton = activationCodePage.$$('#startScanningButton');
     const switchCameraButton = activationCodePage.$$('#switchCameraButton');
@@ -188,4 +210,52 @@ suite('CrComponentsActivationCodePageTest', function() {
 
     assertTrue(video.hidden);
   });
+
+  test('UI is disabled when showBusy property is set', async function() {
+    await flushAsync();
+    const startScanningButton = activationCodePage.$$('#startScanningButton');
+    const switchCameraButton = activationCodePage.$$('#switchCameraButton');
+    const useCameraAgainButton = activationCodePage.$$('#useCameraAgainButton');
+    const tryAgainButton = activationCodePage.$$('#tryAgainButton');
+    const input = activationCodePage.$$('#activationCode');
+
+    assertTrue(!!startScanningButton);
+    assertTrue(!!switchCameraButton);
+    assertTrue(!!useCameraAgainButton);
+    assertTrue(!!tryAgainButton);
+    assertTrue(!!input);
+
+    assertFalse(startScanningButton.disabled);
+    assertFalse(switchCameraButton.disabled);
+    assertFalse(useCameraAgainButton.disabled);
+    assertFalse(tryAgainButton.disabled);
+    assertFalse(input.disabled);
+
+    activationCodePage.showBusy = true;
+
+    assertTrue(startScanningButton.disabled);
+    assertTrue(switchCameraButton.disabled);
+    assertTrue(useCameraAgainButton.disabled);
+    assertTrue(tryAgainButton.disabled);
+    assertTrue(input.disabled);
+  });
+
+  test(
+      'Do not show qrContainer when BarcodeDetector is not ready',
+      async function() {
+        await flushAsync();
+        let qrCodeDetectorContainer =
+            activationCodePage.$$('#esimQrCodeDetection');
+
+        assertTrue(!!qrCodeDetectorContainer);
+
+        FakeBarcodeDetector.setShouldFail(true);
+        activationCodePage.initBarcodeDetector();
+
+        await flushAsync();
+
+        qrCodeDetectorContainer = activationCodePage.$$('#esimQrCodeDetection');
+
+        assertFalse(!!qrCodeDetectorContainer);
+      });
 });

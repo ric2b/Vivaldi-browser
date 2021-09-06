@@ -178,6 +178,7 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillProfileSpecifics& proto) {
   VISIT_REP(name_last_second);
   VISIT_REP(name_last);
   VISIT_REP(name_full);
+  VISIT_REP(name_full_with_honorific);
 
   VISIT_REP(name_honorific_status);
   VISIT_REP(name_first_status);
@@ -187,6 +188,7 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillProfileSpecifics& proto) {
   VISIT_REP(name_last_second_status);
   VISIT_REP(name_last_status);
   VISIT_REP(name_full_status);
+  VISIT_REP(name_full_with_honorific_status);
 
   VISIT_REP(email_address);
   VISIT(company_name);
@@ -428,7 +430,7 @@ VISIT_PROTO_FIELDS(const sync_pb::EntityMetadata& proto) {
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::EntitySpecifics& proto) {
-  static_assert(41 + 1 /* notes */ == ModelType::NUM_ENTRIES,
+  static_assert(39 + 1 /* notes */ == ModelType::NUM_ENTRIES,
                 "When adding a new protocol type, you will likely need to add "
                 "it here as well.");
   VISIT(encrypted);

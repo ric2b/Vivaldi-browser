@@ -4,14 +4,15 @@
 
 #include <string>
 
+#include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_accelerators.h"
 #include "ash/public/cpp/login_screen_test_api.h"
 #include "base/command_line.h"
 #include "base/scoped_observer.h"
+#include "chrome/browser/ash/login/screens/reset_screen.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/login_wizard.h"
 #include "chrome/browser/chromeos/login/oobe_screen.h"
-#include "chrome/browser/chromeos/login/screens/reset_screen.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/test/js_checker.h"
 #include "chrome/browser/chromeos/login/test/local_state_mixin.h"
@@ -29,7 +30,6 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/mixin_based_in_process_browser_test.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_update_engine_client.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
@@ -468,7 +468,7 @@ IN_PROC_BROWSER_TEST_F(ResetFirstAfterBootTestWithRollback,
   // Clicking 'ok' on the error screen will either show the previous OOBE screen
   // or show the login screen. Here login screen should appear because there's
   // no previous screen.
-  test::OobeJS().TapOnPath({"error-message-md-ok-button"});
+  test::OobeJS().TapOnPath({"error-message", "okButton"});
 
   OobeWindowVisibilityWaiter(false).Wait();
 }

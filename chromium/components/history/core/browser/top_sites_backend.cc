@@ -23,8 +23,6 @@
 #include "components/history/core/browser/top_sites_database.h"
 #include "sql/database.h"
 
-#include "app/vivaldi_apptools.h"
-
 namespace history {
 
 TopSitesBackend::TopSitesBackend()
@@ -118,11 +116,6 @@ void TopSitesBackend::ResetDatabaseOnDBThread(const base::FilePath& file_path) {
   sql::Database::Delete(db_path_);
   db_.reset(new TopSitesDatabase());
   InitDBOnDBThread(db_path_);
-}
-
-void TopSitesBackend::SetThumbnailConvertCallback(
-    ConvertThumbnailDataCallback callback) {
-  db_->SetThumbnailConvertCallback(std::move(callback));
 }
 
 }  // namespace history

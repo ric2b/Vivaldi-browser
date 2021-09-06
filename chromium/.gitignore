@@ -60,6 +60,7 @@ tags
 Thumbs.db
 v8.log
 vs-chromium-project.txt
+/.clangd
 /.clangd/
 /.clangd-index/
 # Settings directories for eclipse
@@ -188,7 +189,6 @@ vs-chromium-project.txt
 /components/gcm_driver.xml
 /components/leveldb_proto_test_support.xml
 /components/ntp_tiles/resources/internal
-/components/rappor.xml
 /components/resources/default_100_percent/google_chrome
 /components/resources/default_200_percent/google_chrome
 /components/resources/default_300_percent/google_chrome
@@ -281,6 +281,7 @@ vs-chromium-project.txt
 /sql/sql_unittests_run.xml
 /sync/sync.xml
 /testing/libfuzzer/fuzzer_corpus_for_bots/
+/testing/rts/
 /testserver.log
 # See third_party/.gitignore for entries covering src/third_party.
 /tools/.bisect-builds-cache.json

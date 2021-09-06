@@ -424,17 +424,9 @@ belongs to `android_assets` targets only.
 A list of uncompressed assets stored in the APK. Each entry has the format
 `<source-path>:<destination-path>` too.
 
-* `compressed_locales_java_list`
+* `locales_java_list`
 A string holding a Java source fragment that gives the list of locales stored
-compressed in the `//assets/` directory. E.g. `"{\"am\","\ar\",\"en-US\"}"`.
-Note that the files will be stored with the `.pak` extension (e.g.
-`//assets/en-US.pak`).
-
-* `uncompressed_locales_java_list`
-A string holding a Java source fragment that gives the list of locales stored
-uncompressed in the `//assets/stored-locales/` directory. These are used for
-the System WebView feature only. Note that the files will be stored with the
-`.pak` extension (e.g. `//assets/stored-locales/en-US.apk`).
+uncompressed as android assets.
 
 * `extra_android_manifests`
 A list of `deps_configs['android_manifest]` entries, for all resource
@@ -585,6 +577,13 @@ import xml.dom.minidom
 
 from util import build_utils
 from util import resource_utils
+
+# TODO(crbug.com/1174969): Remove this once Python2 is obsoleted.
+if sys.version_info.major == 2:
+  zip_longest = itertools.izip_longest
+else:
+  zip_longest = itertools.zip_longest
+
 
 # Types that should never be used as a dependency of another build config.
 _ROOT_TYPES = ('android_apk', 'java_binary', 'java_annotation_processor',
@@ -759,7 +758,7 @@ def _MergeAssets(all_assets):
     dest_map = uncompressed if disable_compression else compressed
     other_map = compressed if disable_compression else uncompressed
     outputs = entry.get('outputs', [])
-    for src, dest in itertools.izip_longest(entry['sources'], outputs):
+    for src, dest in zip_longest(entry['sources'], outputs):
       if not dest:
         dest = os.path.basename(src)
       # Merge so that each path shows up in only one of the lists, and that
@@ -770,7 +769,7 @@ def _MergeAssets(all_assets):
         locale_paks.add(dest)
 
   def create_list(asset_map):
-    ret = ['%s:%s' % (src, dest) for dest, src in asset_map.iteritems()]
+    ret = ['%s:%s' % (src, dest) for dest, src in asset_map.items()]
     # Sort to ensure deterministic ordering.
     ret.sort()
     return ret
@@ -804,7 +803,7 @@ def _DepsFromPaths(dep_paths,
   current target) that we could then use to get a full transitive dependants
   list (eg using Deps#all). So filtering single elements out of this list,
   filters whole branches of dependencies. By resolving groups (i.e. expanding
-  them to their consituents), depending on a group is equivalent to directly
+  them to their constituents), depending on a group is equivalent to directly
   depending on each element of that group.
   """
   blocklist = []
@@ -891,7 +890,7 @@ def _CreateJavaLocaleListFromAssets(assets, locale_paks):
   """
   assets_paths = [a.split(':')[1] for a in assets]
   locales = [os.path.basename(a)[:-4] for a in assets_paths if a in locale_paks]
-  return '{%s}' % ','.join(['"%s"' % l for l in sorted(locales)])
+  return '{%s}' % ','.join('"%s"' % l for l in sorted(locales))
 
 
 def _AddJarMapping(jar_to_target, configs):
@@ -959,9 +958,6 @@ def main(argv):
   parser.add_option(
       '--interface-jar-path',
       help='Path to the interface .jar to use for javac classpath purposes.')
-  parser.add_option(
-      '--jetified-jar-path',
-      help='Path to the jetified.jar to use for javac classpath purposes.')
   parser.add_option('--is-prebuilt', action='store_true',
                     help='Whether the jar was compiled or pre-compiled.')
   parser.add_option('--java-sources-file', help='Path to .sources file')
@@ -1212,9 +1208,17 @@ def main(argv):
       build_utils.ParseGnList(options.annotation_processor_configs or ''),
       options.type, filter_root_targets=False)
 
-  all_inputs = sorted(
-      set(deps.AllConfigPaths() + processor_deps.AllConfigPaths() +
-          list(static_library_dependent_configs_by_path)))
+  all_inputs = (deps.AllConfigPaths() + processor_deps.AllConfigPaths() +
+                list(static_library_dependent_configs_by_path))
+
+  if options.recursive_resource_deps:
+    # Include java_library targets since changes to these targets can remove
+    # resource deps from the build, which would require rebuilding this target's
+    # build config file: crbug.com/1168655.
+    recursive_java_deps = _DepsFromPathsWithFilters(
+        GetAllDepsConfigsInOrder(deps_configs_paths),
+        allowlist=['java_library'])
+    all_inputs.extend(recursive_java_deps.AllConfigPaths())
 
   direct_deps = deps.Direct()
   system_library_deps = deps.Direct('system_java_library')
@@ -1252,7 +1256,6 @@ def main(argv):
   if options.base_module_build_config:
     with open(options.base_module_build_config, 'r') as f:
       base_module_build_config = json.load(f)
-      all_inputs.append(options.base_module_build_config)
 
   # Initialize some common config.
   # Any value that needs to be queryable by dependents must go within deps_info.
@@ -1378,8 +1381,6 @@ def main(argv):
       deps_info['device_jar_path'] = options.device_jar_path
     if options.host_jar_path:
       deps_info['host_jar_path'] = options.host_jar_path
-    deps_info['jetified_jar_path'] = (options.jetified_jar_path
-                                      or options.interface_jar_path)
     if options.dex_path:
       deps_info['dex_path'] = options.dex_path
       if is_apk_or_module_target:
@@ -1472,6 +1473,12 @@ def main(argv):
       ]
       config['deps_info']['includes_recursive_resources'] = True
 
+    if options.type in ('dist_aar', 'java_library'):
+      r_text_files = [
+          c['r_text_path'] for c in all_resources_deps if 'r_text_path' in c
+      ]
+      deps_info['dependency_r_txt_files'] = r_text_files
+
     # For feature modules, remove any resources that already exist in the base
     # module.
     if base_module_build_config:
@@ -1520,13 +1527,6 @@ def main(argv):
     # Make a copy of |proguard_configs| since it's mutated below.
     deps_info['proguard_configs'] = list(proguard_configs)
 
-  if options.type == 'dist_aar':
-    # dist_aar combines all dependency R.txt files into one for the aar.
-    r_text_files = [
-        c['r_text_path'] for c in all_resources_deps + all_library_deps
-        if 'r_text_path' in c
-    ]
-    deps_info['dependency_r_txt_files'] = r_text_files
 
   if is_java_target:
     # The classpath used to compile this target when annotation processors are
@@ -1691,7 +1691,7 @@ def main(argv):
     configs_by_classpath_entry = collections.defaultdict(list)
     static_lib_jar_paths = {}
     for config_path, dep_config in (sorted(
-        static_library_dependent_configs_by_path.iteritems())):
+        static_library_dependent_configs_by_path.items())):
       # For bundles, only the jar path and jni sources of the base module
       # are relevant for proguard. Should be updated when bundle feature
       # modules support JNI.
@@ -1717,7 +1717,7 @@ def main(argv):
     for cp_entry in device_classpath:
       configs_by_classpath_entry[cp_entry].append(options.build_config)
 
-    for cp_entry, candidate_configs in configs_by_classpath_entry.iteritems():
+    for cp_entry, candidate_configs in configs_by_classpath_entry.items():
       config_path = (candidate_configs[0]
                      if len(candidate_configs) == 1 else options.build_config)
       classpath_entries_by_owning_config[config_path].append(cp_entry)
@@ -1727,11 +1727,11 @@ def main(argv):
 
   deps_info['static_library_proguard_mapping_output_paths'] = sorted([
       d['proguard_mapping_path']
-      for d in static_library_dependent_configs_by_path.itervalues()
+      for d in static_library_dependent_configs_by_path.values()
   ])
   deps_info['static_library_dependent_classpath_configs'] = {
       path: sorted(set(classpath))
-      for path, classpath in classpath_entries_by_owning_config.iteritems()
+      for path, classpath in classpath_entries_by_owning_config.items()
   }
   deps_info['extra_main_r_text_files'] = sorted(extra_main_r_text_files)
 
@@ -1956,11 +1956,8 @@ def main(argv):
     config['assets'], config['uncompressed_assets'], locale_paks = (
         _MergeAssets(deps.All('android_assets')))
 
-    deps_info['compressed_locales_java_list'] = _CreateJavaLocaleListFromAssets(
-        config['assets'], locale_paks)
-    deps_info[
-        'uncompressed_locales_java_list'] = _CreateJavaLocaleListFromAssets(
-            config['uncompressed_assets'], locale_paks)
+    deps_info['locales_java_list'] = _CreateJavaLocaleListFromAssets(
+        config['uncompressed_assets'], locale_paks)
 
     config['extra_android_manifests'] = []
     for c in extra_manifest_deps:
@@ -2015,7 +2012,8 @@ def main(argv):
   build_utils.WriteJson(config, options.build_config, only_if_changed=True)
 
   if options.depfile:
-    build_utils.WriteDepfile(options.depfile, options.build_config, all_inputs)
+    build_utils.WriteDepfile(options.depfile, options.build_config,
+                             sorted(set(all_inputs)))
 
 
 if __name__ == '__main__':

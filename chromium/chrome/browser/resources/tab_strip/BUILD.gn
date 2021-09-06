@@ -68,7 +68,7 @@ preprocess_if_expr("preprocess_generated") {
   ]
 }
 
-grit("tab_strip_resources") {
+grit("resources") {
   defines = chrome_grit_defines
 
   # These arguments are needed since the grd is generated at build time.
@@ -86,7 +86,6 @@ grit("tab_strip_resources") {
 }
 
 js_type_check("closure_compile") {
-  uses_js_modules = true
   deps = [
     ":alert_indicator",
     ":alert_indicators",
@@ -170,6 +169,7 @@ js_library("tab_list") {
     ":tab_strip_embedder_proxy",
     ":tabs_api_proxy",
     "//ui/webui/resources/js:cr.m",
+    "//ui/webui/resources/js:event_tracker.m",
     "//ui/webui/resources/js:load_time_data.m",
     "//ui/webui/resources/js:util.m",
     "//ui/webui/resources/js/cr/ui:focus_outline_manager.m",

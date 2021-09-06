@@ -16,8 +16,8 @@
 #include "build/build_config.h"
 #include "content/app/mojo/mojo_init.h"
 #include "content/common/agent_scheduling_group.mojom.h"
+#include "content/common/frame.mojom.h"
 #include "content/common/frame_messages.h"
-#include "content/common/input_messages.h"
 #include "content/common/renderer.mojom.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/native_web_keyboard_event.h"
@@ -29,7 +29,6 @@
 #include "content/public/test/fake_render_widget_host.h"
 #include "content/public/test/frame_load_waiter.h"
 #include "content/public/test/policy_container_utils.h"
-#include "content/renderer/loader/resource_dispatcher.h"
 #include "content/renderer/mock_agent_scheduling_group.h"
 #include "content/renderer/render_process.h"
 #include "content/renderer/render_thread_impl.h"
@@ -53,6 +52,7 @@
 #include "third_party/blink/public/mojom/page/record_content_to_visible_time_request.mojom.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
+#include "third_party/blink/public/platform/web_back_forward_cache_loader_helper.h"
 #include "third_party/blink/public/platform/web_runtime_features.h"
 #include "third_party/blink/public/platform/web_url_loader_client.h"
 #include "third_party/blink/public/platform/web_url_request_extra_data.h"
@@ -202,7 +202,9 @@ class FakeWebURLLoaderFactory : public blink::WebURLLoaderFactoryForTest {
       std::unique_ptr<blink::scheduler::WebResourceLoadingTaskRunnerHandle>
           unfreezable_task_runner_handle,
       blink::CrossVariantMojoRemote<blink::mojom::KeepAliveHandleInterfaceBase>
-          keep_alive_handle) override {
+          keep_alive_handle,
+      blink::WebBackForwardCacheLoaderHelper back_forward_cache_loader_helper)
+      override {
     return std::make_unique<FakeWebURLLoader>(
         std::move(freezable_task_runner_handle),
         std::move(unfreezable_task_runner_handle));
@@ -358,8 +360,8 @@ void RenderViewTest::LoadHTML(const char* html) {
   std::string url_string = "data:text/html;charset=utf-8,";
   url_string.append(net::EscapeQueryParamValue(html, false));
   RenderFrame::FromWebFrame(GetMainFrame())
-      ->LoadHTMLString(html, GURL(url_string), "UTF-8", GURL(),
-                       false /* replace_current_item */);
+      ->LoadHTMLStringForTesting(html, GURL(url_string), "UTF-8", GURL(),
+                                 false /* replace_current_item */);
   // The load may happen asynchronously, so we pump messages to process
   // the pending continuation.
   waiter.Wait();
@@ -371,8 +373,8 @@ void RenderViewTest::LoadHTMLWithUrlOverride(const char* html,
                                              const char* url_override) {
   FrameLoadWaiter waiter(view_->GetMainRenderFrame());
   RenderFrame::FromWebFrame(GetMainFrame())
-      ->LoadHTMLString(html, GURL(url_override), "UTF-8", GURL(),
-                       false /* replace_current_item */);
+      ->LoadHTMLStringForTesting(html, GURL(url_override), "UTF-8", GURL(),
+                                 false /* replace_current_item */);
   // The load may happen asynchronously, so we pump messages to process
   // the pending continuation.
   waiter.Wait();
@@ -489,26 +491,34 @@ void RenderViewTest::SetUp() {
   view_params->renderer_preferences = blink::RendererPreferences();
   view_params->web_preferences = blink::web_pref::WebPreferences();
   view_params->view_id = render_thread_->GetNextRoutingID();
-  view_params->main_frame_widget_routing_id =
-      render_thread_->GetNextRoutingID();
-  view_params->main_frame_frame_token = base::UnguessableToken::Create();
-  view_params->main_frame_routing_id = render_thread_->GetNextRoutingID();
+  view_params->replication_state = mojom::FrameReplicationState::New();
 
+  auto main_frame_params = mojom::CreateLocalMainFrameParams::New();
+  main_frame_params->routing_id = render_thread_->GetNextRoutingID();
+  main_frame_params->frame = TestRenderFrame::CreateStubFrameReceiver();
   // Ignoring the returned PendingReceiver because it is not bound to anything
-  ignore_result(view_params->main_frame_interface_broker
-                    .InitWithNewPipeAndPassReceiver());
+  ignore_result(
+      main_frame_params->interface_broker.InitWithNewPipeAndPassReceiver());
+  policy_container_host_ = std::make_unique<MockPolicyContainerHost>();
+  main_frame_params->policy_container =
+      policy_container_host_->CreatePolicyContainerForBlink();
+
+  auto widget_params = mojom::CreateFrameWidgetParams::New();
+  widget_params->routing_id = render_thread_->GetNextRoutingID();
+  std::tie(widget_params->widget_host, widget_params->widget) =
+      render_widget_host_->BindNewWidgetInterfaces();
+  std::tie(widget_params->frame_widget_host, widget_params->frame_widget) =
+      render_widget_host_->BindNewFrameWidgetInterfaces();
+  widget_params->visual_properties = InitialVisualProperties();
+  main_frame_params->widget_params = std::move(widget_params);
+
+  view_params->main_frame =
+      mojom::CreateMainFrameUnion::NewLocalParams(std::move(main_frame_params));
+
   view_params->session_storage_namespace_id =
       blink::AllocateSessionStorageNamespaceId();
-  view_params->replicated_frame_state = FrameReplicationState();
-  view_params->proxy_routing_id = MSG_ROUTING_NONE;
   view_params->hidden = false;
   view_params->never_composited = false;
-  view_params->visual_properties = InitialVisualProperties();
-  std::tie(view_params->widget_host, view_params->widget) =
-      render_widget_host_->BindNewWidgetInterfaces();
-  std::tie(view_params->frame_widget_host, view_params->frame_widget) =
-      render_widget_host_->BindNewFrameWidgetInterfaces();
-  view_params->policy_container = CreateStubPolicyContainer();
 
   RenderViewImpl* view = RenderViewImpl::Create(
       *agent_scheduling_group_, compositor_deps_.get(), std::move(view_params),
@@ -740,7 +750,7 @@ void RenderViewTest::Reload(const GURL& url) {
   auto common_params = mojom::CommonNavigationParams::New(
       url, base::nullopt, blink::mojom::Referrer::New(),
       ui::PAGE_TRANSITION_LINK, mojom::NavigationType::RELOAD,
-      NavigationDownloadPolicy(), false, GURL(), GURL(),
+      blink::NavigationDownloadPolicy(), false, GURL(), GURL(),
       blink::PreviewsTypes::PREVIEWS_UNSPECIFIED, base::TimeTicks::Now(), "GET",
       nullptr, network::mojom::SourceLocation::New(),
       false /* started_from_context_menu */, false /* has_user_gesture */,
@@ -880,7 +890,7 @@ void RenderViewTest::GoToOffset(int offset,
       url, base::nullopt, blink::mojom::Referrer::New(),
       ui::PAGE_TRANSITION_FORWARD_BACK,
       mojom::NavigationType::HISTORY_DIFFERENT_DOCUMENT,
-      NavigationDownloadPolicy(), false, GURL(), GURL(),
+      blink::NavigationDownloadPolicy(), false, GURL(), GURL(),
       blink::PreviewsTypes::PREVIEWS_UNSPECIFIED, base::TimeTicks::Now(), "GET",
       nullptr, network::mojom::SourceLocation::New(),
       false /* started_from_context_menu */, false /* has_user_gesture */,

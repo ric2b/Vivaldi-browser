@@ -8,6 +8,7 @@
 <translation id="1088300314857992706">L'indirizzo <ph name="USER_EMAIL_ADDRESS" /> utilizzava in precedenza Chrome</translation>
 <translation id="1097330777386562916">Cancella cookie e dati dei siti alla chiusura di Chrome</translation>
 <translation id="110877069173485804">Questo è il tuo Chrome</translation>
+<translation id="1125124144982679672">Chi usa Chrome?</translation>
 <translation id="1142745911746664600">Impossibile aggiornare Chrome</translation>
 <translation id="1154147086299354128">&amp;Apri in Chrome</translation>
 <translation id="123620459398936149">Impossibile sincronizzare i tuoi dati in Chrome OS. Aggiorna la passphrase di sincronizzazione.</translation>
@@ -17,7 +18,9 @@
 <translation id="1399397803214730675">Su questo computer è già installata una versione più recente di Google Chrome. Se il software non funziona, disinstalla Google Chrome e riprova.</translation>
 <translation id="1434626383986940139">Applicazioni Chrome Canary</translation>
 <translation id="147727933880789532">Chrome consiglia di disattivare questa estensione perché al momento non soddisfa gli standard di Navigazione sicura avanzata.</translation>
+<translation id="1516530951338665275">Google Chrome richiede l'accesso al Bluetooth per continuare l'accoppiamento. <ph name="IDS_BLUETOOTH_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK" /></translation>
 <translation id="1553358976309200471">Aggiorna Chrome</translation>
+<translation id="1583073672411044740"><ph name="EXISTING_USER" /> ha già eseguito l'accesso a questo profilo Chrome. Questa operazione creerà un nuovo profilo Chrome per <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="1587223624401073077">Google Chrome sta utilizzando la videocamera.</translation>
 <translation id="1587325591171447154"><ph name="FILE_NAME" /> è pericoloso, pertanto è stato bloccato da Chrome.</translation>
 <translation id="1597911401261118146">Per controllare che le tue password siano protette da violazioni dei dati e altri problemi di sicurezza, <ph name="BEGIN_LINK" />accedi a Chrome<ph name="END_LINK" />.</translation>
@@ -85,6 +88,7 @@
 <translation id="3065168410429928842">Scheda Chrome</translation>
 <translation id="3080151273017101988">Continua a eseguire applicazioni in background dopo la chiusura di Google Chrome</translation>
 <translation id="3089968997497233615">È disponibile una nuova versione più sicura di Google Chrome.</translation>
+<translation id="3100998948628680988">Assegna un nome al tuo profilo Chrome</translation>
 <translation id="3114643501466072395">Per controllare che le tue altre password siano protette da violazioni dei dati e altri problemi di sicurezza, <ph name="BEGIN_LINK" />accedi a Chrome<ph name="END_LINK" />.</translation>
 <translation id="3127818369811890733">Impossibile sincronizzare i dati in Chrome OS.</translation>
 <translation id="3140883423282498090">Le modifiche verranno applicate al prossimo riavvio di Google Chrome.</translation>
@@ -109,6 +113,7 @@
 <translation id="3735758079232443276">L'estensione "<ph name="EXTENSION_NAME" />" ha cambiato la pagina mostrata all'avvio di Chrome.</translation>
 <translation id="3779473566290487688">Per ricevere aggiornamenti futuri di Google Chrome, devi avere macOS 10.11 o versioni successive. Su questo computer è installato macOS 10.10.</translation>
 <translation id="3780814664026482060">Chrome - <ph name="PAGE_TITLE" /></translation>
+<translation id="3835168907083856002">Questa operazione creerà un nuovo profilo Chrome per <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="386202838227397562">Chiudi tutte le finestre di Google Chrome e riprova.</translation>
 <translation id="3865754807470779944">La versione di Chrome <ph name="PRODUCT_VERSION" /> è installata</translation>
 <translation id="3873044882194371212">Apri link in una finestra di navigazione in inco&amp;gnito di Chrome</translation>
@@ -116,7 +121,6 @@
 <translation id="4050175100176540509">Nell'ultima versione sono stati apportati miglioramenti rilevanti in materia di sicurezza e sono state aggiunte nuove funzioni.</translation>
 <translation id="4053720452172726777">Personalizza e controlla Google Chrome</translation>
 <translation id="4110895483821904099">Configura il tuo nuovo profilo di Chrome</translation>
-<translation id="4143243756087420366">Nome e immagine di Chrome</translation>
 <translation id="4147555960264124640">Stai per accedere con un account gestito e per dare al relativo amministratore il controllo del tuo profilo Google Chrome. I tuoi dati di Chrome, come app, Preferiti, cronologia, password e altre impostazioni, verranno collegati definitivamente a <ph name="USER_NAME" />. Potrai eliminare questi dati tramite la Dashboard di Google Account, ma non potrai associare questi dati a un altro account. <ph name="LEARN_MORE" /></translation>
 <translation id="4149882025268051530">Il programma di installazione non è riuscito a decomprimere il file. Scarica nuovamente Google Chrome.</translation>
 <translation id="4191857738314598978">{0,plural, =1{Riavvia Chrome entro un giorno}other{Riavvia Chrome entro # giorni}}</translation>
@@ -145,7 +149,6 @@
 <translation id="4633000520311261472">Per rendere Chrome più sicuro, abbiamo disattivato alcune estensioni che non sono elencate nel <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> e potrebbero essere state aggiunte a tua insaputa.</translation>
 <translation id="4666328473657283332">Per accedere ai tuoi contenuti Chrome su tutti i tuoi dispositivi, accedi per poter attivare la sincronizzazione.</translation>
 <translation id="4728575227883772061">Installazione non riuscita a causa di un errore non specificato. Se Google Chrome è attivo, chiudilo e riprova.</translation>
-<translation id="4750550185319565338">Riavvia Chrome per attivare <ph name="PLUGIN_NAME" /></translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
 <translation id="4771048833395599659">Questo file potrebbe essere pericoloso, pertanto è stato bloccato da Chrome.</translation>
 <translation id="479167709087336770">Viene usato lo stesso controllo ortografico utilizzato nella Ricerca Google. Il testo che digiti nel browser viene inviato a Google. Puoi modificare questo comportamento in qualsiasi momento nelle impostazioni.</translation>
@@ -167,10 +170,9 @@
 <translation id="5386244825306882791">Controlla anche la pagina visualizzata all'avvio di Chrome o quando esegui ricerche dalla Omnibox.</translation>
 <translation id="5394833366792865639">Condividi una scheda di Chrome</translation>
 <translation id="5430073640787465221">Il file delle preferenze è danneggiato o non valido. Google Chrome non è in grado di recuperare le impostazioni.</translation>
+<translation id="5434383153637353914">Questa pagina ti consente di gestire gli Account Google a cui hai eseguito l'accesso. Questi account saranno disponibili nel browser Chrome e nelle app del Play Store, nonché in servizi come Gmail, Drive e YouTube. <ph name="LINK_BEGIN" />Scopri di più<ph name="LINK_END" /></translation>
 <translation id="556024056938947818">Google Chrome sta cercando di visualizzare le password.</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
-<translation id="5655746611259367388">Puoi gestire questo e gli altri Account Google che hai aggiunto per <ph name="USER_NAME" /> da un unico posto nella sezione <ph name="LINK_BEGIN" />Impostazioni<ph name="LINK_END" />.
-          Le autorizzazioni concesse ai siti web nel browser Chrome e alle app scaricate da Google Play potrebbero essere applicate a tutti gli account.</translation>
 <translation id="5657226924540934362">Se un'impostazione non viene mostrata in questa pagina, cercala nelle <ph name="LINK_BEGIN" />impostazioni del sistema operativo Chrome<ph name="LINK_END" />.</translation>
 <translation id="565744775970812598"><ph name="FILE_NAME" /> potrebbe essere pericoloso, pertanto è stato bloccato da Chrome.</translation>
 <translation id="5678190148303298925">{COUNT,plural, =0{L'amministratore raccomanda il riavvio di Chrome per installare questo aggiornamento}=1{L'amministratore raccomanda il riavvio di Chrome per installare questo aggiornamento. La finestra di navigazione in incognito non verrà riaperta.}other{L'amministratore raccomanda il riavvio di Chrome per installare questo aggiornamento. Le # finestre di navigazione in incognito non verranno riaperte.}}</translation>
@@ -178,6 +180,7 @@
 <translation id="5690427481109656848">Google LLC</translation>
 <translation id="5715063361988620182">{SECONDS,plural, =1{Google Chrome si riavvierà tra 1 secondo}other{Google Chrome si riavvierà tra # secondi}}</translation>
 <translation id="573759479754913123">Informazioni su Chrome OS</translation>
+<translation id="5756509061973259733">Esiste già un profilo Chrome con questo account su questo dispositivo</translation>
 <translation id="5795887333006832406"><ph name="PAGE_TITLE" /> - Google Chrome Canary</translation>
 <translation id="5804318322022881572">Impossibile avviare Chrome. Riprova.</translation>
 <translation id="5867197326698922595">Google Chrome sta cercando di modificare le password.</translation>
@@ -250,7 +253,6 @@
 <translation id="7930071585467473040">Google Chrome sta cercando di copiare le password.</translation>
 <translation id="7962410387636238736">Questo computer non riceverà più gli aggiornamenti di Google Chrome perché Windows XP e Windows Vista non sono più supportati.</translation>
 <translation id="8008534537613507642">Reinstalla Chrome</translation>
-<translation id="8009904340233602924">Utilizza Chrome senza un account</translation>
 <translation id="8013993649590906847">Se un'immagine è senza descrizione utile, Chrome proverà a fornirne una. Per la creazione delle descrizioni, le immagini vengono inviate a Google.</translation>
 <translation id="8129812357326543296">Informazioni su &amp;Google Chrome</translation>
 <translation id="8255190535488645436">Google Chrome sta utilizzando videocamera e microfono.</translation>
@@ -291,6 +293,5 @@
 <translation id="9138603949443464873">Riavvia Chrome per applicare le modifiche</translation>
 <translation id="919706545465235479">Aggiorna Chrome per avviare la sincronizzazione</translation>
 <translation id="940313311831216333">Per accedere ai tuoi contenuti Chrome su tutti i tuoi dispositivi, accedi e attiva la sincronizzazione.</translation>
-<translation id="94743460404517794">Se hai più Account Google, puoi aggiungerli al tuo <ph name="DEVICE_TYPE" />. I tuoi account saranno disponibili nel browser Chrome e nel Play Store, nonché in servizi come Gmail, Drive e YouTube. <ph name="LINK_BEGIN" />Scopri di più<ph name="LINK_END" /></translation>
 <translation id="989369509083708165">Google Chrome è il tuo browser predefinito</translation>
 </translationbundle>

@@ -272,16 +272,12 @@ void Adapter::DeviceAdded(device::BluetoothAdapter* adapter,
 
 void Adapter::DeviceChanged(device::BluetoothAdapter* adapter,
                             device::BluetoothDevice* device) {
-  const std::string& address = device->GetAddress();
-  base::Optional<int8_t> rssi = device->GetInquiryRSSI();
-  auto it = pending_connect_to_service_args_.begin();
-  while (it != pending_connect_to_service_args_.end()) {
-    if (address == std::get<0>(*it) && !rssi) {
-      std::move(std::get<2>(*it)).Run(/*result=*/nullptr);
-      it = pending_connect_to_service_args_.erase(it);
-    } else {
-      ++it;
-    }
+  // Because paired Bluetooth devices never fire device-removed events, we also
+  // consider a null RSSI indicative of a device no longer being discoverable.
+  // In this scenario, we fail any pending connection requests.
+  if (!device->GetInquiryRSSI()) {
+    ProcessPendingInsecureServiceConnectionRequest(device->GetAddress(),
+                                                   /*device=*/nullptr);
   }
 
   auto device_info = Device::ConstructDeviceInfoStruct(device);
@@ -291,16 +287,8 @@ void Adapter::DeviceChanged(device::BluetoothAdapter* adapter,
 
 void Adapter::DeviceRemoved(device::BluetoothAdapter* adapter,
                             device::BluetoothDevice* device) {
-  const std::string& address = device->GetAddress();
-  auto it = pending_connect_to_service_args_.begin();
-  while (it != pending_connect_to_service_args_.end()) {
-    if (address == std::get<0>(*it)) {
-      std::move(std::get<2>(*it)).Run(/*result=*/nullptr);
-      it = pending_connect_to_service_args_.erase(it);
-    } else {
-      ++it;
-    }
-  }
+  ProcessPendingInsecureServiceConnectionRequest(device->GetAddress(),
+                                                 /*device=*/nullptr);
 
   auto device_info = Device::ConstructDeviceInfoStruct(device);
   for (auto& observer : observers_)
@@ -314,20 +302,9 @@ void Adapter::GattServicesDiscovered(device::BluetoothAdapter* adapter,
   // resolved. Once service probing for a device within a cached request (in
   // |pending_connect_to_service_args_|) concludes, attempt socket creation
   // again via OnDeviceFetchedForInsecureServiceConnection().
-  if (!device->IsGattServicesDiscoveryComplete())
-    return;
-
-  const std::string& address = device->GetAddress();
-  auto it = pending_connect_to_service_args_.begin();
-  while (it != pending_connect_to_service_args_.end()) {
-    if (address == std::get<0>(*it)) {
-      OnDeviceFetchedForInsecureServiceConnection(
-          /*service_uuid=*/std::get<1>(*it),
-          /*callback=*/std::move(std::get<2>(*it)), device);
-      it = pending_connect_to_service_args_.erase(it);
-    } else {
-      ++it;
-    }
+  if (device->IsGattServicesDiscoveryComplete()) {
+    ProcessPendingInsecureServiceConnectionRequest(device->GetAddress(),
+                                                   device);
   }
 }
 
@@ -340,6 +317,11 @@ void Adapter::OnDeviceFetchedForInsecureServiceConnection(
     const device::BluetoothUUID& service_uuid,
     ConnectToServiceInsecurelyCallback callback,
     device::BluetoothDevice* device) {
+  if (!device) {
+    std::move(callback).Run(/*result=*/nullptr);
+    return;
+  }
+
   if (!device->IsPaired() && device->IsConnected() &&
       !device->IsGattServicesDiscoveryComplete()) {
     // This provided device is most likely a result of calling ConnectDevice():
@@ -360,6 +342,22 @@ void Adapter::OnDeviceFetchedForInsecureServiceConnection(
                      weak_ptr_factory_.GetWeakPtr(), copyable_callback),
       base::BindOnce(&Adapter::OnConnectToServiceError,
                      weak_ptr_factory_.GetWeakPtr(), copyable_callback));
+}
+
+void Adapter::ProcessPendingInsecureServiceConnectionRequest(
+    const std::string& address,
+    device::BluetoothDevice* device) {
+  auto it = pending_connect_to_service_args_.begin();
+  while (it != pending_connect_to_service_args_.end()) {
+    if (address == std::get<0>(*it)) {
+      OnDeviceFetchedForInsecureServiceConnection(
+          /*service_uuid=*/std::get<1>(*it),
+          /*callback=*/std::move(std::get<2>(*it)), device);
+      it = pending_connect_to_service_args_.erase(it);
+    } else {
+      ++it;
+    }
+  }
 }
 
 void Adapter::OnGattConnected(
@@ -431,8 +429,8 @@ void Adapter::OnConnectToService(
   mojo::ScopedDataPipeProducerHandle receive_pipe_producer_handle;
   mojo::ScopedDataPipeConsumerHandle receive_pipe_consumer_handle;
   MojoResult result =
-      mojo::CreateDataPipe(/*options=*/nullptr, &receive_pipe_producer_handle,
-                           &receive_pipe_consumer_handle);
+      mojo::CreateDataPipe(/*options=*/nullptr, receive_pipe_producer_handle,
+                           receive_pipe_consumer_handle);
   if (result != MOJO_RESULT_OK) {
     socket->Disconnect(base::BindOnce(
         &Adapter::OnConnectToServiceError, weak_ptr_factory_.GetWeakPtr(),
@@ -442,8 +440,8 @@ void Adapter::OnConnectToService(
 
   mojo::ScopedDataPipeProducerHandle send_pipe_producer_handle;
   mojo::ScopedDataPipeConsumerHandle send_pipe_consumer_handle;
-  result = mojo::CreateDataPipe(/*options=*/nullptr, &send_pipe_producer_handle,
-                                &send_pipe_consumer_handle);
+  result = mojo::CreateDataPipe(/*options=*/nullptr, send_pipe_producer_handle,
+                                send_pipe_consumer_handle);
   if (result != MOJO_RESULT_OK) {
     socket->Disconnect(base::BindOnce(
         &Adapter::OnConnectToServiceError, weak_ptr_factory_.GetWeakPtr(),

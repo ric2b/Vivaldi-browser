@@ -33,9 +33,8 @@ class VivaldiDataSourcesAPI
   explicit VivaldiDataSourcesAPI(Profile* profile);
 
   // number and preferences containing data mapping urls.
-  static constexpr int kDataMappingPrefsCount = 2;
-  static constexpr int kThemeWindowBackgroundImageUrl_Index = 0;
-  static constexpr int kStartpageImagePathCustom_Index = 1;
+  static constexpr int kDataMappingPrefsCount = 1;
+  static constexpr int kThemeBackgroundUserImage_Index = 0;
   static const char* kDataMappingPrefs[kDataMappingPrefsCount];
 
   // /local-image/id, /notes-attachment/id and /thumbnail/id urls

@@ -3,16 +3,21 @@
 // found in the LICENSE file.
 
 /**
- * @typedef {{base: number, alternates: Array<Array<number>>}}
+ * @typedef {{string: string, name: string, keywords: !Array<!string>}} Emoji
  */
 export let Emoji;
 
 /**
- * @typedef {{group: string, emoji: Array<Emoji>}}
+ * @typedef {{base: Emoji, alternates: !Array<Emoji>}} EmojiVariants
+ */
+export let EmojiVariants;
+
+/**
+ * @typedef {{group: string, emoji: !Array<EmojiVariants>}} EmojiGroup
  */
 export let EmojiGroup;
 
 /**
- * @typedef {Array<EmojiGroup>} EmojiData
+ * @typedef {Array<EmojiGroup>} EmojiGroupData
  */
-export let EmojiData;
+export let EmojiGroupData;

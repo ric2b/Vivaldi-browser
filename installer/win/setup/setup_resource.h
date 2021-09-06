@@ -19,7 +19,7 @@
 #define IDB_BITMAP_BKGND_250_SIMPLE     154
 #define IDC_COMBO_INSTALLTYPES          1000
 #define IDC_EDIT_DEST_FOLDER            1001
-#define IDC_CHECK_DEFAULT               1002
+#define IDC_CHECK_NO_AUTOUPDATE         1002
 #define IDC_BTN_BROWSE                  1003
 #define IDC_RICHEDIT_TERMS              1004
 #define IDC_SYSLINK_TOS                 1005

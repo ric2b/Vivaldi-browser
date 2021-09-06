@@ -49,6 +49,7 @@
 #include "content/web_test/browser/web_test_storage_access_manager.h"
 #include "content/web_test/browser/web_test_tts_platform.h"
 #include "content/web_test/common/web_test_bluetooth_fake_adapter_setter.mojom.h"
+#include "content/web_test/common/web_test_string_util.h"
 #include "content/web_test/common/web_test_switches.h"
 #include "device/bluetooth/public/mojom/test/fake_bluetooth.mojom.h"
 #include "device/bluetooth/test/fake_bluetooth.h"
@@ -318,7 +319,7 @@ void WebTestContentBrowserClient::BindStorageAccessAutomation(
 }
 
 void WebTestContentBrowserClient::OverrideWebkitPrefs(
-    RenderViewHost* render_view_host,
+    WebContents* web_contents,
     blink::web_pref::WebPreferences* prefs) {
   if (WebTestControlHost::Get())
     WebTestControlHost::Get()->OverrideWebkitPrefs(prefs);
@@ -395,7 +396,7 @@ WebTestContentBrowserClient::GetOriginsRequiringDedicatedProcess() {
     };
 
     // The list of schemes below is based on
-    // third_party/blink/tools/blinkpy/third_party/wpt/wpt.config.json
+    // //third_party/wpt_tools/wpt.config.json
     const char* kOriginTemplates[] = {
         "http://%s/",
         "https://%s/",
@@ -446,6 +447,19 @@ bool WebTestContentBrowserClient::CanCreateWindow(
     bool opener_suppressed,
     bool* no_javascript_access) {
   *no_javascript_access = false;
+
+  WebTestControlHost* control_host = WebTestControlHost::Get();
+  bool dump_navigation_policy =
+      control_host->web_test_runtime_flags().dump_navigation_policy();
+
+  if (dump_navigation_policy) {
+    static_cast<mojom::WebTestControlHost*>(control_host)
+        ->PrintMessage(
+            "Default policy for createView for '" +
+            web_test_string_util::URLDescription(target_url) + "' is '" +
+            web_test_string_util::WindowOpenDispositionToString(disposition) +
+            "'\n");
+  }
   return !block_popups_ || user_gesture;
 }
 
@@ -529,7 +543,8 @@ std::unique_ptr<LoginDelegate> WebTestContentBrowserClient::CreateLoginDelegate(
 void WebTestContentBrowserClient::ConfigureNetworkContextParamsForShell(
     BrowserContext* context,
     network::mojom::NetworkContextParams* context_params,
-    network::mojom::CertVerifierCreationParams* cert_verifier_creation_params) {
+    cert_verifier::mojom::CertVerifierCreationParams*
+        cert_verifier_creation_params) {
   ShellContentBrowserClient::ConfigureNetworkContextParamsForShell(
       context, context_params, cert_verifier_creation_params);
 
@@ -561,17 +576,20 @@ void WebTestContentBrowserClient::BindWebTestControlHost(
 }
 
 #if defined(OS_WIN)
-bool WebTestContentBrowserClient::PreSpawnRenderer(
+bool WebTestContentBrowserClient::PreSpawnChild(
     sandbox::TargetPolicy* policy,
-    RendererSpawnFlags flags) {
-  // Add sideloaded font files for testing. See also DIR_WINDOWS_FONTS
-  // addition in |StartSandboxedProcess|.
-  std::vector<std::string> font_files = switches::GetSideloadFontFiles();
-  for (std::vector<std::string>::const_iterator i(font_files.begin());
-       i != font_files.end(); ++i) {
-    policy->AddRule(sandbox::TargetPolicy::SUBSYS_FILES,
-                    sandbox::TargetPolicy::FILES_ALLOW_READONLY,
-                    base::UTF8ToWide(*i).c_str());
+    sandbox::policy::SandboxType sandbox_type,
+    ChildSpawnFlags flags) {
+  if (sandbox_type == sandbox::policy::SandboxType::kRenderer) {
+    // Add sideloaded font files for testing. See also DIR_WINDOWS_FONTS
+    // addition in |StartSandboxedProcess|.
+    std::vector<std::string> font_files = switches::GetSideloadFontFiles();
+    for (std::vector<std::string>::const_iterator i(font_files.begin());
+         i != font_files.end(); ++i) {
+      policy->AddRule(sandbox::TargetPolicy::SUBSYS_FILES,
+                      sandbox::TargetPolicy::FILES_ALLOW_READONLY,
+                      base::UTF8ToWide(*i).c_str());
+    }
   }
   return true;
 }

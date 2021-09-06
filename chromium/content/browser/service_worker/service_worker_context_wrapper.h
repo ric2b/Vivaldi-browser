@@ -35,6 +35,7 @@ class FilePath;
 
 namespace storage {
 class QuotaManagerProxy;
+class ServiceWorkerStorageControlImpl;
 class SpecialStoragePolicy;
 }
 
@@ -47,7 +48,6 @@ namespace content {
 class BrowserContext;
 class ChromeBlobStorageContext;
 class ServiceWorkerContextObserver;
-class ServiceWorkerStorageControlImpl;
 class StoragePartitionImpl;
 class URLLoaderFactoryGetter;
 
@@ -84,8 +84,6 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       ServiceWorkerRegistry::GetUserDataForAllRegistrationsCallback;
   using GetInstalledRegistrationOriginsCallback =
       base::OnceCallback<void(const std::vector<url::Origin>& origins)>;
-  using GetStorageUsageForOriginCallback =
-      ServiceWorkerRegistry::GetStorageUsageForOriginCallback;
 
   explicit ServiceWorkerContextWrapper(BrowserContext* browser_context);
 
@@ -154,7 +152,7 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   void RegisterServiceWorker(
       const GURL& script_url,
       const blink::mojom::ServiceWorkerRegistrationOptions& options,
-      ResultCallback callback) override;
+      StatusCodeCallback callback) override;
   void UnregisterServiceWorker(const GURL& scope,
                                ResultCallback callback) override;
   ServiceWorkerExternalRequestResult StartingExternalRequest(
@@ -165,23 +163,18 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       const std::string& request_uuid) override;
   size_t CountExternalRequestsForTest(const url::Origin& origin) override;
   bool MaybeHasRegistrationForOrigin(const url::Origin& origin) override;
-  void GetInstalledRegistrationOrigins(
-      base::Optional<std::string> host_filter,
-      GetInstalledRegistrationOriginsCallback callback) override;
   void GetAllOriginsInfo(GetUsageInfoCallback callback) override;
   void DeleteForOrigin(const url::Origin& origin,
                        ResultCallback callback) override;
-  void PerformStorageCleanup(base::OnceClosure callback) override;
   void CheckHasServiceWorker(const GURL& url,
                              CheckHasServiceWorkerCallback callback) override;
   void CheckOfflineCapability(const GURL& url,
                               CheckOfflineCapabilityCallback callback) override;
 
   void ClearAllServiceWorkersForTest(base::OnceClosure callback) override;
-  void StartWorkerForScope(
-      const GURL& scope,
-      StartWorkerCallback info_callback,
-      StartWorkerFailureCallback failure_callback) override;
+  void StartWorkerForScope(const GURL& scope,
+                           StartWorkerCallback info_callback,
+                           StatusCodeCallback failure_callback) override;
   void StartServiceWorkerAndDispatchMessage(
       const GURL& scope,
       blink::TransferableMessage message,
@@ -315,12 +308,6 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       const std::string& key_prefix,
       StatusCallback callback);
 
-  // Returns total resource size stored in the storage for |origin|.
-  // This can be called from any thread and the callback is called on that
-  // thread.
-  void GetStorageUsageForOrigin(const url::Origin& origin,
-                                GetStorageUsageForOriginCallback callback);
-
   // Returns a list of ServiceWorkerRegistration for |origin|. The list includes
   // stored registrations and installing (not stored yet) registrations.
   void GetRegistrationsForOrigin(const url::Origin& origin,
@@ -352,6 +339,8 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   // which are called in InitializeRegisteredOrigins().
   void WaitForRegistrationsInitializedForTest();
 
+  void SetLoaderFactoryForUpdateCheckForTest(
+      scoped_refptr<network::SharedURLLoaderFactory> loader_factory);
   // Returns nullptr on failure.
   scoped_refptr<network::SharedURLLoaderFactory> GetLoaderFactoryForUpdateCheck(
       const GURL& scope);
@@ -482,7 +471,7 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   void StartServiceWorkerAndDispatchMessageOnUIThread(
       const GURL& scope,
       blink::TransferableMessage message,
-      ResultCallback result_callback);
+      ResultCallback callback);
   void DeleteForOriginOnUIThread(
       const url::Origin& origin,
       ResultCallback callback,
@@ -523,9 +512,6 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       base::Optional<std::string> host_filter,
       GetInstalledRegistrationOriginsCallback callback,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner_for_callback);
-  void GetStorageUsageForOriginOnUIThread(
-      const url::Origin& origin,
-      GetStorageUsageForOriginCallback callback);
 
   // Observers of |context_core_| which live within content's implementation
   // boundary. Shared with |context_core_|.
@@ -563,15 +549,18 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   std::unique_ptr<ServiceWorkerIdentifiabilityMetrics> identifiability_metrics_;
 
   // TODO(crbug.com/1055677): Remove `storage_control_` when
-  // storage::mojom::Partition supports ServiceWorkerStorageControl. An instance
-  // of this impl should live in the storage service, not here.
-  std::unique_ptr<ServiceWorkerStorageControlImpl> storage_control_;
+  // ServiceWorkerStorage is sandboxed. An instance of this impl should live in
+  // the storage service, not here.
+  std::unique_ptr<storage::ServiceWorkerStorageControlImpl> storage_control_;
   // These fields are used to (re)create `storage_control_`.
   base::FilePath user_data_directory_;
   scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy_;
 
   // A callback to bind ServiceWorkerStorageControl. Used for tests.
   StorageControlBinder storage_control_binder_for_test_;
+
+  // A loader factory used to register a service worker. Used for tests.
+  scoped_refptr<network::SharedURLLoaderFactory> loader_factory_for_test_;
 
   // Temporary for moving context core to the UI thread.
   scoped_refptr<base::TaskRunner> core_thread_task_runner_;

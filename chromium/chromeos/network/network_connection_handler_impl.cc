@@ -15,6 +15,7 @@
 #include "chromeos/dbus/shill/shill_manager_client.h"
 #include "chromeos/dbus/shill/shill_service_client.h"
 #include "chromeos/login/login_state/login_state.h"
+#include "chromeos/network/cellular_esim_connection_handler.h"
 #include "chromeos/network/client_cert_resolver.h"
 #include "chromeos/network/client_cert_util.h"
 #include "chromeos/network/device_state.h"
@@ -194,7 +195,8 @@ NetworkConnectionHandlerImpl::~NetworkConnectionHandlerImpl() {
 void NetworkConnectionHandlerImpl::Init(
     NetworkStateHandler* network_state_handler,
     NetworkConfigurationHandler* network_configuration_handler,
-    ManagedNetworkConfigurationHandler* managed_network_configuration_handler) {
+    ManagedNetworkConfigurationHandler* managed_network_configuration_handler,
+    CellularESimConnectionHandler* cellular_esim_connection_handler) {
   if (NetworkCertLoader::IsInitialized()) {
     network_cert_loader_ = NetworkCertLoader::Get();
     network_cert_loader_->AddObserver(this);
@@ -214,6 +216,7 @@ void NetworkConnectionHandlerImpl::Init(
   }
   configuration_handler_ = network_configuration_handler;
   managed_configuration_handler_ = managed_network_configuration_handler;
+  cellular_esim_connection_handler_ = cellular_esim_connection_handler;
 
   // After this point, the NetworkConnectionHandlerImpl is fully initialized
   // (all handler references set, observers registered, ...).
@@ -257,6 +260,8 @@ void NetworkConnectionHandlerImpl::ConnectToNetwork(
   // configured, in which case these checks do not apply anyway.
   const NetworkState* network =
       network_state_handler_->GetNetworkState(service_path);
+
+  bool is_non_connectable_esim_network = false;
 
   if (network) {
     // For existing networks, perform some immediate consistency checks.
@@ -308,6 +313,15 @@ void NetworkConnectionHandlerImpl::ConnectToNetwork(
                                  kErrorBlockedByPolicy);
       return;
     }
+
+    // eSIM networks are Cellular networks with an associated EID. Note that
+    // |cellular_esim_connection_handler_| is expected to be null if the flag is
+    // disabled.
+    if (cellular_esim_connection_handler_ &&
+        NetworkTypePattern::Cellular().MatchesType(network->type()) &&
+        !network->eid().empty() && !network->connectable()) {
+      is_non_connectable_esim_network = true;
+    }
   }
 
   // If the network does not have a profile path, specify the correct default
@@ -341,6 +355,20 @@ void NetworkConnectionHandlerImpl::ConnectToNetwork(
   // NetworkStateHandler when the connection state changes, or cleared if
   // an error occurs before a connect is initialted.
   network_state_handler_->SetNetworkConnectRequested(service_path, true);
+
+  if (is_non_connectable_esim_network) {
+    // eSIM profiles need to be enabled before a connection to them can be
+    // initiated. If this operation is successful, the network's "connectable"
+    // property will be set, and we can invoke CallShillConnect().
+    cellular_esim_connection_handler_->EnableProfileForConnection(
+        service_path,
+        base::BindOnce(&NetworkConnectionHandlerImpl::CallShillConnect,
+                       AsWeakPtr(), service_path),
+        base::BindOnce(
+            &NetworkConnectionHandlerImpl::OnEnableESimProfileFailure,
+            AsWeakPtr(), service_path));
+    return;
+  }
 
   if (call_connect) {
     CallShillConnect(service_path);
@@ -420,6 +448,24 @@ NetworkConnectionHandlerImpl::GetPendingRequest(
   std::map<std::string, ConnectRequest>::iterator iter =
       pending_requests_.find(service_path);
   return iter != pending_requests_.end() ? &(iter->second) : nullptr;
+}
+
+void NetworkConnectionHandlerImpl::OnEnableESimProfileFailure(
+    const std::string& service_path,
+    const std::string& error_name,
+    std::unique_ptr<base::DictionaryValue> error_data) {
+  ConnectRequest* request = GetPendingRequest(service_path);
+  if (!request) {
+    NET_LOG(ERROR)
+        << "OnEnableESimProfileFailure called with no pending request: "
+        << NetworkPathId(service_path);
+    return;
+  }
+  network_handler::ErrorCallback error_callback =
+      std::move(request->error_callback);
+  ClearPendingRequest(service_path);
+  InvokeConnectErrorCallback(service_path, std::move(error_callback),
+                             error_name);
 }
 
 // ConnectToNetwork implementation
@@ -622,10 +668,15 @@ void NetworkConnectionHandlerImpl::VerifyConfiguredAndConnect(
     return;
   }
 
-  if (*type != shill::kTypeVPN && check_error_state) {
-    // For non VPNs, 'Connectable' must be false here, so fail immediately if
-    // |check_error_state| is true. (For VPNs 'Connectable' is not reliable).
-    NET_LOG(ERROR) << "Non VPN is unconfigured: "
+  // Cellular networks are not "connectable" if they are not on the active SIM
+  // slot. For VPNs, "connectable" is not reliable. In either case, we can still
+  // issue Shill a connection request despite the "connectable" property being
+  // false.
+  bool can_connect_without_connectable =
+      *type == shill::kTypeCellular || *type == shill::kTypeVPN;
+
+  if (!can_connect_without_connectable && check_error_state) {
+    NET_LOG(ERROR) << "Non-connectable network is unconfigured: "
                    << NetworkPathId(service_path);
     ErrorCallbackForPendingRequest(service_path, kErrorConfigurationRequired);
     return;

@@ -67,7 +67,7 @@ typedef std::unordered_set<std::string> StringSet;
 // A set of HTTPS headers that are allowed to be collected. Contains both
 // request and response headers. All entries in this list should be lower-case
 // to support case-insensitive comparison.
-struct WhitelistedHttpsHeadersTraits
+struct AllowlistedHttpsHeadersTraits
     : base::internal::DestructorAtExitLazyInstanceTraits<StringSet> {
   static StringSet* New(void* instance) {
     StringSet* headers =
@@ -79,8 +79,8 @@ struct WhitelistedHttpsHeadersTraits
     return headers;
   }
 };
-base::LazyInstance<StringSet, WhitelistedHttpsHeadersTraits>
-    g_https_headers_whitelist = LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<StringSet, AllowlistedHttpsHeadersTraits>
+    g_https_headers_allowlist = LAZY_INSTANCE_INITIALIZER;
 
 // Helper function that converts SBThreatType to
 // ClientSafeBrowsingReportRequest::ReportType.
@@ -118,10 +118,10 @@ ClientSafeBrowsingReportRequest::ReportType GetReportTypeFromSBThreatType(
     case SB_THREAT_TYPE_SAFE:
     case SB_THREAT_TYPE_URL_BINARY_MALWARE:
     case SB_THREAT_TYPE_EXTENSION:
-    case SB_THREAT_TYPE_BLACKLISTED_RESOURCE:
+    case SB_THREAT_TYPE_BLOCKLISTED_RESOURCE:
     case SB_THREAT_TYPE_API_ABUSE:
     case SB_THREAT_TYPE_SUBRESOURCE_FILTER:
-    case SB_THREAT_TYPE_CSD_WHITELIST:
+    case SB_THREAT_TYPE_CSD_ALLOWLIST:
     case SB_THREAT_TYPE_HIGH_CONFIDENCE_ALLOWLIST:
     case DEPRECATED_SB_THREAT_TYPE_URL_PASSWORD_PROTECTION_PHISHING:
       // Gated by SafeBrowsingBlockingPage::ShouldReportThreatDetails.
@@ -132,17 +132,17 @@ ClientSafeBrowsingReportRequest::ReportType GetReportTypeFromSBThreatType(
 }
 
 // Clears the specified HTTPS resource of any sensitive data, only retaining
-// data that is whitelisted for collection.
+// data that is allowlisted for collection.
 void ClearHttpsResource(ClientSafeBrowsingReportRequest::Resource* resource) {
   // Make a copy of the original resource to retain all data.
   ClientSafeBrowsingReportRequest::Resource orig_resource(*resource);
 
-  // Clear the request headers and copy over any whitelisted ones.
+  // Clear the request headers and copy over any allowlisted ones.
   resource->clear_request();
   for (int i = 0; i < orig_resource.request().headers_size(); ++i) {
     ClientSafeBrowsingReportRequest::HTTPHeader* orig_header =
         orig_resource.mutable_request()->mutable_headers(i);
-    if (g_https_headers_whitelist.Get().count(
+    if (g_https_headers_allowlist.Get().count(
             base::ToLowerASCII(orig_header->name())) > 0) {
       resource->mutable_request()->add_headers()->Swap(orig_header);
     }
@@ -158,7 +158,7 @@ void ClearHttpsResource(ClientSafeBrowsingReportRequest::Resource* resource) {
   for (int i = 0; i < orig_resource.response().headers_size(); ++i) {
     ClientSafeBrowsingReportRequest::HTTPHeader* orig_header =
         orig_resource.mutable_response()->mutable_headers(i);
-    if (g_https_headers_whitelist.Get().count(
+    if (g_https_headers_allowlist.Get().count(
             base::ToLowerASCII(orig_header->name())) > 0) {
       resource->mutable_response()->add_headers()->Swap(orig_header);
     }
@@ -181,10 +181,6 @@ using CSBRR = safe_browsing::ClientSafeBrowsingReportRequest;
 CSBRR::SafeBrowsingUrlApiType GetUrlApiTypeForThreatSource(
     safe_browsing::ThreatSource source) {
   switch (source) {
-    case safe_browsing::ThreatSource::DATA_SAVER:
-      return CSBRR::FLYWHEEL;
-    case safe_browsing::ThreatSource::LOCAL_PVER3:
-      return CSBRR::PVER3_NATIVE;
     case safe_browsing::ThreatSource::LOCAL_PVER4:
       return CSBRR::PVER4_NATIVE;
     case safe_browsing::ThreatSource::REMOTE:
@@ -193,10 +189,8 @@ CSBRR::SafeBrowsingUrlApiType GetUrlApiTypeForThreatSource(
       return CSBRR::REAL_TIME;
     case safe_browsing::ThreatSource::UNKNOWN:
     case safe_browsing::ThreatSource::CLIENT_SIDE_DETECTION:
-    case safe_browsing::ThreatSource::PASSWORD_PROTECTION_SERVICE:
-      break;
+      return CSBRR::SAFE_BROWSING_URL_API_TYPE_UNSPECIFIED;
   }
-  return CSBRR::SAFE_BROWSING_URL_API_TYPE_UNSPECIFIED;
 }
 
 void TrimElements(const std::set<int> target_ids,

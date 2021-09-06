@@ -23,7 +23,6 @@
 
 #include "build/build_config.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/renderer/core/css_value_keywords.h"
@@ -749,7 +748,8 @@ void LayoutTheme::SetCustomFocusRingColor(const Color& c) {
   has_custom_focus_ring_color_ = true;
 }
 
-Color LayoutTheme::FocusRingColor() const {
+Color LayoutTheme::FocusRingColor(
+    mojom::blink::ColorScheme color_scheme) const {
   return has_custom_focus_ring_color_ ? custom_focus_ring_color_
                                       : GetTheme().PlatformFocusRingColor();
 }

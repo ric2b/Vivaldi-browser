@@ -397,6 +397,7 @@ RuleSourceHandler::RulesReader::RulesReader(
     : source_path_(source_path),
       output_path_(output_path),
       tracker_info_output_path_(tracker_info_output_path),
+      allow_abp_snippets_(allow_abp_snippets),
       delete_after_read_(delete_after_read) {}
 
 RuleSourceHandler::RulesReader::~RulesReader() = default;

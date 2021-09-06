@@ -40,14 +40,6 @@ void CartHandler::RestoreHiddenCartModule() {
   cart_service_->RestoreHidden();
 }
 
-void CartHandler::RemoveCartModule() {
-  cart_service_->Remove();
-}
-
-void CartHandler::RestoreRemovedCartModule() {
-  cart_service_->RestoreRemoved();
-}
-
 void CartHandler::HideCart(const GURL& cart_url, HideCartCallback callback) {
   cart_service_->HideCart(cart_url, std::move(callback));
 }
@@ -84,8 +76,10 @@ void CartHandler::GetCartDataCallback(GetMerchantCartsCallback callback,
     }
     carts.push_back(std::move(cart));
   }
+  if (carts.size() > 0) {
+    cart_service_->IncreaseWelcomeSurfaceCounter();
+  }
   std::move(callback).Run(std::move(carts));
-  cart_service_->IncreaseWelcomeSurfaceCounter();
 }
 
 void CartHandler::GetWarmWelcomeVisible(

@@ -5,6 +5,7 @@
 module blink.mojom;
 
 import "cc/mojom/browser_controls_state.mojom";
+import "cc/mojom/render_frame_metadata.mojom";
 import "cc/mojom/touch_action.mojom";
 import "mojo/public/mojom/base/string16.mojom";
 import "mojo/public/mojom/base/unguessable_token.mojom";
@@ -16,12 +17,14 @@ import "services/network/public/mojom/cross_origin_opener_policy.mojom";
 import "services/network/public/mojom/fetch_api.mojom";
 import "services/network/public/mojom/source_location.mojom";
 import "services/network/public/mojom/web_sandbox_flags.mojom";
+import "services/viz/public/mojom/compositing/frame_sink_id.mojom";
 import "skia/public/mojom/skcolor.mojom";
 import "third_party/blink/public/mojom/ad_tagging/ad_frame.mojom";
 import "third_party/blink/public/mojom/blob/blob.mojom";
 import "third_party/blink/public/mojom/blob/blob_url_store.mojom";
 import "third_party/blink/public/mojom/messaging/transferable_message.mojom";
 import "third_party/blink/public/mojom/choosers/popup_menu.mojom";
+import "third_party/blink/public/mojom/context_menu/context_menu.mojom";
 import "third_party/blink/public/mojom/devtools/console_message.mojom";
 import "third_party/blink/public/mojom/devtools/inspector_issue.mojom";
 import "third_party/blink/public/mojom/feature_policy/feature_policy.mojom";
@@ -43,6 +46,7 @@ import "third_party/blink/public/mojom/frame/user_activation_update_types.mojom"
 import "third_party/blink/public/mojom/frame/viewport_intersection_state.mojom";
 import "third_party/blink/public/mojom/input/focus_type.mojom";
 import "third_party/blink/public/mojom/input/scroll_direction.mojom";
+import "third_party/blink/public/mojom/modal_close_watcher/modal_close_listener.mojom";
 import "third_party/blink/public/mojom/loader/referrer.mojom";
 import "third_party/blink/public/mojom/portal/portal.mojom";
 import "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom";
@@ -70,7 +74,7 @@ struct SavableSubframe {
 
   // The unique identifier of the RenderFrameHost or RenderFrameProxy for the
   // subframe.
-  mojo_base.mojom.UnguessableToken subframe_token;
+  blink.mojom.FrameToken subframe_token;
 };
 
 struct GetSavableResourceLinksReply {
@@ -154,6 +158,14 @@ struct TextAutosizerPageInfo {
 // An opaque handle that keeps alive the associated render process even after
 // the frame is detached. Used by resource requests with "keepalive" specified.
 interface KeepAliveHandle {};
+
+// A factory interface for KeepAliveHandle. This is separate from LocalFrameHost
+// because LocalFrameHost may not be usable when the frame is about to be gone.
+interface KeepAliveHandleFactory {
+  // Creates and returns a KeepAliveHandle.
+  IssueKeepAliveHandle(
+      pending_receiver<blink.mojom.KeepAliveHandle> keep_alive_handle);
+};
 
 // Implemented in Browser, this interface defines frame-specific methods that
 // will be invoked from the render process (e.g. content::RenderFrameHostImpl).
@@ -420,6 +432,13 @@ interface LocalFrameHost {
                 bool right_aligned,
                 bool allow_multiple_selection);
 
+  // Used to tell the parent that the user right clicked on an area of the
+  // content area, and a context menu should be shown for it. The params
+  // object contains information about the node(s) that were selected when the
+  // user right clicked.
+  ShowContextMenu(pending_associated_remote<ContextMenuClient> client,
+                  UntrustworthyContextMenuParams params);
+
   // Sent when the renderer loads a resource from its memory cache. This message
   // lets the browser know we loaded a resource from the memory cache and is
   // needed to display the correct SSL indicators.
@@ -440,24 +459,24 @@ interface LocalFrameHost {
   // Frame owner properties currently include: name, scrollbar_mode,
   // margin_width and margin_height, among others.
   DidChangeFrameOwnerProperties(
-    mojo_base.mojom.UnguessableToken child_frame_token,
+    blink.mojom.FrameToken child_frame_token,
     blink.mojom.FrameOwnerProperties frame_owner_properties);
 
   // Sent when a local renderer frame either updates its opener to another
-  // frame identified by |opener_frame|, or, if |opener_frame| // is "empty",
+  // frame identified by |opener_frame|, or, if |opener_frame| is "empty",
   // the frame disowns its opener for the lifetime of the window.
-  DidChangeOpener(mojo_base.mojom.UnguessableToken? opener_frame);
+  DidChangeOpener(blink.mojom.LocalFrameToken? opener_frame);
 
   // Notifies the browser that sandbox flags or container policy have changed
   // for a subframe of this frame.
   DidChangeFramePolicy(
-      mojo_base.mojom.UnguessableToken child_frame_token,
+      blink.mojom.FrameToken child_frame_token,
       blink.mojom.FramePolicy frame_policy);
 
   // Notifies the browser that the frame changed the 'csp' attribute
   // of one of its child frames.
   DidChangeCSPAttribute(
-      mojo_base.mojom.UnguessableToken child_frame_token,
+      blink.mojom.FrameToken child_frame_token,
       network.mojom.ContentSecurityPolicy? parsed_csp_attribute);
 
   // Sent by the renderer to request a paint preview of a subframe. |clip_rect|
@@ -468,12 +487,36 @@ interface LocalFrameHost {
   CapturePaintPreviewOfSubframe(
       gfx.mojom.Rect clip_rect, mojo_base.mojom.UnguessableToken guid);
 
+  // Sent when a ModalCloseListener becomes active so the browser can notify if
+  // a modal close signal occurs.
+  SetModalCloseListener(
+      pending_remote<blink.mojom.ModalCloseListener> listener);
+
   // Notifies the browser that a child frame is detached from the DOM.
   Detach();
 
-   // Creates and returns a KeepAliveHandle.
-  IssueKeepAliveHandle(
-      pending_receiver<blink.mojom.KeepAliveHandle> keep_alive_handle);
+  // Returns the associated KeepAliveHandleFactory.
+  GetKeepAliveHandleFactory(
+      pending_receiver<blink.mojom.KeepAliveHandleFactory> factory);
+
+  // Blink and JavaScript error messages to log to the console, debugger UI, or
+  // error reporting service. |source_id| is usually a URL.
+  // |untrusted_stack_trace| should only be printed or sent to other services;
+  // it's untrusted and should not be parsed to get a structured stack trace.
+  // The stack trace is only present if
+  // FrameNavigationControl.SetWantErrorMessageStackTrace has been called for
+  // this frame and the log_level is kError.
+  DidAddMessageToConsole(
+      ConsoleMessageLevel log_level,
+      mojo_base.mojom.BigString16 msg,
+      int32 line_number,
+      mojo_base.mojom.String16? source_id,
+      mojo_base.mojom.BigString16? untrusted_stack_trace);
+
+  // The frame's size is replicated in the browser so that the browser can
+  // correctly set the initial size of the frame in case of a cross-process
+  // navigation.
+  FrameSizeChanged(gfx.mojom.Size size);
 };
 
 // Implemented in Blink, this interface defines frame-specific methods that will
@@ -598,7 +641,7 @@ interface LocalFrame {
   // request. This message is sent when finding the next focusable element would
   // require moving onto a frame from a different process.
   AdvanceFocusInFrame(blink.mojom.FocusType focus_type,
-                      mojo_base.mojom.UnguessableToken? source_frame_token);
+                      blink.mojom.RemoteFrameToken? source_frame_token);
 
   // Notifies this Frame to advance the focus to next input node in the form by
   // moving in specified direction if the currently focused node is a Text node
@@ -626,7 +669,7 @@ interface LocalFrame {
   // the target frame must be for the message to be dispatched. An empty string
   // allows the message to be dispatched to any origin. |message| is the encoded
   // data, and any extra properties such as transferred ports or blobs.
-  PostMessageEvent(mojo_base.mojom.UnguessableToken? source_frame_token,
+  PostMessageEvent(blink.mojom.RemoteFrameToken? source_frame_token,
                    mojo_base.mojom.String16 source_origin,
                    mojo_base.mojom.String16 target_origin,
                    blink.mojom.TransferableMessage message);
@@ -653,7 +696,7 @@ interface LocalFrame {
 
   // Requests that the blink::LocalFrame updates its opener to the specified
   // frame. The frame token may be "empty" if the opener was disowned.
-  UpdateOpener(mojo_base.mojom.UnguessableToken? opener_frame_token);
+  UpdateOpener(blink.mojom.FrameToken? opener_frame_token);
 
   // Request to enumerate and return links to all savable resources in the frame
   // Note: this covers only the immediate frame / doesn't cover subframes.
@@ -744,7 +787,7 @@ interface RemoteFrameHost {
   // Sent when a renderer remote frame either updates its opener to another
   // frame identified by |opener_frame|, or, if |opener_frame| is "empty",
   // the frame disowns its opener for the lifetime of the window.
-  DidChangeOpener(mojo_base.mojom.UnguessableToken? opener_frame);
+  DidChangeOpener(blink.mojom.LocalFrameToken? opener_frame);
 
   // This message is sent from a RemoteFrame when sequential focus navigation
   // needs to advance into its actual frame. |source_frame_token| identifies the
@@ -752,7 +795,7 @@ interface RemoteFrameHost {
   // <shift-tab> hits an out-of-process iframe when searching for the next
   // focusable element.
   AdvanceFocus(blink.mojom.FocusType focus_type,
-               mojo_base.mojom.UnguessableToken source_frame_token);
+               blink.mojom.LocalFrameToken source_frame_token);
 
   // Sent to the browser to post a message to the frame's active renderer, which
   // will receive the re-routed message from the browser process via the method
@@ -765,7 +808,7 @@ interface RemoteFrameHost {
   // sent, |target_origin| specifies what the origin of the target frame must be
   // for the message to be dispatched and |message| is the encoded data, plus
   // any extra properties such as transferred ports or blobs.
-  RouteMessageEvent(mojo_base.mojom.UnguessableToken? source_frame_token,
+  RouteMessageEvent(blink.mojom.LocalFrameToken? source_frame_token,
                     mojo_base.mojom.String16 source_origin,
                     mojo_base.mojom.String16 target_origin,
                     blink.mojom.TransferableMessage message);
@@ -786,7 +829,8 @@ interface RemoteFrameHost {
   // intersection with the parent's viewport, primarily for use by the
   // IntersectionObserver API.
   UpdateViewportIntersection(
-      ViewportIntersectionState intersection_state);
+      ViewportIntersectionState intersection_state,
+      FrameVisualProperties? visual_properties);
 
   // Tells the browser that a child's visual properties have changed.
   SynchronizeVisualProperties(
@@ -811,7 +855,7 @@ interface RemoteFrame {
   // Updates replicated ContentSecurityPolicy on the remote frame's
   // SecurityContent.
   AddReplicatedContentSecurityPolicies(
-      array<network.mojom.ContentSecurityPolicyHeader> headers);
+      array<network.mojom.ContentSecurityPolicy> csps);
 
   // Resets the replicated ContentSecurityPolicy on the remote frame's
   // SecurityContext. Used to reset CSP from the previous document on
@@ -931,12 +975,28 @@ interface RemoteFrame {
 
   // Requests that the blink::RemoteFrame updates its opener to the specified
   // frame. The frame token may be "empty" if the opener was disowned.
-  UpdateOpener(mojo_base.mojom.UnguessableToken? opener_frame_token);
+  UpdateOpener(blink.mojom.FrameToken? opener_frame_token);
 
   // Requests the corresponding RemoteFrame to be deleted and removed from
   // the frame tree. This should not be called on the main frame as that frame
   // is owned by the associated WebView.
   DetachAndDispose();
+
+  // Enables autoresize mode as requested by the parent frame's renderer
+  // process.
+  EnableAutoResize(gfx.mojom.Size min_size, gfx.mojom.Size max_size);
+
+  // Disables autoresize mode as requested by the parent frame's renderer
+  // process.
+  DisableAutoResize();
+
+  // Informs the completion of an autoresize transaction from the parent
+  // renderer and updates with the provided viz::LocalSurfaceId.
+  DidUpdateVisualProperties(cc.mojom.RenderFrameMetadata metadata);
+
+  // Notifies this remote frame that its associated compositing
+  // destination (RenderWidgetHostView) has changed.
+  SetFrameSinkId(viz.mojom.FrameSinkId frame_sink_id);
 };
 
 // Implemented in Blink, this interface defines main-frame-specific methods that
@@ -985,7 +1045,7 @@ interface LocalMainFrame {
   // |report_type|.
   InstallCoopAccessMonitor(
       network.mojom.CoopAccessReportType report_type,
-      mojo_base.mojom.UnguessableToken accessed_window,
+      blink.mojom.FrameToken accessed_window,
       pending_remote<network.mojom.CrossOriginOpenerPolicyReporter> reporter,
       bool endpoint_defined,
       string reported_window_url);
@@ -1016,6 +1076,11 @@ interface LocalMainFrame {
   UpdateBrowserControlsState(cc.mojom.BrowserControlsState constraints,
                              cc.mojom.BrowserControlsState current,
                              bool animate);
+
+  // Notify renderer that the window controls overlay has changed size or
+  // visibility.
+  UpdateWindowControlsOverlay(gfx.mojom.Rect window_controls_overlay_rect,
+                              gfx.mojom.Insets insets);
 };
 
 // Implemented in Blink, this interface defines remote main-frame-specific
@@ -1068,7 +1133,7 @@ interface LocalMainFrameHost {
   // Causes a window previously opened via RenderMessageFilter::CreateNewWindow
   // to be shown on the screen. This message contains the opener_frame_token
   // which is always set. This is called on the main frame of the window to be shown.
-  ShowCreatedWindow(mojo_base.mojom.UnguessableToken opener_frame_token,
+  ShowCreatedWindow(blink.mojom.LocalFrameToken opener_frame_token,
                     ui.mojom.WindowOpenDisposition disposition,
                     gfx.mojom.Rect rect, bool opened_by_user_gesture) => ();
 

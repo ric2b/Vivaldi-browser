@@ -68,14 +68,19 @@ class BASE_EXPORT ThreadCacheRegistry {
 
   // Starts a periodic timer on the current thread to purge all thread caches.
   void StartPeriodicPurge();
-  void OnDeallocation();
 
   static PartitionLock& GetLock() { return Instance().lock_; }
+  // Purges all thread caches *now*. This is completely thread-unsafe, and
+  // should only be called in a post-fork() handler.
+  void ForcePurgeAllThreadAfterForkUnsafe();
 
-  bool has_pending_purge_task() const { return has_pending_purge_task_; }
+  base::TimeDelta purge_interval_for_testing() const { return purge_interval_; }
+
   void ResetForTesting();
 
-  static constexpr TimeDelta kPurgeInterval = TimeDelta::FromSeconds(1);
+  static constexpr TimeDelta kMinPurgeInterval = TimeDelta::FromSeconds(1);
+  static constexpr TimeDelta kMaxPurgeInterval = TimeDelta::FromMinutes(1);
+  static constexpr TimeDelta kDefaultPurgeInterval = 2 * kMinPurgeInterval;
   static constexpr int kMinMainThreadAllocationsForPurging = 1000;
 
  private:
@@ -86,8 +91,8 @@ class BASE_EXPORT ThreadCacheRegistry {
   PartitionLock lock_;
   ThreadCache* list_head_ GUARDED_BY(GetLock()) = nullptr;
   uint64_t allocations_at_last_purge_ = 0;
-  int deallocations_ = 0;
-  bool has_pending_purge_task_ = false;
+  base::TimeDelta purge_interval_ = kDefaultPurgeInterval;
+  bool periodic_purge_running_ = false;
 };
 
 constexpr ThreadCacheRegistry::ThreadCacheRegistry() = default;
@@ -151,8 +156,20 @@ class BASE_EXPORT ThreadCache {
   static void Init(PartitionRoot<ThreadSafe>* root);
   static void Init(PartitionRoot<NotThreadSafe>* root) { IMMEDIATE_CRASH(); }
 
+  // Can be called several times, must be called before any ThreadCache
+  // interactions.
+  static void EnsureThreadSpecificDataInitialized();
+
   static ThreadCache* Get() {
     return reinterpret_cast<ThreadCache*>(PartitionTlsGet(g_thread_cache_key));
+  }
+
+  static bool IsValid(ThreadCache* tcache) {
+    return reinterpret_cast<uintptr_t>(tcache) & kTombstoneMask;
+  }
+
+  static bool IsTombstone(ThreadCache* tcache) {
+    return reinterpret_cast<uintptr_t>(tcache) == kTombstone;
   }
 
   // Create a new ThreadCache associated with |root|.
@@ -172,17 +189,17 @@ class BASE_EXPORT ThreadCache {
   ThreadCache(const ThreadCache&&) = delete;
   ThreadCache& operator=(const ThreadCache&) = delete;
 
-  // Tries to put a memory block at |address| into the cache.
-  // The block comes from the bucket at index |bucket_index| from the partition
+  // Tries to put a slot at |slot_start| into the cache.
+  // The slot comes from the bucket at index |bucket_index| from the partition
   // this cache is for.
   //
-  // Returns true if the memory was put in the cache, and false otherwise. This
+  // Returns true if the slot was put in the cache, and false otherwise. This
   // can happen either because the cache is full or the allocation was too
   // large.
-  ALWAYS_INLINE bool MaybePutInCache(void* address, size_t bucket_index);
+  ALWAYS_INLINE bool MaybePutInCache(void* slot_start, size_t bucket_index);
 
-  // Tries to allocate memory from the cache.
-  // Returns nullptr for failure.
+  // Tries to allocate a memory slot from the cache.
+  // Returns nullptr on failure.
   //
   // Has the same behavior as RawAlloc(), that is: no cookie nor ref-count
   // handling. Sets |slot_size| to the allocated size upon success.
@@ -198,10 +215,6 @@ class BASE_EXPORT ThreadCache {
   void Purge();
   void AccumulateStats(ThreadCacheStats* stats) const;
 
-  // Disables the thread cache for its associated root.
-  void Disable();
-  void Enable();
-
   size_t bucket_count_for_testing(size_t index) const {
     return buckets_[index].count;
   }
@@ -209,6 +222,9 @@ class BASE_EXPORT ThreadCache {
   // TODO(lizeb): Once we have periodic purge, lower the ratio.
   static constexpr uint16_t kBatchFillRatio = 8;
   static constexpr uint8_t kMaxCountPerBucket = 128;
+
+  // TODO(lizeb): Optimize the threshold.
+  static constexpr size_t kSizeThreshold = 512;
 
  private:
   struct Bucket {
@@ -227,12 +243,10 @@ class BASE_EXPORT ThreadCache {
   void FillBucket(size_t bucket_index);
   // Empties the |bucket| until there are at most |limit| objects in it.
   void ClearBucket(Bucket& bucket, size_t limit);
-  ALWAYS_INLINE void PutInBucket(Bucket& bucket, void* ptr);
+  ALWAYS_INLINE void PutInBucket(Bucket& bucket, void* slot_start);
   void HandleNonNormalMode();
   void ResetForTesting();
 
-  // TODO(lizeb): Optimize the threshold.
-  static constexpr size_t kSizeThreshold = 512;
   static constexpr uint16_t kBucketCount =
       ((ConstexprLog2(kSizeThreshold) - kMinBucketedOrder + 1)
        << kNumBucketsPerOrderBits) +
@@ -241,11 +255,23 @@ class BASE_EXPORT ThreadCache {
       kBucketCount < kNumBuckets,
       "Cannot have more cached buckets than what the allocator supports");
 
-  std::atomic<Mode> mode_{Mode::kNormal};
+  // On some architectures, ThreadCache::Get() can be called and return
+  // something after the thread cache has been destroyed. In this case, we set
+  // it to this value, to signal that the thread is being terminated, and the
+  // thread cache should not be used.
+  //
+  // This happens in particular on Windows, during program termination.
+  //
+  // We choose 0x1 as the value as it is an invalid pointer value, since it is
+  // not aligned, and too low. Also, checking !(ptr & kTombstoneMask) checks for
+  // nullptr and kTombstone at the same time.
+  static constexpr uintptr_t kTombstone = 0x1;
+  static constexpr uintptr_t kTombstoneMask = ~kTombstone;
+
   Bucket buckets_[kBucketCount];
+  std::atomic<bool> should_purge_;
   ThreadCacheStats stats_;
   PartitionRoot<ThreadSafe>* const root_;
-  ThreadCacheRegistry* const registry_;
 #if DCHECK_IS_ON()
   bool is_in_thread_cache_ = false;
 #endif
@@ -266,7 +292,7 @@ class BASE_EXPORT ThreadCache {
   FRIEND_TEST_ALL_PREFIXES(ThreadCacheTest, MultipleThreadCachesAccounting);
 };
 
-ALWAYS_INLINE bool ThreadCache::MaybePutInCache(void* address,
+ALWAYS_INLINE bool ThreadCache::MaybePutInCache(void* slot_start,
                                                 size_t bucket_index) {
   PA_REENTRANCY_GUARD(is_in_thread_cache_);
   INCREMENT_COUNTER(stats_.cache_fill_count);
@@ -280,7 +306,7 @@ ALWAYS_INLINE bool ThreadCache::MaybePutInCache(void* address,
 
   PA_DCHECK(bucket.count != 0 || bucket.freelist_head == nullptr);
 
-  PutInBucket(bucket, address);
+  PutInBucket(bucket, slot_start);
   INCREMENT_COUNTER(stats_.cache_fill_hits);
 
   // Batched deallocation, amortizing lock acquisitions.
@@ -288,8 +314,8 @@ ALWAYS_INLINE bool ThreadCache::MaybePutInCache(void* address,
     ClearBucket(bucket, bucket.limit / 2);
   }
 
-  if (UNLIKELY(mode_.load(std::memory_order_relaxed) != Mode::kNormal))
-    HandleNonNormalMode();
+  if (UNLIKELY(should_purge_.load(std::memory_order_relaxed)))
+    PurgeInternal();
 
   return true;
 }
@@ -333,9 +359,9 @@ ALWAYS_INLINE void* ThreadCache::GetFromCache(size_t bucket_index,
   return result;
 }
 
-ALWAYS_INLINE void ThreadCache::PutInBucket(Bucket& bucket, void* ptr) {
-  auto* entry =
-      PartitionFreelistEntry::InitForThreadCache(ptr, bucket.freelist_head);
+ALWAYS_INLINE void ThreadCache::PutInBucket(Bucket& bucket, void* slot_start) {
+  auto* entry = PartitionFreelistEntry::InitForThreadCache(
+      slot_start, bucket.freelist_head);
   bucket.freelist_head = entry;
   bucket.count++;
 }

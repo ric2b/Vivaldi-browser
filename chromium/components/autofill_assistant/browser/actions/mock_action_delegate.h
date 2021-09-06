@@ -47,9 +47,21 @@ class MockActionDelegate : public ActionDelegate {
       void(const Selector& selector,
            base::OnceCallback<void(const ClientStatus&, base::TimeDelta)>&));
 
+  void ShortWaitForElementWithSlowWarning(
+      const Selector& selector,
+      base::OnceCallback<void(const ClientStatus&, base::TimeDelta)> callback)
+      override {
+    OnShortWaitForElement(selector, callback);
+  }
+  MOCK_METHOD2(
+      OnShortWaitForElementWithSlowWarning,
+      void(const Selector& selector,
+           base::OnceCallback<void(const ClientStatus&, base::TimeDelta)>&));
+
   void WaitForDom(
       base::TimeDelta max_wait_time,
       bool allow_interrupt,
+      WaitForDomObserver* observer,
       base::RepeatingCallback<
           void(BatchElementChecker*,
                base::OnceCallback<void(const ClientStatus&)>)> check_elements,
@@ -59,6 +71,26 @@ class MockActionDelegate : public ActionDelegate {
   }
   MOCK_METHOD4(
       OnWaitForDom,
+      void(base::TimeDelta,
+           bool,
+           base::RepeatingCallback<
+               void(BatchElementChecker*,
+                    base::OnceCallback<void(const ClientStatus&)>)>&,
+           base::OnceCallback<void(const ClientStatus&, base::TimeDelta)>&));
+
+  void WaitForDomWithSlowWarning(
+      base::TimeDelta max_wait_time,
+      bool allow_interrupt,
+      WaitForDomObserver* observer,
+      base::RepeatingCallback<
+          void(BatchElementChecker*,
+               base::OnceCallback<void(const ClientStatus&)>)> check_elements,
+      base::OnceCallback<void(const ClientStatus&, base::TimeDelta)> callback)
+      override {
+    OnWaitForDom(max_wait_time, allow_interrupt, check_elements, callback);
+  }
+  MOCK_METHOD4(
+      OnWaitForDomWithSlowWarning,
       void(base::TimeDelta,
            bool,
            base::RepeatingCallback<
@@ -154,9 +186,10 @@ class MockActionDelegate : public ActionDelegate {
                     const ElementFinder::Result& element,
                     base::OnceCallback<void(const ClientStatus&)> callback));
 
-  MOCK_METHOD4(ScrollToElementPosition,
+  MOCK_METHOD5(ScrollToElementPosition,
                void(const Selector& selector,
                     const TopPadding& top_padding,
+                    std::unique_ptr<ElementFinder::Result> scrollable_element,
                     const ElementFinder::Result& element,
                     base::OnceCallback<void(const ClientStatus&)> callback));
 
@@ -326,6 +359,13 @@ class MockActionDelegate : public ActionDelegate {
   MOCK_METHOD1(MaybeShowSlowWebsiteWarning,
                void(base::OnceCallback<void(bool)>));
   MOCK_METHOD0(MaybeShowSlowConnectionWarning, void());
+
+  MOCK_CONST_METHOD1(OnDispatchJsEvent,
+                     void(base::OnceCallback<void(const ClientStatus&)>));
+  void DispatchJsEvent(
+      base::OnceCallback<void(const ClientStatus&)> callback) const override {
+    OnDispatchJsEvent(std::move(callback));
+  }
 
   base::WeakPtr<ActionDelegate> GetWeakPtr() const override {
     return weak_ptr_factory_.GetWeakPtr();

@@ -106,6 +106,12 @@ Polymer({
       value: false,
     },
 
+    /** @private {boolean} */
+    shouldShowInstallErrorDialog_: {
+      type: Boolean,
+      value: false,
+    },
+
     /**
      * Euicc object representing the active euicc_ module on the device
      * @private {?chromeos.cellularSetup.mojom.EuiccRemote}
@@ -113,7 +119,17 @@ Polymer({
     euicc_: {
       type: Object,
       value: null,
-    }
+    },
+
+    /**
+     * The current eSIM profile being installed.
+     * @type {?chromeos.cellularSetup.mojom.ESimProfileRemote}
+     * @private
+     */
+    installingESimProfile_: {
+      type: Object,
+      value: null,
+    },
   },
 
   listeners: {
@@ -161,17 +177,13 @@ Polymer({
 
   /** @private */
   fetchESimPendingProfileList_() {
-    cellular_setup.getESimManagerRemote()
-        .getAvailableEuiccs()
-        .then(response => {
-          if (response.euiccs.length > 0) {
-            // Use first available euicc as current. Only single Euicc modules are
-            // currently supported.
-            this.euicc_ = response.euiccs[0];
-            return this.fetchESimPendingProfileListForEuicc_(this.euicc_);
-          }
-          this.euicc_ = null;
-        });
+    cellular_setup.getEuicc().then(euicc => {
+      if (!euicc) {
+        return;
+      }
+      this.euicc_ = euicc;
+      this.fetchESimPendingProfileListForEuicc_(euicc);
+    });
   },
 
   /**
@@ -320,12 +332,24 @@ Polymer({
    * @private
    */
   installProfile_(event) {
-    const profileIccid = event.detail.iccid;
-    const profile = this.profilesMap_.get(profileIccid);
-    profile.installProfile('').then(
-        () => {
-            // TODO(crbug.com/1093185) Show error if install fails.
-            // Show confirmation code page if required.
-        });
+    this.installingESimProfile_ = this.profilesMap_.get(event.detail.iccid);
+    this.installingESimProfile_.installProfile('').then((response) => {
+      // TODO(crbug.com/1093185) Show error if install fails.
+      if (response.result ===
+          chromeos.cellularSetup.mojom.ProfileInstallResult
+              .kErrorNeedsConfirmationCode) {
+        this.showInstallErrorDialog_();
+      }
+    });
+  },
+
+  /** @private */
+  showInstallErrorDialog_() {
+    this.shouldShowInstallErrorDialog_ = true;
+  },
+
+  /** @private */
+  onCloseInstallErrorDialog_() {
+    this.shouldShowInstallErrorDialog_ = false;
   },
 });

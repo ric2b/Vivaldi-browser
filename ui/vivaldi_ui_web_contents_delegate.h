@@ -64,7 +64,7 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
 
  private:
   // content::WebContentsObserver
-  void RenderViewCreated(content::RenderViewHost* render_view_host) override;
+  void RenderFrameCreated(content::RenderFrameHost* render_view_host) override;
   void RenderViewHostChanged(content::RenderViewHost* old_host,
                              content::RenderViewHost* new_host) override;
   void RenderProcessGone(base::TerminationStatus status) override;

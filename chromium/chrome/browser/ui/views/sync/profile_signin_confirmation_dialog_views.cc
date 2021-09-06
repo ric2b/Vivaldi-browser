@@ -43,6 +43,7 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/layout/layout_provider.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/views_delegate.h"
 #include "ui/views/widget/widget.h"
 
@@ -91,6 +92,7 @@ ProfileSigninConfirmationDialogViews::ProfileSigninConfirmationDialogViews(
   }
   SetButtonLabel(ui::DIALOG_BUTTON_CANCEL,
                  l10n_util::GetStringUTF16(IDS_ENTERPRISE_SIGNIN_CANCEL));
+  SetModalType(ui::MODAL_TYPE_WINDOW);
 
   using Delegate = ui::ProfileSigninConfirmationDelegate;
   using DelegateNotifyFn = void (Delegate::*)();
@@ -125,10 +127,6 @@ void ProfileSigninConfirmationDialogViews::Show(
   constrained_window::CreateBrowserModalDialogViews(
       dialog.release(), browser->window()->GetNativeWindow())
       ->Show();
-}
-
-ui::ModalType ProfileSigninConfirmationDialogViews::GetModalType() const {
-  return ui::MODAL_TYPE_WINDOW;
 }
 
 void ProfileSigninConfirmationDialogViews::ViewHierarchyChanged(
@@ -364,3 +362,6 @@ void ProfileSigninConfirmationDialogViews::LearnMoreClicked(
   params.window_action = NavigateParams::SHOW_WINDOW;
   Navigate(&params);
 }
+
+BEGIN_METADATA(ProfileSigninConfirmationDialogViews, views::DialogDelegateView)
+END_METADATA

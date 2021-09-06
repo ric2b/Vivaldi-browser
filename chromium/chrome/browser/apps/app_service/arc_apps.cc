@@ -23,6 +23,8 @@
 #include "chrome/browser/apps/app_service/arc_apps_factory.h"
 #include "chrome/browser/apps/app_service/dip_px_util.h"
 #include "chrome/browser/apps/app_service/file_utils.h"
+#include "chrome/browser/apps/app_service/intent_util.h"
+#include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/apps/app_service/menu_util.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
@@ -42,7 +44,6 @@
 #include "components/arc/session/arc_bridge_service.h"
 #include "components/full_restore/app_launch_info.h"
 #include "components/full_restore/full_restore_utils.h"
-#include "components/services/app_service/public/cpp/intent_filter_util.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "extensions/grit/extensions_browser_resources.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -57,9 +58,6 @@
 // overwritten icon... IIRC this applies to shelf items and ArcAppWindow icon".
 
 namespace {
-
-constexpr char kIntentExtraText[] = "android.intent.extra.TEXT";
-constexpr char kIntentExtraSubject[] = "android.intent.extra.SUBJECT";
 
 void CompleteWithCompressed(apps::mojom::Publisher::LoadIconCallback callback,
                             std::vector<uint8_t> data) {
@@ -167,6 +165,9 @@ base::Optional<arc::UserInteractionType> GetUserInterationType(
     // kUnknown is not set anywhere, this case is not valid.
     case apps::mojom::LaunchSource::kUnknown:
       return base::nullopt;
+    case apps::mojom::LaunchSource::kFromChromeInternal:
+      user_interaction_type = arc::UserInteractionType::NOT_USER_INITIATED;
+      break;
     case apps::mojom::LaunchSource::kFromAppListGrid:
       user_interaction_type =
           arc::UserInteractionType::APP_STARTED_FROM_LAUNCHER;
@@ -209,214 +210,15 @@ base::Optional<arc::UserInteractionType> GetUserInterationType(
       user_interaction_type =
           arc::UserInteractionType::APP_STARTED_FROM_SHARESHEET;
       break;
+    case apps::mojom::LaunchSource::kFromFullRestore:
+      user_interaction_type =
+          arc::UserInteractionType::APP_STARTED_FROM_FULL_RESTORE;
+      break;
     default:
       NOTREACHED();
       return base::nullopt;
   }
   return user_interaction_type;
-}
-
-base::flat_map<std::string, std::string> CreateIntentExtras(
-    const apps::mojom::IntentPtr& intent) {
-  auto extras = base::flat_map<std::string, std::string>();
-  if (intent->share_text.has_value()) {
-    extras.insert(std::make_pair(kIntentExtraText, intent->share_text.value()));
-  }
-  if (intent->share_title.has_value()) {
-    extras.insert(
-        std::make_pair(kIntentExtraSubject, intent->share_title.value()));
-  }
-  return extras;
-}
-
-const char* GetArcIntentAction(const std::string& action) {
-  if (action == apps_util::kIntentActionView) {
-    return arc::kIntentActionView;
-  } else if (action == apps_util::kIntentActionSend) {
-    return arc::kIntentActionSend;
-  } else if (action == apps_util::kIntentActionSendMultiple) {
-    return arc::kIntentActionSendMultiple;
-  } else {
-    return arc::kIntentActionView;
-  }
-}
-
-arc::mojom::IntentInfoPtr CreateArcIntent(apps::mojom::IntentPtr intent) {
-  arc::mojom::IntentInfoPtr arc_intent;
-  if (!intent->url.has_value() && !intent->share_text.has_value()) {
-    return arc_intent;
-  }
-  arc_intent = arc::mojom::IntentInfo::New();
-  if (intent->action.has_value()) {
-    arc_intent->action = GetArcIntentAction(intent->action.value());
-  } else {
-    arc_intent->action = arc::kIntentActionView;
-  }
-  if (intent->url.has_value()) {
-    arc_intent->data = intent->url->spec();
-  }
-  if (intent->share_text.has_value() || intent->share_title.has_value()) {
-    arc_intent->extras = CreateIntentExtras(intent);
-  }
-  return arc_intent;
-}
-
-apps::mojom::IntentFilterPtr ConvertArcIntentFilter(
-    const arc::IntentFilter& arc_intent_filter) {
-  auto intent_filter = apps::mojom::IntentFilter::New();
-
-  if (base::FeatureList::IsEnabled(features::kIntentHandlingSharing)) {
-    std::vector<apps::mojom::ConditionValuePtr> action_condition_values;
-    for (auto& arc_action : arc_intent_filter.actions()) {
-      std::string action;
-      if (arc_action == arc::kIntentActionView) {
-        action = apps_util::kIntentActionView;
-      } else if (arc_action == arc::kIntentActionSend) {
-        action = apps_util::kIntentActionSend;
-      } else if (arc_action == arc::kIntentActionSendMultiple) {
-        action = apps_util::kIntentActionSendMultiple;
-      } else {
-        continue;
-      }
-      action_condition_values.push_back(apps_util::MakeConditionValue(
-          action, apps::mojom::PatternMatchType::kNone));
-    }
-    if (!action_condition_values.empty()) {
-      auto action_condition =
-          apps_util::MakeCondition(apps::mojom::ConditionType::kAction,
-                                   std::move(action_condition_values));
-      intent_filter->conditions.push_back(std::move(action_condition));
-    }
-  }
-
-  std::vector<apps::mojom::ConditionValuePtr> scheme_condition_values;
-  for (auto& scheme : arc_intent_filter.schemes()) {
-    scheme_condition_values.push_back(apps_util::MakeConditionValue(
-        scheme, apps::mojom::PatternMatchType::kNone));
-  }
-  if (!scheme_condition_values.empty()) {
-    auto scheme_condition =
-        apps_util::MakeCondition(apps::mojom::ConditionType::kScheme,
-                                 std::move(scheme_condition_values));
-    intent_filter->conditions.push_back(std::move(scheme_condition));
-  }
-
-  std::vector<apps::mojom::ConditionValuePtr> host_condition_values;
-  for (auto& authority : arc_intent_filter.authorities()) {
-    host_condition_values.push_back(apps_util::MakeConditionValue(
-        authority.host(), apps::mojom::PatternMatchType::kNone));
-  }
-  if (!host_condition_values.empty()) {
-    auto host_condition = apps_util::MakeCondition(
-        apps::mojom::ConditionType::kHost, std::move(host_condition_values));
-    intent_filter->conditions.push_back(std::move(host_condition));
-  }
-
-  std::vector<apps::mojom::ConditionValuePtr> path_condition_values;
-  for (auto& path : arc_intent_filter.paths()) {
-    apps::mojom::PatternMatchType match_type;
-    switch (path.match_type()) {
-      case arc::mojom::PatternType::PATTERN_LITERAL:
-        match_type = apps::mojom::PatternMatchType::kLiteral;
-        break;
-      case arc::mojom::PatternType::PATTERN_PREFIX:
-        match_type = apps::mojom::PatternMatchType::kPrefix;
-        break;
-      case arc::mojom::PatternType::PATTERN_SIMPLE_GLOB:
-        match_type = apps::mojom::PatternMatchType::kGlob;
-        break;
-    }
-    path_condition_values.push_back(
-        apps_util::MakeConditionValue(path.pattern(), match_type));
-  }
-  if (!path_condition_values.empty()) {
-    auto path_condition = apps_util::MakeCondition(
-        apps::mojom::ConditionType::kPattern, std::move(path_condition_values));
-    intent_filter->conditions.push_back(std::move(path_condition));
-  }
-
-  if (base::FeatureList::IsEnabled(features::kIntentHandlingSharing)) {
-    std::vector<apps::mojom::ConditionValuePtr> mime_type_condition_values;
-    for (auto& mime_type : arc_intent_filter.mime_types()) {
-      mime_type_condition_values.push_back(apps_util::MakeConditionValue(
-          mime_type, apps::mojom::PatternMatchType::kMimeType));
-    }
-    if (!mime_type_condition_values.empty()) {
-      auto mime_type_condition =
-          apps_util::MakeCondition(apps::mojom::ConditionType::kMimeType,
-                                   std::move(mime_type_condition_values));
-      intent_filter->conditions.push_back(std::move(mime_type_condition));
-    }
-    if (!arc_intent_filter.activity_name().empty()) {
-      intent_filter->activity_name = arc_intent_filter.activity_name();
-    }
-    if (!arc_intent_filter.activity_label().empty()) {
-      intent_filter->activity_label = arc_intent_filter.activity_label();
-    }
-  }
-
-  return intent_filter;
-}
-
-arc::IntentFilter CreateArcIntentFilter(
-    const std::string& package_name,
-    const apps::mojom::IntentFilterPtr& intent_filter) {
-  std::vector<std::string> actions;
-  std::vector<std::string> schemes;
-  std::vector<arc::IntentFilter::AuthorityEntry> authorities;
-  std::vector<arc::IntentFilter::PatternMatcher> paths;
-  std::vector<std::string> mime_types;
-  for (auto& condition : intent_filter->conditions) {
-    switch (condition->condition_type) {
-      case apps::mojom::ConditionType::kScheme:
-        for (auto& condition_value : condition->condition_values) {
-          schemes.push_back(condition_value->value);
-        }
-        break;
-      case apps::mojom::ConditionType::kHost:
-        for (auto& condition_value : condition->condition_values) {
-          authorities.push_back(arc::IntentFilter::AuthorityEntry(
-              /*host=*/condition_value->value, /*port=*/0));
-        }
-        break;
-      case apps::mojom::ConditionType::kPattern:
-        for (auto& condition_value : condition->condition_values) {
-          arc::mojom::PatternType match_type;
-          switch (condition_value->match_type) {
-            case apps::mojom::PatternMatchType::kLiteral:
-              match_type = arc::mojom::PatternType::PATTERN_LITERAL;
-              break;
-            case apps::mojom::PatternMatchType::kPrefix:
-              match_type = arc::mojom::PatternType::PATTERN_PREFIX;
-              break;
-            case apps::mojom::PatternMatchType::kGlob:
-              match_type = arc::mojom::PatternType::PATTERN_SIMPLE_GLOB;
-              break;
-            case apps::mojom::PatternMatchType::kNone:
-            case apps::mojom::PatternMatchType::kMimeType:
-              NOTREACHED();
-              return arc::IntentFilter();
-          }
-          paths.push_back(arc::IntentFilter::PatternMatcher(
-              condition_value->value, match_type));
-        }
-        break;
-      case apps::mojom::ConditionType::kAction:
-        for (auto& condition_value : condition->condition_values) {
-          actions.push_back(GetArcIntentAction(condition_value->value));
-        }
-        break;
-      case apps::mojom::ConditionType::kMimeType:
-        for (auto& condition_value : condition->condition_values) {
-          mime_types.push_back(condition_value->value);
-        }
-        break;
-    }
-  }
-  // TODO(crbug.com/853604): Add support for other category types.
-  return arc::IntentFilter(package_name, std::move(actions),
-                           std::move(authorities), std::move(paths),
-                           std::move(schemes), std::move(mime_types));
 }
 
 // Check if this intent filter only contains HTTP and HTTPS schemes.
@@ -460,9 +262,10 @@ void AddPreferredApp(const std::string& app_id,
       app_info ? app_info->package_name
                : arc::ArcIntentHelperBridge::kArcIntentHelperPackageName;
 
-  instance->AddPreferredApp(package_name,
-                            CreateArcIntentFilter(package_name, intent_filter),
-                            CreateArcIntent(std::move(intent)));
+  instance->AddPreferredApp(
+      package_name,
+      apps_util::CreateArcIntentFilter(package_name, intent_filter),
+      apps_util::CreateArcIntent(std::move(intent)));
 }
 
 void ResetVerifiedLinks(
@@ -555,7 +358,7 @@ arc::mojom::OpenUrlsRequestPtr ConstructOpenUrlsRequest(
     request->urls.push_back(std::move(url_with_type));
   }
   if (intent->share_text.has_value() || intent->share_title.has_value()) {
-    request->extras = CreateIntentExtras(intent);
+    request->extras = apps_util::CreateArcIntentExtras(intent);
   }
   return request;
 }
@@ -613,9 +416,7 @@ ArcApps* ArcApps::CreateForTesting(Profile* profile,
 ArcApps::ArcApps(Profile* profile) : ArcApps(profile, nullptr) {}
 
 ArcApps::ArcApps(Profile* profile, apps::AppServiceProxy* proxy)
-    : profile_(profile),
-      arc_icon_once_loader_(profile),
-      settings_app_is_active_(false) {
+    : profile_(profile), arc_icon_once_loader_(profile) {
   if (!arc::IsArcAllowedForProfile(profile_) ||
       (arc::ArcServiceManager::Get() == nullptr)) {
     return;
@@ -716,7 +517,8 @@ void ArcApps::Connect(
   }
   mojo::Remote<apps::mojom::Subscriber> subscriber(
       std::move(subscriber_remote));
-  subscriber->OnApps(std::move(apps));
+  subscriber->OnApps(std::move(apps), apps::mojom::AppType::kArc,
+                     true /* should_notify_initialized */);
   subscribers_.Add(std::move(subscriber));
 }
 
@@ -764,14 +566,16 @@ void ArcApps::LoadIcon(const std::string& app_id,
 void ArcApps::Launch(const std::string& app_id,
                      int32_t event_flags,
                      apps::mojom::LaunchSource launch_source,
-                     int64_t display_id) {
+                     apps::mojom::WindowInfoPtr window_info) {
   auto user_interaction_type = GetUserInterationType(launch_source);
   if (!user_interaction_type.has_value()) {
     return;
   }
 
+  int64_t display_id =
+      window_info ? window_info->display_id : display::kInvalidDisplayId;
   arc::LaunchApp(profile_, app_id, event_flags, user_interaction_type.value(),
-                 display_id);
+                 MakeArcWindowInfo(std::move(window_info)));
 
   full_restore::SaveAppLaunchInfo(profile_->GetPath(),
                                   std::make_unique<full_restore::AppLaunchInfo>(
@@ -782,7 +586,7 @@ void ArcApps::LaunchAppWithIntent(const std::string& app_id,
                                   int32_t event_flags,
                                   apps::mojom::IntentPtr intent,
                                   apps::mojom::LaunchSource launch_source,
-                                  int64_t display_id) {
+                                  apps::mojom::WindowInfoPtr window_info) {
   auto user_interaction_type = GetUserInterationType(launch_source);
   if (!user_interaction_type.has_value()) {
     return;
@@ -810,10 +614,13 @@ void ArcApps::LaunchAppWithIntent(const std::string& app_id,
       activity->activity_name = intent->activity_name.value();
     }
 
+    int64_t display_id =
+        window_info ? window_info->display_id : display::kInvalidDisplayId;
+
     if (intent->mime_type.has_value() && intent->file_urls.has_value()) {
       const auto file_urls = intent->file_urls.value();
-      file_manager::util::ConvertToContentUrls(
-          apps::GetFileSystemURL(profile_, file_urls),
+      arc::ConvertToContentUrlsAndShare(
+          profile_, apps::GetFileSystemURL(profile_, file_urls),
           base::BindOnce(&OnContentUrlResolved, profile_->GetPath(), app_id,
                          event_flags, display_id, std::move(intent),
                          std::move(activity)));
@@ -832,7 +639,7 @@ void ArcApps::LaunchAppWithIntent(const std::string& app_id,
     }
 
     auto intent_for_full_restore = intent.Clone();
-    auto arc_intent = CreateArcIntent(std::move(intent));
+    auto arc_intent = apps_util::CreateArcIntent(std::move(intent));
 
     if (!arc_intent) {
       LOG(ERROR) << "Launch App failed, launch intent is not valid";
@@ -1212,9 +1019,6 @@ void ArcApps::OnIntentFiltersUpdated(
 }
 
 void ArcApps::OnPreferredAppsChanged() {
-  if (!base::FeatureList::IsEnabled(features::kAppServiceIntentHandling)) {
-    return;
-  }
   mojo::Remote<apps::mojom::AppService>& app_service =
       apps::AppServiceProxyFactory::GetForProfile(profile_)->AppService();
   if (!app_service.is_bound()) {
@@ -1258,9 +1062,10 @@ void ArcApps::OnPreferredAppsChanged() {
                  << " to add preferred app.";
       continue;
     }
-    app_service->AddPreferredApp(apps::mojom::AppType::kArc, app_id,
-                                 ConvertArcIntentFilter(added_preferred_app),
-                                 /*intent=*/nullptr, kFromPublisher);
+    app_service->AddPreferredApp(
+        apps::mojom::AppType::kArc, app_id,
+        apps_util::ConvertArcIntentFilter(added_preferred_app),
+        /*intent=*/nullptr, kFromPublisher);
   }
 
   const std::vector<arc::IntentFilter>& deleted_preferred_apps =
@@ -1288,7 +1093,7 @@ void ArcApps::OnPreferredAppsChanged() {
     }
     app_service->RemovePreferredAppForFilter(
         apps::mojom::AppType::kArc, app_id,
-        ConvertArcIntentFilter(deleted_preferred_app));
+        apps_util::ConvertArcIntentFilter(deleted_preferred_app));
   }
 }
 
@@ -1540,7 +1345,8 @@ void ArcApps::UpdateAppIntentFilters(
     if (ShouldSkipFilter(arc_intent_filter)) {
       continue;
     }
-    intent_filters->push_back(ConvertArcIntentFilter(arc_intent_filter));
+    intent_filters->push_back(
+        apps_util::ConvertArcIntentFilter(arc_intent_filter));
   }
 }
 

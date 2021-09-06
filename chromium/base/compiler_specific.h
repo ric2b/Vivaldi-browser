@@ -65,7 +65,7 @@
 // To provide the complementary behavior (prevent the annotated function from
 // being omitted) look at NOINLINE. Also note that this doesn't prevent code
 // folding of multiple identical caller functions into a single signature. To
-// prevent code folding, see base::debug::Alias.
+// prevent code folding, see NO_CODE_FOLDING() in base/debug/alias.h.
 // Use like:
 //   void NOT_TAIL_CALLED FooBar();
 #if defined(__clang__) && __has_attribute(not_tail_called)
@@ -331,5 +331,12 @@ inline constexpr bool AnalyzerAssumeTrue(bool arg) {
 #define ANALYZER_ALLOW_UNUSED(var) static_cast<void>(var);
 
 #endif  // defined(__clang_analyzer__)
+
+// Use nomerge attribute to disable optimization of merging multiple same calls.
+#if defined(__clang__) && __has_attribute(nomerge) && !defined(OS_CHROMEOS)
+#define NOMERGE [[clang::nomerge]]
+#else
+#define NOMERGE
+#endif
 
 #endif  // BASE_COMPILER_SPECIFIC_H_

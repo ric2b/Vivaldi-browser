@@ -44,9 +44,25 @@ syncer::CommitRequestDataList NoteLocalChangesBuilder::BuildCommitRequests(
     data->creation_time = syncer::ProtoTimeToTime(metadata->creation_time());
     data->modification_time =
         syncer::ProtoTimeToTime(metadata->modification_time());
+
+    if (note_tracker_->note_client_tags_in_protocol_enabled()) {
+      DCHECK(!metadata->client_tag_hash().empty());
+      data->client_tag_hash =
+          syncer::ClientTagHash::FromHashed(metadata->client_tag_hash());
+      DCHECK(metadata->is_deleted() ||
+             data->client_tag_hash ==
+                 syncer::ClientTagHash::FromUnhashed(
+                     syncer::NOTES,
+                     entity->note_node()->guid().AsLowercaseString()));
+    }
+
     if (!metadata->is_deleted()) {
       const vivaldi::NoteNode* node = entity->note_node();
       DCHECK(node);
+      DCHECK_EQ(syncer::ClientTagHash::FromUnhashed(
+                    syncer::NOTES, node->guid().AsLowercaseString()),
+                syncer::ClientTagHash::FromHashed(metadata->client_tag_hash()));
+
       const vivaldi::NoteNode* parent = node->parent();
       const SyncedNoteTracker::Entity* parent_entity =
           note_tracker_->GetEntityForNoteNode(parent);
@@ -56,11 +72,7 @@ syncer::CommitRequestDataList NoteLocalChangesBuilder::BuildCommitRequests(
       data->unique_position = metadata->unique_position();
       // Assign specifics only for the non-deletion case. In case of deletion,
       // EntityData should contain empty specifics to indicate deletion.
-      // TODO(crbug.com/978430): has_final_guid() should be enough below
-      // assuming that all codepaths that populate the final GUID make sure the
-      // local model has the appropriate GUID too (and update if needed).
-      data->specifics = CreateSpecificsFromNoteNode(
-          node, notes_model_, entity->final_guid_matches(node->guid()));
+      data->specifics = CreateSpecificsFromNoteNode(node, notes_model_);
       // TODO(crbug.com/1058376): check after finishing if we need to use full
       // title instead of legacy canonicalized one.
       data->name = data->specifics.notes().legacy_canonicalized_title();

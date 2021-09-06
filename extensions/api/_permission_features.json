@@ -16,267 +16,235 @@
 
 {
   "accessKeys": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "autoUpdate": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "bookmarkContextMenu": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "bookmarksPrivate": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "calendar": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "contacts": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "contentBlocking": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "contextMenu": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C", // Vivaldi
       "9BDA982ACDCC4D336065C67D618CB5ED844751FF" // contextMenu test
     ]
   },
   "devtoolsPrivate": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "editcommand": {
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "extensionActionUtils": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "historyPrivate": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "importData": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "infobars": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "mailPrivate": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "menuContent": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "menubar": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "menubarMenu": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "notes": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "pageActions": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "pipPrivate": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app", "extension" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C", // Vivaldi
-      "14AB172D91E1DDC1F3963FBAAD72E6179E13264A"  // pip extension
+      "14AB172D91E1DDC1F3963FBAAD72E6179E13264A" // pip extension
     ]
   },
   "prefs": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "runtimePrivate": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "savedpasswords": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "sessionsPrivate": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "settings": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "sync": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "tabsPrivate": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "thumbnails": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "utilities": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "vivaldiAccount": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "windowPrivate": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "zoom": {
-    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
-    "whitelist": [
+    "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   }

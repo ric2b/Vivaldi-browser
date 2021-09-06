@@ -21,7 +21,6 @@ import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceScreen;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.ContextUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.Pref;
@@ -29,7 +28,6 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileAccountManagementMetrics;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
-import org.chromium.chrome.browser.signin.SigninUtils;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.ProfileDataCache;
 import org.chromium.chrome.browser.signin.services.SigninManager;
@@ -37,6 +35,7 @@ import org.chromium.chrome.browser.signin.services.SigninManager.SignInStateObse
 import org.chromium.chrome.browser.signin.services.SigninMetricsUtils;
 import org.chromium.chrome.browser.signin.ui.SignOutDialogFragment;
 import org.chromium.chrome.browser.signin.ui.SignOutDialogFragment.SignOutDialogListener;
+import org.chromium.chrome.browser.signin.ui.SigninUtils;
 import org.chromium.chrome.browser.superviseduser.FilteringBehavior;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.components.browser_ui.settings.ChromeBasePreference;
@@ -80,7 +79,6 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
     private static final String PREF_PARENTAL_SETTINGS = "parental_settings";
     private static final String PREF_PARENT_ACCOUNTS = "parent_accounts";
     private static final String PREF_CHILD_CONTENT = "child_content";
-    private static final String PREF_CHILD_CONTENT_DIVIDER = "child_content_divider";
     private static final String PREF_SIGN_OUT = "sign_out";
     private static final String PREF_SIGN_OUT_DIVIDER = "sign_out_divider";
 
@@ -109,8 +107,10 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
         SigninMetricsUtils.logProfileAccountManagementMenu(
                 ProfileAccountManagementMetrics.VIEW, mGaiaServiceType);
 
-        mProfileDataCache = ProfileDataCache.createProfileDataCache(
-                getActivity(), mProfile.isChild() ? R.drawable.ic_account_child_20dp : 0);
+        mProfileDataCache = mProfile.isChild()
+                ? ProfileDataCache.createWithDefaultImageSize(
+                        requireContext(), R.drawable.ic_account_child_20dp)
+                : ProfileDataCache.createWithDefaultImageSizeAndNoBadge(requireContext());
     }
 
     @Override
@@ -273,7 +273,6 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
             prefScreen.removePreference(findPreference(PREF_PARENTAL_SETTINGS));
             prefScreen.removePreference(parentAccounts);
             prefScreen.removePreference(childContent);
-            prefScreen.removePreference(findPreference(PREF_CHILD_CONTENT_DIVIDER));
         }
     }
 
@@ -449,11 +448,12 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
      * Open the account management UI.
      * @param serviceType A signin::GAIAServiceType that triggered the dialog.
      */
-    public static void openAccountManagementScreen(@GAIAServiceType int serviceType) {
+    public static void openAccountManagementScreen(
+            Context context, @GAIAServiceType int serviceType) {
         Bundle arguments = new Bundle();
         arguments.putInt(SHOW_GAIA_SERVICE_TYPE_EXTRA, serviceType);
         SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
         settingsLauncher.launchSettingsActivity(
-                ContextUtils.getApplicationContext(), AccountManagementFragment.class, arguments);
+                context, AccountManagementFragment.class, arguments);
     }
 }

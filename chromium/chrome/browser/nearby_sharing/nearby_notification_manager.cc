@@ -57,13 +57,8 @@ message_center::Notification CreateNearbyNotification(const std::string& id) {
       /*optional_fields=*/{},
       /*delegate=*/nullptr);
   notification.set_vector_small_image(kNearbyShareIcon);
-
-  // TODO(crbug.com/1102348): Also show settings for other platforms once there
-  // is a nearby settings page in Chrome browser.
-#if BUILDFLAG(IS_CHROMEOS_ASH)
   notification.set_settings_button_handler(
       message_center::SettingsButtonHandler::DELEGATE);
-#endif
 
   return notification;
 }
@@ -94,53 +89,101 @@ TextAttachment::Type GetCommonTextAttachmentType(
   return type;
 }
 
-int GetFileAttachmentsStringId(const std::vector<FileAttachment>& files) {
+int GetFileAttachmentsCapitalizedStringId(
+    const std::vector<FileAttachment>& files) {
   switch (GetCommonFileAttachmentType(files)) {
     case FileAttachment::Type::kApp:
-      return IDS_NEARBY_FILE_ATTACHMENTS_APPS;
+      return IDS_NEARBY_FILE_ATTACHMENTS_CAPITALIZED_APPS;
     case FileAttachment::Type::kImage:
-      return IDS_NEARBY_FILE_ATTACHMENTS_IMAGES;
+      return IDS_NEARBY_FILE_ATTACHMENTS_CAPITALIZED_IMAGES;
     case FileAttachment::Type::kUnknown:
-      return IDS_NEARBY_FILE_ATTACHMENTS_UNKNOWN;
+      return IDS_NEARBY_FILE_ATTACHMENTS_CAPITALIZED_UNKNOWN;
     case FileAttachment::Type::kVideo:
-      return IDS_NEARBY_FILE_ATTACHMENTS_VIDEOS;
+      return IDS_NEARBY_FILE_ATTACHMENTS_CAPITALIZED_VIDEOS;
     default:
-      return IDS_NEARBY_UNKNOWN_ATTACHMENTS;
+      return IDS_NEARBY_CAPITALIZED_UNKNOWN_ATTACHMENTS;
   }
 }
 
-int GetTextAttachmentsStringId(const std::vector<TextAttachment>& texts) {
+int GetFileAttachmentsNotCapitalizedStringId(
+    const std::vector<FileAttachment>& files) {
+  switch (GetCommonFileAttachmentType(files)) {
+    case FileAttachment::Type::kApp:
+      return IDS_NEARBY_FILE_ATTACHMENTS_NOT_CAPITALIZED_APPS;
+    case FileAttachment::Type::kImage:
+      return IDS_NEARBY_FILE_ATTACHMENTS_NOT_CAPITALIZED_IMAGES;
+    case FileAttachment::Type::kUnknown:
+      return IDS_NEARBY_FILE_ATTACHMENTS_NOT_CAPITALIZED_UNKNOWN;
+    case FileAttachment::Type::kVideo:
+      return IDS_NEARBY_FILE_ATTACHMENTS_NOT_CAPITALIZED_VIDEOS;
+    default:
+      return IDS_NEARBY_NOT_CAPITALIZED_UNKNOWN_ATTACHMENTS;
+  }
+}
+
+int GetTextAttachmentsCapitalizedStringId(
+    const std::vector<TextAttachment>& texts) {
   switch (GetCommonTextAttachmentType(texts)) {
     case TextAttachment::Type::kAddress:
-      return IDS_NEARBY_TEXT_ATTACHMENTS_ADDRESSES;
+      return IDS_NEARBY_TEXT_ATTACHMENTS_CAPITALIZED_ADDRESSES;
     case TextAttachment::Type::kPhoneNumber:
-      return IDS_NEARBY_TEXT_ATTACHMENTS_PHONE_NUMBERS;
+      return IDS_NEARBY_TEXT_ATTACHMENTS_CAPITALIZED_PHONE_NUMBERS;
     case TextAttachment::Type::kText:
-      return IDS_NEARBY_TEXT_ATTACHMENTS_UNKNOWN;
+      return IDS_NEARBY_TEXT_ATTACHMENTS_CAPITALIZED_UNKNOWN;
     case TextAttachment::Type::kUrl:
-      return IDS_NEARBY_TEXT_ATTACHMENTS_LINKS;
+      return IDS_NEARBY_TEXT_ATTACHMENTS_CAPITALIZED_LINKS;
     default:
-      return IDS_NEARBY_TEXT_ATTACHMENTS_UNKNOWN;
+      return IDS_NEARBY_TEXT_ATTACHMENTS_CAPITALIZED_UNKNOWN;
   }
 }
 
-base::string16 GetAttachmentsString(const ShareTarget& share_target) {
+int GetTextAttachmentsNotCapitalizedStringId(
+    const std::vector<TextAttachment>& texts) {
+  switch (GetCommonTextAttachmentType(texts)) {
+    case TextAttachment::Type::kAddress:
+      return IDS_NEARBY_TEXT_ATTACHMENTS_NOT_CAPITALIZED_ADDRESSES;
+    case TextAttachment::Type::kPhoneNumber:
+      return IDS_NEARBY_TEXT_ATTACHMENTS_NOT_CAPITALIZED_PHONE_NUMBERS;
+    case TextAttachment::Type::kText:
+      return IDS_NEARBY_TEXT_ATTACHMENTS_NOT_CAPITALIZED_UNKNOWN;
+    case TextAttachment::Type::kUrl:
+      return IDS_NEARBY_TEXT_ATTACHMENTS_NOT_CAPITALIZED_LINKS;
+    default:
+      return IDS_NEARBY_TEXT_ATTACHMENTS_NOT_CAPITALIZED_UNKNOWN;
+  }
+}
+
+base::string16 GetAttachmentsString(const ShareTarget& share_target,
+                                    bool use_capitalized_attachments) {
   size_t file_count = share_target.file_attachments.size();
   size_t text_count = share_target.text_attachments.size();
-  int resource_id = IDS_NEARBY_UNKNOWN_ATTACHMENTS;
+  int resource_id = use_capitalized_attachments
+                        ? IDS_NEARBY_CAPITALIZED_UNKNOWN_ATTACHMENTS
+                        : IDS_NEARBY_NOT_CAPITALIZED_UNKNOWN_ATTACHMENTS;
 
   if (file_count > 0 && text_count == 0)
-    resource_id = GetFileAttachmentsStringId(share_target.file_attachments);
+    resource_id = use_capitalized_attachments
+                      ? GetFileAttachmentsCapitalizedStringId(
+                            share_target.file_attachments)
+                      : GetFileAttachmentsNotCapitalizedStringId(
+                            share_target.file_attachments);
 
   if (text_count > 0 && file_count == 0)
-    resource_id = GetTextAttachmentsStringId(share_target.text_attachments);
+    resource_id = use_capitalized_attachments
+                      ? GetTextAttachmentsCapitalizedStringId(
+                            share_target.text_attachments)
+                      : GetTextAttachmentsNotCapitalizedStringId(
+                            share_target.text_attachments);
 
   return l10n_util::GetPluralStringFUTF16(resource_id, text_count + file_count);
 }
 
 base::string16 FormatNotificationTitle(const ShareTarget& share_target,
-                                       int resource_id) {
-  base::string16 attachments = GetAttachmentsString(share_target);
+                                       int resource_id,
+                                       bool use_capitalized_attachments) {
+  base::string16 attachments =
+      GetAttachmentsString(share_target, use_capitalized_attachments);
+
   base::string16 device_name = base::ASCIIToUTF16(share_target.device_name);
   size_t attachment_count = share_target.file_attachments.size() +
                             share_target.text_attachments.size();
@@ -152,23 +195,26 @@ base::string16 FormatNotificationTitle(const ShareTarget& share_target,
 
 base::string16 GetProgressNotificationTitle(const ShareTarget& share_target) {
   return FormatNotificationTitle(
-      share_target, share_target.is_incoming
-                        ? IDS_NEARBY_NOTIFICATION_RECEIVE_PROGRESS_TITLE
-                        : IDS_NEARBY_NOTIFICATION_SEND_PROGRESS_TITLE);
+      share_target,
+      share_target.is_incoming ? IDS_NEARBY_NOTIFICATION_RECEIVE_PROGRESS_TITLE
+                               : IDS_NEARBY_NOTIFICATION_SEND_PROGRESS_TITLE,
+      /*use_capitalized_attachments=*/false);
 }
 
 base::string16 GetSuccessNotificationTitle(const ShareTarget& share_target) {
   return FormatNotificationTitle(
-      share_target, share_target.is_incoming
-                        ? IDS_NEARBY_NOTIFICATION_RECEIVE_SUCCESS_TITLE
-                        : IDS_NEARBY_NOTIFICATION_SEND_SUCCESS_TITLE);
+      share_target,
+      share_target.is_incoming ? IDS_NEARBY_NOTIFICATION_RECEIVE_SUCCESS_TITLE
+                               : IDS_NEARBY_NOTIFICATION_SEND_SUCCESS_TITLE,
+      /*use_capitalized_attachments=*/true);
 }
 
 base::string16 GetFailureNotificationTitle(const ShareTarget& share_target) {
   return FormatNotificationTitle(
-      share_target, share_target.is_incoming
-                        ? IDS_NEARBY_NOTIFICATION_RECEIVE_FAILURE_TITLE
-                        : IDS_NEARBY_NOTIFICATION_SEND_FAILURE_TITLE);
+      share_target,
+      share_target.is_incoming ? IDS_NEARBY_NOTIFICATION_RECEIVE_FAILURE_TITLE
+                               : IDS_NEARBY_NOTIFICATION_SEND_FAILURE_TITLE,
+      /*use_capitalized_attachments=*/false);
 }
 
 base::Optional<base::string16> GetFailureNotificationMessage(
@@ -188,7 +234,8 @@ base::Optional<base::string16> GetFailureNotificationMessage(
 base::string16 GetConnectionRequestNotificationMessage(
     const ShareTarget& share_target,
     const TransferMetadata& transfer_metadata) {
-  base::string16 attachments = GetAttachmentsString(share_target);
+  base::string16 attachments =
+      GetAttachmentsString(share_target, /*use_capitalized_attachments=*/false);
   base::string16 device_name = base::ASCIIToUTF16(share_target.device_name);
 
   size_t attachment_count = share_target.file_attachments.size() +
@@ -376,20 +423,21 @@ class SuccessNotificationDelegate : public NearbyNotificationDelegate {
   // NearbyNotificationDelegate:
   void OnClick(const std::string& notification_id,
                const base::Optional<int>& action_index) override {
-    // Ignore clicks on notification body.
-    if (!action_index)
-      return;
-
     switch (type_) {
       case NearbyNotificationManager::ReceivedContentType::kText:
-        DCHECK_EQ(0, *action_index);
-        CopyTextToClipboard();
+        if (action_index.has_value() && action_index.value() == 0) {
+          // Don't overwrite clipboard if user clicks notification body
+          CopyTextToClipboard();
+        }
         break;
       case NearbyNotificationManager::ReceivedContentType::kSingleUrl:
-        DCHECK_EQ(0, *action_index);
         OpenTextLink();
         break;
       case NearbyNotificationManager::ReceivedContentType::kSingleImage:
+        if (!action_index.has_value()) {
+          OpenDownloadsFolder();
+          break;
+        }
         switch (*action_index) {
           case 0:
             OpenDownloadsFolder();
@@ -403,7 +451,6 @@ class SuccessNotificationDelegate : public NearbyNotificationDelegate {
         }
         break;
       case NearbyNotificationManager::ReceivedContentType::kFiles:
-        DCHECK_EQ(0, *action_index);
         OpenDownloadsFolder();
         break;
     }
@@ -552,6 +599,14 @@ void NearbyNotificationManager::OnTransferUpdate(
     share_target_ = share_target;
   DCHECK_EQ(share_target_->id, share_target.id);
 
+  if (!last_transfer_status_ ||
+      *last_transfer_status_ != transfer_metadata.status()) {
+    // Close any previous notifications, to allow subsequent high-priority
+    // notifications to pop up.
+    CloseTransfer();
+  }
+  last_transfer_status_ = transfer_metadata.status();
+
   switch (transfer_metadata.status()) {
     case TransferMetadata::Status::kInProgress:
       ShowProgress(share_target, transfer_metadata);
@@ -560,7 +615,9 @@ void NearbyNotificationManager::OnTransferUpdate(
     case TransferMetadata::Status::kAwaitingRemoteAcceptanceFailed:
     case TransferMetadata::Status::kExternalProviderLaunched:
     case TransferMetadata::Status::kCancelled:
-      CloseTransfer();
+      // Any previous notifications have been closed with the status change
+      // check above that called CloseTransfer(). No notification is currently
+      // shown for these statuses, so break.
       break;
     case TransferMetadata::Status::kAwaitingLocalConfirmation:
     case TransferMetadata::Status::kAwaitingRemoteAcceptance:
@@ -583,8 +640,10 @@ void NearbyNotificationManager::OnTransferUpdate(
       break;
   }
 
-  if (transfer_metadata.is_final_status())
+  if (transfer_metadata.is_final_status()) {
     share_target_.reset();
+    last_transfer_status_.reset();
+  }
 }
 
 void NearbyNotificationManager::OnShareTargetDiscovered(
@@ -606,6 +665,7 @@ void NearbyNotificationManager::ShowProgress(
   notification.set_type(message_center::NOTIFICATION_TYPE_PROGRESS);
   notification.set_title(GetProgressNotificationTitle(share_target));
   notification.set_never_timeout(true);
+  notification.set_priority(message_center::NotificationPriority::MAX_PRIORITY);
 
   // Show indeterminate progress while waiting for remote device to accept.
   if (transfer_metadata.status() == TransferMetadata::Status::kInProgress)
@@ -629,10 +689,6 @@ void NearbyNotificationManager::ShowConnectionRequest(
     const ShareTarget& share_target,
     const TransferMetadata& transfer_metadata) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  // If there is an existing notification, close it first otherwise we won't
-  // get a heads-up pop-up.
-  CloseTransfer();
 
   message_center::Notification notification =
       CreateNearbyNotification(kNearbyNotificationId);
@@ -688,10 +744,6 @@ void NearbyNotificationManager::ShowOnboarding() {
 
 void NearbyNotificationManager::ShowSuccess(const ShareTarget& share_target) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  // If there is an existing notification, close it first otherwise we won't
-  // get a heads-up pop-up.
-  CloseTransfer();
 
   if (!share_target.is_incoming) {
     message_center::Notification notification =
@@ -789,10 +841,6 @@ void NearbyNotificationManager::ShowFailure(
     const ShareTarget& share_target,
     const TransferMetadata& transfer_metadata) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  // If there is an existing notification, close it first otherwise we won't
-  // get a heads-up pop-up.
-  CloseTransfer();
 
   message_center::Notification notification =
       CreateNearbyNotification(kNearbyNotificationId);

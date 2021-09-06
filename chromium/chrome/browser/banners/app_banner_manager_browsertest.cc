@@ -14,17 +14,17 @@
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chrome/browser/banners/app_banner_manager.h"
 #include "chrome/browser/banners/app_banner_manager_browsertest_base.h"
 #include "chrome/browser/banners/app_banner_manager_desktop.h"
-#include "chrome/browser/banners/app_banner_metrics.h"
-#include "chrome/browser/banners/app_banner_settings_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/site_engagement/content/site_engagement_score.h"
 #include "components/site_engagement/content/site_engagement_service.h"
+#include "components/webapps/browser/banners/app_banner_manager.h"
+#include "components/webapps/browser/banners/app_banner_metrics.h"
+#include "components/webapps/browser/banners/app_banner_settings_helper.h"
 #include "components/webapps/browser/installable/installable_logging.h"
 #include "components/webapps/browser/installable/installable_manager.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
@@ -708,9 +708,11 @@ IN_PROC_BROWSER_TEST_F(
   GURL test_url = GetBannerURLWithAction("stash_event");
   service->ResetBaseScoreForURL(test_url, 10);
 
+  blink::Manifest manifest;
+  std::vector<SkBitmap> screenshots;
   installable_manager_->FailNext(base::WrapUnique(new InstallableData(
-      {MANIFEST_URL_CHANGED}, GURL(), nullptr, GURL(), nullptr, false, GURL(),
-      nullptr, std::map<GURL, SkBitmap>(), false, false)));
+      {MANIFEST_URL_CHANGED}, GURL::EmptyGURL(), manifest, GURL::EmptyGURL(),
+      nullptr, false, GURL::EmptyGURL(), nullptr, screenshots, false, false)));
 
   // The page should record one failure of MANIFEST_URL_CHANGED, but it should
   // still successfully get to the PENDING_PROMPT state of the pipeline, as it

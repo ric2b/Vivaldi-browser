@@ -21,6 +21,7 @@
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/dbus/power_manager/power_supply_properties.pb.h"
+#include "chromeos/dbus/power_manager/suspend.pb.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/events/pointer_details.h"
@@ -495,9 +496,6 @@ TEST_F(AmbientControllerTest, ShouldDismissContainerViewOnEvents) {
       gfx::Vector2d(), gfx::PointF(), gfx::PointF(), base::TimeTicks(),
       ui::EF_NONE, ui::EF_NONE));
 
-  events.emplace_back(std::make_unique<ui::KeyEvent>(
-      ui::ET_KEY_PRESSED, ui::VKEY_SPACE, ui::EF_NONE));
-
   events.emplace_back(std::make_unique<ui::ScrollEvent>(
       ui::ET_SCROLL, gfx::PointF(), gfx::PointF(), base::TimeTicks(),
       ui::EF_NONE, /*x_offset=*/0.0f,
@@ -530,15 +528,58 @@ TEST_F(AmbientControllerTest, ShouldDismissAndThenComesBack) {
   FastForwardTiny();
   EXPECT_TRUE(WidgetsVisible());
 
-  ui::KeyEvent key_event(ui::ET_KEY_PRESSED, ui::KeyboardCode::VKEY_1,
-                         ui::EF_NONE);
-  ambient_controller()->OnUserActivity(&key_event);
+  ui::MouseEvent mouse_event(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
+                             base::TimeTicks(), ui::EF_NONE, ui::EF_NONE);
+  ambient_controller()->OnUserActivity(&mouse_event);
   FastForwardTiny();
   EXPECT_TRUE(GetContainerViews().empty());
 
   FastForwardToLockScreenTimeout();
   FastForwardTiny();
   EXPECT_TRUE(WidgetsVisible());
+}
+
+TEST_F(AmbientControllerTest, ShouldDismissContainerViewOnKeyEvent) {
+  // Without user interaction, should show ambient mode.
+  ambient_controller()->ShowUi();
+  EXPECT_FALSE(WidgetsVisible());
+  FastForwardTiny();
+  EXPECT_TRUE(WidgetsVisible());
+  CloseAmbientScreen();
+
+  // When ambient is shown, OnUserActivity() should ignore key event.
+  ambient_controller()->ShowUi();
+  EXPECT_TRUE(ambient_controller()->IsShown());
+
+  // General key press will exit ambient mode.
+  // Simulate key press to close the widget.
+  ui::test::EventGenerator* event_generator = GetEventGenerator();
+  event_generator->PressKey(ui::VKEY_A, /*flags=*/0);
+  EXPECT_FALSE(ambient_controller()->IsShown());
+}
+
+TEST_F(AmbientControllerTest,
+       ShouldDismissContainerViewOnKeyEventWhenLockScreenInBackground) {
+  GetSessionControllerClient()->SetShouldLockScreenAutomatically(true);
+  SetPowerStateCharging();
+  EXPECT_FALSE(ambient_controller()->IsShown());
+
+  // Should not lock the device and enter ambient mode when the screen is
+  // dimmed.
+  SetScreenIdleStateAndWait(/*dimmed=*/true, /*off=*/false);
+  EXPECT_FALSE(IsLocked());
+  EXPECT_TRUE(ambient_controller()->IsShown());
+
+  FastForwardToBackgroundLockScreenTimeout();
+  EXPECT_TRUE(IsLocked());
+  // Should not disrupt ongoing ambient mode.
+  EXPECT_TRUE(ambient_controller()->IsShown());
+
+  // General key press will exit ambient mode.
+  // Simulate key press to close the widget.
+  ui::test::EventGenerator* event_generator = GetEventGenerator();
+  event_generator->PressKey(ui::VKEY_A, /*flags=*/0);
+  EXPECT_FALSE(ambient_controller()->IsShown());
 }
 
 TEST_F(AmbientControllerTest,
@@ -783,8 +824,30 @@ TEST_F(AmbientControllerTest, ClosesAmbientBeforeSuspend) {
   EXPECT_FALSE(ambient_controller()->IsShown());
 
   FastForwardToLockScreenTimeout();
-  // Ambient mode should not resume after suspend.
+  // Ambient mode should not resume until SuspendDone is received.
   EXPECT_FALSE(ambient_controller()->IsShown());
+}
+
+TEST_F(AmbientControllerTest, RestartsAmbientAfterSuspend) {
+  LockScreen();
+  FastForwardToLockScreenTimeout();
+
+  EXPECT_TRUE(ambient_controller()->IsShown());
+
+  SimulateSystemSuspendAndWait(
+      power_manager::SuspendImminent::Reason::SuspendImminent_Reason_IDLE);
+
+  EXPECT_FALSE(ambient_controller()->IsShown());
+
+  // This call should be blocked by prior |SuspendImminent| until |SuspendDone|.
+  ambient_controller()->ShowUi();
+  EXPECT_FALSE(ambient_controller()->IsShown());
+
+  SimulateSystemResumeAndWait();
+
+  FastForwardToLockScreenTimeout();
+
+  EXPECT_TRUE(ambient_controller()->IsShown());
 }
 
 TEST_F(AmbientControllerTest, ObservesPrefsWhenAmbientEnabled) {

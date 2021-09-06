@@ -53,6 +53,9 @@ namespace {
 class MockVideoDecoder : public media::VideoDecoder {
  public:
   std::string GetDisplayName() const override { return "MockVideoDecoder"; }
+  media::VideoDecoderType GetDecoderType() const override {
+    return media::VideoDecoderType::kUnknown;
+  }
   void Initialize(const media::VideoDecoderConfig& config,
                   bool low_delay,
                   media::CdmContext* cdm_context,
@@ -79,6 +82,7 @@ class MockVideoDecoder : public media::VideoDecoder {
   bool NeedsBitstreamConversion() const override { return false; }
   bool CanReadWithoutStalling() const override { return true; }
   int GetMaxDecodeRequests() const override { return 1; }
+  bool IsOptimizedForRTC() const override { return true; }
 };
 
 class MockDecoderFactory : public media::DecoderFactory {

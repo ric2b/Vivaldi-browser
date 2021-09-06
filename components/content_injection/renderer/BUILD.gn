@@ -8,9 +8,9 @@ static_library("renderer") {
     "content_injection_manager.h",
   ]
   deps = [
+    "../mojom",
     "//base",
     "//content/public/common",
     "//content/public/renderer",
-    "//vivaldi_mojom/components/content_injection/mojom"
   ]
 }

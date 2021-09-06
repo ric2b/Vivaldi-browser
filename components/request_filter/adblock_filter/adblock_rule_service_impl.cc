@@ -9,8 +9,6 @@
 
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "components/content_injection/content_injection_service.h"
-#include "components/content_injection/content_injection_service_factory.h"
 #include "components/request_filter/adblock_filter/adblock_cosmetic_filter.h"
 #include "components/request_filter/adblock_filter/adblock_known_sources_handler.h"
 #include "components/request_filter/adblock_filter/adblock_request_filter.h"
@@ -115,7 +113,7 @@ std::string RuleServiceImpl::GetRulesIndexChecksum(RuleGroup group) {
 void RuleServiceImpl::OnStateLoaded(
     std::unique_ptr<RuleServiceStorage::LoadResult> load_result) {
   // All cases of base::Unretained here are safe. We are generally passing
-  // callaback to objects that we own, calling to either this or other objects
+  // callbacks to objects that we own, calling to either this or other objects
   // that we own.
 
   active_exceptions_lists_ = load_result->active_exceptions_lists;
@@ -146,13 +144,6 @@ void RuleServiceImpl::OnStateLoaded(
                             base::Unretained(this)),
         file_task_runner_);
 
-    content_injection_providers_[static_cast<size_t>(group)].emplace(
-        &(index_managers_[static_cast<size_t>(group)].value()));
-    content_injection::ServiceFactory::GetInstance()
-        ->GetForBrowserContext(context_)
-        ->AddProvider(&(
-            content_injection_providers_[static_cast<size_t>(group)].value()));
-
     if (load_result->groups_enabled[static_cast<size_t>(group)]) {
       AddRequestFilter(group);
     }
@@ -160,6 +151,14 @@ void RuleServiceImpl::OnStateLoaded(
     exceptions_[static_cast<size_t>(group)].swap(
         load_result->exceptions[static_cast<size_t>(group)]);
   }
+
+  std::array<RulesIndexManager*, kRuleGroupCount> index_manager_ptrs;
+  for (size_t i = 0; i < kRuleGroupCount; i++) {
+    if (index_managers_[i])
+      index_manager_ptrs[i] = &(index_managers_[i].value());
+  }
+  content_injection_provider_.emplace(context_, index_manager_ptrs,
+                                      &(resources_.value()));
 
   known_sources_handler_.emplace(
       this, load_result->storage_version, load_result->known_sources,

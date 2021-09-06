@@ -43,8 +43,6 @@
 #include "ui/events/gestures/gesture_recognizer.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/vector2d.h"
-#include "ui/ozone/public/input_controller.h"
-#include "ui/ozone/public/ozone_platform.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/core/window_animations.h"
 
@@ -71,13 +69,6 @@ constexpr base::TimeDelta kReportLingeringStateDelay =
 // after the user enters their username.
 constexpr base::TimeDelta kTransientBlurThreshold =
     base::TimeDelta::FromMilliseconds(3500);
-
-void SetTouchEventLogging(bool enable) {
-  ui::InputController* controller =
-      ui::OzonePlatform::GetInstance()->GetInputController();
-  if (controller)
-    controller->SetTouchEventLoggingEnabled(enable);
-}
 
 // An enumeration of different keyboard control events that should be logged.
 // These values are persisted to logs. Entries should not be renumbered and
@@ -257,7 +248,7 @@ void KeyboardUIController::DisableKeyboard() {
   container_behavior_.reset();
   animation_observer_.reset();
 
-  ime_observer_.RemoveAll();
+  ime_observation_.Reset();
   ui_->SetController(nullptr);
   ui_.reset();
 
@@ -559,8 +550,6 @@ void KeyboardUIController::HideKeyboard(HideReason reason) {
 
     case KeyboardUIState::kWillHide:
     case KeyboardUIState::kShown: {
-      SetTouchEventLogging(true /* enable */);
-
       // Log whether this was a user or system (automatic) action.
       switch (reason) {
         case HIDE_REASON_SYSTEM_EXPLICIT:
@@ -789,7 +778,7 @@ void KeyboardUIController::OnWindowBoundsChanged(
 
 void KeyboardUIController::OnInputMethodDestroyed(
     const ui::InputMethod* input_method) {
-  ime_observer_.RemoveAll();
+  ime_observation_.Reset();
   OnTextInputStateChanged(nullptr);
 }
 
@@ -879,8 +868,6 @@ void KeyboardUIController::PopulateKeyboardContent(
   }
 
   ui_->ReloadKeyboardIfNeeded();
-
-  SetTouchEventLogging(false /* enable */);
 
   switch (model_.state()) {
     case KeyboardUIState::kWillHide:
@@ -1124,12 +1111,12 @@ void KeyboardUIController::UpdateInputMethodObserver() {
   if (!ime)
     return;
 
-  if (ime_observer_.IsObserving(ime))
+  if (ime_observation_.IsObservingSource(ime))
     return;
 
   // Only observes the current active IME.
-  ime_observer_.RemoveAll();
-  ime_observer_.Add(ime);
+  ime_observation_.Reset();
+  ime_observation_.Observe(ime);
 
   // Note: We used to call OnTextInputStateChanged(ime->GetTextInputClient())
   // here, but that can trigger HideKeyboardImplicitlyBySystem() from a call to

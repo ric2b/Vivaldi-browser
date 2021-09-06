@@ -111,4 +111,10 @@ public class BuildConfig {
 #else
     public static MAYBE_FINAL boolean IS_FORCE_SOPRANOS_BUILD MAYBE_FALSE;
 #endif
+
+#if defined(_IS_OEM_AUTOMOTIVE_BUILD)
+    public static MAYBE_FINAL boolean IS_OEM_AUTOMOTIVE_BUILD = true;
+#else
+    public static MAYBE_FINAL boolean IS_OEM_AUTOMOTIVE_BUILD MAYBE_FALSE;
+#endif
 }

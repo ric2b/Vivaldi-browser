@@ -8,7 +8,6 @@ import("//tools/grit/grit_rule.gni")
 import("//ui/webui/resources/tools/generate_grd.gni")
 
 js_type_check("closure_compile") {
-  uses_js_modules = true
   deps = [ ":about_webapks" ]
 }
 
@@ -31,7 +30,7 @@ generate_grd("build_grd") {
   input_files_base_dir = rebase_path(".", "//")
 }
 
-grit("webapks_resources") {
+grit("resources") {
   source = "$target_gen_dir/resources.grd"
   deps = [ ":build_grd" ]
   enable_input_discovery_for_gn_analyze = false

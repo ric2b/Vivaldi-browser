@@ -58,12 +58,14 @@
 #include "services/network/public/cpp/ip_address_space_util.h"
 #include "services/network/public/cpp/net_adapters.h"
 #include "services/network/public/cpp/network_switches.h"
+#include "services/network/public/cpp/opaque_response_blocking.h"
 #include "services/network/public/cpp/origin_policy.h"
 #include "services/network/public/cpp/parsed_headers.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/mojom/client_security_state.mojom-forward.h"
 #include "services/network/public/mojom/cookie_access_observer.mojom-forward.h"
 #include "services/network/public/mojom/cookie_access_observer.mojom.h"
+#include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "services/network/public/mojom/origin_policy_manager.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
@@ -83,8 +85,6 @@ using ConcerningHeaderId = URLLoader::ConcerningHeaderId;
 // mojo::core::Core::CreateDataPipe
 constexpr size_t kBlockedBodyAllocationSize = 1;
 
-// TODO: this duplicates some of PopulateResourceResponse in
-// content/browser/loader/resource_loader.cc
 void PopulateResourceResponse(net::URLRequest* request,
                               bool is_load_timing_enabled,
                               int32_t options,
@@ -313,7 +313,9 @@ bool ShouldNotifyAboutCookie(net::CookieInclusionStatus status) {
   // SameSite features, in order to issue a deprecation warning for them.
   return status.IsInclude() || status.ShouldWarn() ||
          status.HasExclusionReason(
-             net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
+             net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES) ||
+         status.HasExclusionReason(
+             net::CookieInclusionStatus::EXCLUDE_INVALID_SAMEPARTY);
 }
 
 mojom::HttpRawRequestResponseInfoPtr BuildRawRequestResponseInfo(
@@ -463,8 +465,10 @@ URLLoader::URLLoader(
     mojom::TrustedURLLoaderHeaderClient* url_loader_header_client,
     mojom::OriginPolicyManager* origin_policy_manager,
     std::unique_ptr<TrustTokenRequestHelperFactory> trust_token_helper_factory,
-    const cors::OriginAccessList* origin_access_list,
-    mojo::PendingRemote<mojom::CookieAccessObserver> cookie_observer)
+    const cors::OriginAccessList& origin_access_list,
+    mojo::PendingRemote<mojom::CookieAccessObserver> cookie_observer,
+    mojo::PendingRemote<mojom::AuthenticationAndCertificateObserver>
+        auth_cert_observer)
     : url_request_context_(url_request_context),
       network_service_client_(network_service_client),
       network_context_client_(network_context_client),
@@ -505,6 +509,7 @@ URLLoader::URLLoader(
       trust_token_helper_factory_(std::move(trust_token_helper_factory)),
       origin_access_list_(origin_access_list),
       cookie_observer_(std::move(cookie_observer)),
+      auth_cert_observer_(std::move(auth_cert_observer)),
       has_fetch_streaming_upload_body_(HasFetchStreamingUploadBody(&request)),
       allow_http1_for_streaming_upload_(
           request.request_body &&
@@ -612,7 +617,7 @@ URLLoader::URLLoader(
 
   SetFetchMetadataHeaders(url_request_.get(), request_mode_,
                           has_user_activation_, request_destination_, nullptr,
-                          *factory_params_);
+                          *factory_params_, origin_access_list_);
 
   if (request.update_first_party_url_on_redirect) {
     url_request_->set_first_party_url_policy(
@@ -1039,23 +1044,35 @@ bool URLLoader::CanConnectToAddressSpace(
            << ", private_network_request_policy: "
            << security_state->private_network_request_policy << " }.";
 
+  bool is_warning = false;
   // We use a switch statement to force this code to be amended when values are
   // added to the PrivateNetworkRequestPolicy enum.
   switch (security_state->private_network_request_policy) {
     case mojom::PrivateNetworkRequestPolicy::kAllow:
+      DVLOG(1) << "CORS-RFC1918 check: unconditionally allowed.";
+      return true;
+    case mojom::PrivateNetworkRequestPolicy::kWarnFromInsecureToMorePrivate:
+      is_warning = true;
       break;
     case mojom::PrivateNetworkRequestPolicy::kBlockFromInsecureToMorePrivate:
-      // We block requests from insecure contexts to resources in IP address
-      // spaces more private than that of the initiator. This prevents malicious
-      // insecure public websites from making requests to someone's printer, for
-      // example.
-      if (!security_state->is_web_secure_context &&
-          IsLessPublicAddressSpace(resource_address_space,
-                                   security_state->ip_address_space)) {
-        DVLOG(1) << "CORS-RFC1918 check: "
-                    "failed, blocking insecure private network request.";
-        return false;
-      }
+      is_warning = false;
+      break;
+  }
+
+  if (!security_state->is_web_secure_context &&
+      IsLessPublicAddressSpace(resource_address_space,
+                               security_state->ip_address_space)) {
+    DVLOG(1) << "CORS-RFC1918 check: failed,"
+             << (is_warning ? "but not enforcing blocking of insecure private "
+                              "network request."
+                            : "blocking insecure private network request.");
+    if (network_service_client_) {
+      network_service_client_->OnPrivateNetworkRequest(
+          factory_params_->process_id, render_frame_id_, devtools_request_id(),
+          url_request_->url(), is_warning, resource_address_space,
+          security_state->Clone());
+    }
+    return is_warning;
   }
 
   DVLOG(1) << "CORS-RFC1918 check: success.";
@@ -1145,7 +1162,8 @@ void URLLoader::OnReceivedRedirect(net::URLRequest* url_request,
   MaybeRemoveSecHeaders(url_request_.get(), redirect_info.new_url);
   SetFetchMetadataHeaders(url_request_.get(), request_mode_,
                           has_user_activation_, request_destination_,
-                          &redirect_info.new_url, *factory_params_);
+                          &redirect_info.new_url, *factory_params_,
+                          origin_access_list_);
 
   url_loader_client_->OnReceiveRedirect(redirect_info, std::move(response));
 }
@@ -1170,7 +1188,7 @@ void URLLoader::OnAuthRequired(net::URLRequest* url_request,
     // |this| may have been deleted.
     return;
   }
-  if (!network_context_client_) {
+  if (!auth_cert_observer_) {
     OnAuthCredentials(base::nullopt);
     return;
   }
@@ -1182,14 +1200,9 @@ void URLLoader::OnAuthRequired(net::URLRequest* url_request,
 
   DCHECK(!auth_challenge_responder_receiver_.is_bound());
 
-  auto head = mojom::URLResponseHead::New();
-  if (url_request->response_headers())
-    head->headers = url_request->response_headers();
-  head->auth_challenge_info = auth_info;
-  network_context_client_->OnAuthRequired(
-      fetch_window_id_, factory_params_->process_id, render_frame_id_,
-      request_id_, url_request_->url(), first_auth_attempt_, auth_info,
-      std::move(head),
+  auth_cert_observer_->OnAuthRequired(
+      fetch_window_id_, request_id_, url_request_->url(), first_auth_attempt_,
+      auth_info, url_request->response_headers(),
       auth_challenge_responder_receiver_.BindNewPipeAndPassRemote());
 
   auth_challenge_responder_receiver_.set_disconnect_handler(
@@ -1210,24 +1223,17 @@ void URLLoader::OnCertificateRequested(net::URLRequest* unused,
     return;
   }
 
-  if (!network_context_client_) {
-    ContinueWithoutCertificate();
+  if (!auth_cert_observer_) {
+    CancelRequest();
     return;
   }
 
   // Set up mojo endpoints for ClientCertificateResponder and bind to the
   // Receiver. This enables us to receive messages regarding the client
   // certificate selection.
-  if (fetch_window_id_) {
-    network_context_client_->OnCertificateRequested(
-        fetch_window_id_, -1 /* process_id */, -1 /* routing_id */, request_id_,
-        cert_info, client_cert_responder_receiver_.BindNewPipeAndPassRemote());
-  } else {
-    network_context_client_->OnCertificateRequested(
-        base::nullopt /* window_id */, factory_params_->process_id,
-        render_frame_id_, request_id_, cert_info,
-        client_cert_responder_receiver_.BindNewPipeAndPassRemote());
-  }
+  auth_cert_observer_->OnCertificateRequested(
+      fetch_window_id_, cert_info,
+      client_cert_responder_receiver_.BindNewPipeAndPassRemote());
   client_cert_responder_receiver_.set_disconnect_handler(
       base::BindOnce(&URLLoader::CancelRequest, base::Unretained(this)));
 }
@@ -1236,13 +1242,12 @@ void URLLoader::OnSSLCertificateError(net::URLRequest* request,
                                       int net_error,
                                       const net::SSLInfo& ssl_info,
                                       bool fatal) {
-  if (!network_context_client_) {
+  if (!auth_cert_observer_) {
     OnSSLCertificateErrorResponse(ssl_info, net::ERR_INSECURE_RESPONSE);
     return;
   }
-  network_context_client_->OnSSLCertificateError(
-      factory_params_->process_id, render_frame_id_, url_request_->url(),
-      net_error, ssl_info, fatal,
+  auth_cert_observer_->OnSSLCertificateError(
+      url_request_->url(), net_error, ssl_info, fatal,
       base::BindOnce(&URLLoader::OnSSLCertificateErrorResponse,
                      weak_ptr_factory_.GetWeakPtr(), ssl_info));
 }
@@ -1322,7 +1327,7 @@ void URLLoader::ContinueOnResponseStarted() {
   options.element_num_bytes = 1;
   options.capacity_num_bytes = kDataPipeDefaultAllocationSize;
   MojoResult result =
-      mojo::CreateDataPipe(&options, &response_body_stream_, &consumer_handle_);
+      mojo::CreateDataPipe(&options, response_body_stream_, consumer_handle_);
   if (result != MOJO_RESULT_OK) {
     NotifyCompleted(net::ERR_INSUFFICIENT_RESOURCES);
     return;
@@ -1376,6 +1381,9 @@ void URLLoader::ContinueOnResponseStarted() {
 
   // Figure out if we need to sniff (for MIME type detection or for Cross-Origin
   // Read Blocking / CORB).
+  LogUmaForOpaqueResponseBlocking(url_request_->url(),
+                                  url_request_->initiator(), request_mode_,
+                                  request_destination_, *response_);
   if (factory_params_->is_corb_enabled) {
     CrossOriginReadBlocking::LogAction(
         CrossOriginReadBlocking::Action::kResponseStarted);
@@ -1920,20 +1928,21 @@ void URLLoader::SetRawRequestHeadersAndNotify(
   }
 
   if (cookie_observer_) {
-    net::CookieAccessResultList reported_cookies;
+    std::vector<mojom::CookieOrLineWithAccessResultPtr> reported_cookies;
     for (const auto& cookie_with_access_result :
          url_request_->maybe_sent_cookies()) {
       if (ShouldNotifyAboutCookie(
               cookie_with_access_result.access_result.status)) {
-        reported_cookies.push_back({cookie_with_access_result.cookie,
-                                    cookie_with_access_result.access_result});
+        reported_cookies.push_back(mojom::CookieOrLineWithAccessResult::New(
+            mojom::CookieOrLine::NewCookie(cookie_with_access_result.cookie),
+            cookie_with_access_result.access_result));
       }
     }
 
     if (!reported_cookies.empty()) {
       cookie_observer_->OnCookiesAccessed(mojom::CookieAccessDetails::New(
           mojom::CookieAccessDetails::Type::kRead, url_request_->url(),
-          url_request_->site_for_cookies(), reported_cookies,
+          url_request_->site_for_cookies(), std::move(reported_cookies),
           devtools_request_id()));
     }
   }
@@ -2054,10 +2063,13 @@ URLLoader::BlockResponseForCorbResult URLLoader::BlockResponseForCorb() {
   url_loader_client_->OnReceiveResponse(response_->Clone());
 
   // Send empty body to the real URLLoaderClient.
-  mojo::DataPipe empty_data_pipe(kBlockedBodyAllocationSize);
-  empty_data_pipe.producer_handle.reset();
-  url_loader_client_->OnStartLoadingResponseBody(
-      std::move(empty_data_pipe.consumer_handle));
+  mojo::ScopedDataPipeProducerHandle producer_handle;
+  mojo::ScopedDataPipeConsumerHandle consumer_handle;
+  CHECK_EQ(mojo::CreateDataPipe(kBlockedBodyAllocationSize, producer_handle,
+                                consumer_handle),
+           MOJO_RESULT_OK);
+  producer_handle.reset();
+  url_loader_client_->OnStartLoadingResponseBody(std::move(consumer_handle));
 
   // Tell the real URLLoaderClient that the response has been completed.
   bool should_report_corb_blocking =
@@ -2135,26 +2147,35 @@ void URLLoader::ReportFlaggedResponseCookies() {
     network_service_client_->OnRawResponse(
         GetProcessId(), GetRenderFrameId(), devtools_request_id().value(),
         url_request_->maybe_stored_cookies(), std::move(header_array),
-        raw_response_headers);
+        raw_response_headers,
+        IPAddressToIPAddressSpace(response_info.remote_endpoint.address()));
   }
 
   if (cookie_observer_) {
-    net::CookieAccessResultList reported_cookies;
+    std::vector<mojom::CookieOrLineWithAccessResultPtr> reported_cookies;
     for (const auto& cookie_line_and_access_result :
          url_request_->maybe_stored_cookies()) {
       if (ShouldNotifyAboutCookie(
-              cookie_line_and_access_result.access_result.status) &&
-          cookie_line_and_access_result.cookie) {
-        reported_cookies.push_back(
-            {cookie_line_and_access_result.cookie.value(),
-             cookie_line_and_access_result.access_result});
+              cookie_line_and_access_result.access_result.status)) {
+        mojom::CookieOrLinePtr cookie_or_line = mojom::CookieOrLine::New();
+        if (cookie_line_and_access_result.cookie.has_value()) {
+          cookie_or_line->set_cookie(
+              cookie_line_and_access_result.cookie.value());
+        } else {
+          cookie_or_line->set_cookie_string(
+              cookie_line_and_access_result.cookie_string);
+        }
+
+        reported_cookies.push_back(mojom::CookieOrLineWithAccessResult::New(
+            std::move(cookie_or_line),
+            cookie_line_and_access_result.access_result));
       }
     }
 
     if (!reported_cookies.empty()) {
       cookie_observer_->OnCookiesAccessed(mojom::CookieAccessDetails::New(
           mojom::CookieAccessDetails::Type::kChange, url_request_->url(),
-          url_request_->site_for_cookies(), reported_cookies,
+          url_request_->site_for_cookies(), std::move(reported_cookies),
           devtools_request_id()));
     }
   }
@@ -2183,35 +2204,14 @@ void URLLoader::OnOriginPolicyManagerRetrieveDone(
 
 bool URLLoader::ShouldForceIgnoreSiteForCookies(
     const ResourceRequest& request) {
-  // `origin_access_list_` may be null in unit tests.
-  if (!origin_access_list_)
-    return false;
-
   // Ignore site for cookies in requests from an initiator covered by the
   // same-origin-policy exclusions in `origin_access_list_` (typically requests
   // initiated by Chrome Extensions).
   if (request.request_initiator.has_value() &&
       cors::OriginAccessList::AccessState::kAllowed ==
-          origin_access_list_->CheckAccessState(
+          origin_access_list_.CheckAccessState(
               request.request_initiator.value(), request.url)) {
     return true;
-  }
-  // Try again against the `factory_bound_access_patterns` to also cover the
-  // ActiveTab permission that the extension might have been granted.
-  if (factory_params_->factory_bound_access_patterns) {
-    cors::OriginAccessList factory_bound_origin_access_list;
-    factory_bound_origin_access_list.SetAllowListForOrigin(
-        factory_params_->factory_bound_access_patterns->source_origin,
-        factory_params_->factory_bound_access_patterns->allow_patterns);
-    factory_bound_origin_access_list.SetBlockListForOrigin(
-        factory_params_->factory_bound_access_patterns->source_origin,
-        factory_params_->factory_bound_access_patterns->block_patterns);
-    if (request.request_initiator.has_value() &&
-        cors::OriginAccessList::AccessState::kAllowed ==
-            factory_bound_origin_access_list.CheckAccessState(
-                request.request_initiator.value(), request.url)) {
-      return true;
-    }
   }
 
   // Convert `site_for_cookies` into an origin (an opaque origin if
@@ -2244,10 +2244,10 @@ bool URLLoader::ShouldForceIgnoreSiteForCookies(
   if (!site_origin.opaque() && request.request_initiator.has_value()) {
     bool site_can_access_target =
         cors::OriginAccessList::AccessState::kAllowed ==
-        origin_access_list_->CheckAccessState(site_origin, request.url);
+        origin_access_list_.CheckAccessState(site_origin, request.url);
     bool site_can_access_initiator =
         cors::OriginAccessList::AccessState::kAllowed ==
-        origin_access_list_->CheckAccessState(
+        origin_access_list_.CheckAccessState(
             site_origin, request.request_initiator->GetURL());
     net::SiteForCookies site_of_initiator =
         net::SiteForCookies::FromOrigin(request.request_initiator.value());

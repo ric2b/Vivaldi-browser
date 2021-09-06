@@ -320,6 +320,17 @@ update_target("//media/renderers:renderers") {
 
 } # system_proprietary_codecs
 
+# ------------------
+# Filters : /media/base/BUILD.gn  all configs
+# ------------------
+
+update_target("//media/base:base") {
+
+  sources += [
+    "//vivaldi/platform_media/common/vivaldi_renderer_factory.cc",
+  ]
+}
+
 # --------------------
 # ffmpeg/linux and 386 changes
 # --------------------

@@ -645,6 +645,7 @@ experimental domain Audits
 
   type SourceCodeLocation extends object
     properties
+      optional Runtime.ScriptId scriptId
       string url
       integer lineNumber
       integer columnNumber
@@ -661,13 +662,57 @@ experimental domain Audits
       optional SourceCodeLocation sourceCodeLocation
       optional DOM.BackendNodeId violatingNodeId
 
-  # Details for a request that has been blocked with the BLOCKED_BY_RESPONSE
-  # code. Currently only used for COEP/COOP, but may be extended to include
-  # some CSP errors in the future.
-  type SharedArrayBufferTransferIssueDetails extends object
+  type SharedArrayBufferIssueType extends string
+    enum
+      TransferIssue
+      CreationIssue
+
+  # Details for a issue arising from an SAB being instantiated in, or
+  # transfered to a context that is not cross-origin isolated.
+  type SharedArrayBufferIssueDetails extends object
     properties
       SourceCodeLocation sourceCodeLocation
       boolean isWarning
+      SharedArrayBufferIssueType type
+
+  type TwaQualityEnforcementViolationType extends string
+    enum
+      kHttpError
+      kUnavailableOffline
+      kDigitalAssetLinks
+
+  type TrustedWebActivityIssueDetails extends object
+    properties
+      # The url that triggers the violation.
+      string url
+      TwaQualityEnforcementViolationType violationType
+      optional integer httpStatusCode
+      # The package name of the Trusted Web Activity client app. This field is
+      # only used when violation type is kDigitalAssetLinks.
+      optional string packageName
+      # The signature of the Trusted Web Activity client app. This field is only
+      # used when violation type is kDigitalAssetLinks.
+      optional string signature
+
+  type LowTextContrastIssueDetails extends object
+    properties
+      DOM.BackendNodeId violatingNodeId
+      string violatingNodeSelector
+      number contrastRatio
+      number thresholdAA
+      number thresholdAAA
+      string fontSize
+      string fontWeight
+
+  # Details for a CORS related issue, e.g. a warning or error related to
+  # CORS RFC1918 enforcement.
+  type CorsIssueDetails extends object
+    properties
+      Network.CorsErrorStatus corsErrorStatus
+      boolean isWarning
+      AffectedRequest request
+      optional Network.IPAddressSpace resourceIPAddressSpace
+      optional Network.ClientSecurityState clientSecurityState
 
   # A unique identifier for the type of issue. Each type may use one of the
   # optional fields in InspectorIssueDetails to convey more specific
@@ -679,7 +724,10 @@ experimental domain Audits
       BlockedByResponseIssue
       HeavyAdIssue
       ContentSecurityPolicyIssue
-      SharedArrayBufferTransferIssue
+      SharedArrayBufferIssue
+      TrustedWebActivityIssue
+      LowTextContrastIssue
+      CorsIssue
 
   # This struct holds a list of optional fields with additional information
   # specific to the kind of issue. When adding a new issue code, please also
@@ -691,7 +739,10 @@ experimental domain Audits
       optional BlockedByResponseIssueDetails blockedByResponseIssueDetails
       optional HeavyAdIssueDetails heavyAdIssueDetails
       optional ContentSecurityPolicyIssueDetails contentSecurityPolicyIssueDetails
-      optional SharedArrayBufferTransferIssueDetails sharedArrayBufferTransferIssueDetails
+      optional SharedArrayBufferIssueDetails sharedArrayBufferIssueDetails
+      optional TrustedWebActivityIssueDetails twaQualityEnforcementDetails
+      optional LowTextContrastIssueDetails lowTextContrastIssueDetails
+      optional CorsIssueDetails corsIssueDetails
 
   # An inspector issue reported from the back-end.
   type InspectorIssue extends object
@@ -728,6 +779,13 @@ experimental domain Audits
   # Enables issues domain, sends the issues collected so far to the client by means of the
   # `issueAdded` event.
   command enable
+
+  # Runs the contrast check for the target page. Found issues are reported
+  # using Audits.issueAdded event.
+  command checkContrast
+    parameters
+      # Whether to report WCAG AAA level issues. Default is false.
+      optional boolean reportAAA
 
   event issueAdded
     parameters
@@ -3135,10 +3193,11 @@ domain Emulation
       string version
 
   # Used to specify User Agent Cient Hints to emulate. See https://wicg.github.io/ua-client-hints
+  # Missing optional values will be filled in by the target with what it would normally use.
   experimental type UserAgentMetadata extends object
     properties
-      array of UserAgentBrandVersion brands
-      string fullVersion
+      optional array of UserAgentBrandVersion brands
+      optional string fullVersion
       string platform
       string platformVersion
       string architecture
@@ -4370,6 +4429,15 @@ domain Network
       Medium
       High
 
+  # Represents the source scheme of the origin that originally set the cookie.
+  # A value of "Unset" allows protocol clients to emulate legacy cookie scope for the scheme.
+  # This is a temporary ability and it will be removed in the future.
+  experimental type CookieSourceScheme extends string
+    enum
+      Unset
+      NonSecure
+      Secure
+
   # Timing information for the request.
   type ResourceTiming extends object
     properties
@@ -4751,6 +4819,12 @@ domain Network
       experimental CookiePriority priority
       # True if cookie is SameParty.
       experimental boolean sameParty
+      # Cookie source scheme type.
+      experimental CookieSourceScheme sourceScheme
+      # Cookie source port. Valid values are {-1, [1, 65535]}, -1 indicates an unspecified port.
+      # An unspecified port value allows protocol clients to emulate legacy cookie scope for the port.
+      # This is a temporary ability and it will be removed in the future.
+      experimental integer sourcePort
 
   # Types of reasons why a cookie may not be stored from a response.
   experimental type SetCookieBlockedReason extends string
@@ -4799,6 +4873,12 @@ domain Network
       # value.
       # This is the "Schemeful Same-Site" version of the blocked reason.
       SchemefulSameSiteUnspecifiedTreatedAsLax
+      # The cookie had the "SameParty" attribute but came from a cross-party response.
+      SamePartyFromCrossPartyContext
+      # The cookie had the "SameParty" attribute but did not specify the "Secure" attribute
+      # (which is required in order to use "SameParty"); or specified the "SameSite=Strict"
+      # attribute (which is forbidden when using "SameParty").
+      SamePartyConflictsWithOtherAttributes
 
   # Types of reasons why a cookie may not be sent with a request.
   experimental type CookieBlockedReason extends string
@@ -4841,6 +4921,8 @@ domain Network
       # value.
       # This is the "Schemeful Same-Site" version of the blocked reason.
       SchemefulSameSiteUnspecifiedTreatedAsLax
+      # The cookie had the "SameParty" attribute and the request was made from a cross-party context.
+      SamePartyFromCrossPartyContext
 
   # A cookie which was not stored from a response with the corresponding reason.
   experimental type BlockedSetCookieWithReason extends object
@@ -4871,7 +4953,7 @@ domain Network
       # Cookie value.
       string value
       # The request-URI to associate with the setting of the cookie. This value can affect the
-      # default domain and path values of the created cookie.
+      # default domain, path, source port, and source scheme values of the created cookie.
       optional string url
       # Cookie domain.
       optional string domain
@@ -4887,6 +4969,14 @@ domain Network
       optional TimeSinceEpoch expires
       # Cookie Priority.
       experimental optional CookiePriority priority
+      # True if cookie is SameParty.
+      experimental optional boolean sameParty
+      # Cookie source scheme type.
+      experimental optional CookieSourceScheme sourceScheme
+      # Cookie source port. Valid values are {-1, [1, 65535]}, -1 indicates an unspecified port.
+      # An unspecified port value allows protocol clients to emulate legacy cookie scope for the port.
+      # This is a temporary ability and it will be removed in the future.
+      experimental optional integer sourcePort
 
   # Authorization challenge for HTTP status code 401 or 407.
   experimental type AuthChallenge extends object
@@ -5217,7 +5307,7 @@ domain Network
       # Cookie value.
       string value
       # The request-URI to associate with the setting of the cookie. This value can affect the
-      # default domain and path values of the created cookie.
+      # default domain, path, source port, and source scheme values of the created cookie.
       optional string url
       # Cookie domain.
       optional string domain
@@ -5233,6 +5323,14 @@ domain Network
       optional TimeSinceEpoch expires
       # Cookie Priority type.
       experimental optional CookiePriority priority
+      # True if cookie is SameParty.
+      experimental optional boolean sameParty
+      # Cookie source scheme type.
+      experimental optional CookieSourceScheme sourceScheme
+      # Cookie source port. Valid values are {-1, [1, 65535]}, -1 indicates an unspecified port.
+      # An unspecified port value allows protocol clients to emulate legacy cookie scope for the port.
+      # This is a temporary ability and it will be removed in the future.
+      experimental optional integer sourcePort
     returns
       # Always set to true. If an error occurs, the response indicates protocol error.
       deprecated boolean success
@@ -5527,6 +5625,15 @@ domain Network
       # Request initiator.
       optional Initiator initiator
 
+  # Fired when WebTransport handshake is finished.
+  event webTransportConnectionEstablished
+    parameters
+      # WebTransport identifier.
+      RequestId transportId
+      # Timestamp.
+      MonotonicTime timestamp
+
+  # Fired when WebTransport is disposed.
   event webTransportClosed
     parameters
       # WebTransport identifier.
@@ -5538,6 +5645,7 @@ domain Network
     enum
       Allow
       BlockFromInsecureToMorePrivate
+      WarnFromInsecureToMorePrivate
 
   experimental type IPAddressSpace extends string
     enum
@@ -5581,6 +5689,9 @@ domain Network
       array of BlockedSetCookieWithReason blockedCookies
       # Raw response headers as they were received over the wire.
       Headers headers
+      # The IP address space of the resource. The address space can only be determined once the transport
+      # established the connection, so we can't send it in `requestWillBeSentExtraInfo`.
+      IPAddressSpace resourceIPAddressSpace
       # Raw response header text as it was received over the wire. The raw text may not always be
       # available, such as in the case of HTTP/2 or QUIC.
       optional string headersText
@@ -5764,6 +5875,16 @@ experimental domain Overlay
       # Style of the self-alignment line (align-items).
       optional LineStyle crossAlignment
 
+  # Configuration data for the highlighting of Flex item elements.
+  type FlexItemHighlightConfig extends object
+    properties
+      # Style of the box representing the item's base size
+      optional BoxStyle baseSizeBox
+      # Style of the border around the box representing the item's base size
+      optional LineStyle baseSizeBorder
+      # Style of the arrow representing if the item grew or shrank
+      optional LineStyle flexibilityArrow
+
   # Style information for drawing a line.
   type LineStyle extends object
     properties
@@ -5823,6 +5944,8 @@ experimental domain Overlay
       optional GridHighlightConfig gridHighlightConfig
       # The flex container highlight configuration (default: all transparent).
       optional FlexContainerHighlightConfig flexContainerHighlightConfig
+      # The flex item highlight configuration (default: all transparent).
+      optional FlexItemHighlightConfig flexItemHighlightConfig
       # The contrast algorithm to use for the contrast ratio (default: aa).
       optional ContrastAlgorithm contrastAlgorithm
 
@@ -6041,6 +6164,11 @@ experimental domain Overlay
       # True for showing hit-test borders
       boolean show
 
+  # Request that backend shows an overlay with web vital metrics.
+  command setShowWebVitals
+    parameters
+      boolean show
+
   # Paints viewport size upon main frame resize.
   command setShowViewportSizeOnResize
     parameters
@@ -6122,6 +6250,83 @@ domain Page
       SharedArrayBuffersTransferAllowed
       PerformanceMeasureMemory
       PerformanceProfile
+
+  # All Permissions Policy features. This enum should match the one defined
+  # in renderer/core/feature_policy/feature_policy_features.json5.
+  experimental type PermissionsPolicyFeature extends string
+    enum
+      accelerometer
+      ambient-light-sensor
+      autoplay
+      camera
+      ch-dpr
+      ch-device-memory
+      ch-downlink
+      ch-ect
+      ch-lang
+      ch-rtt
+      ch-ua
+      ch-ua-arch
+      ch-ua-platform
+      ch-ua-model
+      ch-ua-mobile
+      ch-ua-full-version
+      ch-ua-platform-version
+      ch-viewport-width
+      ch-width
+      clipboard-read
+      clipboard-write
+      conversion-measurement
+      cross-origin-isolated
+      display-capture
+      document-domain
+      encrypted-media
+      execution-while-out-of-viewport
+      execution-while-not-rendered
+      focus-without-user-activation
+      fullscreen
+      frobulate
+      gamepad
+      geolocation
+      gyroscope
+      hid
+      idle-detection
+      interest-cohort
+      magnetometer
+      microphone
+      midi
+      otp-credentials
+      payment
+      picture-in-picture
+      publickey-credentials-get
+      screen-wake-lock
+      serial
+      storage-access-api
+      sync-xhr
+      trust-token-redemption
+      usb
+      vertical-scroll
+      web-share
+      xr-spatial-tracking
+
+  # Reason for a permissions policy feature to be disabled.
+  experimental type PermissionsPolicyBlockReason extends string
+    enum
+      # Declaration in HTTP header.
+      Header
+      # Declaration in iframe attribute.
+      IframeAttribute
+
+  experimental type PermissionsPolicyBlockLocator extends object
+    properties
+      FrameId frameId
+      PermissionsPolicyBlockReason blockReason
+
+  experimental type PermissionsPolicyFeatureState extends object
+    properties
+      PermissionsPolicyFeature feature
+      boolean allowed
+      optional PermissionsPolicyBlockLocator locator
 
   # Information about the Frame on the page.
   type Frame extends object
@@ -6703,6 +6908,13 @@ domain Page
     parameters
       # Whether to bypass page CSP.
       boolean enabled
+
+  # Get Permissions Policy state on given frame.
+  experimental command getPermissionsPolicyState
+    parameters
+      FrameId frameId
+    returns
+      array of PermissionsPolicyFeatureState states
 
   # Overrides the values of device screen dimensions (window.screen.width, window.screen.height,
   # window.innerWidth, window.innerHeight, and "device-width"/"device-height"-related CSS media
@@ -7551,6 +7763,13 @@ experimental domain Storage
       # Storage usage (bytes).
       number usage
 
+  # Pair of issuer origin and number of available (signed, but not used) Trust
+  # Tokens from that issuer.
+  experimental type TrustTokens extends object
+    properties
+      string issuerOrigin
+      number count
+
   # Clears storage for origin.
   command clearDataForOrigin
     parameters
@@ -7634,6 +7853,12 @@ experimental domain Storage
     parameters
       # Security origin.
       string origin
+
+  # Returns the number of stored Trust Tokens per issuer for the
+  # current browsing context.
+  experimental command getTrustTokens
+    returns
+      array of TrustTokens tokens
 
   # A cache's contents have been modified.
   event cacheStorageContentUpdated

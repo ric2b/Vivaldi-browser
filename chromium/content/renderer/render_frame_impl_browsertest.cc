@@ -32,7 +32,6 @@
 #include "content/public/test/render_view_test.h"
 #include "content/public/test/test_utils.h"
 #include "content/renderer/agent_scheduling_group.h"
-#include "content/renderer/loader/web_url_loader_impl.h"
 #include "content/renderer/mojo/blink_interface_registry_impl.h"
 #include "content/renderer/navigation_state.h"
 #include "content/renderer/render_frame_impl.h"
@@ -48,6 +47,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/loader/previews_state.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
 #include "third_party/blink/public/mojom/frame/viewport_intersection_state.mojom-blink.h"
 #include "third_party/blink/public/mojom/page/record_content_to_visible_time_request.mojom.h"
@@ -121,26 +121,22 @@ class RenderFrameImplTest : public RenderViewTest {
     widget_params->widget = std::move(blink_widget_receiver);
     widget_params->widget_host = blink_widget_host.Unbind();
 
-    FrameReplicationState frame_replication_state;
-    frame_replication_state.name = "frame";
-    frame_replication_state.unique_name = "frame-uniqueName";
+    mojom::FrameReplicationStatePtr frame_replication_state =
+        mojom::FrameReplicationState::New();
+    frame_replication_state->name = "frame";
+    frame_replication_state->unique_name = "frame-uniqueName";
 
     RenderFrameImpl::FromWebFrame(
         view_->GetMainRenderFrame()->GetWebFrame()->FirstChild())
-        ->Unload(kFrameProxyRouteId, false, frame_replication_state,
-                 base::UnguessableToken::Create());
-
-    mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
-        stub_browser_interface_broker;
-    ignore_result(
-        stub_browser_interface_broker.InitWithNewPipeAndPassReceiver());
-
+        ->Unload(kFrameProxyRouteId, false, frame_replication_state->Clone(),
+                 blink::RemoteFrameToken());
     RenderFrameImpl::CreateFrame(
-        *agent_scheduling_group_, kSubframeRouteId,
-        std::move(stub_browser_interface_broker), MSG_ROUTING_NONE,
-        base::nullopt, kFrameProxyRouteId, MSG_ROUTING_NONE,
-        base::UnguessableToken::Create(), base::UnguessableToken::Create(),
-        frame_replication_state, &compositor_deps_, std::move(widget_params),
+        *agent_scheduling_group_, blink::LocalFrameToken(), kSubframeRouteId,
+        TestRenderFrame::CreateStubFrameReceiver(),
+        TestRenderFrame::CreateStubBrowserInterfaceBrokerRemote(),
+        MSG_ROUTING_NONE, base::nullopt, kFrameProxyRouteId, MSG_ROUTING_NONE,
+        base::UnguessableToken::Create(), std::move(frame_replication_state),
+        &compositor_deps_, std::move(widget_params),
         blink::mojom::FrameOwnerProperties::New(),
         /*has_committed_real_load=*/true, CreateStubPolicyContainer());
 
@@ -200,16 +196,16 @@ class RenderFrameTestObserver : public RenderFrameObserver {
   void WasHidden() override { visible_ = false; }
   void OnDestruct() override { delete this; }
   void OnMainFrameIntersectionChanged(
-      const blink::WebRect& intersection_rect) override {
+      const gfx::Rect& intersection_rect) override {
     last_intersection_rect_ = intersection_rect;
   }
 
   bool visible() { return visible_; }
-  blink::WebRect last_intersection_rect() { return last_intersection_rect_; }
+  gfx::Rect last_intersection_rect() { return last_intersection_rect_; }
 
  private:
   bool visible_;
-  blink::WebRect last_intersection_rect_;
+  gfx::Rect last_intersection_rect_;
 };
 
 // Verify that a frame with a RenderFrameProxy as a parent has its own
@@ -362,7 +358,7 @@ TEST_F(RenderFrameImplTest, NoCrashWhenDeletingFrameDuringFind) {
       true /* new_session */, true /* force */, false /* wrap_within_frame */,
       false /* async */);
 
-  static_cast<mojom::FrameNavigationControl*>(frame())->Delete(
+  static_cast<mojom::Frame*>(frame())->Delete(
       mojom::FrameDeleteIntention::kNotMainFrame);
 }
 
@@ -441,7 +437,7 @@ TEST_F(RenderFrameImplTest, MainFrameIntersectionRecorded) {
   frame()->OnMainFrameIntersectionChanged(mainframe_intersection);
   // Setting a new frame intersection in a local frame triggers the render frame
   // observer call.
-  EXPECT_EQ(observer.last_intersection_rect(), blink::WebRect(0, 0, 200, 140));
+  EXPECT_EQ(observer.last_intersection_rect(), mainframe_intersection);
 }
 
 // Used to annotate the source of an interface request.
@@ -1023,9 +1019,9 @@ TEST_F(RenderFrameImplTest, LastCommittedUrlForUKM) {
   // Test the case where we have an unreachable URL.
   GURL unreachable_url = GURL("http://www.example.com");
   waiter = std::make_unique<FrameLoadWaiter>(GetMainRenderFrame());
-  GetMainRenderFrame()->LoadHTMLString("test", data_url, "UTF-8",
-                                       unreachable_url,
-                                       false /* replace_current_item */);
+  GetMainRenderFrame()->LoadHTMLStringForTesting(
+      "test", data_url, "UTF-8", unreachable_url,
+      false /* replace_current_item */);
   waiter->Wait();
   EXPECT_EQ(GURL(GetMainRenderFrame()->LastCommittedUrlForUKM()),
             unreachable_url);

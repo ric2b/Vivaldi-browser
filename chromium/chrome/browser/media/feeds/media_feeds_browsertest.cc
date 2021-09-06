@@ -12,6 +12,7 @@
 #include "base/task/post_task.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
+#include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/media/feeds/media_feeds_contents_observer.h"
 #include "chrome/browser/media/feeds/media_feeds_service.h"
@@ -23,6 +24,7 @@
 #include "chrome/browser/media/history/media_history_keyed_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/schema_org/schema_org_entity_names.h"
@@ -924,9 +926,8 @@ IN_PROC_BROWSER_TEST_F(MediaFeedsBrowserTest,
   }
 }
 
-// Flaky on lacros and windows: crbug.com/1124983
-#if BUILDFLAG(IS_CHROMEOS_LACROS) || defined(OS_WIN) || \
-    defined(UNDEFINED_SANITIZER)
+// Flaky on linux: crbug.com/1124983
+#if defined(OS_LINUX)
 #define MAYBE_ResetMediaFeed_WebContentsDestroyed \
   DISABLED_ResetMediaFeed_WebContentsDestroyed
 #else
@@ -935,6 +936,12 @@ IN_PROC_BROWSER_TEST_F(MediaFeedsBrowserTest,
 #endif
 IN_PROC_BROWSER_TEST_F(MediaFeedsBrowserTest,
                        MAYBE_ResetMediaFeed_WebContentsDestroyed) {
+  // Open a separate tab, so that `CloseTab` below doesn't close *all* the
+  // browser window and doesn't destroy the browser state that
+  // GetDiscoveredFeeds relies on in the last test steps.  See also
+  // https://crbug.com/1124983.
+  chrome::NewTab(browser());
+
   DiscoverFeed(kMediaFeedsTestURL);
 
   {
@@ -953,7 +960,7 @@ IN_PROC_BROWSER_TEST_F(MediaFeedsBrowserTest,
   }
 
   // If we destroy the web contents then we should reset the feed.
-  browser()->tab_strip_model()->CloseAllTabs();
+  chrome::CloseTab(browser());
   WaitForDB();
 
   {

@@ -26,6 +26,9 @@ class DesktopMediaPickerViews;
 class DesktopMediaPickerDialogView : public views::DialogDelegateView,
                                      public views::TabbedPaneListener {
  public:
+  // Used for UMA. Visible to this class's .cc file, but opaque beyond.
+  enum class DialogSource : int;
+
   METADATA_HEADER(DesktopMediaPickerDialogView);
   DesktopMediaPickerDialogView(
       const DesktopMediaPicker::Params& params,
@@ -43,19 +46,23 @@ class DesktopMediaPickerDialogView : public views::DialogDelegateView,
   void OnSelectionChanged();
   void AcceptSource();
   void AcceptSpecificSource(content::DesktopMediaID source);
+  void Reject();
   void OnSourceListLayoutChanged();
-  void SelectTab(content::DesktopMediaID::Type source_type);
+
+  // Relevant for UMA. (E.g. for DesktopMediaPickerViews to report
+  // when the dialog gets dismissed.)
+  DialogSource GetDialogSource() const;
 
   // views::TabbedPaneListener:
   void TabSelectedAt(int index) override;
 
   // views::DialogDelegateView:
   gfx::Size CalculatePreferredSize() const override;
-  ui::ModalType GetModalType() const override;
   base::string16 GetWindowTitle() const override;
   bool IsDialogButtonEnabled(ui::DialogButton button) const override;
   views::View* GetInitiallyFocusedView() override;
   bool Accept() override;
+  bool Cancel() override;
   bool ShouldShowCloseButton() const override;
   void DeleteDelegate() override;
 
@@ -64,11 +71,16 @@ class DesktopMediaPickerDialogView : public views::DialogDelegateView,
 
   void OnSourceTypeSwitched(int index);
 
+  int GetSelectedTabIndex() const;
+
   const DesktopMediaListController* GetSelectedController() const;
   DesktopMediaListController* GetSelectedController();
 
+  DesktopMediaList::Type GetSelectedSourceListType() const;
+
+  content::WebContents* const web_contents_;
+
   DesktopMediaPickerViews* parent_;
-  ui::ModalType modality_;
 
   views::Label* description_label_ = nullptr;
 
@@ -76,7 +88,9 @@ class DesktopMediaPickerDialogView : public views::DialogDelegateView,
 
   views::TabbedPane* tabbed_pane_ = nullptr;
   std::vector<std::unique_ptr<DesktopMediaListController>> list_controllers_;
-  std::vector<content::DesktopMediaID::Type> source_types_;
+  std::vector<DesktopMediaList::Type> source_types_;
+
+  DialogSource dialog_source_;
 
   base::Optional<content::DesktopMediaID> accepted_source_;
 };

@@ -64,10 +64,14 @@ const base::Feature kOptimizationTargetPrediction{
 const base::Feature kOptimizationGuideModelDownloading{
     "OptimizationGuideModelDownloading", base::FEATURE_DISABLED_BY_DEFAULT};
 
-size_t MaxHintsFetcherTopHostBlacklistSize() {
-  // The blacklist will be limited to the most engaged hosts and will hold twice
+// Enables page content to be annotated.
+const base::Feature kPageContentAnnotations{"PageContentAnnotations",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+size_t MaxHintsFetcherTopHostBlocklistSize() {
+  // The blocklist will be limited to the most engaged hosts and will hold twice
   // (2*N) as many hosts that the HintsFetcher request hints for. The extra N
-  // hosts on the blacklist are meant to cover the case that the engagement
+  // hosts on the blocklist are meant to cover the case that the engagement
   // scores on some of the top N host engagement scores decay and they fall out
   // of the top N.
   return GetFieldTrialParamByFeatureAsInt(kRemoteOptimizationGuideFetching,
@@ -229,6 +233,12 @@ base::TimeDelta StoredHostModelFeaturesFreshnessDuration() {
       "max_store_duration_for_host_model_features_in_days", 7));
 }
 
+base::TimeDelta StoredModelsInactiveDuration() {
+  return base::TimeDelta::FromDays(GetFieldTrialParamByFeatureAsInt(
+      kOptimizationTargetPrediction, "inactive_duration_for_models_in_days",
+      30));
+}
+
 base::TimeDelta URLKeyedHintValidCacheDuration() {
   return base::TimeDelta::FromSeconds(GetFieldTrialParamByFeatureAsInt(
       kOptimizationHints, "max_url_keyed_hint_valid_cache_duration_in_seconds",
@@ -320,6 +330,15 @@ bool IsUnrestrictedModelDownloadingEnabled() {
   return base::GetFieldTrialParamByFeatureAsBool(
       kOptimizationGuideModelDownloading, "unrestricted_model_downloading",
       false);
+}
+
+bool IsPageContentAnnotationEnabled() {
+  return base::FeatureList::IsEnabled(kPageContentAnnotations);
+}
+
+uint64_t MaxSizeForPageContentTextDump() {
+  return static_cast<uint64_t>(base::GetFieldTrialParamByFeatureAsInt(
+      kPageContentAnnotations, "max_size_for_text_dump_in_bytes", 1024));
 }
 
 }  // namespace features

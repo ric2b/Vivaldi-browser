@@ -8,6 +8,7 @@
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
 #include "third_party/blink/renderer/core/editing/iterators/text_iterator.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_node.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
 namespace blink {
@@ -28,6 +29,7 @@ void CachedTextInputInfo::ClearIfNeeded(const LayoutObject& layout_object) {
   text_ = g_empty_string;
   composition_.Clear();
   selection_.Clear();
+  offset_map_.clear();
 }
 
 void CachedTextInputInfo::DidLayoutSubtree(const LayoutObject& layout_object) {
@@ -70,8 +72,17 @@ void CachedTextInputInfo::EnsureCached(const ContainerNode& container) const {
   constexpr unsigned kInitialCapacity = 1 << 15;
 
   StringBuilder builder;
-  if (needs_text)
-    builder.ReserveCapacity(kInitialCapacity);
+  if (needs_text) {
+    unsigned capacity = kInitialCapacity;
+    if (auto* block_flow =
+            DynamicTo<LayoutBlockFlow>(container.GetLayoutObject())) {
+      if (block_flow->HasNGInlineNodeData()) {
+        if (const auto* mapping = NGInlineNode::GetOffsetMapping(block_flow))
+          capacity = mapping->GetText().length();
+      }
+    }
+    builder.ReserveCapacity(capacity);
+  }
 
   const Node* last_text_node = nullptr;
   unsigned length = 0;

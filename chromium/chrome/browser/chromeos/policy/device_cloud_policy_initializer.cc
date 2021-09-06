@@ -30,7 +30,6 @@
 #include "chrome/common/pref_names.h"
 #include "chromeos/attestation/attestation_flow.h"
 #include "chromeos/attestation/attestation_flow_utils.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/attestation/attestation.pb.h"
 #include "chromeos/dbus/attestation/attestation_client.h"
@@ -103,8 +102,8 @@ void DeviceCloudPolicyInitializer::Init() {
   is_initialized_ = true;
   policy_store_->AddObserver(this);
   state_keys_update_subscription_ = state_keys_broker_->RegisterUpdateCallback(
-      base::Bind(&DeviceCloudPolicyInitializer::TryToCreateClient,
-                 base::Unretained(this)));
+      base::BindRepeating(&DeviceCloudPolicyInitializer::TryToCreateClient,
+                          base::Unretained(this)));
 
   TryToCreateClient();
 }
@@ -123,7 +122,7 @@ void DeviceCloudPolicyInitializer::PrepareEnrollment(
     chromeos::ActiveDirectoryJoinDelegate* ad_join_delegate,
     const EnrollmentConfig& enrollment_config,
     DMAuth dm_auth,
-    const EnrollmentCallback& enrollment_callback) {
+    EnrollmentCallback enrollment_callback) {
   DCHECK(is_initialized_);
   DCHECK(!enrollment_handler_);
 
@@ -136,8 +135,8 @@ void DeviceCloudPolicyInitializer::PrepareEnrollment(
       std::move(dm_auth), install_attributes_->GetDeviceId(),
       EnrollmentRequisitionManager::GetDeviceRequisition(),
       EnrollmentRequisitionManager::GetSubOrganization(),
-      base::Bind(&DeviceCloudPolicyInitializer::EnrollmentCompleted,
-                 base::Unretained(this), enrollment_callback)));
+      base::BindOnce(&DeviceCloudPolicyInitializer::EnrollmentCompleted,
+                     base::Unretained(this), std::move(enrollment_callback))));
 }
 
 void DeviceCloudPolicyInitializer::StartEnrollment() {
@@ -290,7 +289,7 @@ void DeviceCloudPolicyInitializer::OnStoreError(CloudPolicyStore* store) {
 }
 
 void DeviceCloudPolicyInitializer::EnrollmentCompleted(
-    const EnrollmentCallback& enrollment_callback,
+    EnrollmentCallback enrollment_callback,
     EnrollmentStatus status) {
   std::unique_ptr<CloudPolicyClient> client =
       enrollment_handler_->ReleaseClient();
@@ -306,7 +305,7 @@ void DeviceCloudPolicyInitializer::EnrollmentCompleted(
   }
 
   if (!enrollment_callback.is_null())
-    enrollment_callback.Run(status);
+    std::move(enrollment_callback).Run(status);
 }
 
 std::unique_ptr<CloudPolicyClient> DeviceCloudPolicyInitializer::CreateClient(

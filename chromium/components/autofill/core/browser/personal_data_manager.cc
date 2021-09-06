@@ -294,7 +294,7 @@ void PersonalDataManager::Init(
   // Listen for URL deletions from browsing history.
   history_service_ = history_service;
   if (history_service_)
-    history_service_->AddObserver(this);
+    history_service_observation_.Observe(history_service_);
 
   // Listen for account cookie deletion by the user.
   identity_manager_ = identity_manager;
@@ -344,7 +344,7 @@ void PersonalDataManager::Shutdown() {
   sync_service_ = nullptr;
 
   if (history_service_)
-    history_service_->RemoveObserver(this);
+    history_service_observation_.Reset();
   history_service_ = nullptr;
 
   if (identity_manager_)
@@ -542,7 +542,8 @@ CoreAccountInfo PersonalDataManager::GetAccountInfoForPaymentsServer() const {
   // the user has disabled sync.
   // In both cases, the AccountInfo will be empty if the user is not signed in.
   return sync_service_ ? sync_service_->GetAuthenticatedAccountInfo()
-                       : identity_manager_->GetPrimaryAccountInfo();
+                       : identity_manager_->GetPrimaryAccountInfo(
+                             signin::ConsentLevel::kSync);
 }
 
 // TODO(crbug.com/903914): Clean up this function so that it's more clear what
@@ -934,6 +935,11 @@ void PersonalDataManager::SetSyncServiceForTest(
     sync_service_->AddObserver(this);
 }
 
+void PersonalDataManager::AddOfferDataForTest(
+    std::unique_ptr<AutofillOfferData> offer_data) {
+  autofill_offer_data_.push_back(std::move(offer_data));
+}
+
 void PersonalDataManager::
     RemoveAutofillProfileByGUIDAndBlankCreditCardReference(
         const std::string& guid) {
@@ -986,6 +992,16 @@ CreditCard* PersonalDataManager::GetCreditCardByNumber(
   for (CreditCard* credit_card : GetCreditCards()) {
     DCHECK(credit_card);
     if (credit_card->HasSameNumberAs(numbered_card))
+      return credit_card;
+  }
+  return nullptr;
+}
+
+CreditCard* PersonalDataManager::GetCreditCardByInstrumentId(
+    int64_t instrument_id) {
+  const std::vector<CreditCard*> credit_cards = GetCreditCards();
+  for (CreditCard* credit_card : credit_cards) {
+    if (credit_card->instrument_id() == instrument_id)
       return credit_card;
   }
   return nullptr;
@@ -1274,8 +1290,6 @@ std::vector<Suggestion> PersonalDataManager::GetProfileSuggestions(
   return unique_suggestions;
 }
 
-// TODO(crbug.com/613187): Investigate if it would be more efficient to dedupe
-// with a vector instead of a list.
 const std::vector<CreditCard*> PersonalDataManager::GetCreditCardsToSuggest(
     bool include_server_cards) const {
   if (!IsAutofillCreditCardEnabled())
@@ -2354,11 +2368,6 @@ void PersonalDataManager::MigrateUserOptedInWalletSyncTransportIfNeeded() {
 
 base::string16 PersonalDataManager::GetDisplayNicknameForCreditCard(
     const CreditCard& card) const {
-  if (!base::FeatureList::IsEnabled(
-          features::kAutofillEnableCardNicknameManagement)) {
-    return base::string16();
-  }
-
   // Always prefer a local nickname if available.
   if (card.HasNonEmptyValidNickname() &&
       card.record_type() == CreditCard::LOCAL_CARD)

@@ -11,12 +11,24 @@
 
 class GURL;
 
+namespace url {
+class Origin;
+}
+
 namespace net {
 class HttpResponseHeaders;
 }
 
 namespace network {
 class CSPContext;
+
+// Return the next Content Security Policy directive after |directive| in
+// |original_directive|'s fallback list:
+// https://w3c.github.io/webappsec-csp/#directive-fallback-list.
+COMPONENT_EXPORT(NETWORK_CPP)
+mojom::CSPDirectiveName CSPFallbackDirective(
+    mojom::CSPDirectiveName directive,
+    mojom::CSPDirectiveName original_directive);
 
 // Parses the Content-Security-Policy headers specified in |headers| and appends
 // the results into |out|.
@@ -92,6 +104,15 @@ mojom::CSPDirectiveName ToCSPDirectiveName(const std::string& name);
 
 COMPONENT_EXPORT(NETWORK_CPP)
 std::string ToString(mojom::CSPDirectiveName name);
+
+// Return true if the response allows the embedder to enforce arbitrary policy
+// on its behalf.
+// Specification: https://w3c.github.io/webappsec-cspee/#origin-allowed
+COMPONENT_EXPORT(NETWORK_CPP)
+bool AllowsBlanketEnforcementOfRequiredCSP(
+    const url::Origin& request_origin,
+    const GURL& response_url,
+    const network::mojom::AllowCSPFromHeaderValue* allow_csp_from);
 
 }  // namespace network
 

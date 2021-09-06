@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/containers/fixed_flat_map.h"
 #include "base/feature_list.h"
 #include "base/i18n/number_formatting.h"
 #include "base/metrics/user_metrics.h"
@@ -53,6 +54,7 @@
 #include "chrome/browser/ui/views/toolbar/back_forward_button.h"
 #include "chrome/browser/ui/views/toolbar/browser_actions_container.h"
 #include "chrome/browser/ui/views/toolbar/browser_app_menu_button.h"
+#include "chrome/browser/ui/views/toolbar/chrome_labs_bubble_view_model.h"
 #include "chrome/browser/ui/views/toolbar/chrome_labs_button.h"
 #include "chrome/browser/ui/views/toolbar/home_button.h"
 #include "chrome/browser/ui/views/toolbar/reload_button.h"
@@ -99,7 +101,7 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chromeos/constants/chromeos_features.h"
+#include "ash/constants/ash_features.h"
 #else
 #include "chrome/browser/signin/signin_global_error_factory.h"
 #include "chrome/browser/ui/bookmarks/bookmark_bubble_sign_in_delegate.h"
@@ -133,14 +135,14 @@ ToolbarView::DisplayMode GetDisplayMode(Browser* browser) {
   return ToolbarView::DisplayMode::LOCATION;
 }
 
-const base::flat_map<int, int>& GetViewCommandMap() {
-  static const base::NoDestructor<base::flat_map<int, int>> kViewCommandMap(
+auto& GetViewCommandMap() {
+  static constexpr auto kViewCommandMap = base::MakeFixedFlatMap<int, int>(
       {{VIEW_ID_BACK_BUTTON, IDC_BACK},
        {VIEW_ID_FORWARD_BUTTON, IDC_FORWARD},
        {VIEW_ID_HOME_BUTTON, IDC_HOME},
        {VIEW_ID_RELOAD_BUTTON, IDC_RELOAD},
        {VIEW_ID_AVATAR_BUTTON, IDC_SHOW_AVATAR_MENU}});
-  return *kViewCommandMap;
+  return kViewCommandMap;
 }
 
 }  // namespace
@@ -271,15 +273,19 @@ void ToolbarView::Init() {
     extensions_container_ = AddChildView(std::move(extensions_container));
 
   if (base::FeatureList::IsEnabled(features::kChromeLabs)) {
-    chrome_labs_button_ = AddChildView(std::make_unique<ChromeLabsButton>());
-    profile_pref_service_ = browser_->profile()->GetPrefs();
-    profile_registrar_ = std::make_unique<PrefChangeRegistrar>();
-    profile_registrar_->Init(profile_pref_service_);
-    profile_registrar_->Add(
-        chrome_labs_prefs::kBrowserLabsEnabled,
-        base::BindRepeating(&ToolbarView::OnChromeLabsPrefChanged,
-                            base::Unretained(this)));
-    OnChromeLabsPrefChanged();
+    chrome_labs_model_ = std::make_unique<ChromeLabsBubbleViewModel>();
+    if (ChromeLabsButton::ShouldShowButton(chrome_labs_model_.get())) {
+      chrome_labs_button_ = AddChildView(
+          std::make_unique<ChromeLabsButton>(chrome_labs_model_.get()));
+      profile_pref_service_ = browser_->profile()->GetPrefs();
+      profile_registrar_ = std::make_unique<PrefChangeRegistrar>();
+      profile_registrar_->Init(profile_pref_service_);
+      profile_registrar_->Add(
+          chrome_labs_prefs::kBrowserLabsEnabled,
+          base::BindRepeating(&ToolbarView::OnChromeLabsPrefChanged,
+                              base::Unretained(this)));
+      OnChromeLabsPrefChanged();
+    }
   }
 
   if (cast)

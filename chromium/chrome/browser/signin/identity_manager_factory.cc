@@ -32,9 +32,9 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/components/account_manager/account_manager_factory.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chromeos/components/account_manager/account_manager_factory.h"
 #endif
 
 #if defined(OS_WIN)
@@ -116,7 +116,7 @@ KeyedService* IdentityManagerFactory::BuildServiceInstanceFor(
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos::AccountManagerFactory* factory =
+  auto* factory =
       g_browser_process->platform_part()->GetAccountManagerFactory();
   DCHECK(factory);
   params.account_manager =
@@ -124,6 +124,9 @@ KeyedService* IdentityManagerFactory::BuildServiceInstanceFor(
   params.is_regular_profile =
       chromeos::ProfileHelper::IsRegularProfile(profile);
 #endif
+
+  // Ephemeral Guest profiles are not supposed to fetch Dice access tokens.
+  params.allow_access_token_fetch = !profile->IsEphemeralGuestProfile();
 
 #if defined(OS_WIN)
   params.reauth_callback =

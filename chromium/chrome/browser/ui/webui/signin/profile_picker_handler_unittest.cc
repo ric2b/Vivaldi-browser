@@ -72,10 +72,11 @@ class ProfilePickerHandlerTest : public testing::Test {
   ProfileAttributesEntry* CreateTestingProfile(
       const std::string& profile_name) {
     auto* profile = profile_manager()->CreateTestingProfile(profile_name);
-    ProfileAttributesEntry* entry = nullptr;
-    CHECK(profile_manager()
-              ->profile_attributes_storage()
-              ->GetProfileAttributesWithPath(profile->GetPath(), &entry));
+    ProfileAttributesEntry* entry =
+        profile_manager()
+            ->profile_attributes_storage()
+            ->GetProfileAttributesWithPath(profile->GetPath());
+    CHECK(entry);
     return entry;
   }
 
@@ -166,6 +167,7 @@ TEST_F(ProfilePickerHandlerTest, RemoveOmittedProfile) {
   ProfileAttributesEntry* profile_d = CreateTestingProfile("D");
   ProfileAttributesEntry* profile_c = CreateTestingProfile("C");
   ProfileAttributesEntry* profile_b = CreateTestingProfile("B");
+  profile_b->SetIsEphemeral(true);
   profile_b->SetIsOmitted(true);
 
   InitializeMainViewAndVerifyProfileList({profile_a, profile_c, profile_d});
@@ -192,6 +194,7 @@ TEST_F(ProfilePickerHandlerTest, MarkProfileAsOmitted) {
       {profile_a, profile_b, profile_c, profile_d});
   web_ui()->ClearTrackedCalls();
 
+  profile_b->SetIsEphemeral(true);
   profile_b->SetIsOmitted(true);
   VerifyProfileListWasPushed({profile_a, profile_c, profile_d});
   web_ui()->ClearTrackedCalls();
@@ -207,6 +210,7 @@ TEST_F(ProfilePickerHandlerTest, OmittedProfileOnInit) {
   ProfileAttributesEntry* profile_b = CreateTestingProfile("B");
   ProfileAttributesEntry* profile_c = CreateTestingProfile("C");
   ProfileAttributesEntry* profile_d = CreateTestingProfile("D");
+  profile_b->SetIsEphemeral(true);
   profile_b->SetIsOmitted(true);
 
   InitializeMainViewAndVerifyProfileList({profile_a, profile_c, profile_d});

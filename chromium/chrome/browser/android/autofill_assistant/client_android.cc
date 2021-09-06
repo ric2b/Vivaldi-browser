@@ -29,6 +29,7 @@
 #include "chrome/common/channel_info.h"
 #include "components/autofill_assistant/browser/controller.h"
 #include "components/autofill_assistant/browser/features.h"
+#include "components/autofill_assistant/browser/public/ui_state.h"
 #include "components/autofill_assistant/browser/service/access_token_fetcher.h"
 #include "components/autofill_assistant/browser/switches.h"
 #include "components/autofill_assistant/browser/website_login_manager_impl.h"
@@ -52,6 +53,9 @@ namespace {
 // the UI.
 const char* const kCancelActionName = "cancel";
 
+// Intent not set constant.
+const char* const kIntentNotSet = "NotSet";
+
 }  // namespace
 
 static base::android::ScopedJavaLocalRef<jobject>
@@ -61,6 +65,15 @@ JNI_AutofillAssistantClient_FromWebContents(
   auto* web_contents = content::WebContents::FromJavaWebContents(jweb_contents);
   ClientAndroid::CreateForWebContents(web_contents);
   return ClientAndroid::FromWebContents(web_contents)->GetJavaObject();
+}
+static void JNI_AutofillAssistantClient_OnOnboardingUiChange(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& jweb_contents,
+    jboolean shown) {
+  RuntimeManagerImpl* runtime_manager = RuntimeManagerImpl::GetForWebContents(
+      content::WebContents::FromJavaWebContents(jweb_contents));
+  if (runtime_manager)
+    runtime_manager->SetUIState(shown ? UIState::kShown : UIState::kNotShown);
 }
 
 ClientAndroid::ClientAndroid(content::WebContents* web_contents)
@@ -74,7 +87,7 @@ ClientAndroid::~ClientAndroid() {
     // In the case of an unexpected closing of the activity or tab, controller_
     // will not yet have been cleaned up (since that happens when a web
     // contents object gets destroyed).
-    Metrics::RecordDropOut(Metrics::DropOutReason::CONTENT_DESTROYED);
+    Metrics::RecordDropOut(Metrics::DropOutReason::CONTENT_DESTROYED, intent_);
   }
 
   Java_AutofillAssistantClient_clearNativePtr(AttachCurrentThread(),
@@ -118,13 +131,11 @@ bool ClientAndroid::Start(JNIEnv* env,
 
   GURL initial_url(base::android::ConvertJavaStringToUTF8(env, jinitial_url));
   auto trigger_context = ui_controller_android_utils::CreateTriggerContext(
-      env, jexperiment_ids, jparameter_names, jparameter_values);
-  trigger_context->SetCCT(jis_cct);
-  trigger_context->SetOnboardingShown(jonboarding_shown);
-  if (jcaller_account) {
-    trigger_context->SetCallerAccountHash(
-        base::android::ConvertJavaStringToUTF8(env, jcaller_account));
-  }
+      env, jexperiment_ids, jparameter_names, jparameter_values, jis_cct,
+      jonboarding_shown, /* is_direct_action = */ false, jcaller_account);
+
+  intent_ = trigger_context->GetScriptParameters().GetIntent().value_or(
+      kIntentNotSet);
 
   if (VLOG_IS_ON(2)) {
     std::string experiment_ids =
@@ -153,11 +164,15 @@ void ClientAndroid::StartTriggerScript(
     const base::android::JavaParamRef<jobjectArray>& jparameter_names,
     const base::android::JavaParamRef<jobjectArray>& jparameter_values,
     jlong jservice_request_sender) {
+  // TODO(arbesser): populate is_cct field correctly for trigger scripts.
   trigger_script_bridge_.StartTriggerScript(
       web_contents_, jdelegate,
       GURL(base::android::ConvertJavaStringToUTF8(env, jinitial_url)),
       ui_controller_android_utils::CreateTriggerContext(
-          env, jexperiment_ids, jparameter_names, jparameter_values),
+          env, jexperiment_ids, jparameter_names, jparameter_values,
+          /* is_cct = */ false, /* onboarding_shown = */ false,
+          /* is_direct_action = */ false,
+          /* caller_account_hash = */ nullptr),
       jservice_request_sender);
 }
 
@@ -224,7 +239,10 @@ void ClientAndroid::FetchWebsiteActions(
   base::android::ScopedJavaGlobalRef<jobject> scoped_jcallback(env, jcallback);
   controller_->Track(
       ui_controller_android_utils::CreateTriggerContext(
-          env, jexperiment_ids, jparameter_names, jparameter_values),
+          env, jexperiment_ids, jparameter_names, jparameter_values,
+          /* is_cct = */ false, /* onboarding_shown = */ false,
+          /* is_direct_action = */ true,
+          /* caller_account_hash = */ nullptr),
       base::BindOnce(&ClientAndroid::OnFetchWebsiteActions,
                      weak_ptr_factory_.GetWeakPtr(), scoped_jcallback));
 }
@@ -339,14 +357,15 @@ bool ClientAndroid::PerformDirectAction(
   std::string action_name =
       base::android::ConvertJavaStringToUTF8(env, jaction_name);
 
-  int action_index = FindDirectAction(action_name);
-
   auto trigger_context = ui_controller_android_utils::CreateTriggerContext(
-      env, jexperiment_ids, jparameter_names, jparameter_values);
-  trigger_context->SetDirectAction(true);
+      env, jexperiment_ids, jparameter_names, jparameter_values,
+      /* is_cct = */ false, /* onboarding_shown = */ false,
+      /* is_direct_action = */ true,
+      /* caller_account_hash = */ nullptr);
 
   // Cancel through the UI if it is up. This allows the user to undo. This is
   // always available, even if no action was found and action_index == -1.
+  int action_index = FindDirectAction(action_name);
   if (action_name == kCancelActionName && ui_controller_android_) {
     ui_controller_android_->CloseOrCancel(action_index,
                                           std::move(trigger_context),
@@ -433,7 +452,7 @@ std::string ClientAndroid::GetChromeSignedInEmailAddress() const {
   CoreAccountInfo account_info =
       IdentityManagerFactory::GetForProfile(
           Profile::FromBrowserContext(web_contents_->GetBrowserContext()))
-          ->GetPrimaryAccountInfo();
+          ->GetPrimaryAccountInfo(signin::ConsentLevel::kSync);
   return account_info.email;
 }
 
@@ -495,7 +514,7 @@ content::WebContents* ClientAndroid::GetWebContents() const {
 
 void ClientAndroid::RecordDropOut(Metrics::DropOutReason reason) {
   if (started_)
-    Metrics::RecordDropOut(reason);
+    Metrics::RecordDropOut(reason, intent_);
 
   started_ = false;
 }
@@ -517,7 +536,7 @@ void ClientAndroid::Shutdown(Metrics::DropOutReason reason) {
 
 void ClientAndroid::SafeDestroyControllerAndUI(Metrics::DropOutReason reason) {
   if (started_) {
-    Metrics::RecordDropOut(reason);
+    Metrics::RecordDropOut(reason, intent_);
   }
 
   DestroyUI();
@@ -547,11 +566,7 @@ void ClientAndroid::CreateController(std::unique_ptr<Service> service) {
   base::Optional<ShowProgressBarProto::StepProgressBarConfiguration>
       progress_bar_config;
   base::Optional<int> progress_bar_active_step;
-  if (controller_) {
-    // Legacy, remove as soon as possible.
-    status_message = controller_->GetStatusMessage();
-    DestroyController();
-  } else if (trigger_script_bridge_.GetLastShownTriggerScript().has_value()) {
+  if (trigger_script_bridge_.GetLastShownTriggerScript().has_value()) {
     auto last_shown_trigger_script =
         trigger_script_bridge_.GetLastShownTriggerScript();
     status_message =
@@ -570,6 +585,7 @@ void ClientAndroid::CreateController(std::unique_ptr<Service> service) {
     }
   }
 
+  DestroyController();
   controller_ = std::make_unique<Controller>(
       web_contents_, /* client= */ this, base::DefaultTickClock::GetInstance(),
       RuntimeManagerImpl::GetForWebContents(web_contents_)->GetWeakPtr(),

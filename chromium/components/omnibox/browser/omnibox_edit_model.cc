@@ -539,7 +539,8 @@ void OmniboxEditModel::StartAutocomplete(bool has_selected_text,
   input_ =
       AutocompleteInput(input_text, cursor_position, GetPageClassification(),
                         client_->GetSchemeClassifier(),
-                        client_->ShouldDefaultTypedNavigationsToHttps());
+                        client_->ShouldDefaultTypedNavigationsToHttps(),
+                        client_->GetHttpsPortForTesting());
   input_.set_current_url(client_->GetURL());
   input_.set_current_title(client_->GetTitle());
   input_.set_prevent_inline_autocomplete(
@@ -571,7 +572,6 @@ bool OmniboxEditModel::CanPasteAndGo(const base::string16& text) const {
 void OmniboxEditModel::PasteAndGo(const base::string16& text,
                                   base::TimeTicks match_selection_timestamp) {
   DCHECK(CanPasteAndGo(text));
-  UMA_HISTOGRAM_COUNTS_1M("Omnibox.PasteAndGo", 1);
 
   view_->RevertAll();
   AutocompleteMatch match;
@@ -762,7 +762,8 @@ void OmniboxEditModel::OpenMatch(AutocompleteMatch match,
   // to create an alternate navigational match.
   AutocompleteInput alternate_input(
       input_text, GetPageClassification(), client_->GetSchemeClassifier(),
-      client_->ShouldDefaultTypedNavigationsToHttps());
+      client_->ShouldDefaultTypedNavigationsToHttps(),
+      client_->GetHttpsPortForTesting());
   // Somehow we can occasionally get here with no active tab.  It's not
   // clear why this happens.
   alternate_input.set_current_url(client_->GetURL());
@@ -1105,6 +1106,10 @@ void OmniboxEditModel::ClearKeyword() {
   }
 }
 
+void OmniboxEditModel::ClearAdditionalText() {
+  view_->SetAdditionalText(base::string16());
+}
+
 void OmniboxEditModel::OnSetFocus(bool control_down) {
   last_omnibox_focus_ = base::TimeTicks::Now();
   user_input_since_focus_ = false;
@@ -1144,7 +1149,8 @@ void OmniboxEditModel::StartZeroSuggestRequest(
   // match can be wrong. The full page URL is anyways in set_current_url().
   input_ = AutocompleteInput(view_->GetText(), GetPageClassification(),
                              client_->GetSchemeClassifier(),
-                             client_->ShouldDefaultTypedNavigationsToHttps());
+                             client_->ShouldDefaultTypedNavigationsToHttps(),
+                             client_->GetHttpsPortForTesting());
   input_.set_current_url(client_->GetURL());
   input_.set_current_title(client_->GetTitle());
   input_.set_focus_type(user_clobbered_permanent_text
@@ -1546,12 +1552,11 @@ void OmniboxEditModel::OnCurrentMatchChanged() {
   const base::string16 inline_autocompletion(match.inline_autocompletion);
   const base::string16 prefix_autocompletion(match.prefix_autocompletion);
   const auto split_autocompletion(match.split_autocompletion);
-  const base::string16 fill_into_edit_additional_text(
-      match.fill_into_edit_additional_text);
+  const base::string16 additional_text(match.additional_text);
   OnPopupDataChanged(base::string16(),
                      /*is_temporary_text=*/false, inline_autocompletion,
                      prefix_autocompletion, split_autocompletion, keyword,
-                     is_keyword_hint, fill_into_edit_additional_text);
+                     is_keyword_hint, additional_text);
 }
 
 // static

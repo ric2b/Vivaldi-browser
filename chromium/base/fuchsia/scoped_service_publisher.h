@@ -34,7 +34,7 @@ class BASE_EXPORT ScopedServicePublisher {
   ScopedServicePublisher(vfs::PseudoDir* pseudo_dir,
                          fidl::InterfaceRequestHandler<Interface> handler,
                          base::StringPiece name = Interface::Name_)
-      : pseudo_dir_(pseudo_dir), name_(name.as_string()) {
+      : pseudo_dir_(pseudo_dir), name_(name) {
     pseudo_dir_->AddEntry(name_,
                           std::make_unique<vfs::Service>(std::move(handler)));
   }
@@ -46,15 +46,6 @@ class BASE_EXPORT ScopedServicePublisher {
   std::string name_;
   DISALLOW_COPY_AND_ASSIGN(ScopedServicePublisher);
 };
-
-// TODO(crbug.com/1073821): Remove this block when out-of-tree callers have been
-// changed to use the non-fuchsia-sub-namespace version.
-namespace fuchsia {
-
-template <typename Interface>
-using ScopedServicePublisher = ::base::ScopedServicePublisher<Interface>;
-
-}  // namespace fuchsia
 
 }  // namespace base
 

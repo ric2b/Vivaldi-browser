@@ -36,6 +36,7 @@ import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.ui.base.ViewUtils;
 
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.searchwidget.SearchActivity;
 import org.vivaldi.browser.common.VivaldiUtils;
 
@@ -58,6 +59,9 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
 
     private int mListViewMaxHeight;
     private int mLastBroadcastedListViewMaxHeight;
+
+    // Vivaldi
+    private ChromeActivity mActivity;
 
     /** Interface that will receive notifications and callbacks from OmniboxSuggestionsDropdown. */
     public interface Observer {
@@ -162,6 +166,10 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
 
         mStandardBgColor = ChromeColors.getDefaultThemeColor(resources, false);
         mIncognitoBgColor = ChromeColors.getDefaultThemeColor(resources, true);
+
+        // Vivaldi
+        assert context instanceof ChromeActivity;
+        mActivity = (ChromeActivity) context;
     }
 
     /** Get the Android View implementing suggestion list. */
@@ -292,7 +300,8 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
             // bottom.
             if (shouldAnchorToBottom()) {
                 ((ViewGroup.MarginLayoutParams) layoutParams).bottomMargin = topMargin;
-                ((ViewGroup.MarginLayoutParams) layoutParams).topMargin = 0;
+                ((ViewGroup.MarginLayoutParams) layoutParams).topMargin =
+                        mActivity.getBrowserControlsManager().getTopControlsMinHeight();
             } else
             ((ViewGroup.MarginLayoutParams) layoutParams).topMargin = topMargin;
         }
@@ -302,7 +311,8 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
         // Note(david@vivaldi.com): We don't take the visible display frame into account when we
         // can anchor to the bottom.
         if (shouldAnchorToBottom())
-            return anchorBottomRelativeToContent;
+            return anchorBottomRelativeToContent
+                    - mActivity.getBrowserControlsManager().getTopControlsMinHeight();
 
         mEmbedder.getWindowDelegate().getWindowVisibleDisplayFrame(mTempRect);
         return mTempRect.height() - anchorBottomRelativeToContent;

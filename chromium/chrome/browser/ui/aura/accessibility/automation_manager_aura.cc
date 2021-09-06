@@ -71,11 +71,22 @@ void AutomationManagerAura::Enable() {
       PostEvent(focus->GetUniqueId(), ax::mojom::Event::kChildrenChanged);
   }
 #endif
+
+  if (!automation_event_router_observer_.IsObserving()) {
+    automation_event_router_observer_.Observe(
+        extensions::AutomationEventRouter::GetInstance());
+  }
 }
 
 void AutomationManagerAura::Disable() {
   enabled_ = false;
-  Reset(true);
+  cache_ = std::make_unique<views::AXAuraObjCache>();
+  tree_.reset();
+  tree_serializer_.reset();
+  alert_window_.reset();
+
+  if (automation_event_router_observer_.IsObserving())
+    automation_event_router_observer_.Reset();
 }
 
 void AutomationManagerAura::OnViewEvent(views::View* view,
@@ -90,6 +101,10 @@ void AutomationManagerAura::OnViewEvent(views::View* view,
     return;
 
   PostEvent(obj->GetUniqueId(), event_type);
+}
+
+void AutomationManagerAura::AllAutomationExtensionsGone() {
+  Disable();
 }
 
 void AutomationManagerAura::HandleEvent(ax::mojom::Event event_type) {
@@ -324,9 +339,7 @@ void AutomationManagerAura::PerformHitTest(
 void AutomationManagerAura::OnSerializeFailure(ax::mojom::Event event_type,
                                                const ui::AXTreeUpdate& update) {
   std::string error_string;
-  ui::AXTreeSourceChecker<views::AXAuraObjWrapper*, ui::AXNodeData,
-                          ui::AXTreeData>
-      checker(tree_.get());
+  ui::AXTreeSourceChecker<views::AXAuraObjWrapper*> checker(tree_.get());
   checker.CheckAndGetErrorString(&error_string);
 
   // Add a crash key so we can figure out why this is happening.

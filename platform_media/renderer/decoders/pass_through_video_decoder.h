@@ -32,6 +32,7 @@ class MEDIA_EXPORT PassThroughVideoDecoder : public VideoDecoder {
               DecodeCB decode_cb) override;
   void Reset(base::OnceClosure closure) override;
   std::string GetDisplayName() const override;
+  VideoDecoderType GetDecoderType() const override;
 
  private:
   PassThroughDecoderImpl<DemuxerStream::VIDEO> impl_;

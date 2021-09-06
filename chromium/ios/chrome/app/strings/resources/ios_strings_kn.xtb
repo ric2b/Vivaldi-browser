@@ -19,7 +19,6 @@
 <translation id="1125564390852150847">ಹೊಸ ಟ್ಯಾಬ್ ರಚಿಸಿ.</translation>
 <translation id="1145536944570833626">ಪ್ರಸ್ತುತ ಡೇಟಾ ಅಳಿಸಿ.</translation>
 <translation id="1147031633655575115"><ph name="USER" /> ಎಂಬ ಹೆಸರಿನಲ್ಲಿ ಸೈನ್ ಇನ್ ಮಾಡಲಾಗಿದೆ</translation>
-<translation id="1154690515305205900">ಹೈಲೈಟ್ ಮಾಡಿದ ಪಠ್ಯಕ್ಕಾಗಿ ಲಿಂಕ್ ಅನ್ನು ರಚಿಸಲು ಸಾದ್ಯವಿಲ್ಲ.</translation>
 <translation id="1154984953698510061">ಇತರ ಟ್ಯಾಬ್‌ಗಳನ್ನು ನೋಡಿ</translation>
 <translation id="1157749421655780457">ಸ್ಥಳವನ್ನು ಅನುಮತಿಸಿ...</translation>
 <translation id="1165039591588034296">ದೋಷ</translation>
@@ -103,6 +102,7 @@
 <translation id="1952172573699511566">ಸಾಧ್ಯವಾದಾಗ, ನೀವು ಆದ್ಯತೆ ನೀಡುವ ಭಾಷೆಯಲ್ಲಿ ವೆಬ್‌ಸೈಟ್‌ಗಳು ಪಠ್ಯವನ್ನು ತೋರಿಸುತ್ತವೆ.</translation>
 <translation id="1952728750904661634">ನಿರ್ವಹಿಸಲಾದ ಖಾತೆಯ ಮೂಲಕ ಸೈನ್ ಇನ್ ಮಾಡಿ</translation>
 <translation id="1965935827552890526">ನಿಮ್ಮ ಇತರ ತೆರೆದ Chrome ವಿಂಡೋದಲ್ಲಿ ನೀವು ಮಾಡುತ್ತಿರುವ ಕೆಲಸವನ್ನು ಪೂರ್ಣಗೊಳಿಸಿ.</translation>
+<translation id="1973912524893600642">ಡೇಟಾವನ್ನು ಇರಿಸಿಕೊಳ್ಳಿ</translation>
 <translation id="1974060860693918893">ಸುಧಾರಿತ</translation>
 <translation id="1989112275319619282">ಬ್ರೌಸ್ ಮಾಡಿ</translation>
 <translation id="2015722694326466240">ಪಾಸ್‌ವರ್ಡ್‌ಗಳನ್ನು ವೀಕ್ಷಿಸಲು, ನೀವು ಮೊದಲು ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿ ಪಾಸ್‌ವಡ್‌ ಅನ್ನು ಹೊಂದಿಸಿ.</translation>
@@ -174,6 +174,7 @@
 <translation id="2780046210906776326">ಯಾವುದೇ ಇಮೇಲ್ ಖಾತೆಗಳಿಲ್ಲ</translation>
 <translation id="2781331604911854368">ಆನ್‌ ಆಗಿದೆ</translation>
 <translation id="2781692009645368755">Google Pay</translation>
+<translation id="2783054063075604403">ಲಿಂಕ್ ಅನ್ನು ರಚಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ</translation>
 <translation id="2800683595868705743">ಟ್ಯಾಬ್ ಸ್ವಿಚರ್ ತ್ಯಜಿಸಿ</translation>
 <translation id="2815198996063984598">2. ಡೀಫಾಲ್ಟ್ ಬ್ರೌಸರ್ ಆ್ಯಪ್ ಟ್ಯಾಪ್ ಮಾಡಿ</translation>
 <translation id="2830972654601096923">ವಿಳಾಸಗಳನ್ನು ನಿರ್ವಹಿಸಿ...</translation>
@@ -197,6 +198,7 @@
 <translation id="2964349545761222050">ಥರ್ಡ್ ಪಾರ್ಟಿ ಕುಕೀಗಳನ್ನು ನಿರ್ಬಂಧಿಸಿ</translation>
 <translation id="2969979262385602596">ಸೈನ್ ಇನ್ ವಿಫಲವಾಗಿದೆ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.</translation>
 <translation id="2975121486251958312">ಅಜ್ಞಾತ ಮೋಡ್ ಮಾತ್ರ ಲಭ್ಯವಿದೆ</translation>
+<translation id="2982481275546140226">ಡೇಟಾ ತೆರವುಗೊಳಿಸಿ</translation>
 <translation id="298306318844797842">ಪಾವತಿ ವಿಧಾನವನ್ನು ಸೇರಿಸಿ...</translation>
 <translation id="2989805286512600854">ಹೊಸ ಟ್ಯಾಬ್‌ನಲ್ಲಿ ತೆರೆಯಿರಿ</translation>
 <translation id="3037605927509011580">ಓಹ್, ಹೋಯ್ತು!</translation>
@@ -257,6 +259,7 @@
 <translation id="3533436815740441613">ಹೊಸ ಟ್ಯಾಬ್</translation>
 <translation id="3551320343578183772">ಟ್ಯಾಬ್ ಅನ್ನು ಮುಚ್ಚಿ</translation>
 <translation id="3581564640715911333">ಪುಟಗಳನ್ನು ಇತರ ಭಾಷೆಗಳಲ್ಲಿ ಅನುವಾದಿಸಲು ಅವಕಾಶ ನೀಡಿ</translation>
+<translation id="3588492282865875287">ಸೈನ್ ಔಟ್ ಮಾಡಬೇಕೆ?</translation>
 <translation id="3588820906588687999">ಚಿತ್ರವನ್ನು ಹೊಸ ಟ್ಯಾಬ್‌ನಲ್ಲಿ ತೆರೆಯಿರಿ</translation>
 <translation id="359441731697487922">Chrome ಅನ್ನು ನಿಮ್ಮ ಡೀಫಾಲ್ಟ್ ಬ್ರೌಸರ್ ಆ್ಯಪ್ ಮಾಡಿಕೊಳ್ಳುವ ಮೂಲಕ ಅದರಲ್ಲಿ ಲಿಂಕ್‌ಗಳನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ತೆರೆಯಿರಿ.
       
@@ -297,6 +300,7 @@
 <translation id="4038354071007134711">ಫೈಲ್‌ ತೆರೆಯಬಹುದಾದ ಯಾವುದೇ ಅಪ್ಲಿಕೇಶನ್‌ಗಳು ಈ ಸಾಧನದಲ್ಲಿ ಇಲ್ಲ.</translation>
 <translation id="4042870976416480368">ಪುಟದಲ್ಲಿ ಹುಡುಕಿ</translation>
 <translation id="4049507953662678203">ನೀವು ನೆಟ್‌‌ವರ್ಕ್ ಸಂಪರ್ಕ ಹೊಂದಿರುವಿರಾ ಎಂಬುದನ್ನು ಖಚಿತಪಡಿಸಿಕೊಳ್ಳಿ ಹಾಗೂ ಮತ್ತೊಮ್ಮೆ ಪ್ರಯತ್ನಿಸಿ.</translation>
+<translation id="4079195788735381731">ನಿಮ್ಮ ಸಂಸ್ಥೆಯ ನಿಮ್ಮನ್ನು ಸೈನ್ ಔಟ್ ಮಾಡಿದೆ</translation>
 <translation id="4082688844002261427">ಹುಡುಕಾಟ, ಜಾಹೀರಾತುಗಳು, ಮತ್ತು ಇನ್ನೂ ಹೆಚ್ಚಿನವುಗಳನ್ನು ವೈಯಕ್ತೀಕರಿಸಲು ನಿಮ್ಮ ಬ್ರೌಸಿಂಗ್ ಇತಿಹಾಸವನ್ನು ಹೇಗೆ ಬಳಸಲಾಗಿದೆ ಎಂಬುದನ್ನು ನಿಯಂತ್ರಿಸಿ</translation>
 <translation id="408404951701638773">ಇದೀಗ ಹುಡುಕಾಟ ಪಟ್ಟಿಯನ್ನು ತಲುಪುವುದು ಸುಲಭವಾಗಿದೆ</translation>
 <translation id="411254640334432676">ಡೌನ್‌ಲೋಡ್ ವಿಫಲವಾಗಿದೆ.</translation>
@@ -305,7 +309,6 @@
 <translation id="4121993058175073134">ಒಟ್ಟು ರಫ್ತು ಡೇಟಾ ಕಳುಹಿಸಲು, ದಯವಿಟ್ಟು ನಿಮ್ಮ ಇಮೇಲ್ ಖಾತೆಯನ್ನು ಸೆಟ್ಟಿಂಗ್‌‌ಗಳ ಅಪ್ಲಿಕೇಶನ್‌‌ನಲ್ಲಿ ಕಾನ್ಫಿಗರ್ ಮಾಡಿ.</translation>
 <translation id="4124987746317609294">ಸಮಯ ವ್ಯಾಪ್ತಿ</translation>
 <translation id="4152011295694446843">ನಿಮ್ಮ ಬುಕ್‌ಮಾರ್ಕ್‌ಗಳನ್ನು ಇಲ್ಲಿ ಕಾಣಬಹುದು</translation>
-<translation id="4152093603141133546">ನಿಮ್ಮ ಸಂಸ್ಥೆಯ ನಿಮ್ಮನ್ನು ಸೈನ್ ಔಟ್ ಮಾಡಿದೆ.</translation>
 <translation id="4172051516777682613">ಯಾವಾಗಲೂ ತೋರಿಸು</translation>
 <translation id="418156467088430727">ಆಫ್‌ಲೈನ್ ಆವೃತ್ತಿಯನ್ನು ಹೊಸ ಟ್ಯಾಬ್‌ನಲ್ಲಿ ವೀಕ್ಷಿಸಿ</translation>
 <translation id="4181841719683918333">ಭಾಷೆಗಳು</translation>
@@ -410,9 +413,9 @@
 <translation id="5317780077021120954">ಉಳಿಸು</translation>
 <translation id="5327248766486351172">ಹೆಸರು</translation>
 <translation id="5339316356165661760">ಸಿಂಕ್ ಆನ್ ಮಾಡಿ</translation>
+<translation id="5360976571138293719">ಗೌಪ್ಯತೆ, ಸುರಕ್ಷತೆ ಮತ್ತು ಡೇಟಾ ಸಂಗ್ರಹಣೆಗೆ ಸಂಬಂಧಿಸಿದ ಹೆಚ್ಚಿನ ಸೆಟ್ಟಿಂಗ್‌ಗಳಿಗಾಗಿ, <ph name="BEGIN_LINK" />Google ಸೇವೆಗಳನ್ನು<ph name="END_LINK" /> ನೋಡಿ.</translation>
 <translation id="5388358297987318779">ಚಿತ್ರವನ್ನು ತೆರೆಯಿರಿ</translation>
 <translation id="5407969256130905701">ಬದಲಾವಣೆಗಳನ್ನು ತ್ಯಜಿಸಿ</translation>
-<translation id="5409365236829784218">ಈ ಫೈಲ್ ಅನ್ನು ತೆರೆಯಬಹುದಾದ ಯಾವುದೇ ಅಪ್ಲಿಕೇಶನ್‌ಗಳನ್ನು ಸ್ಥಾಪಿಸಲಾಗಿಲ್ಲ.</translation>
 <translation id="5416022985862681400">ಕಳೆದ 7 ದಿನಗಳಲ್ಲಿ</translation>
 <translation id="543338862236136125">ಪಾಸ್‌ವರ್ಡ್ ಎಡಿಟ್ ಮಾಡಿ</translation>
 <translation id="5433691172869980887">ಬಳಕೆದಾರರ ಹೆಸರನ್ನು ನಕಲಿಸಲಾಗಿದೆ</translation>
@@ -465,6 +468,7 @@
 <translation id="5948291296578561264">ನಿಮ್ಮ ಫೋಟೋ ಲೈಬ್ರರಿಗೆ ಫೋಟೋಗಳನ್ನು ಉಳಿಸಲು ಇದು ನಿಮ್ಮನ್ನು ಅನುಮತಿಸುತ್ತದೆ.</translation>
 <translation id="5955891643922670672">ಆಫ್‌ಲೈನ್ ಆವೃತ್ತಿ ಅನ್ನು ವೀಕ್ಷಿಸಲಾಗುತ್ತಿದೆ</translation>
 <translation id="5957613098218939406">ಇನ್ನಷ್ಟು ಆಯ್ಕೆಗಳು</translation>
+<translation id="5963939892571022323">ಹೈಲೈಟ್ ಮಾಡುವುದಕ್ಕಾಗಿ ಲಿಂಕ್ ಅನ್ನು ರಚಿಸಲು ಸಾದ್ಯವಿಲ್ಲ.</translation>
 <translation id="5964480694698977962">ಹೊಸ ಅದೃಶ್ಯ ಟ್ಯಾಬ್ ರಚಿಸಿ.</translation>
 <translation id="5965679971710331625">ನೀವು ಸೈನ್ ಇನ್ ಆಗಿರುವಿರಿ</translation>
 <translation id="5979837087407522202">ಪಾಸ್‌ವರ್ಡ್‌ಗಳನ್ನು ಹುಡುಕಿ</translation>
@@ -496,6 +500,7 @@
 <translation id="6254066287920239840">ಬ್ರೌಸರ್ ಬದಲಿಗೆ ಅಪ್ಲಿಕೇಶನ್‌ನಲ್ಲಿ ಲಿಂಕ್‌ಗಳನ್ನು ತೆರೆಯಿರಿ.</translation>
 <translation id="6255097610484507482">ಕ್ರೆಡಿಟ್ ಕಾರ್ಡ್ ಎಡಿಟ್ ಮಾಡಿ</translation>
 <translation id="6284652193729350524"><ph name="LANGUAGE" /> ಅನ್ನು ಅನುವಾದಿಸುವ ಕೊಡುಗೆ</translation>
+<translation id="6293101329759844770">ಸುರಕ್ಷಿತ ಬ್ರೌಸಿಂಗ್ ಅನ್ನು ಆನ್ ಮಾಡಲು, <ph name="BEGIN_LINK" />Google ಸೇವೆಗಳನ್ನು<ph name="END_LINK" /> ತೆರೆಯಿರಿ ಮತ್ತು ಸುರಕ್ಷಿತ ಬ್ರೌಸಿಂಗ್ ಅನ್ನು ಟ್ಯಾಪ್ ಮಾಡಿ.</translation>
 <translation id="6303969859164067831">ಸೈನ್ ಔಟ್ ಮಾಡಿ ಮತ್ತು ಸಿಂಕ್ ಆಫ್ ಮಾಡಿ</translation>
 <translation id="6308436439357671616">ಇದು ಫೋಟೋಗಳನ್ನು ತೆಗೆಯಲು ಮತ್ತು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ನಿಮ್ಮನ್ನು ಅನುಮತಿಸುತ್ತದೆ.</translation>
 <translation id="6324528485781869530">ಸಿಂಕ್ ಖಾತೆಯನ್ನು ಬದಲಾಯಿಸಿ</translation>
@@ -563,7 +568,6 @@
 <translation id="6807889908376551050">ಎಲ್ಲಾ ತೋರಿಸಿ...</translation>
 <translation id="681368974849482173">ಐಟಂ ರಚಿಸಲಾಗಿದೆ</translation>
 <translation id="6831043979455480757">Translate</translation>
-<translation id="6841409746189899007">ಪಠ್ಯಕ್ಕೆ ಲಿಂಕ್ ಮಾಡಿ</translation>
 <translation id="6851516051005285358">ಡೆಸ್ಕ್‌ಟಾಪ್‌ ಸೈಟ್‌ ಅನ್ನು ವಿನಂತಿಸಿ</translation>
 <translation id="6858855187367714033">ಸ್ಕ್ಯಾನ್ ಮಾಡಲಾಗಿದೆ</translation>
 <translation id="6859944681507688231">QR ಕೋಡ್ ಅಥವಾ ಕ್ರೆಡಿಟ್ ಕಾರ್ಡ್ ಅನ್ನು ಸ್ಕ್ಯಾನ್ ಮಾಡಲು, ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಕ್ಯಾಮರಾವನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಿ.</translation>
@@ -613,6 +617,7 @@
 <translation id="734758817008927353">ಕಾರ್ಡ್ ಅನ್ನು ಉಳಿಸಲು ಆಯ್ಕೆಗಳು</translation>
 <translation id="7348502496356775519">ಬುಕ್‌ಮಾರ್ಕ್ ಮಾಡಿ</translation>
 <translation id="7383797227493018512">ಓದುವ ಪಟ್ಟಿ</translation>
+<translation id="7398893703713203428">ಲಿಂಕ್ ರಚಿಸಿ</translation>
 <translation id="739941347996872055">ಹಿಂದಿನ ಟ್ಯಾಬ್</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7409985198648820906"><ph name="UNREAD_COUNT" /> ಓದದಿರುವ ಲೇಖನಗಳು.</translation>
@@ -641,8 +646,8 @@
 <translation id="7658239707568436148">ರದ್ದುಮಾಡಿ</translation>
 <translation id="766891008101699113">ವೆಬ್ ಅನ್ನು ಖಾಸಗಿಯಾಗಿ ಬ್ರೌಸ್ ಮಾಡಲು, ಹೊಸ ಟ್ಯಾಬ್ ಸೇರಿಸಿ.</translation>
 <translation id="7671141431838911305">ಇನ್‌ಸ್ಟಾಲ್</translation>
-<translation id="7690812411882623730">ಪಠ್ಯವನ್ನು ಲಿಂಕ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ</translation>
 <translation id="7701040980221191251">ಯಾವುದೂ ಇಲ್ಲ</translation>
+<translation id="7741325291586284254">ಹೊಸ ಅದೃಶ್ಯ ಟ್ಯಾಬ್ ಪುಟ</translation>
 <translation id="7765158879357617694">ಸರಿಸು</translation>
 <translation id="7771470029643830783">ಸೈನ್ ಔಟ್ ಮಾಡುವುದರಿಂದ ನಿಮ್ಮ ಬುಕ್‌ಮಾರ್ಕ್‌ಗಳು, ಇತಿಹಾಸ, ಪಾಸ್‌ವರ್ಡ್‌ಗಳು ಮತ್ತು ಇತರ Chrome ಡೇಟಾವನ್ನು ಇನ್ನು ಮುಂದೆ ನಿಮ್ಮ Google ಖಾತೆಗೆ ಸಿಂಕ್ ಮಾಡುವುದಿಲ್ಲ.
 
@@ -650,6 +655,7 @@
 <translation id="7772032839648071052">ಪಾಸ್‌ಫ್ರೇಸ್ ಅನ್ನು ದೃಢೀಕರಿಸಿ</translation>
 <translation id="7778472311864276518">ಈ ಸಾಧನದಿಂದ ಖಾತೆಯನ್ನು ತೆಗೆದುಹಾಕಿ</translation>
 <translation id="7781011649027948662">ಪುಟವನ್ನು ಅನುವಾದಿಸಬೇಕೇ?</translation>
+<translation id="7781069478569868053">ಹೊಸ ಟ್ಯಾಬ್‌ ಪುಟ</translation>
 <translation id="7781829728241885113">ನಿನ್ನೆ</translation>
 <translation id="778855399387580014">ಹೊಸ Chrome ಟ್ಯಾಬ್‌ನಲ್ಲಿ ಹುಡುಕಾಟವನ್ನು ಪ್ರಾರಂಭಿಸಿ.</translation>
 <translation id="7791543448312431591">ಸೇರಿಸು</translation>

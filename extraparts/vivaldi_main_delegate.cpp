@@ -2,6 +2,7 @@
 
 #include "extraparts/vivaldi_main_delegate.h"
 
+#include "app/vivaldi_apptools.h"
 #include "extraparts/vivaldi_content_browser_client.h"
 
 VivaldiMainDelegate::VivaldiMainDelegate()
@@ -20,9 +21,19 @@ VivaldiMainDelegate::~VivaldiMainDelegate() {}
 
 content::ContentBrowserClient*
 VivaldiMainDelegate::CreateContentBrowserClient() {
+  if (!vivaldi::IsVivaldiRunning() && !vivaldi::ForcedVivaldiRunning()) {
+    return ChromeMainDelegate::CreateContentBrowserClient();
+  }
+
   if (chrome_content_browser_client_ == nullptr) {
     chrome_content_browser_client_ =
         std::make_unique<VivaldiContentBrowserClient>();
   }
   return chrome_content_browser_client_.get();
 }
+
+#if defined(OS_WIN)
+bool VivaldiTestMainDelegate::ShouldHandleConsoleControlEvents() {
+  return false;
+}
+#endif

@@ -4,6 +4,7 @@
 
 #include "ash/system/network/network_section_header_view.h"
 
+#include "ash/constants/ash_features.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/cpp/system_tray_client.h"
 #include "ash/session/session_controller_impl.h"
@@ -14,7 +15,6 @@
 #include "ash/system/network/tray_network_state_model.h"
 #include "ash/system/unified/top_shortcut_button.h"
 #include "base/bind.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/onc/onc_constants.h"
@@ -66,6 +66,21 @@ bool IsSecondaryUser() {
       Shell::Get()->session_controller();
   return session_controller->IsActiveUserSessionStarted() &&
          !session_controller->IsUserPrimary();
+}
+
+bool IsESimSupported() {
+  const DeviceStateProperties* cellular_device =
+      Shell::Get()->system_tray_model()->network_state_model()->GetDevice(
+          NetworkType::kCellular);
+
+  if (!cellular_device || !cellular_device->sim_infos)
+    return false;
+
+  for (const auto& sim_info : *cellular_device->sim_infos) {
+    if (!sim_info->eid.empty())
+      return true;
+  }
+  return false;
 }
 
 }  // namespace
@@ -276,11 +291,29 @@ void MobileSectionHeaderView::OnToggleToggled(bool is_on) {
 }
 
 void MobileSectionHeaderView::AddExtraButtons(bool enabled) {
-  if (!base::FeatureList::IsEnabled(
-          chromeos::features::kUpdatedCellularActivationUi)) {
+  if (!chromeos::features::IsCellularActivationUiEnabled())
+    return;
+
+  if (IsESimSupported()) {
+    PerformAddExtraButtons(enabled);
     return;
   }
 
+  // Fetch the available networks, all of which should be PSIM networks.
+  // If any are unactivated, PerformAddExtraButtons() should be called.
+  Shell::Get()
+      ->system_tray_model()
+      ->network_state_model()
+      ->cros_network_config()
+      ->GetNetworkStateList(
+          NetworkFilter::New(
+              FilterType::kVisible, NetworkType::kCellular,
+              /*limit=*/chromeos::network_config::mojom::kNoLimit),
+          base::BindOnce(&MobileSectionHeaderView::OnCellularNetworksFetched,
+                         weak_ptr_factory_.GetWeakPtr(), enabled));
+}
+
+void MobileSectionHeaderView::PerformAddExtraButtons(bool enabled) {
   TopShortcutButton* add_cellular_button = new TopShortcutButton(
       base::BindRepeating(&MobileSectionHeaderView::AddCellularButtonPressed,
                           base::Unretained(this)),
@@ -288,6 +321,22 @@ void MobileSectionHeaderView::AddExtraButtons(bool enabled) {
       IDS_ASH_STATUS_TRAY_ADD_CELLULAR_LABEL);
   add_cellular_button->SetEnabled(enabled);
   container()->AddView(TriView::Container::END, add_cellular_button);
+}
+
+void MobileSectionHeaderView::OnCellularNetworksFetched(
+    bool enabled,
+    std::vector<chromeos::network_config::mojom::NetworkStatePropertiesPtr>
+        networks) {
+  if (networks.empty())
+    return;
+
+  for (const auto& network : networks) {
+    if (network->type_state->get_cellular()->activation_state !=
+        chromeos::network_config::mojom::ActivationStateType::kActivated) {
+      PerformAddExtraButtons(enabled);
+      return;
+    }
+  }
 }
 
 void MobileSectionHeaderView::AddCellularButtonPressed() {

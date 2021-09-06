@@ -295,25 +295,63 @@ TEST_F(ThumbnailImageTest, RequestCompressedThumbnailData) {
   EXPECT_TRUE(waiter.called());
 }
 
-TEST_F(ThumbnailImageTest, ClearThumbnailWhileNotifyingObservers) {
+TEST_F(ThumbnailImageTest, ClearThumbnailAfterAssignBitmap) {
   auto image = base::MakeRefCounted<ThumbnailImage>(this);
 
   std::unique_ptr<Subscription> subscription = image->Subscribe();
 
-  CallbackWaiter waiter;
+  CallbackWaiter uncompressed_image_waiter;
   subscription->SetUncompressedImageCallback(
-      IgnoreArgs<gfx::ImageSkia>(waiter.callback()));
+      IgnoreArgs<gfx::ImageSkia>(uncompressed_image_waiter.callback()));
+
+  CallbackWaiter compressed_image_waiter;
+  subscription->SetCompressedImageCallback(
+      IgnoreArgs<ThumbnailImage::CompressedThumbnailData>(
+          compressed_image_waiter.callback()));
+
+  CallbackWaiter async_operation_finished_waiter;
+  image->set_async_operation_finished_callback_for_testing(
+      async_operation_finished_waiter.callback());
+
+  // No observers should be notified if the thumbnail is cleared just
+  // after assigning a bitmap.
+  SkBitmap bitmap = CreateBitmap(kTestBitmapWidth, kTestBitmapHeight);
+  image->AssignSkBitmap(bitmap, base::nullopt);
+  image->ClearData();
+  async_operation_finished_waiter.Wait();
+  EXPECT_TRUE(async_operation_finished_waiter.called());
+  EXPECT_FALSE(uncompressed_image_waiter.called());
+  EXPECT_FALSE(compressed_image_waiter.called());
+}
+
+TEST_F(ThumbnailImageTest, ClearExistingThumbnailNotifiesObservers) {
+  auto image = base::MakeRefCounted<ThumbnailImage>(this);
+
+  std::unique_ptr<Subscription> subscription = image->Subscribe();
+
+  CallbackWaiter uncompressed_image_waiter;
+  subscription->SetUncompressedImageCallback(
+      IgnoreArgs<gfx::ImageSkia>(uncompressed_image_waiter.callback()));
+
+  CallbackWaiter compressed_image_waiter;
+  subscription->SetCompressedImageCallback(
+      IgnoreArgs<ThumbnailImage::CompressedThumbnailData>(
+          compressed_image_waiter.callback()));
 
   SkBitmap bitmap = CreateBitmap(kTestBitmapWidth, kTestBitmapHeight);
   image->AssignSkBitmap(bitmap, base::nullopt);
-  waiter.Wait();
-  EXPECT_TRUE(waiter.called());
-  waiter.Reset();
+  compressed_image_waiter.Wait();
+  uncompressed_image_waiter.Wait();
+  EXPECT_TRUE(compressed_image_waiter.called());
+  EXPECT_TRUE(uncompressed_image_waiter.called());
+  compressed_image_waiter.Reset();
+  uncompressed_image_waiter.Reset();
 
-  image->RequestThumbnailImage();
   image->ClearData();
-  waiter.Wait();
-  EXPECT_TRUE(waiter.called());
+  compressed_image_waiter.Wait();
+  uncompressed_image_waiter.Wait();
+  EXPECT_TRUE(compressed_image_waiter.called());
+  EXPECT_TRUE(uncompressed_image_waiter.called());
 }
 
 // Makes sure a null dereference does not happen. Regression test for
@@ -329,4 +367,30 @@ TEST_F(ThumbnailImageTest, UnsubscribeAfterDelegateDestroyed) {
   // do anything.
   delegate.reset();
   subscription.reset();
+}
+
+// Ensures subscribers with a size hint get notified correctly on
+// thumbnail clear. Regression test for crbug.com/1168483 where
+// CropPreviewImage was called on blank thumbnails resulting in a
+// DCHECK.
+TEST_F(ThumbnailImageTest, DoesNotCropBlankThumbnails) {
+  auto image = base::MakeRefCounted<ThumbnailImage>(this);
+
+  std::unique_ptr<Subscription> subscription = image->Subscribe();
+  subscription->SetSizeHint(
+      gfx::Size(kTestBitmapWidth / 2, kTestBitmapHeight / 2));
+
+  CallbackWaiter uncompressed_image_waiter;
+  subscription->SetUncompressedImageCallback(
+      IgnoreArgs<gfx::ImageSkia>(uncompressed_image_waiter.callback()));
+
+  SkBitmap bitmap = CreateBitmap(kTestBitmapWidth, kTestBitmapHeight);
+  image->AssignSkBitmap(bitmap, base::nullopt);
+  uncompressed_image_waiter.Wait();
+  EXPECT_TRUE(uncompressed_image_waiter.called());
+  uncompressed_image_waiter.Reset();
+
+  image->ClearData();
+  uncompressed_image_waiter.Wait();
+  EXPECT_TRUE(uncompressed_image_waiter.called());
 }

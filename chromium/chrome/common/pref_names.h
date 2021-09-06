@@ -43,7 +43,6 @@ extern const char kProfileIconVersion[];
 extern const char kRestoreOnStartup[];
 extern const char kSessionExitedCleanly[];
 extern const char kSessionExitType[];
-extern const char kSiteEngagementLastUpdateTime[];
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS) && BUILDFLAG(ENABLE_EXTENSIONS)
 extern const char kSupervisedUserApprovedExtensions[];
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS) && BUILDFLAG(ENABLE_EXTENSIONS)
@@ -166,6 +165,7 @@ extern const char kWebKitForceEnableZoom[];
 extern const char kWebKitPasswordEchoEnabled[];
 #endif
 extern const char kSSLErrorOverrideAllowed[];
+extern const char kSSLErrorOverrideAllowedForOrigins[];
 extern const char kIncognitoModeAvailability[];
 extern const char kSearchSuggestEnabled[];
 #if defined(OS_ANDROID)
@@ -194,12 +194,6 @@ extern const char kAccessibilityCaptionsBackgroundOpacity[];
 extern const char kLiveCaptionEnabled[];
 extern const char kLiveCaptionLanguageCode[];
 extern const char kSodaBinaryPath[];
-extern const char kSodaEnUsConfigPath[];
-extern const char kSodaJaJpConfigPath[];
-extern const char kSodaDeDeConfigPath[];
-extern const char kSodaEsEsConfigPath[];
-extern const char kSodaFrFrConfigPath[];
-extern const char kSodaItItConfigPath[];
 extern const char kSodaScheduledDeletionTime[];
 #endif
 #if defined(OS_MAC)
@@ -350,12 +344,14 @@ extern const char kAppReinstallRecommendationEnabled[];
 extern const char kStartupBrowserWindowLaunchSuppressed[];
 extern const char kLoginExtensionApiDataForNextLoginAttempt[];
 extern const char kLoginExtensionApiLaunchExtensionId[];
-extern const char kSettingsShowOSBanner[];
 extern const char kUpdateRequiredTimerStartTime[];
 extern const char kUpdateRequiredWarningPeriod[];
 extern const char kSystemProxyUserTrafficHostAndPort[];
 extern const char kEduCoexistenceArcMigrationCompleted[];
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+extern const char kSettingsShowOSBanner[];
+#endif
 extern const char kShowHomeButton[];
 extern const char kSpeechRecognitionFilterProfanities[];
 extern const char kAllowDeletingBrowserHistory[];
@@ -526,6 +522,7 @@ extern const char kNaviOnboardGroup[];
 extern const char kQuietNotificationPermissionShouldShowPromo[];
 extern const char kQuietNotificationPermissionPromoWasShown[];
 extern const char kNotificationPermissionActions[];
+extern const char kPermissionActions[];
 extern const char kHadThreeConsecutiveNotificationPermissionDenies[];
 
 extern const char kProfileLastUsed[];
@@ -621,6 +618,7 @@ extern const char kNtpCollapsedSyncPromo[];
 extern const char kNtpCustomBackgroundDict[];
 extern const char kNtpCustomBackgroundLocalToDevice[];
 extern const char kNtpModulesVisible[];
+extern const char kNtpDisabledModules[];
 extern const char kNtpPromoBlocklist[];
 extern const char kNtpSearchSuggestionsBlocklist[];
 extern const char kNtpSearchSuggestionsImpressions[];
@@ -654,6 +652,7 @@ extern const char kWebAppCreateOnDesktop[];
 extern const char kWebAppCreateInAppsMenu[];
 extern const char kWebAppCreateInQuickLaunchBar[];
 extern const char kWebAppInstallForceList[];
+extern const char kWebAppSettings[];
 extern const char kWebAppInstallMetrics[];
 extern const char kWebAppsDailyMetrics[];
 extern const char kWebAppsDailyMetricsDate[];
@@ -664,7 +663,14 @@ extern const char kWebAppsMigratedDefaultApps[];
 extern const char kWebAppsDidMigrateDefaultChromeApps[];
 extern const char kWebAppsUninstalledDefaultChromeApps[];
 extern const char kWebAppsPreferences[];
+
+#if defined(OS_WIN) || defined(OS_MAC) || \
+    (defined(OS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS))
+extern const char kWebAppsUrlHandlerInfo[];
+#endif
+
 extern const char kWebAppsUserDisplayModeCleanedUp[];
+
 extern const char kSystemWebAppLastUpdateVersion[];
 extern const char kSystemWebAppLastInstalledLocale[];
 extern const char kSystemWebAppInstallFailureCount[];
@@ -922,7 +928,6 @@ extern const char kEasyUnlockLocalStateUserPrefs[];
 
 extern const char kRecoveryComponentNeedsElevation[];
 
-
 #if !defined(OS_ANDROID)
 extern const char kCloudExtensionRequestEnabled[];
 extern const char kCloudExtensionRequestIds[];
@@ -1030,6 +1035,7 @@ extern const char kBlockAutoplayEnabled[];
 // of lacros-chrome is complete.
 #if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 extern const char kAllowNativeNotifications[];
+extern const char kAllowSystemNotifications[];
 #endif
 
 extern const char kNotificationNextPersistentId[];
@@ -1111,9 +1117,18 @@ extern const char kSecurityTokenSessionNotificationScheduledDomain[];
 
 #if !defined(OS_ANDROID)
 extern const char kCartModuleHidden[];
-extern const char kCartModuleRemoved[];
 extern const char kCartModuleWelcomeSurfaceShownTimes[];
 #endif
+
+#if defined(OS_ANDROID)
+extern const char kWebXRImmersiveArEnabled[];
+#endif
+
+#if !defined(OS_ANDROID)
+extern const char kFetchKeepaliveDurationOnShutdown[];
+#endif
+
+extern const char kSuppressDifferentOriginSubframeJSDialogs[];
 
 }  // namespace prefs
 

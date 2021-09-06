@@ -12,6 +12,7 @@
 #include "components/adverse_adblocking/vivaldi_subresource_filter_client.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_test_utils.h"
 #include "content/public/common/content_client.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "extraparts/vivaldi_content_browser_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -77,7 +78,7 @@ TEST_F(VivaldiSubresourceFilterTest, SimpleAllowedLoad_WithObserver) {
   SimulateNavigateAndCommit(GURL(allowed_url), subframe);
   EXPECT_EQ(subresource_filter::LoadPolicy::ALLOW,
             *observer.GetSubframeLoadPolicy(allowed_url));
-  EXPECT_FALSE(*observer.GetIsAdSubframe(subframe->GetFrameTreeNodeId()));
+  EXPECT_FALSE(observer.GetIsAdSubframe(subframe->GetFrameTreeNodeId()));
 }
 
 TEST_F(VivaldiSubresourceFilterTest, SimpleDisallowedLoad_WithObserver) {
@@ -93,9 +94,15 @@ TEST_F(VivaldiSubresourceFilterTest, SimpleDisallowedLoad_WithObserver) {
   GURL disallowed_url(VivaldiSubresourceFilterTest::kDefaultDisallowedUrl);
   auto* subframe =
       content::RenderFrameHostTester::For(main_rfh())->AppendChild("subframe");
+
+  content::TestNavigationObserver navigation_observer(
+      web_contents(), content::MessageLoopRunner::QuitMode::IMMEDIATE,
+      false /* ignore_uncommitted_navigations */);
   EXPECT_FALSE(
       SimulateNavigateAndCommit(GURL(kDefaultDisallowedUrl), subframe));
+  navigation_observer.WaitForNavigationFinished();
+
   EXPECT_EQ(subresource_filter::LoadPolicy::DISALLOW,
             *observer.GetSubframeLoadPolicy(disallowed_url));
-  EXPECT_TRUE(*observer.GetIsAdSubframe(subframe->GetFrameTreeNodeId()));
+  EXPECT_TRUE(observer.GetIsAdSubframe(subframe->GetFrameTreeNodeId()));
 }

@@ -87,6 +87,14 @@ void LayoutListMarker::ListStyleTypeChanged() {
       layout_invalidation_reason::kListStyleTypeChange);
 }
 
+void LayoutListMarker::CounterStyleChanged() {
+  NOT_DESTROYED();
+  if (IsImage())
+    return;
+  SetNeedsLayoutAndIntrinsicWidthsRecalcAndFullPaintInvalidation(
+      layout_invalidation_reason::kCounterStyleChange);
+}
+
 void LayoutListMarker::UpdateMarkerImageIfNeeded(StyleImage* image) {
   NOT_DESTROYED();
   if (image_ != image) {
@@ -207,6 +215,9 @@ String LayoutListMarker::TextAlternative() const {
   // order.
 
   if (RuntimeEnabledFeatures::CSSAtRuleCounterStyleEnabled()) {
+    if (GetListStyleCategory() == ListMarker::ListStyleCategory::kNone)
+      return "";
+
     const CounterStyle& counter_style = GetCounterStyle();
     return counter_style.GetPrefix() + text_ + counter_style.GetSuffix();
   }
@@ -343,8 +354,7 @@ const CounterStyle& LayoutListMarker::GetCounterStyle() const {
   const ListStyleTypeData* list_style_data = StyleRef().GetListStyleType();
   DCHECK(list_style_data);
   DCHECK(list_style_data->IsCounterStyle());
-  return GetDocument().GetStyleEngine().FindCounterStyleAcrossScopes(
-      list_style_data->GetCounterStyleName(), list_style_data->GetTreeScope());
+  return list_style_data->GetCounterStyle(GetDocument());
 }
 
 bool LayoutListMarker::IsInside() const {

@@ -77,7 +77,7 @@ RequestFilterProxyingWebSocket::RequestFilterProxyingWebSocket(
     std::vector<network::mojom::HttpHeaderPtr> additional_headers,
     mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
         handshake_client,
-    mojo::PendingRemote<network::mojom::AuthenticationHandler>
+    mojo::PendingRemote<network::mojom::WebSocketAuthenticationHandler>
         authentication_handler,
     mojo::PendingRemote<network::mojom::TrustedHeaderClient> header_client,
     bool has_extra_headers,
@@ -310,7 +310,7 @@ void RequestFilterProxyingWebSocket::StartProxying(
     std::vector<network::mojom::HttpHeaderPtr> additional_headers,
     mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
         handshake_client,
-    mojo::PendingRemote<network::mojom::AuthenticationHandler>
+    mojo::PendingRemote<network::mojom::WebSocketAuthenticationHandler>
         authentication_handler,
     mojo::PendingRemote<network::mojom::TrustedHeaderClient> header_client,
     bool has_extra_headers,

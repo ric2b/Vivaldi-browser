@@ -11,6 +11,7 @@
 #import "ios/chrome/browser/ui/gestures/view_revealing_animatee.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_paging.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/grid_transition_animation_layout_providing.h"
+#import "ios/chrome/browser/ui/thumb_strip/thumb_strip_supporting.h"
 
 @protocol ApplicationCommands;
 @protocol IncognitoReauthCommands;
@@ -19,9 +20,22 @@
 @protocol GridCommands;
 @protocol GridDragDropHandler;
 @protocol GridImageDataSource;
+class GURL;
+@protocol PopupMenuCommands;
 @protocol RecentTabsConsumer;
 @class RecentTabsTableViewController;
 @class TabGridViewController;
+@protocol ViewControllerTraitCollectionObserver;
+
+// Configurations for tab grid pages.
+enum class TabGridPageConfiguration {
+  // All pages are enabled.
+  kAllPagesEnabled = 0,
+  // Only the incognito page is disabled.
+  kIncognitoPageDisabled = 1,
+  // Only incognito page is enabled.
+  kIncognitoPageOnly = 2,
+};
 
 // Delegate protocol for an object that can handle presenting ("opening") tabs
 // from the tab grid.
@@ -48,6 +62,9 @@
 - (void)tabGridViewControllerDidDismiss:
     (TabGridViewController*)tabGridViewController;
 
+// Opens a link when the user clicks on the in-text link.
+- (void)openLinkWithURL:(const GURL&)URL;
+
 @end
 
 // View controller representing a tab switcher. The tab switcher has an
@@ -56,10 +73,13 @@
     : UIViewController <GridTransitionAnimationLayoutProviding,
                         LayoutSwitcherProvider,
                         TabGridPaging,
-                        ViewRevealingAnimatee>
+                        ThumbStripSupporting>
 
 @property(nonatomic, weak) id<ApplicationCommands> handler;
 @property(nonatomic, weak) id<IncognitoReauthCommands> reauthHandler;
+// Handlers for popup menu commands for the regular and incognito states.
+@property(nonatomic, weak) id<PopupMenuCommands> regularPopupMenuHandler;
+@property(nonatomic, weak) id<PopupMenuCommands> incognitoPopupMenuHandler;
 
 // Delegate for this view controller to handle presenting tab UI.
 @property(nonatomic, weak) id<TabPresentationDelegate> tabPresentationDelegate;
@@ -84,6 +104,11 @@
 @property(nonatomic, weak) id<GridImageDataSource> regularTabsImageDataSource;
 @property(nonatomic, weak) id<GridImageDataSource> incognitoTabsImageDataSource;
 
+// An optional object to be notified whenever the trait collection of this view
+// controller changes.
+@property(nonatomic, weak) id<ViewControllerTraitCollectionObserver>
+    traitCollectionObserver;
+
 // Readwrite override of the UIViewController property. This object will ignore
 // the value supplied by UIViewController.
 @property(nonatomic, weak, readwrite)
@@ -95,6 +120,17 @@
 // model objects used in this view controller should be factored out.
 @property(nonatomic, strong)
     RecentTabsTableViewController* remoteTabsViewController;
+
+// Init with tab grid view configuration, which decides which sub view
+// controller should be added.
+- (instancetype)initWithPageConfiguration:
+    (TabGridPageConfiguration)tabGridPageConfiguration
+    NS_DESIGNATED_INITIALIZER;
+
+- (instancetype)init NS_UNAVAILABLE;
+- (instancetype)initWithCoder:(NSCoder*)coder NS_UNAVAILABLE;
+- (instancetype)initWithNibName:(NSString*)nibNameOrNil
+                         bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;
 
 // Tells the receiver to prepare for its appearance by pre-requesting any
 // resources it needs from data sources. This should be called before any

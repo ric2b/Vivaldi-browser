@@ -18,6 +18,8 @@ import android.provider.Settings;
 import android.text.format.Formatter;
 import android.view.View;
 
+import androidx.annotation.ColorRes;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
@@ -68,6 +70,10 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
     // permissions for that website address and display those.
     public static final String EXTRA_SITE = "org.chromium.chrome.preferences.site";
     public static final String EXTRA_SITE_ADDRESS = "org.chromium.chrome.preferences.site_address";
+
+    // Used to store mPreviousNotificationPermission when the activity is paused.
+    private static final String PREVIOUS_NOTIFICATION_PERMISSION_KEY =
+            "previous_notification_permission";
 
     // Preference keys, see single_website_preferences.xml
     // Headings:
@@ -162,6 +168,18 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         }
     }
 
+    public static @ContentSettingsType int getHighestPriorityPermission(
+            @ContentSettingsType @NonNull int[] types) {
+        for (@ContentSettingsType int setting : SETTINGS_ORDER) {
+            for (@ContentSettingsType int type : types) {
+                if (setting == type) {
+                    return type;
+                }
+            }
+        }
+        return ContentSettingsType.DEFAULT;
+    }
+
     /**
      * @return The status of the actionable content settings flag
      */
@@ -179,6 +197,13 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
             PREF_PERMISSIONS_HEADER,
             PREF_CLEAR_DATA,
     };
+
+    /** The permission type to be highlighted on this page, if any. */
+    @ContentSettingsType
+    private int mHighlightedPermission = ContentSettingsType.DEFAULT;
+    /** The highlight color. */
+    @ColorRes
+    private int mHighlightColor;
 
     // The callback to be run after this site is reset.
     private Observer mWebsiteSettingsObserver;
@@ -265,6 +290,26 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
     }
 
     @Override
+    public void onSaveInstanceState(Bundle outState) {
+        if (mPreviousNotificationPermission != null) {
+            outState.putInt(PREVIOUS_NOTIFICATION_PERMISSION_KEY, mPreviousNotificationPermission);
+        }
+        super.onSaveInstanceState(outState);
+    }
+
+    @Override
+    public void onViewStateRestored(Bundle savedInstanceState) {
+        super.onViewStateRestored(savedInstanceState);
+
+        if (savedInstanceState == null) return;
+
+        if (savedInstanceState.containsKey(PREVIOUS_NOTIFICATION_PERMISSION_KEY)) {
+            mPreviousNotificationPermission =
+                    savedInstanceState.getInt(PREVIOUS_NOTIFICATION_PERMISSION_KEY);
+        }
+    }
+
+    @Override
     public void onActivityCreated(Bundle savedInstanceState) {
         getActivity().setTitle(getContext().getString(R.string.prefs_site_settings));
         init();
@@ -311,6 +356,10 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
     @Override
     public void onDisplayPreferenceDialog(Preference preference) {
         if (preference instanceof ClearWebsiteStorage) {
+            // If the activity is getting destroyed or saved, it is not allowed to modify fragments.
+            if (getFragmentManager().isStateSaved()) {
+                return;
+            }
             Callback<Boolean> onDialogClosed = (Boolean confirmed) -> {
                 if (confirmed) {
                     mSite.clearAllStoredData(getSiteSettingsDelegate().getBrowserContextHandle(),
@@ -332,6 +381,17 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
 
     public void setWebsiteSettingsObserver(Observer observer) {
         mWebsiteSettingsObserver = observer;
+    }
+
+    /**
+     * Sets the permission row that should be highlighted on the page, with its corresponding color.
+     * @param permission The ContentSettingsType for the permission to be highlighted.
+     * @param colorResId The color resource id for the background color of the permission row.
+     */
+    public void setHighlightedPermission(
+            @ContentSettingsType int permission, @ColorRes int colorResId) {
+        mHighlightedPermission = permission;
+        mHighlightColor = colorResId;
     }
 
     /**
@@ -409,16 +469,9 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
     }
 
     private Drawable getContentSettingsIcon(@ContentSettingsType int contentSettingsType,
-            @ContentSettingValues @Nullable Integer value, boolean enabled) {
-        Drawable icon = enabled
-                ? SettingsUtils.getTintedIcon(
-                        getContext(), ContentSettingsResources.getIcon(contentSettingsType))
-                : ContentSettingsResources.getDisabledIcon(contentSettingsType, getResources());
-        if (isActionableContentSettingsEnabled() && value != null
-                && value == ContentSettingValues.BLOCK) {
-            return ContentSettingsResources.getBlockedSquareIcon(getResources(), icon);
-        }
-        return icon;
+            @ContentSettingValues @Nullable Integer value) {
+        return ContentSettingsResources.getContentSettingsIcon(getContext(), contentSettingsType,
+                isActionableContentSettingsEnabled() ? value : null);
     }
 
     /**
@@ -550,6 +603,11 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         newPreference.setKey(oldPreference.getKey());
         setUpPreferenceCommon(newPreference, value);
         newPreference.setSummary(newSummary);
+        @ContentSettingsType
+        int contentType = getContentSettingsTypeFromPreferenceKey(newPreference.getKey());
+        if (isActionableContentSettingsEnabled() && contentType == mHighlightedPermission) {
+            newPreference.setBackgroundColor(mHighlightColor);
+        }
 
         return newPreference;
     }
@@ -726,8 +784,7 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
                     new ChromeImageViewPreference(getStyledContext());
 
             preference.setKey(CHOOSER_PERMISSION_PREFERENCE_KEY);
-            preference.setIcon(SettingsUtils.getTintedIcon(
-                    getContext(), ContentSettingsResources.getIcon(info.getContentSettingsType())));
+            preference.setIcon(getContentSettingsIcon(info.getContentSettingsType(), null));
             preference.setTitle(info.getName());
             preference.setImageView(R.drawable.ic_delete_white_24dp,
                     R.string.website_settings_revoke_device_permission, (View view) -> {
@@ -739,6 +796,10 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
                             removePreferenceSafely(PREF_PERMISSIONS_HEADER);
                         }
                     });
+            if (isActionableContentSettingsEnabled()
+                    && info.getContentSettingsType() == mHighlightedPermission) {
+                preference.setBackgroundColor(mHighlightColor);
+            }
 
             preference.setManagedPreferenceDelegate(new ForwardingManagedPreferenceDelegate(
                     getSiteSettingsDelegate().getManagedPreferenceDelegate()) {
@@ -879,6 +940,11 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
                         ? getString(R.string.automatically_blocked)
                         : getString(ContentSettingsResources.getCategorySummary(value)));
         switchPreference.setOnPreferenceChangeListener(this);
+        @ContentSettingsType
+        int contentType = getContentSettingsTypeFromPreferenceKey(preference.getKey());
+        if (contentType == mHighlightedPermission) {
+            switchPreference.setBackgroundColor(mHighlightColor);
+        }
     }
 
     /**
@@ -916,16 +982,14 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
      */
     private void setUpPreferenceCommon(
             Preference preference, @ContentSettingValues @Nullable Integer value) {
+        @ContentSettingsType
         int contentType = getContentSettingsTypeFromPreferenceKey(preference.getKey());
         int titleResourceId = ContentSettingsResources.getTitle(contentType);
 
         if (titleResourceId != 0) {
             preference.setTitle(titleResourceId);
         }
-        if (!preference.isEnabled()) {
-            preference.setIcon(getContentSettingsIcon(contentType, value, false));
-            return;
-        }
+
         SiteSettingsCategory category = SiteSettingsCategory.createFromContentSettingsType(
                 getSiteSettingsDelegate().getBrowserContextHandle(), contentType);
         if (category != null && value != null && value != ContentSettingValues.BLOCK
@@ -933,7 +997,7 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
             preference.setIcon(category.getDisabledInAndroidIcon(getContext()));
             preference.setEnabled(false);
         } else {
-            preference.setIcon(getContentSettingsIcon(contentType, value, true));
+            preference.setIcon(getContentSettingsIcon(contentType, value));
         }
 
         // These preferences are persisted elsewhere, using SharedPreferences
@@ -1134,7 +1198,7 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
             preference.setSummary(
                     getString(ContentSettingsResources.getCategorySummary(permission)));
         }
-        preference.setIcon(getContentSettingsIcon(type, permission, true));
+        preference.setIcon(getContentSettingsIcon(type, permission));
 
         if (mWebsiteSettingsObserver != null) {
             mWebsiteSettingsObserver.onPermissionChanged();

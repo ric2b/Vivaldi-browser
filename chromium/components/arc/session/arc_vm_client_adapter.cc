@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "ash/constants/ash_switches.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
@@ -42,7 +43,7 @@
 #include "base/threading/scoped_blocking_call.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
-#include "chromeos/constants/chromeos_switches.h"
+#include "chromeos/components/sensors/buildflags.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/concierge_client.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
@@ -96,7 +97,6 @@ constexpr base::TimeDelta kConnectSleepDurationInitial =
 base::Optional<base::TimeDelta> g_connect_timeout_limit_for_testing;
 base::Optional<base::TimeDelta> g_connect_sleep_duration_initial_for_testing;
 base::Optional<int> g_boot_notification_server_fd;
-bool g_enable_adb_over_usb_for_testing = false;
 
 chromeos::ConciergeClient* GetConciergeClient() {
   return chromeos::DBusThreadManager::Get()->GetConciergeClient();
@@ -228,6 +228,8 @@ std::vector<std::string> GenerateKernelCmdline(
                          start_params.arc_disable_system_default_app),
       "androidboot.chromeos_channel=" + channel,
       "androidboot.boottime_offset=" + MonotonicTimestamp(),
+      base::StringPrintf("androidboot.iioservice_present=%d",
+                         BUILDFLAG(USE_IIOSERVICE)),
   };
 
   // We run vshd under a restricted domain on non-test images.
@@ -241,6 +243,9 @@ std::vector<std::string> GenerateKernelCmdline(
   // Only add boot property if flag to disable media store maintenance is set.
   if (start_params.disable_media_store_maintenance)
     result.push_back("androidboot.disable_media_store_maintenance=1");
+
+  if (start_params.arc_generate_play_auto_install)
+    result.push_back("androidboot.arc_generate_pai=1");
 
   // Conditionally sets some properties based on |start_params|.
   switch (start_params.play_store_auto_update) {
@@ -268,6 +273,25 @@ std::vector<std::string> GenerateKernelCmdline(
       break;
   }
 
+  std::string log_profile_name;
+  switch (start_params.usap_profile) {
+    case StartParams::UsapProfile::DEFAULT:
+      log_profile_name = "default low-memory";
+      break;
+    case StartParams::UsapProfile::M4G:
+      result.push_back("androidboot.usap_profile=4G");
+      log_profile_name = "high-memory 4G";
+      break;
+    case StartParams::UsapProfile::M8G:
+      result.push_back("androidboot.usap_profile=8G");
+      log_profile_name = "high-memory 8G";
+      break;
+    case StartParams::UsapProfile::M16G:
+      result.push_back("androidboot.usap_profile=16G");
+      log_profile_name = "high-memory 16G";
+      break;
+  }
+  VLOG(1) << "Applied " << log_profile_name << " USAP profile";
   return result;
 }
 
@@ -301,7 +325,7 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
                               file_system_status.is_system_image_ext_format());
 
   // Add /vendor as /dev/block/vdb. The device name has to be consistent with
-  // the one in GenerateFirstStageFstab() in ../arc_util.cc.
+  // the one in GenerateFirstStageFstab() in platform2/arc/setup/.
   vm_tools::concierge::DiskImage* disk_image = request.add_disks();
   disk_image->set_path(file_system_status.vendor_image_path().value());
   disk_image->set_image_type(vm_tools::concierge::DISK_IMAGE_AUTO);
@@ -310,7 +334,6 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
 
   // Add /run/imageloader/.../android_demo_apps.squash as /dev/block/vdc if
   // needed.
-  // TODO(b/144542975): Do this on upgrade instead.
   if (!demo_session_apps_path.empty()) {
     disk_image = request.add_disks();
     disk_image->set_path(demo_session_apps_path.value());
@@ -328,6 +351,8 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
   // Add ignore_dev_conf setting for dev mode.
   request.set_ignore_dev_conf(IsArcVmDevConfIgnored());
 
+  // Add enable_rt_vcpu.
+  request.set_enable_rt_vcpu(IsArcVmRtVcpuEnabled(cpus));
   return request;
 }
 
@@ -409,16 +434,6 @@ bool SendUpgradePropsToArcVmBootNotificationServer(
     return false;
   }
   return true;
-}
-
-// Returns true if the daemon for adb-over-usb should be started on the device.
-bool ShouldStartAdbd(bool is_dev_mode,
-                     bool is_host_on_vm,
-                     bool has_adbd_json,
-                     bool is_adb_over_usb_disabled) {
-  // Do the same check as ArcSetup::MaybeStartAdbdProxy().
-  return is_dev_mode && !is_host_on_vm && has_adbd_json &&
-         !is_adb_over_usb_disabled;
 }
 
 }  // namespace
@@ -611,20 +626,6 @@ class ArcVmClientAdapter : public ArcClientAdapter,
   void OnIsDevMode(chromeos::VoidDBusMethodCallback callback,
                    bool is_dev_mode) {
     is_dev_mode_ = is_dev_mode;
-    base::ThreadPool::PostTaskAndReplyWithResult(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-        base::BindOnce([]() {
-          std::string output;
-          return base::GetAppOutput({"crossystem", "dev_enable_udc?0"},
-                                    &output);
-        }),
-        base::BindOnce(&ArcVmClientAdapter::OnIsAdbOverUsbDisabled,
-                       weak_factory_.GetWeakPtr(), std::move(callback)));
-  }
-
-  void OnIsAdbOverUsbDisabled(chromeos::VoidDBusMethodCallback callback,
-                              bool is_adb_over_usb_disabled) {
-    is_adb_over_usb_disabled_ = is_adb_over_usb_disabled;
     std::deque<JobDesc> jobs{
         // Note: the first Upstart job is a task, and the callback for the start
         // request won't be called until the task finishes. When the callback is
@@ -721,8 +722,6 @@ class ArcVmClientAdapter : public ArcClientAdapter,
     VLOG(2) << "Got file system status";
     if (file_system_status_rewriter_for_testing_)
       file_system_status_rewriter_for_testing_.Run(&file_system_status);
-
-    file_system_status_has_adbd_json_ = file_system_status.has_adbd_json();
 
     VLOG(2) << "Retrieving demo session apps path";
     DCHECK(demo_mode_delegate_);
@@ -901,15 +900,6 @@ class ArcVmClientAdapter : public ArcClientAdapter,
 
     VLOG(1) << "Starting arcvm-post-vm-start-services.";
     std::vector<std::string> environment;
-    bool should_start_adbd = ShouldStartAdbd(*is_dev_mode_, is_host_on_vm_,
-                                             file_system_status_has_adbd_json_,
-                                             *is_adb_over_usb_disabled_) ||
-                             g_enable_adb_over_usb_for_testing;
-    if (should_start_adbd) {
-      environment.push_back("SERIALNUMBER=" + serial_number_);
-      environment.push_back(
-          base::StringPrintf("ARCVM_CID=%" PRId64, current_cid_));
-    }
     std::deque<JobDesc> jobs{JobDesc{kArcVmPostVmStartServicesJobName,
                                      UpstartOperation::JOB_START,
                                      std::move(environment)}};
@@ -964,9 +954,6 @@ class ArcVmClientAdapter : public ArcClientAdapter,
   base::Optional<bool> is_dev_mode_;
   // True when the *host* is running on a VM.
   const bool is_host_on_vm_;
-  // True when adb-over-usb is disabled.
-  base::Optional<bool> is_adb_over_usb_disabled_;
-
   // A cryptohome ID of the primary profile.
   cryptohome::Identification cryptohome_id_;
   // A hash of the primary profile user ID.
@@ -978,7 +965,6 @@ class ArcVmClientAdapter : public ArcClientAdapter,
   bool should_notify_observers_ = false;
   int64_t current_cid_ = kInvalidCid;
 
-  bool file_system_status_has_adbd_json_ = false;
   FileSystemStatusRewriter file_system_status_rewriter_for_testing_;
 
   // The delegate is owned by ArcSessionRunner.
@@ -1019,10 +1005,6 @@ void SetArcVmBootNotificationServerAddressForTesting(
 
 void SetArcVmBootNotificationServerFdForTesting(base::Optional<int> fd) {
   g_boot_notification_server_fd = fd;
-}
-
-void EnableAdbOverUsbForTesting() {
-  g_enable_adb_over_usb_for_testing = true;
 }
 
 std::vector<std::string> GenerateUpgradePropsForTesting(

@@ -25,10 +25,10 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include <utility>
 
+#include "ash/constants/ash_switches.h"
 #include "base/metrics/histogram_macros.h"
+#include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/chromeos/attestation/platform_verification_dialog.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/constants/dbus_switches.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/permissions/permission_request_impl.h"
@@ -92,7 +92,7 @@ void ProtectedMediaIdentifierPermissionContext::DecidePermission(
                          OnPlatformVerificationConsentResponse,
                      weak_factory_.GetWeakPtr(), web_contents, id,
                      requesting_origin, embedding_origin, user_gesture,
-                     repeating_callback));
+                     base::Time::Now(), repeating_callback));
 
   // This could happen when the permission is requested from an extension. See
   // http://crbug.com/728534
@@ -224,6 +224,7 @@ void ProtectedMediaIdentifierPermissionContext::
         const GURL& requesting_origin,
         const GURL& embedding_origin,
         bool user_gesture,
+        base::Time dialog_show_time,
         permissions::BrowserPermissionCallback callback,
         PlatformVerificationDialog::ConsentResponse response) {
   // Prepare function to report metrics.
@@ -239,6 +240,7 @@ void ProtectedMediaIdentifierPermissionContext::
 
     permissions::PermissionUmaUtil::PermissionPromptResolved(
         {permission_request.get()}, web_contents, permission_action,
+        base::Time::Now() - dialog_show_time,
         permissions::PermissionPromptDisposition::CUSTOM_MODAL_DIALOG,
         /*ui_reason=*/base::nullopt,
         /*predicted_grant_likelihood=*/base::nullopt);

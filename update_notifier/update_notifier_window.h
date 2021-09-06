@@ -22,9 +22,7 @@ class UpdateNotifierWindow {
   UpdateNotifierWindow();
   ~UpdateNotifierWindow();
 
-  bool Init();
-
-  void ShowNotification(const std::string& version);
+  void ShowNotification(const std::wstring& version);
 
  private:
   friend class WindowClass;
@@ -40,7 +38,7 @@ class UpdateNotifierWindow {
                      LRESULT* result);
 
   void RemoveNotification();
-  bool is_showing_notification_;
+  bool is_showing_notification_ = false;
 
   NativeMenu notification_menu_;
 

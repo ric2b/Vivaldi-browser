@@ -25,8 +25,6 @@
 <translation id="1966382378801805537">Chromium nu poate determina sau seta browserul prestabilit</translation>
 <translation id="2008474315282236005">Astfel, se va șterge 1 element de pe acest dispozitiv. Pentru a recupera datele mai târziu, conectează-te la Chromium ca <ph name="USER_EMAIL" />.</translation>
 <translation id="2020032459870799438">Ca să verifici dacă celelalte parole sunt protejate împotriva încălcării securității datelor și a altor probleme de securitate, <ph name="BEGIN_LINK" />conectează-te la Chromium<ph name="END_LINK" />.</translation>
-<translation id="2179192076895113433">Poți gestiona acest cont și alte Conturi Google pe care le-ai adăugat pentru <ph name="USER_NAME" /> dintr-un singur loc din <ph name="LINK_BEGIN" />Setări<ph name="LINK_END" />.
-          Permisiunile pe care le-ai acordat site-urilor din browserul Chrome și aplicațiilor din Google Play se pot aplica tuturor conturilor.</translation>
 <translation id="2185166961232948079">Chromium – conectare la rețea – <ph name="PAGE_TITLE" /></translation>
 <translation id="2225696941839557119">Sistemul de operare Chromium nu a putut sincroniza parolele.</translation>
 <translation id="2241627712206172106">Dacă permiteți accesul la un computer, familia și prietenii pot să navigheze separat și să configureze Chromium cum doresc.</translation>
@@ -36,7 +34,6 @@
 <translation id="2396765026452590966">Extensia „<ph name="EXTENSION_NAME" />” a modificat ce pagină se afișează când pornești Chromium.</translation>
 <translation id="2483889755041906834">În Chromium</translation>
 <translation id="2485422356828889247">Dezinstalează</translation>
-<translation id="2527042973354814951">Repornește Chromium pentru a activa <ph name="PLUGIN_NAME" /></translation>
 <translation id="2535480412977113886">Sistemul de operare Chromium nu a putut sincroniza datele, deoarece detaliile de conectare pentru contul dvs. nu sunt actualizate.</translation>
 <translation id="2560420686485554789">Pentru a descărca fișiere, Chromium necesită acces la stocare</translation>
 <translation id="2572494885440352020">Chromium Helper</translation>
@@ -52,6 +49,7 @@
 <translation id="2770231113462710648">Schimbă browserul prestabilit la:</translation>
 <translation id="2799223571221894425">Repornește</translation>
 <translation id="2816712596130903444">Creezi un profil Chromium separat?</translation>
+<translation id="2837693172913560447">Astfel, se va crea un nou profil Chromium pentru <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="2847479871509788944">Elimină din Chromium...</translation>
 <translation id="2885378588091291677">Manager de activități</translation>
 <translation id="2910007522516064972">Despre &amp;Chromium</translation>
@@ -107,6 +105,7 @@
 <translation id="4407044323746248786">Ieși din Chromium oricum?</translation>
 <translation id="4415566066719264597">Permite Chromium să ruleze în fundal</translation>
 <translation id="4423735387467980091">Personalizați și controlați Chromium</translation>
+<translation id="4491398312037323794">În această pagină poți să gestionezi conturile Google la care te-ai conectat. Conturile vor fi disponibile în browserul Chromium și în aplicații din Magazinul Play, precum și în servicii cum ar fi Gmail, Drive și YouTube. <ph name="LINK_BEGIN" />Află mai multe<ph name="LINK_END" /></translation>
 <translation id="452711251841752011">Bun venit la Chromium; fereastră de browser nouă deschisă</translation>
 <translation id="4544142686420020088">Chromium nu s-a actualizat. A apărut o eroare. <ph name="BEGIN_LINK" />Remediază problemele de actualizare și actualizările nereușite în Chromium.<ph name="END_LINK" /></translation>
 <translation id="454579500955453258">Continui cu un profil Chromium nou?</translation>
@@ -120,12 +119,12 @@
 <translation id="4750035648288509542">Actualizarea este aproape gata! Relansează Chromium pentru a finaliza actualizarea. Ferestrele incognito nu se vor redeschide.</translation>
 <translation id="4788777615168560705">Chromium nu îți poate verifica parolele. Încearcă din nou după 24 de ore sau <ph name="BEGIN_LINK" />verifică parolele din Contul Google<ph name="END_LINK" />.</translation>
 <translation id="479167709087336770">Folosește același verificator ortografic folosit în Căutarea Google. Textul pe care îl introduci în browser este trimis la Google. Poți schimba acest comportament în setări.</translation>
-<translation id="4814736265800133385">Folosește Chromium fără un cont</translation>
 <translation id="4888717733111232871">Regula de intrare pentru Chromium pentru a permite traficul mDNS.</translation>
 <translation id="4943838377383847465">Chromium este în modul fundal.</translation>
 <translation id="4987820182225656817">Invitații pot folosi Chromium fără a lăsa nicio urmă.</translation>
 <translation id="4994636714258228724">Adăugați-vă la Chromium</translation>
 <translation id="5224391634244552924">Nu există parole salvate. Chromium îți poate verifica parolele dacă le salvezi.</translation>
+<translation id="5252179775517634216"><ph name="EXISTING_USER" /> s-a conectat deja la acest profil Chromium. Astfel, se va crea un nou profil Chromium pentru <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="5277894862589591112">Pentru a aplica modificările, relansează Chromium</translation>
 <translation id="5358375970380395591">Vă conectați cu un cont gestionat și îi permiteți administratorului acestuia controlul asupra profilului dvs. Chromium. Datele Chromium, cum ar fi aplicațiile, marcajele, istoricul, parolele și alte setări vor fi asociate definitiv cu <ph name="USER_NAME" />. Veți putea să ștergeți aceste date prin intermediul Tabloului de bord pentru Conturi Google, însă nu veți putea să asociați aceste date cu alt cont. <ph name="LEARN_MORE" /></translation>
 <translation id="5386450000063123300">Chromium se actualizează (<ph name="PROGRESS_PERCENT" />)</translation>
@@ -139,7 +138,6 @@
 <translation id="549669000822060376">Așteaptă până când Chromium instalează cele mai recente actualizări de sistem.</translation>
 <translation id="5496810170689441661">Chromium încearcă să modifice parolele. Pentru a permite acest lucru, introdu parola pentru Windows.</translation>
 <translation id="5623402015214259806">{0,plural, =0{Este disponibilă o actualizare Chromium}=1{Este disponibilă o actualizare Chromium}few{O actualizare Chromium este disponibilă de # zile}other{O actualizare Chromium este disponibilă de # de zile}}</translation>
-<translation id="5631814766731275228">Numele și imaginea profilului Chromium</translation>
 <translation id="5634636535844844681">Chromium necesită Windows 7 sau o versiune ulterioară.</translation>
 <translation id="5653831366781983928">Repornește Chromium acum</translation>
 <translation id="5698481217667032250">Afișează Chromium în această limbă</translation>
@@ -167,6 +165,7 @@
 <translation id="6266342355635466082">Chromium nu poate căuta actualizări. Verifică-ți conexiunea la internet.</translation>
 <translation id="6268381023930128611">Te deconectezi de la Chromium?</translation>
 <translation id="6281746429495226318">Personalizează-ți profilul Chromium</translation>
+<translation id="6290827346642914212">Denumește profilul Chromium</translation>
 <translation id="6295779123002464101">Este posibil ca <ph name="FILE_NAME" /> să fie periculos, așadar Chromium l-a blocat.</translation>
 <translation id="6309712487085796862">Chromium utilizează camera foto.</translation>
 <translation id="6333502561965082103">O altă operație din Chromium este în curs de desfășurare. Încearcă din nou mai târziu.</translation>
@@ -195,6 +194,7 @@ Este posibil ca unele funcții să nu fie disponibile. Specificați un director 
 <translation id="6863361426438995919">Google Pay (copiat în Chromium)</translation>
 <translation id="6893813176749746474">Chromium a fost actualizat, dar nu l-ați utilizat de cel puțin 30 de zile.</translation>
 <translation id="6897548120660295439">Rosetta face posibilă redarea conținutului media protejat din această pagină în Chromium.</translation>
+<translation id="691026815377248078">Chromium are nevoie de acces la Bluetooth pentru a continua conectarea. <ph name="IDS_BLUETOOTH_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK" /></translation>
 <translation id="6964305034639999644">Deschide linkul într-o fereastră Chromium inco&amp;gnito</translation>
 <translation id="6978145336957848883">Parolele slabe sunt ușor de ghicit. Permite browserului Chromium <ph name="BEGIN_LINK" />să creeze și să memoreze parole puternice pentru tine<ph name="END_LINK" />.</translation>
 <translation id="6990124437352146030">Chromium are nevoie de permisiune ca să acceseze microfonul pentru acest site</translation>
@@ -234,6 +234,7 @@ Chromium nu poate recupera setările.</translation>
 <translation id="7773960292263897147">Avertisment: Chromium nu poate împiedica extensiile să înregistreze istoricul de navigare. Pentru a dezactiva această extensie în modul incognito, debifează această opțiune.</translation>
 <translation id="7790626492778995050"><ph name="PAGE_TITLE" /> – Chromium Canary</translation>
 <translation id="7827169012280634081">Șterge cookie-urile și datele privind site-urile când închizi Chromium</translation>
+<translation id="7828947555739565424">Există deja un profil Chromium asociat acestui cont pe dispozitiv</translation>
 <translation id="7857220146454061152">Pentru a primi actualizările Chromium viitoare, vei avea nevoie de OS X 10.11 sau o versiune ulterioară. Acest computer folosește OS X 10.10.</translation>
 <translation id="7867198900892795913">Chromium nu s-a putut actualiza la cea mai recentă versiune. Astfel, pierzi noi funcții și remedieri de securitate.</translation>
 <translation id="7898472181347242998">Pentru a verifica dacă dispozitivul este actualizat, accesează <ph name="LINK_BEGIN" />Setările sistemului de operare Chromium<ph name="LINK_END" /></translation>
@@ -274,12 +275,12 @@ Chromium nu poate recupera setările.</translation>
 <translation id="9047197236183657400">Muți contul într-un nou profil Chromium?</translation>
 <translation id="9089354809943900324">Chromium nu este actualizat</translation>
 <translation id="9093206154853821181">{0,plural, =1{Chromium se va relansa într-o oră}few{Chromium se va relansa în # ore}other{Chromium se va relansa în # de ore}}</translation>
-<translation id="9107750757953039239">Dacă ai mai multe Conturi Google, le poți adăuga pe <ph name="DEVICE_TYPE" />. Conturile vor fi disponibile în browserul Chromium și în Magazinul Play și în servicii precum Gmail, Drive și YouTube. <ph name="LINK_BEGIN" />Află mai multe<ph name="LINK_END" /></translation>
 <translation id="91086099826398415">Deschide linkul într-o &amp;filă Chromium nouă</translation>
 <translation id="911206726377975832">Ștergi și datele de navigare?</translation>
 <translation id="9158494823179993217">Administratorul de sistem a configurat Chromium să deschidă un browser secundar pentru a accesa <ph name="TARGET_URL_HOSTNAME" />.</translation>
 <translation id="9190841055450128916">Chromium (mDNS-In)</translation>
 <translation id="9214764063801632699">Sistemul de operare Chromium</translation>
 <translation id="93478295209880648">Este posibil ca Chromium să nu funcționeze corespunzător, deoarece nu mai este acceptat pe Windows XP sau Windows Vista</translation>
+<translation id="965162752251293939">Cine folosește Chromium?</translation>
 <translation id="985602178874221306">The Chromium Authors</translation>
 </translationbundle>

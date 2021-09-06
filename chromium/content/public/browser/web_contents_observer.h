@@ -107,10 +107,6 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // made the current host for a frame.
   virtual void FrameDeleted(RenderFrameHost* render_frame_host) {}
 
-  // This is called when a RVH is created for a WebContents, but not if it's an
-  // interstitial.
-  virtual void RenderViewCreated(RenderViewHost* render_view_host) {}
-
   // This method is invoked when the RenderView of the current RenderViewHost
   // is ready, e.g. because we recreated it after a crash.
   virtual void RenderViewReady() {}
@@ -391,6 +387,11 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // Invoked when a frame changes size.
   virtual void FrameSizeChanged(RenderFrameHost* render_frame_host,
                                 const gfx::Size& frame_size) {}
+
+  // Invoked when the state of render_frame_host->IsInBackForwardCache()
+  // changes.
+  virtual void FrameBackForwardCacheStateChanged(
+      RenderFrameHost* render_frame_host) {}
 
   // This method is invoked when the title of the WebContents is set. Note that
   // |entry| may be null if the web page whose title changed has not yet had a

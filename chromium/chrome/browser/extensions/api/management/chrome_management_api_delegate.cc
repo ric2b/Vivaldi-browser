@@ -59,8 +59,8 @@
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
-#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/arc_util.h"
@@ -472,9 +472,9 @@ bool ChromeManagementAPIDelegate::CreateAppShortcutFunctionDelegate(
 
   chrome::ShowCreateChromeAppShortcutsDialog(
       browser->window()->GetNativeWindow(), browser->profile(), extension,
-      base::Bind(&extensions::ManagementCreateAppShortcutFunction::
-                     OnCloseShortcutPrompt,
-                 function));
+      base::BindOnce(&extensions::ManagementCreateAppShortcutFunction::
+                         OnCloseShortcutPrompt,
+                     function));
 
   return true;
 }

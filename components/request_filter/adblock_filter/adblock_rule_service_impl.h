@@ -116,8 +116,10 @@ class RuleServiceImpl : public RuleService {
   std::array<base::Optional<RulesIndexManager>, kRuleGroupCount>
       index_managers_;
 
-  std::array<base::Optional<ContentInjectionProvider>, kRuleGroupCount>
-      content_injection_providers_;
+  // We can't have one injection manager per rule group, because they all use
+  // the same resources and we only want to provide one copy of the static
+  // injections to the content injection module.
+  base::Optional<ContentInjectionProvider> content_injection_provider_;
 
   // Keeps track of the request filters we have set up, to allow tearing them
   // down if needed. These pointers are not guaranteed to be valid at any time.

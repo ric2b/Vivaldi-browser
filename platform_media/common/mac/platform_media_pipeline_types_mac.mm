@@ -66,7 +66,9 @@ base::TimeDelta GetStartTimeFromTrack(AVAssetTrack* track) {
 }
 
 PlatformVideoConfig GetPlatformVideoConfig(CMFormatDescriptionRef description,
-                                           CGAffineTransform transform) {
+                                           CGAffineTransform transform,
+                                           size_t stride_Y,
+                                           size_t stride_UV) {
   VLOG(4) << " PROPMEDIA(COMMON) : " << __FUNCTION__;
   PlatformVideoConfig video_config;
 
@@ -89,9 +91,9 @@ PlatformVideoConfig GetPlatformVideoConfig(CMFormatDescriptionRef description,
 
   // TODO(mkoss): Tentative implementation of stride calculation based on width.
   // The stride must be a multiple of 32 for each plane.
-  video_config.planes[VideoFrame::kYPlane].stride =
+  video_config.planes[VideoFrame::kYPlane].stride = stride_Y != 0 ? stride_Y :
       (video_config.coded_size.width() + 31) & ~31;
-  video_config.planes[VideoFrame::kVPlane].stride =
+  video_config.planes[VideoFrame::kVPlane].stride = stride_UV != 0 ? stride_UV :
       (video_config.planes[VideoFrame::kYPlane].stride / 2 + 31) & ~31;
   video_config.planes[VideoFrame::kUPlane].stride =
       video_config.planes[VideoFrame::kVPlane].stride;

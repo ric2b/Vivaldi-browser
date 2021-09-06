@@ -9,18 +9,21 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 
+class Profile;
+
 // Handles requests of drive modules sent from JS.
 class DriveHandler : public drive::mojom::DriveHandler {
  public:
-  explicit DriveHandler(
-      mojo::PendingReceiver<drive::mojom::DriveHandler> handler);
+  DriveHandler(mojo::PendingReceiver<drive::mojom::DriveHandler> handler,
+               Profile* profile);
   ~DriveHandler() override;
 
   // drive::mojom::DriveHandler:
-  void GetTestString(GetTestStringCallback callback) override;
+  void GetFiles(GetFilesCallback callback) override;
 
  private:
   mojo::Receiver<drive::mojom::DriveHandler> handler_;
+  Profile* profile_;
 };
 
 #endif  // CHROME_BROWSER_SEARCH_DRIVE_DRIVE_HANDLER_H_

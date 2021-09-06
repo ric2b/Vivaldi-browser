@@ -30,9 +30,9 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-namespace chromeos {
+namespace ash {
 class AccountManager;
-}  // namespace chromeos
+}
 #endif
 
 namespace gaia {
@@ -77,16 +77,12 @@ class IdentityManager : public KeyedService,
 
     // Called when there is a change in the primary account or in the consent
     // level for the primary account.
+    //
+    // Note: Observers are not allowed to change the primary account directly
+    // from this methood as that would lead to |event_details| not being correct
+    // for the future observers.
     virtual void OnPrimaryAccountChanged(
         const PrimaryAccountChangeEvent& event_details) {}
-
-    // TODO(crbug.com/1046746): Move to |SigninClient|.
-    // Called After notifying all the observers of |OnPrimaryAccountChanged|
-    // if the sync primary account was cleared.
-    //
-    // Note: This function is only intended to be used by the signin code.
-    // General observers should use |OnPrimaryAccountChanged|.
-    virtual void AfterSyncPrimaryAccountCleared() {}
 
     // Called when a new refresh token is associated with |account_info|.
     // NOTE: On a signin event, the ordering of this callback wrt the
@@ -163,18 +159,16 @@ class IdentityManager : public KeyedService,
   // Returns a non-empty struct if the primary account exists and was granted
   // the required consent level.
   // TODO(1046746): Update (./README.md).
-  CoreAccountInfo GetPrimaryAccountInfo(
-      ConsentLevel consent = ConsentLevel::kSync) const;
+  CoreAccountInfo GetPrimaryAccountInfo(ConsentLevel consent_level) const;
 
   // Provides access to the account ID of the user's primary account. Simple
   // convenience wrapper over GetPrimaryAccountInfo().account_id.
-  CoreAccountId GetPrimaryAccountId(
-      ConsentLevel consent = ConsentLevel::kSync) const;
+  CoreAccountId GetPrimaryAccountId(ConsentLevel consent_level) const;
 
   // Returns whether the user's primary account is available. If consent is
   // |ConsentLevel::kSync| then true implies that the user has blessed this
   // account for sync.
-  bool HasPrimaryAccount(ConsentLevel consent = ConsentLevel::kSync) const;
+  bool HasPrimaryAccount(ConsentLevel consent_level) const;
 
   // Creates an AccessTokenFetcher given the passed-in information.
   std::unique_ptr<AccessTokenFetcher> CreateAccessTokenFetcherForAccount(
@@ -227,7 +221,7 @@ class IdentityManager : public KeyedService,
 
   // Returns true if (a) the primary account exists, and (b) a refresh token
   // exists for the primary account.
-  bool HasPrimaryAccountWithRefreshToken() const;
+  bool HasPrimaryAccountWithRefreshToken(ConsentLevel consent_level) const;
 
   // Returns true if a refresh token exists for |account_id|.
   bool HasAccountWithRefreshToken(const CoreAccountId& account_id) const;
@@ -352,6 +346,10 @@ class IdentityManager : public KeyedService,
     virtual void OnRefreshTokenRemovedForAccountFromSource(
         const CoreAccountId& account_id,
         const std::string& source) {}
+
+    // Called on Shutdown(), for observers that aren't KeyedServices to remove
+    // their observers.
+    virtual void OnIdentityManagerShutdown() {}
   };
 
   void AddDiagnosticsObserver(DiagnosticsObserver* observer);
@@ -378,8 +376,10 @@ class IdentityManager : public KeyedService,
     std::unique_ptr<DeviceAccountsSynchronizer> device_accounts_synchronizer;
     std::unique_ptr<DiagnosticsProvider> diagnostics_provider;
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-    chromeos::AccountManager* chromeos_account_manager = nullptr;
+    ash::AccountManager* ash_account_manager = nullptr;
 #endif
+
+    bool allow_access_token_fetch = true;
 
     InitParameters();
     InitParameters(InitParameters&&);
@@ -391,6 +391,9 @@ class IdentityManager : public KeyedService,
 
   explicit IdentityManager(IdentityManager::InitParameters&& parameters);
   ~IdentityManager() override;
+
+  // KeyedService:
+  void Shutdown() override;
 
   // Performs initialization that is dependent on the network being
   // initialized.
@@ -466,6 +469,12 @@ class IdentityManager : public KeyedService,
 
   base::android::ScopedJavaLocalRef<jobjectArray> GetAccountsWithRefreshTokens(
       JNIEnv* env) const;
+
+  // Forces refreshing extended account info with image for the given
+  // core account id.
+  void ForceRefreshOfExtendedAccountInfo(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& j_core_account_id);
 #endif
 
  private:
@@ -597,7 +606,7 @@ class IdentityManager : public KeyedService,
   AccountFetcherService* GetAccountFetcherService() const;
   GaiaCookieManagerService* GetGaiaCookieManagerService() const;
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos::AccountManager* GetChromeOSAccountManager() const;
+  ash::AccountManager* GetAshAccountManager() const;
 #endif
 
   // Populates and returns an AccountInfo object corresponding to |account_id|,
@@ -679,9 +688,10 @@ class IdentityManager : public KeyedService,
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos::AccountManager* chromeos_account_manager_ = nullptr;
+  ash::AccountManager* ash_account_manager_ = nullptr;
 #endif
 
+  const bool allow_access_token_fetch_;
   DISALLOW_COPY_AND_ASSIGN(IdentityManager);
 };
 

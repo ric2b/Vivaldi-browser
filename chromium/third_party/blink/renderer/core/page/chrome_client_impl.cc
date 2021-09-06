@@ -41,7 +41,6 @@
 #include "cc/layers/picture_layer.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
-#include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/public/web/web_autofill_client.h"
@@ -301,7 +300,7 @@ void ChromeClientImpl::SetOverscrollBehavior(
       overscroll_behavior);
 }
 
-void ChromeClientImpl::Show(const base::UnguessableToken& opener_frame_token,
+void ChromeClientImpl::Show(const blink::LocalFrameToken& opener_frame_token,
                             NavigationPolicy navigation_policy,
                             const IntRect& initial_rect,
                             bool user_gesture) {
@@ -327,6 +326,12 @@ void ChromeClientImpl::AddMessageToConsole(LocalFrame* local_frame,
                                            unsigned line_number,
                                            const String& source_id,
                                            const String& stack_trace) {
+  if (!message.IsNull()) {
+    local_frame->GetLocalFrameHostRemote().DidAddMessageToConsole(
+        level, message, static_cast<int32_t>(line_number), source_id,
+        stack_trace);
+  }
+
   WebLocalFrameImpl* frame = WebLocalFrameImpl::FromFrame(local_frame);
   if (frame && frame->Client()) {
     frame->Client()->DidAddMessageToConsole(
@@ -447,7 +452,7 @@ float ChromeClientImpl::WindowToViewportScalar(LocalFrame* frame,
   return frame->GetWidgetForLocalRoot()->DIPsToBlinkSpace(scalar_value);
 }
 
-ScreenInfo ChromeClientImpl::GetScreenInfo(LocalFrame& frame) const {
+const ScreenInfo& ChromeClientImpl::GetScreenInfo(LocalFrame& frame) const {
   return frame.GetWidgetForLocalRoot()->GetScreenInfo();
 }
 
@@ -479,7 +484,8 @@ void ChromeClientImpl::EnablePreferredSizeChangedMode() {
   web_view_->EnablePreferredSizeChangedMode();
 }
 
-void ChromeClientImpl::ZoomToFindInPageRect(const WebRect& rect_in_root_frame) {
+void ChromeClientImpl::ZoomToFindInPageRect(
+    const gfx::Rect& rect_in_root_frame) {
   web_view_->ZoomToFindInPageRect(rect_in_root_frame);
 }
 
@@ -725,7 +731,7 @@ void ChromeClientImpl::AutoscrollEnd(LocalFrame* local_frame) {
 }
 
 String ChromeClientImpl::AcceptLanguages() {
-  return web_view_->Client()->AcceptLanguages();
+  return String::FromUTF8(web_view_->GetRendererPreferences().accept_languages);
 }
 
 void ChromeClientImpl::AttachRootLayer(scoped_refptr<cc::Layer> root_layer,
@@ -782,7 +788,7 @@ void ChromeClientImpl::FullscreenElementChanged(
 
 void ChromeClientImpl::AnimateDoubleTapZoom(const gfx::Point& point,
                                             const gfx::Rect& rect) {
-  web_view_->AnimateDoubleTapZoom(point, WebRect(rect));
+  web_view_->AnimateDoubleTapZoom(point, rect);
 }
 
 void ChromeClientImpl::ClearLayerSelection(LocalFrame* frame) {

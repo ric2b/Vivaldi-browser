@@ -38,7 +38,6 @@ import org.chromium.chrome.browser.DeferredStartupHandler;
 import org.chromium.chrome.browser.DevToolsServer;
 import org.chromium.chrome.browser.app.video_tutorials.VideoTutorialShareHelper;
 import org.chromium.chrome.browser.banners.AppBannerInProductHelpControllerProvider;
-import org.chromium.chrome.browser.banners.AppBannerManager;
 import org.chromium.chrome.browser.bookmarkswidget.BookmarkWidgetProvider;
 import org.chromium.chrome.browser.contacts_picker.ChromePickerAdapter;
 import org.chromium.chrome.browser.content_capture.ContentCaptureHistoryDeletionObserver;
@@ -71,14 +70,12 @@ import org.chromium.chrome.browser.policy.EnterpriseInfo;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.profiles.ProfileManagerUtils;
+import org.chromium.chrome.browser.query_tiles.QueryTileUtils;
 import org.chromium.chrome.browser.rlz.RevenueStats;
 import org.chromium.chrome.browser.searchwidget.SearchWidgetProvider;
 import org.chromium.chrome.browser.share.clipboard.ClipboardImageFileProvider;
 import org.chromium.chrome.browser.sharing.shared_clipboard.SharedClipboardShareActivity;
 import org.chromium.chrome.browser.signin.SigninHelperProvider;
-import org.chromium.chrome.browser.sync.SyncController;
-import org.chromium.chrome.browser.uid.UniqueIdentificationGeneratorFactory;
-import org.chromium.chrome.browser.uid.UuidBasedUniqueIdentificationGenerator;
 import org.chromium.chrome.browser.webapps.WebApkVersionManager;
 import org.chromium.chrome.browser.webapps.WebappRegistry;
 import org.chromium.components.background_task_scheduler.BackgroundTaskSchedulerFactory;
@@ -95,6 +92,7 @@ import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountsChangeObserver;
 import org.chromium.components.viz.common.VizSwitches;
 import org.chromium.components.viz.common.display.DeJellyUtils;
+import org.chromium.components.webapps.AppBannerManager;
 import org.chromium.content_public.browser.BrowserTaskExecutor;
 import org.chromium.content_public.browser.ChildProcessLauncherHelper;
 import org.chromium.content_public.browser.ContactsPicker;
@@ -182,13 +180,6 @@ public class ProcessInitializationHandler {
         // default AccountManagerDelegate.
         AccountManagerFacadeProvider.setInstance(
                 new AccountManagerFacadeImpl(AppHooks.get().createAccountManagerDelegate()));
-
-        // Set up the identification generator for sync. The ID is actually generated
-        // in the SyncController constructor.
-        UniqueIdentificationGeneratorFactory.registerGenerator(SyncController.GENERATOR_ID,
-                new UuidBasedUniqueIdentificationGenerator(
-                        application, ChromePreferenceKeys.SYNC_SESSIONS_UUID),
-                false);
 
         // De-jelly can also be controlled by a system property. As sandboxed processes can't
         // read this property directly, convert it to the equivalent command line flag.
@@ -447,6 +438,7 @@ public class ProcessInitializationHandler {
                 () -> TosDialogBehaviorSharedPrefInvalidator.refreshSharedPreferenceIfTosSkipped());
         deferredStartupHandler.addDeferredTask(
                 () -> OfflineMeasurementsBackgroundTask.maybeScheduleTaskAndReportMetrics());
+        deferredStartupHandler.addDeferredTask(() -> QueryTileUtils.isQueryTilesEnabledOnNTP());
     }
 
     private void initChannelsAsync() {

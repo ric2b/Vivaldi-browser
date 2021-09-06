@@ -106,6 +106,15 @@ public class SigninPreferencesManager {
     }
 
     /**
+     * Clears the accounts state-related shared prefs.
+     */
+    @VisibleForTesting
+    public void clearSigninPromoLastShownPrefsForTesting() {
+        mManager.removeKey(ChromePreferenceKeys.SIGNIN_PROMO_LAST_SHOWN_MAJOR_VERSION);
+        mManager.removeKey(ChromePreferenceKeys.SIGNIN_PROMO_LAST_SHOWN_ACCOUNT_NAMES);
+    }
+
+    /**
      * Returns Chrome major version number when signin promo was last shown, or 0 if version number
      * isn't known.
      */
@@ -201,5 +210,28 @@ public class SigninPreferencesManager {
      */
     public int getAccountPickerBottomSheetShownCount() {
         return mManager.readInt(ChromePreferenceKeys.ACCOUNT_PICKER_BOTTOM_SHEET_SHOWN_COUNT);
+    }
+
+    /**
+     * Increments the active dismissal count for the account picker bottom sheet.
+     */
+    public void incrementAccountPickerBottomSheetActiveDismissalCount() {
+        mManager.incrementInt(
+                ChromePreferenceKeys.ACCOUNT_PICKER_BOTTOM_SHEET_ACTIVE_DISMISSAL_COUNT);
+    }
+
+    /**
+     * Returns the number of times account picker bottom sheet has been actively dismissed.
+     */
+    public int getAccountPickerBottomSheetActiveDismissalCount() {
+        return mManager.readInt(
+                ChromePreferenceKeys.ACCOUNT_PICKER_BOTTOM_SHEET_ACTIVE_DISMISSAL_COUNT);
+    }
+
+    /**
+     * Clears the active dismissal count for the account picker bottom sheet.
+     */
+    public void clearAccountPickerBottomSheetActiveDismissalCount() {
+        mManager.removeKey(ChromePreferenceKeys.ACCOUNT_PICKER_BOTTOM_SHEET_ACTIVE_DISMISSAL_COUNT);
     }
 }

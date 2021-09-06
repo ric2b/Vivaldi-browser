@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/events/event_queue.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
+#include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/frame_owner.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -60,6 +61,7 @@
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/mojo/mojo_helper.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/weborigin/reporting_disposition.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
@@ -701,6 +703,15 @@ void ValidateAndConvertPaymentMethodData(
       }
     }
 
+    KURL url(payment_method_data->supportedMethod());
+    if (url.IsValid() &&
+        !execution_context.GetContentSecurityPolicy()->AllowConnectToSource(
+            url, url, RedirectStatus::kNoRedirect,
+            ReportingDisposition::kSuppressReporting)) {
+      UseCounter::Count(&execution_context,
+                        WebFeature::kPaymentRequestCSPViolation);
+    }
+
     method_names.insert(payment_method_data->supportedMethod());
 
     output.push_back(payments::mojom::blink::PaymentMethodData::New());
@@ -808,35 +819,45 @@ ScriptPromise PaymentRequest::show(ScriptState* script_state,
     return ScriptPromise();
   }
 
-  bool is_user_gesture =
-      LocalFrame::HasTransientUserActivation(DomWindow()->GetFrame());
-  if (!is_user_gesture) {
+  LocalFrame* local_frame = DomWindow()->GetFrame();
+
+  bool payment_request_allowed =
+      LocalFrame::HasTransientUserActivation(local_frame);
+  if (!payment_request_allowed) {
     UseCounter::Count(GetExecutionContext(),
                       WebFeature::kPaymentRequestShowWithoutGesture);
   }
-  if (RuntimeEnabledFeatures::PaymentRequestShowConsumesUserActivationEnabled(
+
+  if (RuntimeEnabledFeatures::CapabilityDelegationPaymentRequestEnabled(
           GetExecutionContext())) {
-    if (!is_user_gesture) {
-      exception_state.ThrowDOMException(
-          DOMExceptionCode::kNotAllowedError,
-          "show() must be called with transient user activation");
+    payment_request_allowed |= local_frame->IsPaymentRequestTokenActive();
+    if (!payment_request_allowed) {
+      String message =
+          "PaymentRequest.show() requires either transient user activation or "
+          "delegated payment request capability";
+      GetExecutionContext()->AddConsoleMessage(
+          MakeGarbageCollected<ConsoleMessage>(
+              mojom::blink::ConsoleMessageSource::kJavaScript,
+              mojom::blink::ConsoleMessageLevel::kWarning, message));
+      exception_state.ThrowDOMException(DOMExceptionCode::kNotAllowedError,
+                                        message);
       return ScriptPromise();
     }
-    // TODO(crbug.com/1130553): consume the user activation as well.
-  }
+    LocalFrame::ConsumeTransientUserActivation(local_frame);
+    local_frame->ConsumePaymentRequestToken();
 
-  // TODO(crbug.com/825270): Pretend that a user gesture is provided to allow
-  // origins that are part of the Secure Payment Confirmation Origin Trial to
-  // use skip-the-sheet flow as a hack for secure modal window
-  // (crbug.com/1122028). Remove this after user gesture delegation ships.
-  if (RuntimeEnabledFeatures::SecurePaymentConfirmationEnabled(
-          GetExecutionContext())) {
-    is_user_gesture = true;
+  } else if (RuntimeEnabledFeatures::SecurePaymentConfirmationEnabled(
+                 GetExecutionContext())) {
+    // TODO(crbug.com/825270): Pretend that a user gesture is provided to allow
+    // origins that are part of the Secure Payment Confirmation Origin Trial to
+    // use skip-the-sheet flow as a hack for secure modal window
+    // (crbug.com/1122028). Remove this after user gesture delegation ships.
+    payment_request_allowed = true;
   }
 
   // TODO(crbug.com/779126): add support for handling payment requests in
   // immersive mode.
-  if (DomWindow()->GetFrame()->GetSettings()->GetImmersiveModeEnabled()) {
+  if (local_frame->GetSettings()->GetImmersiveModeEnabled()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "Page popups are suppressed");
     return ScriptPromise();
@@ -847,7 +868,7 @@ ScriptPromise PaymentRequest::show(ScriptState* script_state,
   UseCounter::Count(GetExecutionContext(), WebFeature::kPaymentRequestShow);
 
   is_waiting_for_show_promise_to_resolve_ = !details_promise.IsEmpty();
-  payment_provider_->Show(is_user_gesture,
+  payment_provider_->Show(payment_request_allowed,
                           is_waiting_for_show_promise_to_resolve_);
   if (is_waiting_for_show_promise_to_resolve_) {
     // If the website does not calculate the final shopping cart contents within
@@ -1178,6 +1199,8 @@ void PaymentRequest::Trace(Visitor* visitor) const {
   visitor->Trace(has_enrolled_instrument_resolver_);
   visitor->Trace(payment_provider_);
   visitor->Trace(client_receiver_);
+  visitor->Trace(complete_timer_);
+  visitor->Trace(update_payment_details_timer_);
   EventTargetWithInlineData::Trace(visitor);
   ExecutionContextLifecycleObserver::Trace(visitor);
 }

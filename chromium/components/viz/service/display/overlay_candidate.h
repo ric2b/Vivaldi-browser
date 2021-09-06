@@ -102,7 +102,7 @@ class VIZ_SERVICE_EXPORT OverlayCandidate {
   // If the quad doesn't require blending.
   bool is_opaque = false;
   // Texture resource to present in an overlay.
-  unsigned resource_id = 0;
+  ResourceId resource_id = kInvalidResourceId;
   // Mailbox from resource_id. It is used by SkiaRenderer.
   gpu::Mailbox mailbox;
 
@@ -134,6 +134,11 @@ class VIZ_SERVICE_EXPORT OverlayCandidate {
 
   // Is true if an HW overlay is required for the quad content.
   bool requires_overlay = false;
+
+  // Is true when quad is part of a |shared_quad_state| that has damage.
+  // This is a fallback case for when |overlay_damage_index| is unavailable and
+  // will be absent from the |SurfaceDamageRectList|.
+  bool assume_damaged = false;
 
   // Identifier passed through by the video decoder that allows us to validate
   // if a protected surface can still be displayed. Non-zero when valid.

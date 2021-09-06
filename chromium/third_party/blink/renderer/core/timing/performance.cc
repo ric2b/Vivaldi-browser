@@ -53,6 +53,7 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/loader/document_load_timing.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
@@ -534,6 +535,7 @@ mojom::blink::ResourceTimingInfoPtr Performance::GenerateResourceTiming(
   result->encoded_body_size = final_response.EncodedBodyLength();
   result->decoded_body_size = final_response.DecodedBodyLength();
   result->did_reuse_connection = final_response.ConnectionReused();
+  // TODO(crbug.com/1153336) Use network::IsUrlPotentiallyTrustworthy().
   result->is_secure_context =
       SecurityOrigin::IsSecure(final_response.ResponseUrl());
   result->allow_negative_values = info.NegativeAllowed();
@@ -879,7 +881,17 @@ ScriptPromise Performance::profile(ScriptState* script_state,
     return ScriptPromise();
   }
 
-  if (!execution_context->CrossOriginIsolatedCapability()) {
+  // Bypass COOP/COEP checks when the |--disable-web-security| flag is present.
+  bool web_security_enabled = true;
+  if (LocalDOMWindow* window = LocalDOMWindow::From(script_state)) {
+    if (LocalFrame* local_frame = window->GetFrame()) {
+      web_security_enabled =
+          local_frame->GetSettings()->GetWebSecurityEnabled();
+    }
+  }
+
+  if (web_security_enabled &&
+      !execution_context->CrossOriginIsolatedCapability()) {
     exception_state.ThrowSecurityError(
         "performance.profile() requires COOP+COEP (web.dev/coop-coep)");
     return ScriptPromise();
@@ -1047,6 +1059,8 @@ void Performance::Trace(Visitor* visitor) const {
   visitor->Trace(observers_);
   visitor->Trace(active_observers_);
   visitor->Trace(suspended_observers_);
+  visitor->Trace(deliver_observations_timer_);
+  visitor->Trace(resource_timing_buffer_full_timer_);
   EventTargetWithInlineData::Trace(visitor);
 }
 

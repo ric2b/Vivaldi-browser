@@ -9,12 +9,11 @@
 
   .header {
     @apply --diagnostics-data-point-title-font;
-    color: var(--diagnostics-data-point-title-color);
   }
 
   #infoIcon {
     bottom: 1px;
-    fill:  var(--google-grey-700);
+    fill: var(--google-grey-700);
     height: 20px;
     left: 4px;
     width: 20px;
@@ -22,16 +21,24 @@
 
   .value {
     @apply --diagnostics-data-point-subtitle-font;
-    color: var(--diagnostics-data-point-subtitle-color);
+  }
+
+  .text-red {
+    color: var(--google-red-600);
   }
 </style>
-<div class="data-point">
+<div class="data-point" tabindex="0" aria-labelledby="headerText value"
+    aria-describedby="tooltipText">
   <div class="header">
-    <span>[[header]]</span>
+    <span id="headerText" aria-hidden="true"> [[header]]</span>
     <iron-icon slot="icon" icon="cr:info-outline" id="infoIcon"
-      hidden$="[[!tooltipText]]">
+        hidden$="[[!tooltipText]]">
     </iron-icon>
-    <paper-tooltip for="infoIcon">[[tooltipText]]</paper-tooltip>
+    <paper-tooltip for="infoIcon" aria-hidden="true">
+      <span id="tooltipText">[[tooltipText]]</span>
+    </paper-tooltip>
   </div>
-  <div class="value">[[value]]</div>
+  <div class$="[[getValueClass_(warningState)]]" id="value" aria-hidden="true">
+    [[value]]
+  </div>
 </div>

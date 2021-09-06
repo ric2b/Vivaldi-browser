@@ -86,6 +86,10 @@ class CompositingTest : public PaintTestConfigurations, public testing::Test {
     return frame->GetFrame()->GetDocument()->getElementById(id);
   }
 
+  LayoutObject* GetLayoutObjectById(const AtomicString& id) {
+    return GetElementById(id)->GetLayoutObject();
+  }
+
   void UpdateAllLifecyclePhases() {
     WebView()->MainFrameWidget()->UpdateAllLifecyclePhases(
         DocumentUpdateReason::kTest);
@@ -260,7 +264,120 @@ TEST_P(CompositingTest, WillChangeTransformHintInSVG) {
   UpdateAllLifecyclePhases();
   auto* layer = CcLayerByDOMElementId("willChange");
   auto* transform_node = GetTransformNode(layer);
-  EXPECT_TRUE(transform_node->will_change_transform);
+  // For now will-change:transform triggers compositing for SVG, but we don't
+  // pass the flag to cc to ensure raster quality.
+  EXPECT_FALSE(transform_node->will_change_transform);
+}
+
+TEST_P(CompositingTest, Compositing3DTransformOnSVGModelObject) {
+  ScopedCompositeSVGForTest enable_feature(true);
+  InitializeWithHTML(*WebView()->MainFrameImpl()->GetFrame(), R"HTML(
+    <!doctype html>
+    <svg width="200" height="200">
+      <rect id="target" fill="blue" width="100" height="100"></rect>
+    </svg>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(CcLayerByDOMElementId("target"));
+
+  // Adding a 3D transform should trigger compositing.
+  auto* target_element = GetElementById("target");
+  target_element->setAttribute(html_names::kStyleAttr,
+                               "transform: translate3d(0, 0, 1px)");
+  UpdateAllLifecyclePhases();
+  // |HasTransformRelatedProperty| is used in |CompositingReasonsFor3DTransform|
+  // and must be set correctly.
+  ASSERT_TRUE(GetLayoutObjectById("target")->HasTransformRelatedProperty());
+  EXPECT_TRUE(CcLayerByDOMElementId("target"));
+
+  // Removing a 3D transform removes the compositing trigger.
+  target_element->setAttribute(html_names::kStyleAttr, "transform: none");
+  UpdateAllLifecyclePhases();
+  // |HasTransformRelatedProperty| is used in |CompositingReasonsFor3DTransform|
+  // and must be set correctly.
+  ASSERT_FALSE(GetLayoutObjectById("target")->HasTransformRelatedProperty());
+  EXPECT_FALSE(CcLayerByDOMElementId("target"));
+
+  // Adding a 2D transform should not trigger compositing.
+  target_element->setAttribute(html_names::kStyleAttr,
+                               "transform: translate(1px, 0)");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(CcLayerByDOMElementId("target"));
+
+  // Switching from a 2D to a 3D transform should trigger compositing.
+  target_element->setAttribute(html_names::kStyleAttr,
+                               "transform: translate3d(0, 0, 1px)");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(CcLayerByDOMElementId("target"));
+}
+
+TEST_P(CompositingTest, Compositing3DTransformOnSVGBlock) {
+  ScopedCompositeSVGForTest enable_feature(true);
+  InitializeWithHTML(*WebView()->MainFrameImpl()->GetFrame(), R"HTML(
+    <!doctype html>
+    <svg width="200" height="200">
+      <text id="target" x="50" y="50">text</text>
+    </svg>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(CcLayerByDOMElementId("target"));
+
+  // Adding a 3D transform should trigger compositing.
+  auto* target_element = GetElementById("target");
+  target_element->setAttribute(html_names::kStyleAttr,
+                               "transform: translate3d(0, 0, 1px)");
+  UpdateAllLifecyclePhases();
+  // |HasTransformRelatedProperty| is used in |CompositingReasonsFor3DTransform|
+  // and must be set correctly.
+  ASSERT_TRUE(GetLayoutObjectById("target")->HasTransformRelatedProperty());
+  EXPECT_TRUE(CcLayerByDOMElementId("target"));
+
+  // Removing a 3D transform removes the compositing trigger.
+  target_element->setAttribute(html_names::kStyleAttr, "transform: none");
+  UpdateAllLifecyclePhases();
+  // |HasTransformRelatedProperty| is used in |CompositingReasonsFor3DTransform|
+  // and must be set correctly.
+  ASSERT_FALSE(GetLayoutObjectById("target")->HasTransformRelatedProperty());
+  EXPECT_FALSE(CcLayerByDOMElementId("target"));
+
+  // Adding a 2D transform should not trigger compositing.
+  target_element->setAttribute(html_names::kStyleAttr,
+                               "transform: translate(1px, 0)");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(CcLayerByDOMElementId("target"));
+
+  // Switching from a 2D to a 3D transform should trigger compositing.
+  target_element->setAttribute(html_names::kStyleAttr,
+                               "transform: translate3d(0, 0, 1px)");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(CcLayerByDOMElementId("target"));
+}
+
+// Inlines do not support the transform property and should not be composited
+// due to 3D transforms.
+TEST_P(CompositingTest, NotCompositing3DTransformOnSVGInline) {
+  ScopedCompositeSVGForTest enable_feature(true);
+  InitializeWithHTML(*WebView()->MainFrameImpl()->GetFrame(), R"HTML(
+    <!doctype html>
+    <svg width="200" height="200">
+      <text x="50" y="50">
+        text
+        <tspan id="inline">tspan</tspan>
+      </text>
+    </svg>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(CcLayerByDOMElementId("inline"));
+
+  // Adding a 3D transform to an inline should not trigger compositing.
+  auto* inline_element = GetElementById("inline");
+  inline_element->setAttribute(html_names::kStyleAttr,
+                               "transform: translate3d(0, 0, 1px)");
+  UpdateAllLifecyclePhases();
+  // |HasTransformRelatedProperty| is used in |CompositingReasonsFor3DTransform|
+  // and must be set correctly.
+  ASSERT_FALSE(GetLayoutObjectById("inline")->HasTransformRelatedProperty());
+  EXPECT_FALSE(CcLayerByDOMElementId("inline"));
 }
 
 TEST_P(CompositingTest, PaintPropertiesWhenCompositingSVG) {
@@ -440,6 +557,32 @@ TEST_P(CompositingTest, ContainPaintLayerBounds) {
   auto* layer = CcLayersByDOMElementId(RootCcLayer(), "target")[0];
   ASSERT_TRUE(layer);
   EXPECT_EQ(gfx::Size(200, 100), layer->bounds());
+}
+
+TEST_P(CompositingTest, SVGForeignObjectDirectlyCompositedContainer) {
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
+    return;
+
+  InitializeWithHTML(*WebView()->MainFrameImpl()->GetFrame(), R"HTML(
+    <!doctype html>
+    <div id="container" style="backface-visibility: hidden">
+      <svg>
+        <foreignObject id="foreign">
+          <div id="child" style="position: relative"></div>
+        </foreignObject>
+      </svg>
+    </body>
+  )HTML");
+  UpdateAllLifecyclePhases();
+
+  // PaintInvalidator should use the same directly_composited_container during
+  // PrePaint and should not fail DCHECK.
+  auto* container = GetLayoutObjectById("container");
+  EXPECT_FALSE(container->IsStackingContext());
+  EXPECT_EQ(container,
+            &GetLayoutObjectById("foreign")->DirectlyCompositableContainer());
+  EXPECT_EQ(container,
+            &GetLayoutObjectById("child")->DirectlyCompositableContainer());
 }
 
 class CompositingSimTest : public PaintTestConfigurations, public SimTest {
@@ -1415,9 +1558,6 @@ TEST_P(CompositingSimTest, NoRenderSurfaceWithAxisAlignedTransformAnimation) {
 }
 
 TEST_P(CompositingSimTest, PromoteCrossOriginIframe) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(
-      blink::features::kCompositeCrossOriginIframes, true);
   InitializeWithHTML("<!DOCTYPE html><iframe id=iframe sandbox></iframe>");
   Compositor().BeginFrame();
   Document* iframe_doc =
@@ -1434,10 +1574,6 @@ TEST_P(CompositingSimTest, PromoteCrossOriginIframe) {
 // cross origin. This test ensures the iframe is promoted due to being cross
 // origin after the iframe loads.
 TEST_P(CompositingSimTest, PromoteCrossOriginIframeAfterLoading) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(
-      blink::features::kCompositeCrossOriginIframes, true);
-
   SimRequest main_resource("https://origin-a.com/a.html", "text/html");
   SimRequest frame_resource("https://origin-b.com/b.html", "text/html");
 
@@ -1461,10 +1597,6 @@ TEST_P(CompositingSimTest, PromoteCrossOriginIframeAfterLoading) {
 // sets up nested frames with domains A -> B -> A. Both the child and grandchild
 // frames should be composited because they are cross-origin to their parent.
 TEST_P(CompositingSimTest, PromoteCrossOriginToParent) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(
-      blink::features::kCompositeCrossOriginIframes, true);
-
   SimRequest main_resource("https://origin-a.com/a.html", "text/html");
   SimRequest child_resource("https://origin-b.com/b.html", "text/html");
   SimRequest grandchild_resource("https://origin-a.com/c.html", "text/html");
@@ -1498,10 +1630,6 @@ TEST_P(CompositingSimTest, PromoteCrossOriginToParent) {
 // Initially the iframe is cross-origin and should be composited. After changing
 // to same-origin, the frame should no longer be composited.
 TEST_P(CompositingSimTest, PromoteCrossOriginIframeAfterDomainChange) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(
-      blink::features::kCompositeCrossOriginIframes, true);
-
   SimRequest main_resource("https://origin-a.com/a.html", "text/html");
   SimRequest frame_resource("https://sub.origin-a.com/b.html", "text/html");
 
@@ -1544,10 +1672,6 @@ TEST_P(CompositingSimTest, PromoteCrossOriginIframeAfterDomainChange) {
 // child frame to A (same-origin), both child and grandchild frames should no
 // longer be composited.
 TEST_P(CompositingSimTest, PromoteCrossOriginToParentIframeAfterDomainChange) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(
-      blink::features::kCompositeCrossOriginIframes, true);
-
   SimRequest main_resource("https://origin-a.com/a.html", "text/html");
   SimRequest child_resource("https://sub.origin-a.com/b.html", "text/html");
   SimRequest grandchild_resource("https://origin-a.com/c.html", "text/html");
@@ -1668,10 +1792,6 @@ TEST_P(CompositingSimTest, ImplSideScrollSkipsCommit) {
 }
 
 TEST_P(CompositingSimTest, FrameAttribution) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(
-      blink::features::kCompositeCrossOriginIframes, true);
-
   InitializeWithHTML(R"HTML(
     <div id='child' style='will-change: transform;'>test</div>
     <iframe id='iframe' sandbox></iframe>
@@ -1722,10 +1842,6 @@ TEST_P(CompositingSimTest, FrameAttribution) {
 }
 
 TEST_P(CompositingSimTest, VisibleFrameRootLayers) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(
-      blink::features::kCompositeCrossOriginIframes, true);
-
   SimRequest main_resource("https://origin-a.com/a.html", "text/html");
   SimRequest frame_resource("https://origin-b.com/b.html", "text/html");
 

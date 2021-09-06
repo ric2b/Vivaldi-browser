@@ -33,6 +33,7 @@
 
 #include <utility>
 
+#include "base/stl_util.h"
 #include "base/time/time.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -69,6 +70,7 @@
 #include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/fileapi/public_url_manager.h"
+#include "third_party/blink/renderer/core/frame/csp/conversion_util.h"
 #include "third_party/blink/renderer/core/frame/frame.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -164,76 +166,6 @@ void ResetWheelAndTouchEventHandlerProperties(LocalFrame& frame) {
       cc::EventListenerProperties::kNone);
 }
 
-// TODO(arthursonzogni): Remove this when BeginNavigation will be sent directly
-// from blink.
-WebContentSecurityPolicySourceExpression ConvertToPublic(
-    network::mojom::blink::CSPSourcePtr source) {
-  return {source->scheme,
-          source->host,
-          source->is_host_wildcard ? kWebWildcardDispositionHasWildcard
-                                   : kWebWildcardDispositionNoWildcard,
-          source->port,
-          source->is_port_wildcard ? kWebWildcardDispositionHasWildcard
-                                   : kWebWildcardDispositionNoWildcard,
-          source->path};
-}
-
-// TODO(arthursonzogni): Remove this when BeginNavigation will be sent directly
-// from blink.
-WebContentSecurityPolicySourceList ConvertToPublic(
-    network::mojom::blink::CSPSourceListPtr source_list) {
-  WebVector<WebContentSecurityPolicySourceExpression> sources(
-      source_list->sources.size());
-  for (size_t i = 0; i < sources.size(); ++i)
-    sources[i] = ConvertToPublic(std::move(source_list->sources[i]));
-  return {source_list->allow_self, source_list->allow_star,
-          source_list->allow_response_redirects, std::move(sources)};
-}
-
-// TODO(arthursonzogni): Remove this when BeginNavigation will be sent directly
-// from blink.
-base::Optional<WebCSPTrustedTypes> ConvertToPublic(
-    network::mojom::blink::CSPTrustedTypesPtr trusted_types) {
-  if (!trusted_types)
-    return base::nullopt;
-  return WebCSPTrustedTypes{std::move(trusted_types->list),
-                            trusted_types->allow_any,
-                            trusted_types->allow_duplicates};
-}
-
-// TODO(arthursonzogni): Remove this when BeginNavigation will be sent directly
-// from blink.
-WebContentSecurityPolicy ConvertToPublic(
-    network::mojom::blink::ContentSecurityPolicyPtr policy) {
-  WebVector<WebContentSecurityPolicyDirective> directives(
-      policy->directives.size());
-  size_t i = 0;
-  for (auto& directive : policy->directives) {
-    directives[i++] = {directive.key,
-                       ConvertToPublic(std::move(directive.value))};
-  }
-
-  WebVector<WebContentSecurityPolicyRawDirective> raw_directives(
-      policy->raw_directives.size());
-  i = 0;
-  for (auto& directive : policy->raw_directives) {
-    raw_directives[i++] = {directive.key, std::move(directive.value)};
-  }
-
-  return {policy->header->type,
-          policy->header->source,
-          ConvertToPublic(std::move(policy->self_origin)),
-          std::move(raw_directives),
-          std::move(directives),
-          policy->upgrade_insecure_requests,
-          policy->block_all_mixed_content,
-          std::move(policy->report_endpoints),
-          policy->header->header_value,
-          policy->use_reporting_api,
-          policy->require_trusted_types_for,
-          ConvertToPublic(std::move(policy->trusted_types))};
-}
-
 }  // namespace
 
 LocalFrameClientImpl::LocalFrameClientImpl(WebLocalFrameImpl* frame)
@@ -253,11 +185,6 @@ WebLocalFrameImpl* LocalFrameClientImpl::GetWebFrame() const {
 WebContentCaptureClient* LocalFrameClientImpl::GetWebContentCaptureClient()
     const {
   return web_frame_->ContentCaptureClient();
-}
-
-void LocalFrameClientImpl::DidCreateInitialEmptyDocument() {
-  if (web_frame_->Client())
-    web_frame_->Client()->DidCreateInitialEmptyDocument();
 }
 
 void LocalFrameClientImpl::DidCommitDocumentReplacementNavigation(
@@ -562,9 +489,16 @@ void LocalFrameClientImpl::BeginNavigation(
     WTF::Vector<network::mojom::blink::ContentSecurityPolicyPtr> initiator_csp,
     network::mojom::IPAddressSpace initiator_address_space,
     mojo::PendingRemote<mojom::blink::NavigationInitiator> navigation_initiator,
-    const base::UnguessableToken* initiator_frame_token) {
+    const LocalFrameToken* initiator_frame_token,
+    mojo::PendingRemote<mojom::blink::PolicyContainerHostKeepAliveHandle>
+        initiator_policy_container_keep_alive_handle) {
   if (!web_frame_->Client())
     return;
+
+  // |initiator_frame_token| and |initiator_policy_container_keep_alive_handle|
+  // should either be both specified or both null.
+  DCHECK(!initiator_frame_token ==
+         !initiator_policy_container_keep_alive_handle);
 
   auto navigation_info = std::make_unique<WebNavigationInfo>();
   navigation_info->url_request.CopyFrom(WrappedResourceRequest(request));
@@ -579,15 +513,30 @@ void LocalFrameClientImpl::BeginNavigation(
       should_check_main_world_content_security_policy;
   navigation_info->blob_url_token = std::move(blob_url_token);
   navigation_info->input_start = input_start_time;
-  if (initiator_frame_token)
-    navigation_info->initiator_frame_token = *initiator_frame_token;
+  navigation_info->initiator_frame_token =
+      base::OptionalFromPtr(initiator_frame_token);
+  navigation_info->initiator_policy_container_keep_alive_handle =
+      std::move(initiator_policy_container_keep_alive_handle);
   if (origin_window && origin_window->GetFrame()) {
     // Many navigation paths do not pass an |initiator_frame_token|, so we need
     // to compute it here.
     if (!navigation_info->initiator_frame_token) {
       navigation_info->initiator_frame_token =
-          origin_window->GetFrame()->GetFrameToken();
+          origin_window->GetFrame()->GetLocalFrameToken();
     }
+    // Similarly, many navigation paths do not pass an
+    // |initiator_policy_container_keep_alive_handle|.
+    if (!navigation_info->initiator_policy_container_keep_alive_handle) {
+      navigation_info->initiator_policy_container_keep_alive_handle =
+          origin_window->GetFrame()
+              ->GetPolicyContainer()
+              ->IssueKeepAliveHandle();
+    }
+  } else {
+    // TODO(https://crbug.com/1173409 and https://crbug.com/1059959): Check that
+    // we always pass an |initiator_frame_token| and an
+    // |initiator_policy_container_keep_alive_handle| if |origin_window| is not
+    // set.
   }
   for (auto& csp_policy : initiator_csp) {
     navigation_info->initiator_csp.emplace_back(
@@ -777,6 +726,12 @@ void LocalFrameClientImpl::DidObserveLayoutShift(double score,
                                                  bool after_input_or_scroll) {
   if (WebLocalFrameClient* client = web_frame_->Client())
     client->DidObserveLayoutShift(score, after_input_or_scroll);
+}
+
+void LocalFrameClientImpl::DidObserveInputForLayoutShiftTracking(
+    base::TimeTicks timestamp) {
+  if (WebLocalFrameClient* client = web_frame_->Client())
+    client->DidObserveInputForLayoutShiftTracking(timestamp);
 }
 
 void LocalFrameClientImpl::DidObserveLayoutNg(uint32_t all_block_count,
@@ -1088,11 +1043,6 @@ void LocalFrameClientImpl::DidChangeContents() {
 Frame* LocalFrameClientImpl::FindFrame(const AtomicString& name) const {
   DCHECK(web_frame_->Client());
   return ToCoreFrame(web_frame_->Client()->FindFrame(name));
-}
-
-void LocalFrameClientImpl::FrameRectsChanged(const IntRect& frame_rect) {
-  DCHECK(web_frame_->Client());
-  web_frame_->Client()->FrameRectsChanged(frame_rect);
 }
 
 void LocalFrameClientImpl::FocusedElementChanged(Element* element) {

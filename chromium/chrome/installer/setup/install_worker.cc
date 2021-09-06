@@ -59,17 +59,10 @@
 #include "chrome/installer/util/util_constants.h"
 #include "chrome/installer/util/work_item_list.h"
 
-#include "installer/util/marker_file_work_item.h"
 #include "installer/util/vivaldi_install_util.h"
+#include "installer/util/vivaldi_setup_util.h"
 
-#if !defined(OFFICIAL_BUILD)
-// Path to use for all following setup.exe invocations.
-namespace installer {
-base::FilePath* vivaldi_debug_subprocesses_exe = nullptr;
-}
-#endif
-
-using base::ASCIIToUTF16;
+using base::ASCIIToWide;
 using base::win::RegKey;
 
 namespace installer {
@@ -215,7 +208,7 @@ void AddDeleteUninstallEntryForMSIWorkItems(
       << "This must only be called for MSI installations!";
 
   HKEY reg_root = installer_state.root_key();
-  base::string16 uninstall_reg = install_static::GetUninstallRegistryPath();
+  std::wstring uninstall_reg = install_static::GetUninstallRegistryPath();
 
   WorkItem* delete_reg_key = work_item_list->AddDeleteRegKeyWorkItem(
       reg_root, uninstall_reg, KEY_WOW64_32KEY);
@@ -260,7 +253,7 @@ void AddChromeWorkItems(const InstallParams& install_params,
 
   WorkItem::CopyOverWriteOption vivaldi_exe_write_option =
       WorkItem::NEW_NAME_IF_IN_USE;
-  if (kVivaldi && !installer_state.is_vivaldi_silent_update()) {
+  if (vivaldi::IsInstallSilentUpdate()) {
     // If this is not a live update, assume that all Vivaldi processes should be
     // terminated at this point.
     vivaldi_exe_write_option = WorkItem::ALWAYS;
@@ -287,34 +280,7 @@ void AddChromeWorkItems(const InstallParams& install_params,
         target_path.Append(installer::kVisualElementsManifest), temp_path);
   }
 
-  if (kVivaldi) {
-    base::FilePath update_notifier(
-        target_path.Append(vivaldi::constants::kVivaldiUpdateNotifierExe));
-    base::FilePath old_update_notifier(
-        target_path.Append(vivaldi::constants::kVivaldiUpdateNotifierOldExe));
-
-    // Delete any update_notifier.old if present
-    install_list->AddDeleteTreeWorkItem(old_update_notifier, temp_path);
-
-    // Rename the currently running update_notifier.exe to update_notifier.old
-    // (ignore failure if it doesn't exist)
-    install_list
-        ->AddMoveTreeWorkItem(update_notifier, old_update_notifier, temp_path,
-                              WorkItem::ALWAYS_MOVE)
-        ->set_best_effort(true);
-
-    // Install the new update_notifier.exe
-    install_list->AddCopyTreeWorkItem(
-        src_path.Append(vivaldi::constants::kVivaldiUpdateNotifierExe),
-        update_notifier, temp_path, WorkItem::CopyOverWriteOption::ALWAYS);
-
-    if (installer_state.is_vivaldi_standalone()) {
-      base::FilePath standalone_marker =
-          target_path.Append(vivaldi::constants::kStandaloneMarkerFile);
-      install_list->AddWorkItem(new vivaldi::MarkerFileWorkItem(
-          std::move(standalone_marker), "// Vivaldi Standalone\n"));
-    }
-  }
+  vivaldi::AddVivaldiSpecificWorkItems(install_params, install_list);
 
   // In the past, we copied rather than moved for system level installs so that
   // the permissions of %ProgramFiles% would be picked up.  Now that |temp_path|
@@ -459,7 +425,7 @@ void AddEnterpriseEnrollmentWorkItems(const InstallerState& installer_state,
     return;
 
   const HKEY root_key = installer_state.root_key();
-  const base::string16 cmd_key(GetCommandKey(kCmdStoreDMToken));
+  const std::wstring cmd_key(GetCommandKey(kCmdStoreDMToken));
 
   if (installer_state.operation() == InstallerState::UNINSTALL) {
     install_list->AddDeleteRegKeyWorkItem(root_key, cmd_key, KEY_WOW64_32KEY)
@@ -516,7 +482,7 @@ void AddUninstallShortcutWorkItems(const InstallParams& install_params,
   base::CommandLine uninstall_arguments(base::CommandLine::NO_PROGRAM);
   AppendUninstallCommandLineFlags(installer_state, &uninstall_arguments);
 
-  base::string16 update_state_key(install_static::GetClientStateKeyPath());
+  std::wstring update_state_key(install_static::GetClientStateKeyPath());
   install_list->AddCreateRegKeyWorkItem(reg_root, update_state_key,
                                         KEY_WOW64_32KEY);
   install_list->AddSetRegValueWorkItem(
@@ -534,7 +500,7 @@ void AddUninstallShortcutWorkItems(const InstallParams& install_params,
     DCHECK_EQ(quoted_uninstall_cmd.GetCommandLineString()[0], '"');
     quoted_uninstall_cmd.AppendArguments(uninstall_arguments, false);
 
-    base::string16 uninstall_reg = install_static::GetUninstallRegistryPath();
+    std::wstring uninstall_reg = install_static::GetUninstallRegistryPath();
     install_list->AddCreateRegKeyWorkItem(reg_root, uninstall_reg,
                                           KEY_WOW64_32KEY);
     install_list->AddSetRegValueWorkItem(reg_root, uninstall_reg,
@@ -549,7 +515,7 @@ void AddUninstallShortcutWorkItems(const InstallParams& install_params,
                                          KEY_WOW64_32KEY, L"InstallLocation",
                                          install_path.value(), true);
 
-    base::string16 chrome_icon =
+    std::wstring chrome_icon =
         ShellUtil::FormatIconLocation(install_path.Append(kChromeExe),
                                       install_static::GetIconResourceIndex());
     install_list->AddSetRegValueWorkItem(reg_root, uninstall_reg,
@@ -567,10 +533,10 @@ void AddUninstallShortcutWorkItems(const InstallParams& install_params,
                                          InstallUtil::GetPublisherName(), true);
     install_list->AddSetRegValueWorkItem(
         reg_root, uninstall_reg, KEY_WOW64_32KEY, L"Version",
-        ASCIIToUTF16(new_version.GetString()), true);
+        ASCIIToWide(new_version.GetString()), true);
     install_list->AddSetRegValueWorkItem(
         reg_root, uninstall_reg, KEY_WOW64_32KEY, L"DisplayVersion",
-        ASCIIToUTF16(new_version.GetString()), true);
+        ASCIIToWide(new_version.GetString()), true);
     // TODO(wfh): Ensure that this value is preserved in the 64-bit hive when
     // 64-bit installs place the uninstall information into the 64-bit registry.
     install_list->AddSetRegValueWorkItem(reg_root, uninstall_reg,
@@ -601,7 +567,7 @@ void AddVersionKeyWorkItems(const InstallParams& install_params,
   // language may not be related to a given user's runtime language.
   const bool add_language_identifier = !installer_state.system_install();
 
-  const base::string16 clients_key = install_static::GetClientsKeyPath();
+  const std::wstring clients_key = install_static::GetClientsKeyPath();
   list->AddCreateRegKeyWorkItem(root, clients_key, KEY_WOW64_32KEY);
 
   list->AddSetRegValueWorkItem(root, clients_key, KEY_WOW64_32KEY,
@@ -619,7 +585,7 @@ void AddVersionKeyWorkItems(const InstallParams& install_params,
     // Write the language identifier of the current translation.  Omaha's set of
     // languages is a superset of Chrome's set of translations with this one
     // exception: what Chrome calls "en-us", Omaha calls "en".  sigh.
-    base::string16 language(GetCurrentTranslation());
+    std::wstring language(GetCurrentTranslation());
     if (base::LowerCaseEqualsASCII(language, "en-us"))
       language.resize(2);
     list->AddSetRegValueWorkItem(root, clients_key, KEY_WOW64_32KEY,
@@ -628,18 +594,18 @@ void AddVersionKeyWorkItems(const InstallParams& install_params,
   }
   list->AddSetRegValueWorkItem(
       root, clients_key, KEY_WOW64_32KEY, google_update::kRegVersionField,
-      ASCIIToUTF16(install_params.new_version.GetString()),
+      ASCIIToWide(install_params.new_version.GetString()),
       true);  // overwrite version
 }
 
 void AddUpdateBrandCodeWorkItem(const InstallerState& installer_state,
                                 WorkItemList* install_list) {
   // Only update specific brand codes needed for enterprise.
-  base::string16 brand;
+  std::wstring brand;
   if (!GoogleUpdateSettings::GetBrand(&brand))
     return;
 
-  base::string16 new_brand = GetUpdatedBrandCode(brand);
+  std::wstring new_brand = GetUpdatedBrandCode(brand);
   if (new_brand.empty())
     return;
 
@@ -659,7 +625,7 @@ void AddUpdateBrandCodeWorkItem(const InstallerState& installer_state,
       KEY_WOW64_32KEY, google_update::kRegRLZBrandField, new_brand, true);
 }
 
-base::string16 GetUpdatedBrandCode(const base::string16& brand_code) {
+std::wstring GetUpdatedBrandCode(const std::wstring& brand_code) {
   // Brand codes to be remapped on enterprise installs.
   static constexpr struct EnterpriseBrandRemapping {
     const wchar_t* old_brand;
@@ -673,7 +639,7 @@ base::string16 GetUpdatedBrandCode(const base::string16& brand_code) {
     if (brand_code == mapping.old_brand)
       return mapping.new_brand;
   }
-  return base::string16();
+  return std::wstring();
 }
 
 bool AppendPostInstallTasks(const InstallParams& install_params,
@@ -690,7 +656,7 @@ bool AppendPostInstallTasks(const InstallParams& install_params,
   HKEY root = installer_state.root_key();
   const base::FilePath& target_path = installer_state.target_path();
   base::FilePath new_chrome_exe(target_path.Append(kChromeNewExe));
-  const base::string16 clients_key(install_static::GetClientsKeyPath());
+  const std::wstring clients_key(install_static::GetClientsKeyPath());
 
   // Append work items that will only be executed if this was an in-use update.
   // We update the 'opv' value with the current version that is active,
@@ -714,13 +680,13 @@ bool AppendPostInstallTasks(const InstallParams& install_params,
       in_use_update_work_items->AddSetRegValueWorkItem(
           root, clients_key, KEY_WOW64_32KEY,
           google_update::kRegOldVersionField,
-          ASCIIToUTF16(current_version.GetString()), true);
+          ASCIIToWide(current_version.GetString()), true);
     }
     if (critical_version.IsValid()) {
       in_use_update_work_items->AddSetRegValueWorkItem(
           root, clients_key, KEY_WOW64_32KEY,
           google_update::kRegCriticalVersionField,
-          ASCIIToUTF16(critical_version.GetString()), true);
+          ASCIIToWide(critical_version.GetString()), true);
     } else {
       in_use_update_work_items->AddDeleteRegValueWorkItem(
           root, clients_key, KEY_WOW64_32KEY,
@@ -730,8 +696,10 @@ bool AppendPostInstallTasks(const InstallParams& install_params,
     // Form the mode-specific rename command.
     base::CommandLine product_rename_cmd(installer_path);
 #if !defined(OFFICIAL_BUILD)
-    if (vivaldi_debug_subprocesses_exe) {
-      product_rename_cmd.SetProgram(*vivaldi_debug_subprocesses_exe);
+    if (vivaldi::debug_subprocesses_exe) {
+      product_rename_cmd.SetProgram(*vivaldi::debug_subprocesses_exe);
+      product_rename_cmd.AppendSwitchPath(
+          vivaldi::constants::kVivaldiDebugTargetExe, installer_path);
     }
 #endif
     product_rename_cmd.AppendSwitch(switches::kRenameChromeExe);
@@ -809,7 +777,7 @@ bool AppendPostInstallTasks(const InstallParams& install_params,
   // installs.
 #if BUILDFLAG(USE_GOOGLE_UPDATE_INTEGRATION)
   if (installer_state.system_install()) {
-    const base::string16 path = install_static::GetClientStateMediumKeyPath();
+    const std::wstring path = install_static::GetClientStateMediumKeyPath();
     post_install_task_list
         ->AddCreateRegKeyWorkItem(HKEY_LOCAL_MACHINE, path, KEY_WOW64_32KEY)
         ->set_best_effort(true);
@@ -889,7 +857,7 @@ void AddInstallWorkItems(const InstallParams& install_params,
   AddInstallerCopyTasks(install_params, install_list);
 
   // Do not create registry entries for Vivaldi standalone install
-  if (!installer_state.is_vivaldi_standalone()) {
+  if (!vivaldi::IsInstallStandalone()) {
     // clang-format off
   AddUninstallShortcutWorkItems(install_params, install_list);
 
@@ -940,7 +908,7 @@ void AddNativeNotificationWorkItems(
     return;
   }
 
-  base::string16 toast_activator_reg_path =
+  std::wstring toast_activator_reg_path =
       InstallUtil::GetToastActivatorRegistryPath();
 
   if (toast_activator_reg_path.empty()) {
@@ -965,11 +933,11 @@ void AddNativeNotificationWorkItems(
                      install_static::GetToastActivatorClsid()));
   item->set_best_effort(true);
 
-  base::string16 toast_activator_server_path =
+  std::wstring toast_activator_server_path =
       toast_activator_reg_path + L"\\LocalServer32";
 
   // Command-line featuring the quoted path to the exe.
-  base::string16 command(1, L'"');
+  std::wstring command(1, L'"');
   command.append(notification_helper_path.value()).append(1, L'"');
 
   list->AddCreateRegKeyWorkItem(root, toast_activator_server_path,
@@ -1021,7 +989,7 @@ void AddActiveSetupWorkItems(const InstallerState& installer_state,
   DCHECK(installer_state.RequiresActiveSetup());
 
   const HKEY root = HKEY_LOCAL_MACHINE;
-  const base::string16 active_setup_path(install_static::GetActiveSetupPath());
+  const std::wstring active_setup_path(install_static::GetActiveSetupPath());
 
   VLOG(1) << "Adding registration items for Active Setup.";
   list->AddCreateRegKeyWorkItem(root, active_setup_path,
@@ -1073,7 +1041,7 @@ void AddOsUpgradeWorkItems(const InstallerState& installer_state,
                            const base::Version& new_version,
                            WorkItemList* install_list) {
   const HKEY root_key = installer_state.root_key();
-  const base::string16 cmd_key(GetCommandKey(kCmdOnOsUpgrade));
+  const std::wstring cmd_key(GetCommandKey(kCmdOnOsUpgrade));
 
   if (installer_state.operation() == InstallerState::UNINSTALL) {
     install_list->AddDeleteRegKeyWorkItem(root_key, cmd_key, KEY_WOW64_32KEY)

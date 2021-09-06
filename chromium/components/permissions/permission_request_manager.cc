@@ -242,9 +242,14 @@ void PermissionRequestManager::AddRequest(
   }
 }
 
-void PermissionRequestManager::UpdateAnchorPosition() {
-  if (view_)
-    view_->UpdateAnchorPosition();
+void PermissionRequestManager::UpdateAnchor() {
+  if (view_) {
+    // When the prompt's anchor is being updated, the prompt view can be
+    // recreated for the new browser. Because of that, ignore prompt callbacks
+    // while doing that.
+    base::AutoReset<bool> ignore(&ignore_callbacks_from_prompt_, true);
+    view_->UpdateAnchor();
+  }
 }
 
 void PermissionRequestManager::DidStartNavigation(
@@ -379,7 +384,7 @@ GURL PermissionRequestManager::GetEmbeddingOrigin() const {
 }
 
 void PermissionRequestManager::Accept() {
-  if (deleting_bubble_)
+  if (ignore_callbacks_from_prompt_)
     return;
   DCHECK(view_);
   std::vector<PermissionRequest*>::iterator requests_iter;
@@ -391,7 +396,7 @@ void PermissionRequestManager::Accept() {
 }
 
 void PermissionRequestManager::AcceptThisTime() {
-  if (deleting_bubble_)
+  if (ignore_callbacks_from_prompt_)
     return;
   DCHECK(view_);
   std::vector<PermissionRequest*>::iterator requests_iter;
@@ -403,7 +408,7 @@ void PermissionRequestManager::AcceptThisTime() {
 }
 
 void PermissionRequestManager::Deny() {
-  if (deleting_bubble_)
+  if (ignore_callbacks_from_prompt_)
     return;
   DCHECK(view_);
 
@@ -429,7 +434,7 @@ void PermissionRequestManager::Deny() {
 }
 
 void PermissionRequestManager::Closing() {
-  if (deleting_bubble_)
+  if (ignore_callbacks_from_prompt_)
     return;
   DCHECK(view_);
   std::vector<PermissionRequest*>::iterator requests_iter;
@@ -578,8 +583,8 @@ void PermissionRequestManager::ShowBubble() {
     }
   }
   current_request_already_displayed_ = true;
+  current_request_first_display_time_ = base::Time::Now();
   NotifyBubbleAdded();
-
   // If in testing mode, automatically respond to the bubble that was shown.
   if (auto_response_for_test_ != NONE)
     DoAutoResponseForTesting();
@@ -588,7 +593,7 @@ void PermissionRequestManager::ShowBubble() {
 void PermissionRequestManager::DeleteBubble() {
   DCHECK(view_);
   {
-    base::AutoReset<bool> deleting(&deleting_bubble_, true);
+    base::AutoReset<bool> deleting(&ignore_callbacks_from_prompt_, true);
     view_.reset();
   }
   NotifyBubbleRemoved();
@@ -599,6 +604,7 @@ void PermissionRequestManager::ResetViewStateForCurrentRequest() {
     selector->Cancel();
 
   current_request_already_displayed_ = false;
+  current_request_first_display_time_ = base::Time();
   prediction_grant_likelihood_.reset();
   current_request_ui_to_use_.reset();
   selector_decisions_.clear();
@@ -610,8 +616,13 @@ void PermissionRequestManager::ResetViewStateForCurrentRequest() {
 void PermissionRequestManager::FinalizeCurrentRequests(
     PermissionAction permission_action) {
   DCHECK(IsRequestInProgress());
+  base::TimeDelta time_to_decision;
+  if (!current_request_first_display_time_.is_null() &&
+      permission_action != PermissionAction::IGNORED) {
+    time_to_decision = base::Time::Now() - current_request_first_display_time_;
+  }
   PermissionUmaUtil::PermissionPromptResolved(
-      requests_, web_contents(), permission_action,
+      requests_, web_contents(), permission_action, time_to_decision,
       DetermineCurrentRequestUIDispositionForUMA(),
       DetermineCurrentRequestUIDispositionReasonForUMA(),
       prediction_grant_likelihood_);
@@ -866,6 +877,9 @@ void PermissionRequestManager::LogWarningToConsole(const char* message) {
 
 void PermissionRequestManager::DoAutoResponseForTesting() {
   switch (auto_response_for_test_) {
+    case ACCEPT_ONCE:
+      AcceptThisTime();
+      break;
     case ACCEPT_ALL:
       Accept();
       break;

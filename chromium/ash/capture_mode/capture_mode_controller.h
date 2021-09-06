@@ -65,7 +65,7 @@ class ASH_EXPORT CaptureModeController
   bool is_recording_in_progress() const { return is_recording_in_progress_; }
 
   // Returns true if a capture mode session is currently active.
-  bool IsActive() const { return !!capture_mode_session_; }
+  bool IsActive() const;
 
   // Sets the capture source/type, which will be applied to an ongoing capture
   // session (if any), or to a future capture session when Start() is called.
@@ -116,7 +116,7 @@ class ASH_EXPORT CaptureModeController
 
   // recording::mojom::RecordingServiceClient:
   void OnMuxerOutput(const std::string& chunk) override;
-  void OnRecordingEnded(bool success) override;
+  void OnRecordingEnded(bool success, const gfx::ImageSkia& thumbnail) override;
 
   // SessionObserver:
   void OnActiveUserSessionChanged(const AccountId& account_id) override;
@@ -199,12 +199,6 @@ class ASH_EXPORT CaptureModeController
   // Returns whether doing a screen capture is currently allowed by enterprise
   // policies and a reason otherwise.
   // ShouldBlockRecordingForContentProtection() should be used for HDCP checks.
-  enum class CaptureAllowance {
-    kAllowed,
-    kDisallowedByDlp,
-    kDisallowedByPolicy,
-    kDisallowedByHdcp
-  };
   CaptureAllowance IsCaptureAllowedByEnterprisePolicies(
       const CaptureParams& capture_params) const;
 
@@ -243,8 +237,10 @@ class ASH_EXPORT CaptureModeController
   void OnVideoFileStatus(bool success);
 
   // Called back when the |video_file_handler_| flushes the remaining cached
-  // video chunks in its buffer. Called on the UI thread.
-  void OnVideoFileSaved(bool success);
+  // video chunks in its buffer. Called on the UI thread. |video_thumbnail| is
+  // an RGB image provided by the recording service that can be used as a
+  // thumbnail of the video in the notification.
+  void OnVideoFileSaved(const gfx::ImageSkia& video_thumbnail, bool success);
 
   // Shows a preview notification of the newly taken screenshot or screen
   // recording.
@@ -254,15 +250,6 @@ class ASH_EXPORT CaptureModeController
   void HandleNotificationClicked(const base::FilePath& screen_capture_path,
                                  const CaptureModeType type,
                                  base::Optional<int> button_index);
-
-  // Returns the message for the notification based on |allowance|.
-  static int GetDisabledNotificationMessageId(
-      CaptureModeController::CaptureAllowance allowance);
-  // Shows a notification informing the user that Capture Mode operations are
-  // currently disabled. |allowance| identifies the reason why the operation is
-  // currently disabled.
-  static void ShowDisabledNotification(
-      CaptureModeController::CaptureAllowance allowance);
 
   // Builds a path for a file of an image screenshot, or a video screen
   // recording, builds with display index if there are

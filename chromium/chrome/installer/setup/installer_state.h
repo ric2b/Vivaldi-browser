@@ -6,10 +6,10 @@
 #define CHROME_INSTALLER_SETUP_INSTALLER_STATE_H_
 
 #include <memory>
+#include <string>
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/strings/string16.h"
 #include "base/version.h"
 #include "base/win/windows_types.h"
 #include "build/build_config.h"
@@ -68,20 +68,6 @@ class InstallerState {
   // flag is set is to be operated on.
   bool is_msi() const { return msi_; }
 
-  // True if this installer is started with the "--vivaldi-update" option
-  bool is_vivaldi_update() const { return is_vivaldi_update_; }
-
-  // True if this installer is started with the "--vivaldi-standalone" option
-  bool is_vivaldi_standalone() const { return is_vivaldi_standalone_; }
-
-  // True if this installer is started with the
-  // "--vivaldi-register-standalone" option
-  bool is_vivaldi_register_standalone() const {
-    return is_vivaldi_register_standalone_;
-  }
-
-  bool is_vivaldi_silent_update() const { return is_vivaldi_silent_update_; }
-
   // True if the --verbose-logging command-line flag is set or if the
   // verbose_logging initial preferences option is true.
   bool verbose_logging() const { return verbose_logging_; }
@@ -89,7 +75,7 @@ class InstallerState {
   HKEY root_key() const { return root_key_; }
 
   // The ClientState key by which we interact with Google Update.
-  const base::string16& state_key() const { return state_key_; }
+  const std::wstring& state_key() const { return state_key_; }
 
   // Returns the currently installed version in |target_path|.
   // Use IsValid() predicate to detect if product not installed.
@@ -121,7 +107,7 @@ class InstallerState {
   // non-empty, is written to the InstallerSuccessLaunchCmdLine value.
   void WriteInstallerResult(InstallStatus status,
                             int string_resource_id,
-                            const base::string16* launch_cmd) const;
+                            const std::wstring* launch_cmd) const;
 
   // Returns true if this install needs to register an Active Setup command.
   bool RequiresActiveSetup() const;
@@ -135,7 +121,7 @@ class InstallerState {
 
   Operation operation_;
   base::FilePath target_path_;
-  base::string16 state_key_;
+  std::wstring state_key_;
   base::Version critical_update_version_;
   ProgressCalculator progress_calculator_;
   Level level_;
@@ -143,18 +129,9 @@ class InstallerState {
   bool msi_;
   bool verbose_logging_;
 
-  // Vivaldi specific.
-  bool is_vivaldi_update_ = false;
-  bool is_vivaldi_standalone_ = false;
-  bool is_vivaldi_register_standalone_ = false;
-  bool is_vivaldi_silent_update_ = false;
-
  private:
   DISALLOW_COPY_AND_ASSIGN(InstallerState);
 };
-
-// Marker for Vivaldi-specific changes.
-constexpr bool kVivaldi = true;
 
 }  // namespace installer
 

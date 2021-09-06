@@ -37,6 +37,7 @@
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/autofill_profile_comparator.h"
+#include "components/autofill/core/browser/data_model/autofill_structured_address_utils.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
@@ -69,6 +70,11 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace autofill {
+
+using structured_address::HonorificPrefixEnabled;
+using structured_address::StructuredAddressesEnabled;
+using structured_address::StructuredNamesEnabled;
+
 namespace {
 
 const char kPrimaryAccountEmail[] = "syncuser@example.com";
@@ -84,15 +90,6 @@ ACTION_P(QuitMessageLoop, loop) {
   loop->Quit();
 }
 
-bool StructuredNames() {
-  return base::FeatureList::IsEnabled(
-      features::kAutofillEnableSupportForMoreStructureInNames);
-}
-
-bool StructuredAddress() {
-  return base::FeatureList::IsEnabled(
-      features::kAutofillEnableSupportForMoreStructureInAddresses);
-}
 
 class PersonalDataLoadedObserverMock : public PersonalDataManagerObserver {
  public:
@@ -370,11 +367,6 @@ class PersonalDataManagerHelper : public PersonalDataManagerTestBase {
     return PersonalDataManagerTestBase::TurnOnSyncFeature(personal_data_.get());
   }
 
-  void EnableAutofillProfileCleanup() {
-    personal_data_->personal_data_manager_cleaner_for_testing()
-        ->set_is_autofill_profile_cleanup_pending(true);
-  }
-
   void SetUpReferenceProfile(const AutofillProfile& profile) {
     ASSERT_EQ(0U, personal_data_->GetProfiles().size());
 
@@ -607,8 +599,6 @@ class PersonalDataManagerMockTest : public PersonalDataManagerTestBase,
     personal_data_->pref_service_->SetInteger(
         prefs::kAutofillLastVersionValidated,
         atoi(version_info::GetVersionNumber().c_str()));
-    personal_data_->personal_data_manager_cleaner_for_testing()
-        ->set_is_autofill_profile_cleanup_pending(true);
   }
 
   void TearDown() override {
@@ -1751,25 +1741,27 @@ TEST_F(PersonalDataManagerTest, GetNonEmptyTypes) {
   // For structured names and addresses, there are more non-empty types.
   // TODO(crbug.com/1103421): Clean once launched.
   unsigned int non_empty_types_expectation = 15;
-  if (StructuredNames())
+  if (StructuredNamesEnabled())
     non_empty_types_expectation += 1;
   // TODO(crbug.com/1130194): Clean once launched.
-  if (StructuredAddress())
+  if (StructuredAddressesEnabled())
     non_empty_types_expectation += 2;
+  if (HonorificPrefixEnabled())
+    non_empty_types_expectation += 1;
 
   EXPECT_EQ(non_empty_types_expectation, non_empty_types.size());
 
   EXPECT_TRUE(non_empty_types.count(NAME_FIRST));
   EXPECT_TRUE(non_empty_types.count(NAME_LAST));
   // TODO(crbug.com/1103421): Clean once launched.
-  if (StructuredNames())
+  if (StructuredNamesEnabled())
     EXPECT_TRUE(non_empty_types.count(NAME_LAST_SECOND));
   EXPECT_TRUE(non_empty_types.count(NAME_FULL));
   EXPECT_TRUE(non_empty_types.count(EMAIL_ADDRESS));
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_LINE1));
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_STREET_ADDRESS));
   // TODO(crbug.com/1130194): Clean once launched.
-  if (StructuredAddress()) {
+  if (StructuredAddressesEnabled()) {
     EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_STREET_NAME));
     EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_HOUSE_NUMBER));
   }
@@ -1803,17 +1795,19 @@ TEST_F(PersonalDataManagerTest, GetNonEmptyTypes) {
   non_empty_types_expectation = 19;
   // For structured names, there is one more non-empty type.
   // TODO(crbug.com/1103421): Clean once launched.
-  if (StructuredNames())
+  if (StructuredNamesEnabled())
+    non_empty_types_expectation += 1;
+  if (HonorificPrefixEnabled())
     non_empty_types_expectation += 1;
   // TODO(crbug.com/1130194): Clean once launched.
-  if (StructuredAddress())
+  if (StructuredAddressesEnabled())
     non_empty_types_expectation += 2;
   EXPECT_EQ(non_empty_types_expectation, non_empty_types.size());
   EXPECT_TRUE(non_empty_types.count(NAME_FIRST));
   EXPECT_TRUE(non_empty_types.count(NAME_MIDDLE));
   EXPECT_TRUE(non_empty_types.count(NAME_MIDDLE_INITIAL));
   // TODO(crbug.com/1103421): Clean once launched.
-  if (StructuredNames())
+  if (StructuredNamesEnabled())
     EXPECT_TRUE(non_empty_types.count(NAME_LAST));
   EXPECT_TRUE(non_empty_types.count(NAME_FULL));
   EXPECT_TRUE(non_empty_types.count(EMAIL_ADDRESS));
@@ -1822,7 +1816,7 @@ TEST_F(PersonalDataManagerTest, GetNonEmptyTypes) {
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_LINE2));
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_STREET_ADDRESS));
   // TODO(crbug.com/1130194): Clean once launched.
-  if (StructuredAddress()) {
+  if (StructuredAddressesEnabled()) {
     EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_STREET_NAME));
     EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_HOUSE_NUMBER));
   }
@@ -1849,10 +1843,12 @@ TEST_F(PersonalDataManagerTest, GetNonEmptyTypes) {
   // For structured names, there is one more non-empty type.
   // TODO(crbug.com/1103421): Clean once launched.
   non_empty_types_expectation = 29;
-  if (StructuredNames())
+  if (StructuredNamesEnabled())
+    non_empty_types_expectation += 1;
+  if (HonorificPrefixEnabled())
     non_empty_types_expectation += 1;
   // TODO(crbug.com/1130194): Clean once launched.
-  if (StructuredAddress())
+  if (StructuredAddressesEnabled())
     non_empty_types_expectation += 2;
   EXPECT_EQ(non_empty_types_expectation, non_empty_types.size());
   EXPECT_TRUE(non_empty_types.count(NAME_FIRST));
@@ -1860,7 +1856,7 @@ TEST_F(PersonalDataManagerTest, GetNonEmptyTypes) {
   EXPECT_TRUE(non_empty_types.count(NAME_MIDDLE_INITIAL));
   EXPECT_TRUE(non_empty_types.count(NAME_LAST));
   EXPECT_TRUE(non_empty_types.count(NAME_FULL));
-  if (StructuredNames())
+  if (StructuredNamesEnabled())
     EXPECT_TRUE(non_empty_types.count(NAME_LAST));
   EXPECT_TRUE(non_empty_types.count(EMAIL_ADDRESS));
   EXPECT_TRUE(non_empty_types.count(COMPANY_NAME));
@@ -1868,7 +1864,7 @@ TEST_F(PersonalDataManagerTest, GetNonEmptyTypes) {
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_LINE2));
   EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_STREET_ADDRESS));
   // TODO(crbug.com/1130194): Clean once launched.
-  if (StructuredAddress()) {
+  if (StructuredAddressesEnabled()) {
     EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_STREET_NAME));
     EXPECT_TRUE(non_empty_types.count(ADDRESS_HOME_HOUSE_NUMBER));
   }
@@ -4085,8 +4081,6 @@ class SaveImportedProfileTest
     }
   }
 
-  bool StructuredNames() const { return structured_names_enabled_; }
-
  private:
   bool structured_names_enabled_;
   base::test::ScopedFeatureList scoped_features_;
@@ -4160,9 +4154,10 @@ TEST_P(SaveImportedProfileTest, SaveImportedProfile) {
     // date were properly updated.
     EXPECT_EQ(1U, saved_profiles.front()->use_count());
     EXPECT_EQ(kSomeLaterTime, saved_profiles.front()->use_date());
-    // For structured names, the modification date is only updated when the
+
+    // For structured addresses, the modification date is only updated when the
     // profile actually changes.
-    if (StructuredNames()) {
+    if (StructuredNamesEnabled() || StructuredAddressesEnabled()) {
       EXPECT_EQ(*saved_profiles.front() == original_profile ? kArbitraryTime
                                                             : kSomeLaterTime,
                 saved_profiles.front()->modification_date());
@@ -4608,9 +4603,6 @@ TEST_F(PersonalDataManagerTest, DedupeProfiles_ProfilesToDelete) {
   existing_profiles.push_back(std::unique_ptr<AutofillProfile>(profile4));
   existing_profiles.push_back(std::unique_ptr<AutofillProfile>(profile5));
 
-  // Enable the profile cleanup.
-  EnableAutofillProfileCleanup();
-
   base::HistogramTester histogram_tester;
   std::unordered_map<std::string, std::string> guids_merge_map;
   std::unordered_set<std::string> profiles_to_delete;
@@ -4694,9 +4686,6 @@ TEST_F(PersonalDataManagerTest, DedupeProfiles_GuidsMergeMap) {
   existing_profiles.push_back(std::unique_ptr<AutofillProfile>(profile4));
   existing_profiles.push_back(std::unique_ptr<AutofillProfile>(profile5));
 
-  // Enable the profile cleanup.
-  EnableAutofillProfileCleanup();
-
   std::unordered_map<std::string, std::string> guids_merge_map;
   std::unordered_set<std::string> profiles_to_delete;
 
@@ -4775,6 +4764,9 @@ TEST_F(PersonalDataManagerTest, UpdateCardsBillingAddressReference) {
 // based on the deduped profiles.
 TEST_F(PersonalDataManagerTest,
        ApplyDedupingRoutine_CardsBillingAddressIdUpdated) {
+  base::test::ScopedFeatureList feature;
+  feature.InitAndEnableFeature(features::kAutofillEnableProfileDeduplication);
+
   // A set of 6 profiles will be created. They should merge in this way:
   //  1 -> 2 -> 3
   //  4 -> 5
@@ -4876,10 +4868,6 @@ TEST_F(PersonalDataManagerTest,
   EXPECT_EQ(6U, personal_data_->GetProfiles().size());
   EXPECT_EQ(3U, personal_data_->GetCreditCards().size());
 
-  // Enable the profile cleanup now. Otherwise it would be triggered by the
-  // calls to AddProfile.
-  EnableAutofillProfileCleanup();
-
   EXPECT_TRUE(personal_data_->personal_data_manager_cleaner_for_testing()
                   ->ApplyDedupingRoutineForTesting());
   WaitForOnPersonalDataChanged();
@@ -4916,6 +4904,9 @@ TEST_F(PersonalDataManagerTest,
 // never lose information and keep the syntax of the profile with the higher
 // frecency score.
 TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_MergedProfileValues) {
+  base::test::ScopedFeatureList feature;
+  feature.InitAndEnableFeature(features::kAutofillEnableProfileDeduplication);
+
   // Create a profile with a higher frecency score.
   AutofillProfile profile1(base::GenerateGUID(), test::kEmptyOrigin);
   test::SetProfileInfo(&profile1, "Homer", "J", "Simpson",
@@ -4946,10 +4937,6 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_MergedProfileValues) {
 
   // Make sure the 3 profiles were saved;
   EXPECT_EQ(3U, personal_data_->GetProfiles().size());
-
-  // Enable the profile cleanup now. Otherwise it would be triggered by the
-  // calls to AddProfile.
-  EnableAutofillProfileCleanup();
 
   base::HistogramTester histogram_tester;
 
@@ -5005,11 +4992,16 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_MergedProfileValues) {
 // original data when deduping with similar profiles, even if it has a higher
 // frecency score.
 TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_VerifiedProfileFirst) {
+  base::test::ScopedFeatureList feature;
+  feature.InitAndEnableFeature(features::kAutofillEnableProfileDeduplication);
+
   // Create a verified profile with a higher frecency score.
   AutofillProfile profile1(base::GenerateGUID(), kSettingsOrigin);
-  test::SetProfileInfo(&profile1, "Homer", "Jay", "Simpson",
-                       "homer.simpson@abc.com", "", "742 Evergreen Terrace", "",
-                       "Springfield", "IL", "91601", "", "12345678910");
+  test::SetProfileInfo(
+      &profile1, "Homer", "Jay", "Simpson", "homer.simpson@abc.com", "",
+      "742 Evergreen Terrace", "", "Springfield", "IL", "91601", "",
+      "12345678910", /*finalize=*/true,
+      /*status=*/structured_address::VerificationStatus::kUserVerified);
   profile1.set_use_count(7);
   profile1.set_use_date(kMuchLaterTime);
 
@@ -5036,10 +5028,6 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_VerifiedProfileFirst) {
   // Make sure the 3 profiles were saved.
   EXPECT_EQ(3U, personal_data_->GetProfiles().size());
 
-  // Enable the profile cleanup now. Otherwise it would be triggered by the
-  // calls to AddProfile.
-  EnableAutofillProfileCleanup();
-
   base::HistogramTester histogram_tester;
 
   EXPECT_TRUE(personal_data_->personal_data_manager_cleaner_for_testing()
@@ -5059,6 +5047,13 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_VerifiedProfileFirst) {
   histogram_tester.ExpectUniqueSample(
       "Autofill.NumberOfProfilesRemovedDuringDedupe", 2, 1);
 
+  // Although the profile was verified, the structure of the  street address
+  // still evolved with future observations. In this case, the "." was added
+  // from a later observation.
+  profile1.SetRawInfoWithVerificationStatus(
+      ADDRESS_HOME_STREET_NAME, base::UTF8ToUTF16("Evergreen Terrace"),
+      structured_address::VerificationStatus::kParsed);
+  //
   // Only the verified |profile1| with its original data should have been kept.
   EXPECT_EQ(profile1.guid(), profiles[0]->guid());
   EXPECT_TRUE(profile1 == *profiles[0]);
@@ -5070,6 +5065,9 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_VerifiedProfileFirst) {
 // original data when deduping with similar profiles, even if it has a lower
 // frecency score.
 TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_VerifiedProfileLast) {
+  base::test::ScopedFeatureList feature;
+  feature.InitAndEnableFeature(features::kAutofillEnableProfileDeduplication);
+
   // Create a profile to dedupe with a higher frecency score.
   AutofillProfile profile1(base::GenerateGUID(), test::kEmptyOrigin);
   test::SetProfileInfo(&profile1, "Homer", "J", "Simpson",
@@ -5088,9 +5086,11 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_VerifiedProfileLast) {
 
   // Create a similar verified profile with a lower frecency score.
   AutofillProfile profile3(base::GenerateGUID(), kSettingsOrigin);
-  test::SetProfileInfo(&profile3, "Homer", "Jay", "Simpson",
-                       "homer.simpson@abc.com", "", "742 Evergreen Terrace", "",
-                       "Springfield", "IL", "91601", "", "12345678910");
+  test::SetProfileInfo(
+      &profile3, "Homer", "Jay", "Simpson", "homer.simpson@abc.com", "",
+      "742 Evergreen Terrace", "", "Springfield", "IL", "91601", "",
+      "12345678910", /*finalize=*/true,
+      /*status=*/structured_address::VerificationStatus::kUserVerified);
   profile3.set_use_count(3);
   profile3.set_use_date(kArbitraryTime);
 
@@ -5100,10 +5100,6 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_VerifiedProfileLast) {
 
   // Make sure the 3 profiles were saved.
   EXPECT_EQ(3U, personal_data_->GetProfiles().size());
-
-  // Enable the profile cleanup now. Otherwise it would be triggered by the
-  // calls to AddProfile.
-  EnableAutofillProfileCleanup();
 
   base::HistogramTester histogram_tester;
 
@@ -5134,6 +5130,9 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_VerifiedProfileLast) {
 // Tests that ApplyDedupingRoutine does not merge unverified data into
 // a verified profile. Also tests that two verified profiles don't get merged.
 TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_MultipleVerifiedProfiles) {
+  base::test::ScopedFeatureList feature;
+  feature.InitAndEnableFeature(features::kAutofillEnableProfileDeduplication);
+
   // Create a profile to dedupe with a higher frecency score.
   AutofillProfile profile1(base::GenerateGUID(), test::kEmptyOrigin);
   test::SetProfileInfo(&profile1, "Homer", "J", "Simpson",
@@ -5144,17 +5143,22 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_MultipleVerifiedProfiles) {
 
   // Create a similar verified profile with a medium frecency score.
   AutofillProfile profile2(base::GenerateGUID(), kSettingsOrigin);
-  test::SetProfileInfo(&profile2, "Homer", "J", "Simpson",
-                       "homer.simpson@abc.com", "Fox", "742 Evergreen Terrace.",
-                       "", "Springfield", "IL", "91601", "", "");
+  test::SetProfileInfo(
+      &profile2, "Homer", "J", "Simpson", "homer.simpson@abc.com", "Fox",
+      "742 Evergreen Terrace.", "", "Springfield", "IL", "91601", "", "",
+      /*finalize=*/true,
+      /*status=*/structured_address::VerificationStatus::kUserVerified);
+
   profile2.set_use_count(5);
   profile2.set_use_date(kSomeLaterTime);
 
   // Create a similar verified profile with a lower frecency score.
   AutofillProfile profile3(base::GenerateGUID(), kSettingsOrigin);
-  test::SetProfileInfo(&profile3, "Homer", "Jay", "Simpson",
-                       "homer.simpson@abc.com", "", "742 Evergreen Terrace", "",
-                       "Springfield", "IL", "91601", "", "12345678910");
+  test::SetProfileInfo(
+      &profile3, "Homer", "Jay", "Simpson", "homer.simpson@abc.com", "",
+      "742 Evergreen Terrace", "", "Springfield", "IL", "91601", "",
+      "12345678910", /*finalize=*/true,
+      /*status*/ structured_address::VerificationStatus::kUserVerified);
   profile3.set_use_count(3);
   profile3.set_use_date(kArbitraryTime);
 
@@ -5165,10 +5169,6 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_MultipleVerifiedProfiles) {
   // Make sure the 3 profiles were saved.
   EXPECT_EQ(3U, personal_data_->GetProfiles().size());
 
-  // Enable the profile cleanup now. Otherwise it would be triggered by the
-  // calls to AddProfile.
-  EnableAutofillProfileCleanup();
-
   base::HistogramTester histogram_tester;
 
   EXPECT_TRUE(personal_data_->personal_data_manager_cleaner_for_testing()
@@ -5178,6 +5178,13 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_MultipleVerifiedProfiles) {
   // Get the profiles, sorted by frecency to have a deterministic order.
   std::vector<AutofillProfile*> profiles =
       personal_data_->GetProfilesToSuggest();
+
+  // Although the profile was verified, the structure of the  street address
+  // still evolved with future observations. In this case, the "." was removed
+  // from a later observation.
+  profile2.SetRawInfoWithVerificationStatus(
+      ADDRESS_HOME_STREET_NAME, base::UTF8ToUTF16("Evergreen Terrace"),
+      structured_address::VerificationStatus::kParsed);
 
   // |profile1| should have been discarded because the saved profile with the
   // highest frecency score is verified (|profile2|). Therefore, |profile1|'s
@@ -5208,6 +5215,9 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_MultipleVerifiedProfiles) {
 // that the resulting profiles have the right values, has no effect on the other
 // profiles and that the data of verified profiles is not modified.
 TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_MultipleDedupes) {
+  base::test::ScopedFeatureList feature;
+  feature.InitAndEnableFeature(features::kAutofillEnableProfileDeduplication);
+
   // Create a Homer home profile with a higher frecency score than other Homer
   // profiles.
   AutofillProfile Homer1(base::GenerateGUID(), test::kEmptyOrigin);
@@ -5281,10 +5291,6 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_MultipleDedupes) {
   // Make sure the 7 profiles were saved;
   EXPECT_EQ(7U, personal_data_->GetProfiles().size());
 
-  // Enable the profile cleanup now. Otherwise it would be triggered by the
-  // calls to AddProfile.
-  EnableAutofillProfileCleanup();
-
   base::HistogramTester histogram_tester;
 
   // |Homer1| should get merged into |Homer2| which should then be merged into
@@ -5346,42 +5352,18 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_MultipleDedupes) {
   EXPECT_TRUE(Barney == *profiles[3]);
 }
 
-// Tests that ApplyDedupingRoutine is not run if the feature is disabled.
-TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_FeatureDisabled) {
-  // Create a profile to dedupe.
-  AutofillProfile profile1(base::GenerateGUID(), test::kEmptyOrigin);
-  test::SetProfileInfo(&profile1, "Homer", "J", "Simpson",
-                       "homer.simpson@abc.com", "", "742. Evergreen Terrace",
-                       "", "Springfield", "IL", "91601", "US", "");
-
-  // Create a similar profile.
-  AutofillProfile profile2(base::GenerateGUID(), test::kEmptyOrigin);
-  test::SetProfileInfo(&profile2, "Homer", "J", "Simpson",
-                       "homer.simpson@abc.com", "Fox", "742 Evergreen Terrace.",
-                       "", "Springfield", "IL", "91601", "", "");
-
-  AddProfileToPersonalDataManager(profile1);
-  AddProfileToPersonalDataManager(profile2);
-
-  // Make sure both profiles were saved.
-  EXPECT_EQ(2U, personal_data_->GetProfiles().size());
-
-  // The deduping routine should not be run.
-  EXPECT_FALSE(personal_data_->personal_data_manager_cleaner_for_testing()
-                   ->ApplyDedupingRoutineForTesting());
-
-  // Both profiles should still be present.
-  EXPECT_EQ(2U, personal_data_->GetProfiles().size());
-}
-
 TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_NopIfZeroProfiles) {
+  base::test::ScopedFeatureList feature;
+  feature.InitAndEnableFeature(features::kAutofillEnableProfileDeduplication);
   EXPECT_TRUE(personal_data_->GetProfiles().empty());
-  EnableAutofillProfileCleanup();
   EXPECT_FALSE(personal_data_->personal_data_manager_cleaner_for_testing()
                    ->ApplyDedupingRoutineForTesting());
 }
 
 TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_NopIfOneProfile) {
+  base::test::ScopedFeatureList feature;
+  feature.InitAndEnableFeature(features::kAutofillEnableProfileDeduplication);
+
   // Create a profile to dedupe.
   AutofillProfile profile(base::GenerateGUID(), test::kEmptyOrigin);
   test::SetProfileInfo(&profile, "Homer", "J", "Simpson",
@@ -5391,10 +5373,6 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_NopIfOneProfile) {
   AddProfileToPersonalDataManager(profile);
 
   EXPECT_EQ(1U, personal_data_->GetProfiles().size());
-
-  // Enable the profile cleanup now. Otherwise it would be triggered by the
-  // calls to AddProfile.
-  EnableAutofillProfileCleanup();
   EXPECT_FALSE(personal_data_->personal_data_manager_cleaner_for_testing()
                    ->ApplyDedupingRoutineForTesting());
 }
@@ -5402,6 +5380,9 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_NopIfOneProfile) {
 // Tests that ApplyDedupingRoutine is not run a second time on the same major
 // version.
 TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_OncePerVersion) {
+  base::test::ScopedFeatureList feature;
+  feature.InitAndEnableFeature(features::kAutofillEnableProfileDeduplication);
+
   // Create a profile to dedupe.
   AutofillProfile profile1(base::GenerateGUID(), test::kEmptyOrigin);
   test::SetProfileInfo(&profile1, "Homer", "J", "Simpson",
@@ -5418,10 +5399,6 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_OncePerVersion) {
   AddProfileToPersonalDataManager(profile2);
 
   EXPECT_EQ(2U, personal_data_->GetProfiles().size());
-
-  // Enable the profile cleanup now. Otherwise it would be triggered by the
-  // calls to AddProfile.
-  EnableAutofillProfileCleanup();
 
   // The deduping routine should be run a first time.
   EXPECT_TRUE(personal_data_->personal_data_manager_cleaner_for_testing()
@@ -5443,9 +5420,6 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_OncePerVersion) {
 
   // Make sure |profile3| was saved.
   EXPECT_EQ(2U, personal_data_->GetProfiles().size());
-
-  // Re-enable the profile cleanup now that the profile was added.
-  EnableAutofillProfileCleanup();
 
   // The deduping routine should not be run.
   EXPECT_FALSE(personal_data_->personal_data_manager_cleaner_for_testing()
@@ -5702,7 +5676,7 @@ TEST_F(PersonalDataManagerTest,
   // Wallet only provides a full name, so the above first and last names
   // will be ignored when the profile is written to the DB.
 
-  if (!StructuredNames()) {
+  if (!StructuredNamesEnabled()) {
     server_profiles.back().SetRawInfo(NAME_FULL,
                                       base::ASCIIToUTF16("John Doe"));
   }
@@ -5942,7 +5916,7 @@ TEST_F(
   // Wallet only provides a full name, so the above first and last names
   // will be ignored when the profile is written to the DB.
   // This step happens automatically for structured names.
-  if (!StructuredNames()) {
+  if (!StructuredNamesEnabled()) {
     server_profiles.back().SetRawInfo(NAME_FULL,
                                       base::ASCIIToUTF16("John Doe"));
   }
@@ -7985,16 +7959,6 @@ class PersonalDataManagerTestForSharingNickname
   base::string16 local_nickname_;
   base::string16 server_nickname_;
   base::string16 expected_nickname_;
-
- protected:
-  void SetUp() override {
-    PersonalDataManagerTest::SetUp();
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kAutofillEnableCardNicknameManagement);
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 INSTANTIATE_TEST_SUITE_P(,

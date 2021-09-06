@@ -11,12 +11,11 @@
 #include "components/sync/trusted_vault/proto_string_bytes_conversion.h"
 #include "components/sync/trusted_vault/securebox.h"
 #include "components/sync/trusted_vault/trusted_vault_crypto.h"
+#include "components/sync/trusted_vault/trusted_vault_server_constants.h"
 
 namespace syncer {
 
 namespace {
-
-const char kSecurityDomainName[] = "chromesync";
 
 struct ExtractedSharedKey {
   int version;
@@ -30,7 +29,7 @@ const sync_pb::SecurityDomain* FindSyncSecurityDomain(
     const sync_pb::ListSecurityDomainsResponse& response) {
   for (const sync_pb::SecurityDomain& security_domain :
        response.security_domains()) {
-    if (security_domain.name() == kSecurityDomainName) {
+    if (security_domain.name() == kSyncSecurityDomainName) {
       return &security_domain;
     }
   }
@@ -132,9 +131,9 @@ DownloadKeysResponseHandler::ProcessedResponse::ProcessedResponse(
 
 DownloadKeysResponseHandler::ProcessedResponse::ProcessedResponse(
     TrustedVaultRequestStatus status,
-    std::vector<std::vector<uint8_t>> keys,
+    std::vector<std::vector<uint8_t>> new_keys,
     int last_key_version)
-    : status(status), keys(keys), last_key_version(last_key_version) {}
+    : status(status), new_keys(new_keys), last_key_version(last_key_version) {}
 
 DownloadKeysResponseHandler::ProcessedResponse::ProcessedResponse(
     const ProcessedResponse& other) = default;
@@ -205,7 +204,7 @@ DownloadKeysResponseHandler::ProcessResponse(
   std::vector<std::vector<uint8_t>> new_keys;
   for (const ExtractedSharedKey& key : extracted_keys) {
     if (!last_trusted_vault_key_and_version_.has_value() ||
-        key.version >= last_trusted_vault_key_and_version_->version) {
+        key.version > last_trusted_vault_key_and_version_->version) {
       // Don't include previous keys into the result, because they weren't
       // validated using |last_trusted_vault_key_and_version| and client should
       // be already aware of them.

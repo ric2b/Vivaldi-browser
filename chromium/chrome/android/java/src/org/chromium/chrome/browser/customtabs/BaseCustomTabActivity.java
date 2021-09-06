@@ -24,6 +24,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.KeyboardShortcuts;
 import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.app.tabmodel.TabModelOrchestrator;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.browserservices.ui.controller.Verifier;
 import org.chromium.chrome.browser.browserservices.ui.trustedwebactivity.TrustedWebActivityCoordinator;
@@ -38,6 +39,7 @@ import org.chromium.chrome.browser.customtabs.dependency_injection.BaseCustomTab
 import org.chromium.chrome.browser.customtabs.dependency_injection.BaseCustomTabActivityModule;
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbarCoordinator;
 import org.chromium.chrome.browser.dependency_injection.ChromeActivityCommonsModule;
+import org.chromium.chrome.browser.feed.webfeed.WebFeedBridge;
 import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.night_mode.NightModeStateProvider;
 import org.chromium.chrome.browser.night_mode.PowerSavingModeMonitor;
@@ -45,7 +47,6 @@ import org.chromium.chrome.browser.night_mode.SystemNightModeMonitor;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabState;
 import org.chromium.chrome.browser.tabmodel.ChromeTabCreator;
-import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorImpl;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.ui.RootUiCoordinator;
@@ -147,7 +148,7 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
                 ()
                         -> mNavigationController,
                 getActivityTabProvider(), mTabModelProfileSupplier, mBookmarkBridgeSupplier,
-                this::getContextualSearchManager, mTabModelSelectorSupplier);
+                this::getContextualSearchManager, getTabModelSelectorSupplier());
     }
 
     @Override
@@ -283,7 +284,8 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
     @Override
     public void finishNativeInitialization() {
         if (isTaskRoot() && UsageStatsService.isEnabled()) {
-            UsageStatsService.getInstance().createPageViewObserver(getTabModelSelector(), this);
+            UsageStatsService.getInstance().createPageViewObserver(
+                    getTabModelSelector(), this, getTabContentManagerSupplier());
         }
         if (!getIntentDataProvider().isWebappOrWebApkActivity()) {
             mTabController.finishNativeInitialization();
@@ -293,8 +295,20 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
     }
 
     @Override
-    protected TabModelSelector createTabModelSelector() {
-        return mTabFactory.createTabModelSelector();
+    protected TabModelOrchestrator createTabModelOrchestrator() {
+        return mTabFactory.createTabModelOrchestrator();
+    }
+
+    @Override
+    protected void destroyTabModels() {
+        if (mTabFactory != null) {
+            mTabFactory.destroyTabModelOrchestrator();
+        }
+    }
+
+    @Override
+    protected void createTabModels() {
+        mTabFactory.createTabModels();
     }
 
     @Override
@@ -311,7 +325,7 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
     @Override
     public void initializeCompositor() {
         super.initializeCompositor();
-        getTabModelSelector().onNativeLibraryReady(getTabContentManager());
+        mTabFactory.getTabModelOrchestrator().onNativeLibraryReady(getTabContentManager());
     }
 
     @Override
@@ -335,7 +349,8 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
                 mIntentDataProvider.shouldShowShareMenuItem(),
                 mIntentDataProvider.shouldShowStarButton(),
                 mIntentDataProvider.shouldShowDownloadButton(), mIntentDataProvider.isIncognito(),
-                getModalDialogManager(), mIntentDataProvider.shouldShowOpenInChromeMenuItem());
+                getModalDialogManager(), new WebFeedBridge(),
+                mIntentDataProvider.shouldShowOpenInChromeMenuItem());
     }
 
     @Override

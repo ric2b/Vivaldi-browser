@@ -111,14 +111,6 @@
             }
         },
         "executables": {
-            "media_perftests": {
-                "path": "media_perftests",
-                "arguments": [
-                    "--single-process-tests",
-                    "--test-launcher-retry-limit=0",
-                    "--isolated-script-test-filter=*::-*_unoptimized::*_unaligned::*unoptimized_aligned"
-                ]
-            },
             "performance_browser_tests": {
                 "path": "browser_tests",
                 "arguments": [
@@ -183,6 +175,18 @@
     },
     "6": {
         "benchmarks": {
+            "blink_perf.webgl": {
+                "abridged": false
+            },
+            "blink_perf.webgl_fast_call": {
+                "abridged": false
+            },
+            "blink_perf.webgpu": {
+                "abridged": false
+            },
+            "blink_perf.webgpu_fast_call": {
+                "abridged": false
+            },
             "system_health.memory_desktop": {
                 "begin": 24,
                 "end": 78,
@@ -197,6 +201,9 @@
                 "abridged": false
             },
             "desktop_ui": {
+                "abridged": false
+            },
+            "system_health.pcscan": {
                 "abridged": false
             },
             "tab_switching.typical_25": {

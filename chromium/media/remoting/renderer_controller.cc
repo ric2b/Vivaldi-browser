@@ -19,6 +19,7 @@ namespace media {
 namespace remoting {
 
 using mojom::RemotingSinkAudioCapability;
+using mojom::RemotingSinkFeature;
 using mojom::RemotingSinkVideoCapability;
 
 namespace {
@@ -129,7 +130,7 @@ void RendererController::OnSinkAvailable(
 
   sink_metadata_ = *metadata;
 
-  if (!HasFeatureCapability(mojom::RemotingSinkFeature::RENDERING)) {
+  if (!SinkSupportsRemoting()) {
     OnSinkGone();
     return;
   }
@@ -218,16 +219,30 @@ base::WeakPtr<RpcBroker> RendererController::GetRpcBroker() {
 }
 #endif
 
-void RendererController::StartDataPipe(
-    std::unique_ptr<mojo::DataPipe> audio_data_pipe,
-    std::unique_ptr<mojo::DataPipe> video_data_pipe,
-    DataPipeStartCallback done_callback) {
+void RendererController::StartDataPipe(uint32_t data_pipe_capacity,
+                                       bool audio,
+                                       bool video,
+                                       DataPipeStartCallback done_callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!done_callback.is_null());
 
-  bool audio = audio_data_pipe != nullptr;
-  bool video = video_data_pipe != nullptr;
-  if (!audio && !video) {
+  bool ok = audio || video;
+
+  mojo::ScopedDataPipeProducerHandle audio_producer_handle;
+  mojo::ScopedDataPipeConsumerHandle audio_consumer_handle;
+  if (ok && audio) {
+    ok &= mojo::CreateDataPipe(data_pipe_capacity, audio_producer_handle,
+                               audio_consumer_handle) == MOJO_RESULT_OK;
+  }
+
+  mojo::ScopedDataPipeProducerHandle video_producer_handle;
+  mojo::ScopedDataPipeConsumerHandle video_consumer_handle;
+  if (ok && video) {
+    ok &= mojo::CreateDataPipe(data_pipe_capacity, video_producer_handle,
+                               video_consumer_handle) == MOJO_RESULT_OK;
+  }
+
+  if (!ok) {
     LOG(ERROR) << "No audio nor video to establish data pipe";
     std::move(done_callback)
         .Run(mojo::NullRemote(), mojo::NullRemote(),
@@ -235,23 +250,18 @@ void RendererController::StartDataPipe(
              mojo::ScopedDataPipeProducerHandle());
     return;
   }
+
   mojo::PendingRemote<mojom::RemotingDataStreamSender> audio_stream_sender;
   mojo::PendingRemote<mojom::RemotingDataStreamSender> video_stream_sender;
   remoter_->StartDataStreams(
-      audio ? std::move(audio_data_pipe->consumer_handle)
-            : mojo::ScopedDataPipeConsumerHandle(),
-      video ? std::move(video_data_pipe->consumer_handle)
-            : mojo::ScopedDataPipeConsumerHandle(),
+      std::move(audio_consumer_handle), std::move(video_consumer_handle),
       audio ? audio_stream_sender.InitWithNewPipeAndPassReceiver()
             : mojo::NullReceiver(),
       video ? video_stream_sender.InitWithNewPipeAndPassReceiver()
             : mojo::NullReceiver());
   std::move(done_callback)
       .Run(std::move(audio_stream_sender), std::move(video_stream_sender),
-           audio ? std::move(audio_data_pipe->producer_handle)
-                 : mojo::ScopedDataPipeProducerHandle(),
-           video ? std::move(video_data_pipe->producer_handle)
-                 : mojo::ScopedDataPipeProducerHandle());
+           std::move(audio_producer_handle), std::move(video_producer_handle));
 }
 
 void RendererController::OnMetadataChanged(const PipelineMetadata& metadata) {
@@ -470,7 +480,8 @@ void RendererController::UpdateAndMaybeSwitch(StartTrigger start_trigger,
   // screen if switching to remoting while paused. Thus, the user experience is
   // improved by not starting remoting until playback resumes.
   bool should_be_remoting = client_ && !encountered_renderer_fatal_error_ &&
-                            is_dominant_content_ && !is_paused_;
+                            is_dominant_content_ && !is_paused_ &&
+                            SinkSupportsRemoting();
   if (should_be_remoting) {
     const RemotingCompatibility compatibility = GetCompatibility();
     metrics_recorder_.RecordCompatibility(compatibility);
@@ -610,10 +621,14 @@ bool RendererController::HasAudioCapability(
 }
 
 bool RendererController::HasFeatureCapability(
-    mojom::RemotingSinkFeature capability) const {
+    RemotingSinkFeature capability) const {
   return std::find(std::begin(sink_metadata_.features),
                    std::end(sink_metadata_.features),
                    capability) != std::end(sink_metadata_.features);
+}
+
+bool RendererController::SinkSupportsRemoting() const {
+  return HasFeatureCapability(RemotingSinkFeature::RENDERING);
 }
 
 void RendererController::SendMessageToSink(

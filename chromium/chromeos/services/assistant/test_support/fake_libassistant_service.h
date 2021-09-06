@@ -7,6 +7,7 @@
 
 #include "chromeos/services/assistant/test_support/fake_service_controller.h"
 #include "chromeos/services/libassistant/public/mojom/service.mojom.h"
+#include "chromeos/services/libassistant/public/mojom/speaker_id_enrollment_controller.mojom-forward.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 
@@ -29,23 +30,46 @@ class FakeLibassistantService
 
   FakeServiceController& service_controller() { return service_controller_; }
 
+  // Return the receiver that was passed into the last Bind() call.
+  mojo::PendingReceiver<libassistant::mojom::MediaController>
+  GetMediaControllerPendingReceiver();
+  mojo::PendingRemote<libassistant::mojom::MediaDelegate>
+  GetMediaDelegatePendingRemote();
+  mojo::PendingReceiver<libassistant::mojom::SpeakerIdEnrollmentController>
+  GetSpeakerIdEnrollmentControllerPendingReceiver();
+
   // mojom::LibassistantService implementation:
-  void Bind(mojo::PendingReceiver<libassistant::mojom::AudioInputController>
-                audio_input_controller,
-            mojo::PendingRemote<libassistant::mojom::AudioStreamFactoryDelegate>
-                audio_stream_factory_delegate,
-            mojo::PendingReceiver<libassistant::mojom::ConversationController>
-                conversation_controller,
-            mojo::PendingReceiver<libassistant::mojom::DisplayController>
-                display_controller,
-            mojo::PendingReceiver<libassistant::mojom::ServiceController>
-                service_controller) override;
+  void Bind(
+      mojo::PendingReceiver<libassistant::mojom::AudioInputController>
+          audio_input_controller,
+      mojo::PendingReceiver<libassistant::mojom::ConversationController>
+          conversation_controller,
+      mojo::PendingReceiver<libassistant::mojom::DisplayController>
+          display_controller,
+      mojo::PendingReceiver<libassistant::mojom::MediaController>
+          media_controller,
+      mojo::PendingReceiver<libassistant::mojom::ServiceController>
+          service_controller,
+      mojo::PendingReceiver<libassistant::mojom::SpeakerIdEnrollmentController>
+          speaker_id_enrollment_controller,
+      mojo::PendingRemote<libassistant::mojom::AudioOutputDelegate>
+          audio_output_delegate,
+      mojo::PendingRemote<libassistant::mojom::MediaDelegate> media_delegate,
+      mojo::PendingRemote<libassistant::mojom::PlatformDelegate>
+          platform_delegate) override;
   void AddSpeechRecognitionObserver(
       mojo::PendingRemote<libassistant::mojom::SpeechRecognitionObserver>
           observer) override {}
 
  private:
   mojo::Receiver<libassistant::mojom::LibassistantService> receiver_;
+
+  mojo::PendingReceiver<libassistant::mojom::MediaController>
+      media_controller_pending_receiver_;
+  mojo::PendingReceiver<libassistant::mojom::SpeakerIdEnrollmentController>
+      speaker_id_enrollment_controller_pending_receiver_;
+  mojo::PendingRemote<libassistant::mojom::MediaDelegate>
+      media_delegate_pending_remote_;
 
   FakeServiceController service_controller_;
 };

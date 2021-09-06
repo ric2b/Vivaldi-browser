@@ -59,7 +59,7 @@ CartService::CartService(Profile* profile)
       domain_cart_url_mapping_(
           JSONToDictionary(IDR_CART_DOMAIN_CART_URL_MAPPING_JSON)) {
   if (history_service_) {
-    history_service_->AddObserver(this);
+    history_service_observation_.Observe(history_service_);
   }
   if (base::GetFieldTrialParamValueByFeature(
           ntp_features::kNtpChromeCartModule,
@@ -75,7 +75,6 @@ CartService::~CartService() = default;
 
 void CartService::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kCartModuleHidden, false);
-  registry->RegisterBooleanPref(prefs::kCartModuleRemoved, false);
   registry->RegisterIntegerPref(prefs::kCartModuleWelcomeSurfaceShownTimes, 0);
 }
 
@@ -89,18 +88,6 @@ void CartService::RestoreHidden() {
 
 bool CartService::IsHidden() {
   return profile_->GetPrefs()->GetBoolean(prefs::kCartModuleHidden);
-}
-
-void CartService::Remove() {
-  profile_->GetPrefs()->SetBoolean(prefs::kCartModuleRemoved, true);
-}
-
-void CartService::RestoreRemoved() {
-  profile_->GetPrefs()->SetBoolean(prefs::kCartModuleRemoved, false);
-}
-
-bool CartService::IsRemoved() {
-  return profile_->GetPrefs()->GetBoolean(prefs::kCartModuleRemoved);
 }
 
 void CartService::LoadCart(const std::string& domain,
@@ -194,7 +181,7 @@ void CartService::OnOperationFinishedWithCallback(
 
 void CartService::Shutdown() {
   if (history_service_) {
-    history_service_->RemoveObserver(this);
+    history_service_observation_.Reset();
   }
   DeleteCartsWithFakeData();
   // Delete content of all carts that are removed.
@@ -320,7 +307,7 @@ void CartService::DeleteRemovedCartsContent(
 void CartService::OnLoadCarts(CartDB::LoadCallback callback,
                               bool success,
                               std::vector<CartDB::KeyAndValue> proto_pairs) {
-  if ((IsHidden() || IsRemoved()) &&
+  if (IsHidden() &&
       base::GetFieldTrialParamValueByFeature(
           ntp_features::kNtpChromeCartModule,
           ntp_features::kNtpChromeCartModuleDataParam) != "fake") {

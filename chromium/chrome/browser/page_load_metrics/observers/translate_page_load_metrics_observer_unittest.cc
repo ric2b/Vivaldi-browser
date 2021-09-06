@@ -58,8 +58,9 @@ class MockTranslateMetricsLoggerContainer
     mock_translate_metrics_logger_->LogInitialState();
   }
 
-  void LogTranslationStarted() override {
-    mock_translate_metrics_logger_->LogTranslationStarted();
+  void LogTranslationStarted(
+      translate::TranslationType translation_type) override {
+    mock_translate_metrics_logger_->LogTranslationStarted(translation_type);
   }
 
   void LogTranslationFinished(
@@ -97,6 +98,35 @@ class MockTranslateMetricsLoggerContainer
 
   void LogUIInteraction(translate::UIInteraction ui_interaction) override {
     mock_translate_metrics_logger_->LogUIInteraction(ui_interaction);
+  }
+
+  translate::TranslationType GetNextManualTranslationType() override {
+    return mock_translate_metrics_logger_->GetNextManualTranslationType();
+  }
+
+  void SetHasHrefTranslateTarget(bool has_href_translate_target) override {
+    mock_translate_metrics_logger_->SetHasHrefTranslateTarget(
+        has_href_translate_target);
+  }
+
+  void LogHTMLDocumentLanguage(const std::string& html_doc_language) override {
+    mock_translate_metrics_logger_->LogHTMLDocumentLanguage(html_doc_language);
+  }
+
+  void LogHTMLContentLanguage(
+      const std::string& html_content_language) override {
+    mock_translate_metrics_logger_->LogHTMLDocumentLanguage(
+        html_content_language);
+  }
+
+  void LogDetectedLanguage(const std::string& detected_language) override {
+    mock_translate_metrics_logger_->LogDetectedLanguage(detected_language);
+  }
+
+  void LogDetectionReliabilityScore(
+      const float& model_detection_reliability_score) override {
+    mock_translate_metrics_logger_->LogDetectionReliabilityScore(
+        model_detection_reliability_score);
   }
 
  private:

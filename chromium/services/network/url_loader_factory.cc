@@ -78,7 +78,8 @@ URLLoaderFactory::URLLoaderFactory(
       header_client_(std::move(params_->header_client)),
       coep_reporter_(std::move(params_->coep_reporter)),
       cors_url_loader_factory_(cors_url_loader_factory),
-      cookie_observer_(std::move(params_->cookie_observer)) {
+      cookie_observer_(std::move(params_->cookie_observer)),
+      auth_cert_observer_(std::move(params_->auth_cert_observer)) {
   DCHECK(context);
   DCHECK_NE(mojom::kInvalidProcessId, params_->process_id);
   DCHECK(!params_->factory_override);
@@ -133,25 +134,18 @@ void URLLoaderFactory::CreateLoaderAndStart(
   if (url_request.web_bundle_token_params.has_value() &&
       url_request.destination !=
           network::mojom::RequestDestination::kWebBundle) {
-    // Load a subresource from a WebBundle.
-    base::WeakPtr<WebBundleURLLoaderFactory> web_bundle_url_loader_factory =
-        context_->GetWebBundleManager().GetWebBundleURLLoaderFactory(
-            url_request.web_bundle_token_params->token);
-    if (web_bundle_url_loader_factory) {
-      web_bundle_url_loader_factory->CreateLoaderAndStart(
-          std::move(receiver), routing_id, request_id, options, url_request,
-          std::move(client), traffic_annotation);
-      return;
+    mojo::Remote<mojom::TrustedHeaderClient> trusted_header_client;
+    if (header_client_ && (options & mojom::kURLLoadOptionUseHeaderClient)) {
+      // CORS preflight request must not come here.
+      DCHECK(!(options & mojom::kURLLoadOptionAsCorsPreflight));
+      header_client_->OnLoaderCreated(
+          request_id, trusted_header_client.BindNewPipeAndPassReceiver());
     }
-    // Fails if the token is missing in the WebBundleManager. This can happen
-    // when the network process crashes. In normal cases, our assumption is this
-    // shouldn't happen as long as requests from a renderer are ordered.
-    //
-    // TODO(crbug.com/1082020): Re-visit this case to be more robust.
-    URLLoaderCompletionStatus status;
-    status.error_code = net::ERR_INVALID_WEB_BUNDLE;  // Tentative.
-    status.completion_time = base::TimeTicks::Now();
-    mojo::Remote<mojom::URLLoaderClient>(std::move(client))->OnComplete(status);
+
+    // Load a subresource from a WebBundle.
+    context_->GetWebBundleManager().StartSubresourceRequest(
+        std::move(receiver), url_request, std::move(client),
+        params_->process_id, std::move(trusted_header_client));
     return;
   }
 
@@ -272,15 +266,17 @@ void URLLoaderFactory::CreateLoaderAndStart(
   } else if (cookie_observer_) {
     cookie_observer_->Clone(cookie_observer.InitWithNewPipeAndPassReceiver());
   }
-
-  if (url_request.destination ==
-      network::mojom::RequestDestination::kWebBundle) {
-    DCHECK(url_request.web_bundle_token_params.has_value());
-    base::WeakPtr<WebBundleURLLoaderFactory> web_bundle_url_loader_factory =
-        context_->GetWebBundleManager().CreateWebBundleURLLoaderFactory(
-            url_request.url, *url_request.web_bundle_token_params, params_);
-    client =
-        web_bundle_url_loader_factory->WrapURLLoaderClient(std::move(client));
+  mojo::PendingRemote<mojom::AuthenticationAndCertificateObserver>
+      auth_cert_observer;
+  if (url_request.trusted_params &&
+      url_request.trusted_params->auth_cert_observer) {
+    auth_cert_observer = std::move(
+        const_cast<
+            mojo::PendingRemote<mojom::AuthenticationAndCertificateObserver>&>(
+            url_request.trusted_params->auth_cert_observer));
+  } else if (auth_cert_observer_) {
+    auth_cert_observer_->Clone(
+        auth_cert_observer.InitWithNewPipeAndPassReceiver());
   }
 
   auto loader = std::make_unique<URLLoader>(
@@ -298,7 +294,8 @@ void URLLoaderFactory::CreateLoaderAndStart(
       std::move(network_usage_accumulator),
       header_client_.is_bound() ? header_client_.get() : nullptr,
       context_->origin_policy_manager(), std::move(trust_token_factory),
-      context_->cors_origin_access_list(), std::move(cookie_observer));
+      context_->cors_origin_access_list(), std::move(cookie_observer),
+      std::move(auth_cert_observer));
 
   cors_url_loader_factory_->OnLoaderCreated(std::move(loader));
 }

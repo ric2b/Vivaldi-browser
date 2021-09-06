@@ -8,6 +8,7 @@ import "mojo/public/mojom/base/big_buffer.mojom";
 import "mojo/public/mojom/base/file_path.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "mojo/public/mojom/base/unguessable_token.mojom";
+import "services/network/public/mojom/auth_and_certificate_observer.mojom";
 import "services/network/public/mojom/client_security_state.mojom";
 import "services/network/public/mojom/cors.mojom";
 import "services/network/public/mojom/cookie_access_observer.mojom";
@@ -75,6 +76,11 @@ struct TrustedUrlRequestParams {
   // URLLoaderFactory will be ignored.
   pending_remote<CookieAccessObserver>? cookie_observer;
 
+  // Observer which should be notified when this URLRequest has authentication
+  // and certificate events. If this is set to non-null, the observer passed to
+  // URLLoaderFactory will be ignored.
+  pending_remote<AuthenticationAndCertificateObserver>? auth_cert_observer;
+
   // Specifies the security state of the client, for cases when the
   // URLLoaderFactory is shared among multiple clients.
   //
@@ -86,6 +92,8 @@ struct TrustedUrlRequestParams {
 
 // Options that may only be set on URLRequests which are related to WebBundle.
 struct WebBundleTokenParams {
+  // The URL of the WebBundle.
+  url.mojom.Url bundle_url;
   // Unique token to identify a WebBundle.
   mojo_base.mojom.UnguessableToken token;
   // Handle for the WebBundle-related communication between the network process
@@ -93,6 +101,10 @@ struct WebBundleTokenParams {
   // the WebBundle data in the network process when the renderer-side endpoint
   // is deleted.
   pending_remote<WebBundleHandle>? web_bundle_handle;
+  // Renderer process ID of the request initiator frame. Set by the browser
+  // process, for subframe navigation requests to bundled resources. Not used
+  // for subresource requests sent by renderer processes.
+  int32 render_process_id;
 };
 
 // Typemapped to network::ResourceRequest.
@@ -376,6 +388,9 @@ struct URLRequest {
 
   // True for XHR, Fetch, and EventSource.
   bool is_fetch_like_api;
+
+  // True for favicon.
+  bool is_favicon;
 
   // If set, the network service will attempt to retrieve the appropriate origin
   // policy, if necessary, and attach it to the ResourceResponseHead.

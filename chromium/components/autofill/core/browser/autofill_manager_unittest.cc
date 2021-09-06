@@ -70,6 +70,7 @@
 #include "components/security_state/core/security_state.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/driver/test_sync_service.h"
+#include "components/translate/core/common/language_detection_details.h"
 #include "components/variations/variations_associated_data.h"
 #include "components/version_info/channel.h"
 #include "net/base/url_util.h"
@@ -723,21 +724,25 @@ class AutofillManagerStructuredProfileTest
 
   void InitializeFeatures();
 
-  bool StructuredNames() const { return structured_names_enabled_; }
+  bool StructuredNamesAndAddresses() const {
+    return structured_names_and_addresses_;
+  }
 
  private:
-  bool structured_names_enabled_;
+  bool structured_names_and_addresses_;
   base::test::ScopedFeatureList scoped_features_;
 };
 
 void AutofillManagerStructuredProfileTest::InitializeFeatures() {
-  structured_names_enabled_ = GetParam();
-  if (structured_names_enabled_) {
-    scoped_features_.InitAndEnableFeature(
-        features::kAutofillEnableSupportForMoreStructureInNames);
+  structured_names_and_addresses_ = GetParam();
+
+  std::vector<base::Feature> features = {
+      features::kAutofillEnableSupportForMoreStructureInAddresses,
+      features::kAutofillEnableSupportForMoreStructureInNames};
+  if (structured_names_and_addresses_) {
+    scoped_features_.InitWithFeatures(features, {});
   } else {
-    scoped_features_.InitAndDisableFeature(
-        features::kAutofillEnableSupportForMoreStructureInNames);
+    scoped_features_.InitWithFeatures({}, features);
   }
 }
 
@@ -1661,7 +1666,8 @@ TEST_P(AutofillManagerStructuredProfileTest,
   FormsSeen(forms);
   // Set the field being edited to CC field.
   const FormFieldData& credit_card_number_field = form.fields[1];
-  const std::string google_issued_card_value = "Google";
+  const std::string google_issued_card_value = base::JoinString(
+      {"Plex Mastercard  ", test::ObfuscatedCardDigitsAsUTF8("4444")}, "");
 #if defined(OS_ANDROID) || defined(OS_IOS)
   const std::string google_issued_card_label = std::string("10/98");
 #else
@@ -1700,13 +1706,16 @@ TEST_P(AutofillManagerStructuredProfileTest,
   // Set the field being edited to the cardholder name field.
   const FormFieldData& cardholder_name_field = form.fields[0];
 #if defined(OS_ANDROID)
-  const std::string google_issued_card_label = std::string("Google");
+  const std::string google_issued_card_label = base::JoinString(
+      {"Plex Mastercard  ", test::ObfuscatedCardDigitsAsUTF8("4444")}, "");
 #elif defined(OS_IOS)
   const std::string google_issued_card_label =
       test::ObfuscatedCardDigitsAsUTF8("4444");
 #else
-  const std::string google_issued_card_label =
-      std::string("Google, expires on 10/98");
+  const std::string google_issued_card_label = base::JoinString(
+      {"Plex Mastercard  ", test::ObfuscatedCardDigitsAsUTF8("4444"),
+       ", expires on 10/98"},
+      "");
 #endif
 
   GetAutofillSuggestions(form, cardholder_name_field);
@@ -2991,6 +3000,11 @@ TEST_P(AutofillManagerStructuredProfileTest, FillCreditCardForm_SplitName) {
 // Test that only filled selection boxes are counted for the type filling limit.
 TEST_P(AutofillManagerStructuredProfileTest,
        OnlyCountFilledSelectionBoxesForTypeFillingLimit) {
+  test::PopulateAlternativeStateNameMapForTesting(
+      "US", "Tennessee",
+      {{.canonical_name = "Tennessee",
+        .abbreviations = {"TN"},
+        .alternative_names = {}}});
   // Set up our form data.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
@@ -5122,7 +5136,7 @@ TEST_P(AutofillManagerStructuredProfileTest, OnLoadedServerPredictionsFromApi) {
   auto form_structure_instance = std::make_unique<TestFormStructure>(form);
   // This pointer is valid as long as autofill manager lives.
   TestFormStructure* form_structure = form_structure_instance.get();
-  form_structure->DetermineHeuristicTypes();
+  form_structure->DetermineHeuristicTypes(nullptr, nullptr);
   autofill_manager_->AddSeenFormStructure(std::move(form_structure_instance));
 
   // Second form on the page.
@@ -5140,7 +5154,7 @@ TEST_P(AutofillManagerStructuredProfileTest, OnLoadedServerPredictionsFromApi) {
   auto form_structure_instance2 = std::make_unique<TestFormStructure>(form2);
   // This pointer is valid as long as autofill manager lives.
   TestFormStructure* form_structure2 = form_structure_instance2.get();
-  form_structure2->DetermineHeuristicTypes();
+  form_structure2->DetermineHeuristicTypes(nullptr, nullptr);
   autofill_manager_->AddSeenFormStructure(std::move(form_structure_instance2));
 
   // Make API response with suggestions.
@@ -5211,7 +5225,7 @@ TEST_P(AutofillManagerStructuredProfileTest,
   // Simulate having seen this form on page load.
   // |form_structure| will be owned by |autofill_manager_|.
   TestFormStructure* form_structure = new TestFormStructure(form);
-  form_structure->DetermineHeuristicTypes();
+  form_structure->DetermineHeuristicTypes(nullptr, nullptr);
   std::vector<FormSignature> signatures =
       test::GetEncodedSignatures(*form_structure);
   autofill_manager_->AddSeenFormStructure(
@@ -5271,7 +5285,7 @@ TEST_P(AutofillManagerStructuredProfileTest,
   // Simulate having seen this form on page load.
   // |form_structure| will be owned by |autofill_manager_|.
   TestFormStructure* form_structure = new TestFormStructure(form);
-  form_structure->DetermineHeuristicTypes();
+  form_structure->DetermineHeuristicTypes(nullptr, nullptr);
   autofill_manager_->AddSeenFormStructure(
       std::unique_ptr<TestFormStructure>(form_structure));
 
@@ -5345,7 +5359,7 @@ TEST_P(AutofillManagerStructuredProfileTest, FormSubmittedServerTypes) {
   // Simulate having seen this form on page load.
   // |form_structure| will be owned by |autofill_manager_|.
   TestFormStructure* form_structure = new TestFormStructure(form);
-  form_structure->DetermineHeuristicTypes();
+  form_structure->DetermineHeuristicTypes(nullptr, nullptr);
 
   // Clear the heuristic types, and instead set the appropriate server types.
   std::vector<ServerFieldType> heuristic_types, server_types;
@@ -5489,9 +5503,8 @@ TEST_P(AutofillManagerStructuredProfileTest, FormSubmittedWithDefaultValues) {
 
 struct ProfileMatchingTypesTestCase {
   const char* input_value;  // The value to input in the field.
-  std::set<ServerFieldType>
-      field_types;  // The expected field types to be determined.
-  std::set<ServerFieldType>
+  ServerFieldTypeSet field_types;  // The expected field types to be determined.
+  ServerFieldTypeSet
       structured_field_types;  // The expected field types to be determined.
 };
 
@@ -5508,24 +5521,27 @@ class ProfileMatchingTypesTest
     InitializeFeatures();
   }
 
-  bool StructuredNames() const { return structured_names_enabled_; }
+  bool StructuredNamesAndAddresses() const {
+    return structured_names_and_addresses_;
+  }
 
   void InitializeFeatures();
 
  private:
-  bool structured_names_enabled_;
+  bool structured_names_and_addresses_;
   base::test::ScopedFeatureList scoped_features_;
 };
 
 void ProfileMatchingTypesTest::InitializeFeatures() {
-  structured_names_enabled_ = std::get<2>(GetParam());
+  structured_names_and_addresses_ = std::get<2>(GetParam());
 
-  if (structured_names_enabled_) {
-    scoped_features_.InitAndEnableFeature(
-        features::kAutofillEnableSupportForMoreStructureInNames);
+  std::vector<base::Feature> features = {
+      features::kAutofillEnableSupportForMoreStructureInAddresses,
+      features::kAutofillEnableSupportForMoreStructureInNames};
+  if (structured_names_and_addresses_) {
+    scoped_features_.InitWithFeatures(features, {});
   } else {
-    scoped_features_.InitAndDisableFeature(
-        features::kAutofillEnableSupportForMoreStructureInNames);
+    scoped_features_.InitWithFeatures({}, features);
   }
 }
 
@@ -5539,7 +5555,11 @@ const ProfileMatchingTypesTestCase kProfileMatchingTypesTestCases[] = {
     {"theking@gmail.com", {EMAIL_ADDRESS}, {EMAIL_ADDRESS}},
     {"RCA", {COMPANY_NAME}, {COMPANY_NAME}},
     {"3734 Elvis Presley Blvd.", {ADDRESS_HOME_LINE1}, {ADDRESS_HOME_LINE1}},
-    {"Apt. 10", {ADDRESS_HOME_LINE2}, {ADDRESS_HOME_LINE2}},
+    {"3734", {UNKNOWN_TYPE}, {ADDRESS_HOME_HOUSE_NUMBER}},
+    {"Elvis Presley Blvd.", {UNKNOWN_TYPE}, {ADDRESS_HOME_STREET_NAME}},
+    {"Apt. 10",
+     {ADDRESS_HOME_LINE2},
+     {ADDRESS_HOME_LINE2, ADDRESS_HOME_SUBPREMISE}},
     {"Memphis", {ADDRESS_HOME_CITY}, {ADDRESS_HOME_CITY}},
     {"Tennessee", {ADDRESS_HOME_STATE}, {ADDRESS_HOME_STATE}},
     {"38116", {ADDRESS_HOME_ZIP}, {ADDRESS_HOME_ZIP}},
@@ -5651,13 +5671,14 @@ TEST_P(ProfileMatchingTypesTest, DeterminePossibleFieldTypesForUpload) {
       "structured_names=%s ",
       test_case.input_value,
       AutofillType(*test_case.field_types.begin()).ToString().c_str(),
-      validity_state, validation_source, StructuredNames() ? "true" : "false"));
+      validity_state, validation_source,
+      StructuredNamesAndAddresses() ? "true" : "false"));
 
   // Take the field types depending on the state of the structured names
   // feature.
-  const std::set<ServerFieldType>& expected_possible_types =
-      StructuredNames() ? test_case.structured_field_types
-                        : test_case.field_types;
+  const ServerFieldTypeSet& expected_possible_types =
+      StructuredNamesAndAddresses() ? test_case.structured_field_types
+                                    : test_case.field_types;
 
   ASSERT_LE(AutofillDataModel::UNVALIDATED, validity_state);
   ASSERT_LE(validity_state, AutofillDataModel::UNSUPPORTED);
@@ -5684,7 +5705,7 @@ TEST_P(ProfileMatchingTypesTest, DeterminePossibleFieldTypesForUpload) {
 
   // Set the validity state for the matching field type.
   for (auto type : expected_possible_types) {
-    if (GroupTypeOfServerFieldType(type) != CREDIT_CARD) {
+    if (GroupTypeOfServerFieldType(type) != FieldTypeGroup::kCreditCard) {
       for (auto& profile : profiles) {
         ASSERT_GT(test_case.field_types.size(), 0U);
         if (type == UNKNOWN_TYPE) {
@@ -5731,7 +5752,7 @@ TEST_P(ProfileMatchingTypesTest, DeterminePossibleFieldTypesForUpload) {
 
   for (auto type : expected_possible_types) {
     // We don't add validity states for credit card fields.
-    if (GroupTypeOfServerFieldType(type) != CREDIT_CARD) {
+    if (GroupTypeOfServerFieldType(type) != FieldTypeGroup::kCreditCard) {
       ServerFieldTypeValidityStatesMap possible_types_validities =
           form_structure.field(0)->possible_types_validities();
       ASSERT_EQ(expected_possible_types.size(),
@@ -6072,12 +6093,13 @@ TEST_P(AutofillManagerStructuredProfileTest, DisambiguateUploadTypes) {
         // For structured names it is possible that a field as two out of three
         // possible classifications: NAME_FULL, NAME_LAST,
         // NAME_LAST_FIRST/SECOND. Note, all cases contain NAME_LAST.
-        if (StructuredNames() && possible_types.size() == 2) {
+        if (StructuredNamesAndAddresses() && possible_types.size() == 2) {
           EXPECT_TRUE(possible_types.count(NAME_LAST) &&
                       (possible_types.count(NAME_LAST_SECOND) ||
                        possible_types.count(NAME_LAST_FIRST) ||
                        possible_types.count(NAME_FULL)));
-        } else if (StructuredNames() && possible_types.size() == 3) {
+        } else if (StructuredNamesAndAddresses() &&
+                   possible_types.size() == 3) {
           // Or even all three.
           EXPECT_TRUE(possible_types.count(NAME_FULL) &&
                       possible_types.count(NAME_LAST) &&
@@ -6544,7 +6566,7 @@ TEST_P(AutofillManagerStructuredProfileTest,
   test::CreateTestFormField("Last Name", "lastname", "", "text", &field);
   form.fields.push_back(field);
   types.clear();
-  if (StructuredNames())
+  if (StructuredNamesAndAddresses())
     types.insert(NAME_LAST_SECOND);
   types.insert(NAME_LAST);
   expected_types.push_back(types);
@@ -6598,7 +6620,7 @@ TEST_P(AutofillManagerStructuredProfileTest,
   test::CreateTestFormField("Last Name", "lastname", "", "text", &field);
   form.fields.push_back(field);
   types.clear();
-  if (StructuredNames())
+  if (StructuredNamesAndAddresses())
     types.insert(NAME_LAST_SECOND);
   types.insert(NAME_LAST);
   expected_types.push_back(types);
@@ -7457,7 +7479,7 @@ TEST_P(AutofillManagerStructuredProfileTest,
   form.fields.push_back(field);
 
   auto form_structure = std::make_unique<TestFormStructure>(form);
-  form_structure->DetermineHeuristicTypes();
+  form_structure->DetermineHeuristicTypes(nullptr, nullptr);
   // Make sure the form can not be autofilled now.
   ASSERT_EQ(0u, form_structure->autofill_count());
   for (size_t idx = 0; idx < form_structure->field_count(); ++idx) {
@@ -8397,8 +8419,9 @@ TEST_F(AutofillManagerTest, DontImportUpiIdWhenIncognito) {
 // Tests the vote generation for the address enhancement types.
 TEST_F(AutofillManagerTest, PossibleFieldTypesForEnhancementVotes) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kAutofillAddressEnhancementVotes);
+  scoped_feature_list.InitWithFeatures(
+      {features::kAutofillAddressEnhancementVotes},
+      {features::kAutofillEnableSupportForMoreStructureInAddresses});
 
   std::vector<AutofillProfile> profiles = {AutofillProfile()};
   profiles[0].SetRawInfo(ADDRESS_HOME_STREET_NAME,
@@ -8464,18 +8487,43 @@ TEST_F(AutofillManagerTest, PageLanguageGetsCorrectlySet) {
   FormData form;
   test::CreateTestAddressFormData(&form);
 
-  autofill_client_.GetLanguageState()->SetCurrentLanguage("und");
+  autofill_manager_->OnFormsSeen({form});
+  FormStructure* parsed_form =
+      autofill_manager_->FindCachedFormByRendererId(form.unique_renderer_id);
+
+  ASSERT_TRUE(parsed_form);
+  ASSERT_EQ(LanguageCode(), parsed_form->current_page_language());
+
+  autofill_client_.GetLanguageState()->SetCurrentLanguage("zh");
+
+  autofill_manager_->OnFormsSeen({form});
+  parsed_form =
+      autofill_manager_->FindCachedFormByRendererId(form.unique_renderer_id);
+
+  ASSERT_EQ(LanguageCode("zh"), parsed_form->current_page_language());
+}
+
+TEST_F(AutofillManagerTest, PageLanguageGetsCorrectlyDetected) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      features::kAutofillParsingPatternsLanguageDetection);
+
+  FormData form;
+  test::CreateTestAddressFormData(&form);
 
   autofill_manager_->OnFormsSeen({form});
   FormStructure* parsed_form =
       autofill_manager_->FindCachedFormByRendererId(form.unique_renderer_id);
 
   ASSERT_TRUE(parsed_form);
-  ASSERT_EQ(LanguageCode("und"), parsed_form->current_page_language());
+  ASSERT_EQ(LanguageCode(), parsed_form->current_page_language());
+
+  translate::LanguageDetectionDetails language_detection_details;
+  language_detection_details.adopted_language = "zh";
+  autofill_manager_->OnLanguageDetermined(language_detection_details);
 
   autofill_client_.GetLanguageState()->SetCurrentLanguage("zh");
 
-  autofill_manager_->OnFormsSeen({form});
   parsed_form =
       autofill_manager_->FindCachedFormByRendererId(form.unique_renderer_id);
 

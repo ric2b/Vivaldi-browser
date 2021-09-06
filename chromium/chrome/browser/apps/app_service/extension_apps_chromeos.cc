@@ -45,6 +45,7 @@
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
 #include "chrome/browser/ui/ash/session_controller_client_impl.h"
+#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/extensions/extension_metrics.h"
@@ -157,6 +158,9 @@ void ExtensionAppsChromeOs::ObserveArc() {
 
 void ExtensionAppsChromeOs::Initialize() {
   app_window_registry_.Add(extensions::AppWindowRegistry::Get(profile()));
+
+  media_dispatcher_.Observe(MediaCaptureDevicesDispatcher::GetInstance());
+
   notification_display_service_.Add(
       NotificationDisplayServiceFactory::GetForProfile(profile()));
 
@@ -173,6 +177,10 @@ void ExtensionAppsChromeOs::Initialize() {
         policy::policy_prefs::kSystemFeaturesDisableList,
         base::BindRepeating(&ExtensionAppsBase::OnSystemFeaturesPrefChanged,
                             GetWeakPtr()));
+    local_state_pref_change_registrar_.Add(
+        policy::policy_prefs::kSystemFeaturesDisableMode,
+        base::BindRepeating(&ExtensionAppsBase::OnSystemFeaturesPrefChanged,
+                            GetWeakPtr()));
     OnSystemFeaturesPrefChanged();
   }
 }
@@ -182,9 +190,9 @@ void ExtensionAppsChromeOs::LaunchAppWithIntent(
     int32_t event_flags,
     apps::mojom::IntentPtr intent,
     apps::mojom::LaunchSource launch_source,
-    int64_t display_id) {
+    apps::mojom::WindowInfoPtr window_info) {
   auto* tab = LaunchAppWithIntentImpl(app_id, event_flags, std::move(intent),
-                                      launch_source, display_id);
+                                      launch_source, std::move(window_info));
 
   if (launch_source == apps::mojom::LaunchSource::kFromArc && tab) {
     // Add a flag to remember this tab originated in the ARC context.
@@ -356,6 +364,10 @@ void ExtensionAppsChromeOs::OnExtensionUninstalled(
   app_notifications_.RemoveNotificationsForApp(extension->id());
   paused_apps_.MaybeRemoveApp(extension->id());
 
+  auto result = media_requests_.RemoveRequests(extension->id());
+  ModifyCapabilityAccess(subscribers(), extension->id(), result.camera,
+                         result.microphone);
+
   ExtensionAppsBase::OnExtensionUninstalled(browser_context, extension, reason);
 }
 
@@ -380,6 +392,69 @@ void ExtensionAppsChromeOs::OnPackageListInitialRefreshed() {
 
 void ExtensionAppsChromeOs::OnArcAppListPrefsDestroyed() {
   arc_prefs_ = nullptr;
+}
+
+void ExtensionAppsChromeOs::OnRequestUpdate(
+    int render_process_id,
+    int render_frame_id,
+    blink::mojom::MediaStreamType stream_type,
+    const content::MediaRequestState state) {
+  content::WebContents* web_contents =
+      content::WebContents::FromRenderFrameHost(
+          content::RenderFrameHost::FromID(render_process_id, render_frame_id));
+
+  if (!web_contents) {
+    return;
+  }
+
+  base::Optional<web_app::AppId> web_app_id =
+      web_app::FindInstalledAppWithUrlInScope(profile(), web_contents->GetURL(),
+                                              /*window_only=*/false);
+  if (web_app_id.has_value()) {
+    // WebAppsChromeOs is responsible for |app_id|.
+    return;
+  }
+
+  std::string app_id = extension_misc::kChromeAppId;
+  extensions::ExtensionRegistry* registry =
+      extensions::ExtensionRegistry::Get(profile());
+  DCHECK(registry);
+  const extensions::ExtensionSet& extensions = registry->enabled_extensions();
+  const extensions::Extension* extension =
+      extensions.GetAppByURL(web_contents->GetURL());
+  if (extension && Accepts(extension)) {
+    app_id = extension->id();
+  }
+
+  if (media_requests_.IsNewRequest(app_id, web_contents, state)) {
+    content::WebContentsUserData<AppWebContentsData>::CreateForWebContents(
+        web_contents, this);
+  }
+
+  auto result =
+      media_requests_.UpdateRequests(app_id, web_contents, stream_type, state);
+  ModifyCapabilityAccess(subscribers(), app_id, result.camera,
+                         result.microphone);
+}
+
+void ExtensionAppsChromeOs::OnWebContentsDestroyed(
+    content::WebContents* web_contents) {
+  DCHECK(web_contents);
+
+  std::string app_id = extension_misc::kChromeAppId;
+  extensions::ExtensionRegistry* registry =
+      extensions::ExtensionRegistry::Get(profile());
+  DCHECK(registry);
+  const extensions::ExtensionSet& extensions = registry->enabled_extensions();
+  const extensions::Extension* extension =
+      extensions.GetAppByURL(web_contents->GetLastCommittedURL());
+  if (extension && Accepts(extension)) {
+    app_id = extension->id();
+  }
+
+  auto result = media_requests_.OnWebContentsDestroyed(app_id, web_contents);
+  ModifyCapabilityAccess(subscribers(), app_id, result.camera,
+                         result.microphone);
 }
 
 void ExtensionAppsChromeOs::OnNotificationDisplayed(
@@ -504,13 +579,21 @@ void ExtensionAppsChromeOs::OnSystemFeaturesPrefChanged() {
     return;
   }
 
-  UpdateAppDisabledState(disabled_system_features_pref,
-                         policy::SystemFeature::kCamera,
-                         extension_misc::kCameraAppId);
+  const bool is_pref_disabled_mode_hidden =
+      local_state->GetString(
+          policy::policy_prefs::kSystemFeaturesDisableMode) ==
+      policy::kHiddenDisableMode;
+  const bool is_disabled_mode_changed =
+      (is_pref_disabled_mode_hidden != is_disabled_apps_mode_hidden_);
+  is_disabled_apps_mode_hidden_ = is_pref_disabled_mode_hidden;
+
+  UpdateAppDisabledState(
+      disabled_system_features_pref, policy::SystemFeature::kCamera,
+      extension_misc::kCameraAppId, is_disabled_mode_changed);
 
   UpdateAppDisabledState(disabled_system_features_pref,
                          policy::SystemFeature::kWebStore,
-                         extensions::kWebStoreAppId);
+                         extensions::kWebStoreAppId, is_disabled_mode_changed);
 }
 
 bool ExtensionAppsChromeOs::Accepts(const extensions::Extension* extension) {
@@ -529,10 +612,10 @@ bool ExtensionAppsChromeOs::ShouldShownInLauncher(
 apps::mojom::AppPtr ExtensionAppsChromeOs::Convert(
     const extensions::Extension* extension,
     apps::mojom::Readiness readiness) {
-  apps::mojom::AppPtr app =
-      ConvertImpl(extension, base::Contains(disabled_apps_, extension->id())
-                                 ? apps::mojom::Readiness::kDisabledByPolicy
-                                 : readiness);
+  const bool is_app_disabled = base::Contains(disabled_apps_, extension->id());
+  apps::mojom::AppPtr app = ConvertImpl(
+      extension,
+      is_app_disabled ? apps::mojom::Readiness::kDisabledByPolicy : readiness);
   bool paused = paused_apps_.IsPaused(extension->id());
   app->icon_key =
       icon_key_factory().MakeIconKey(GetIconEffects(extension, paused));
@@ -542,6 +625,12 @@ apps::mojom::AppPtr ExtensionAppsChromeOs::Convert(
                        : apps::mojom::OptionalBool::kFalse;
   app->paused = paused ? apps::mojom::OptionalBool::kTrue
                        : apps::mojom::OptionalBool::kFalse;
+
+  if (is_app_disabled && is_disabled_apps_mode_hidden_) {
+    app->show_in_launcher = apps::mojom::OptionalBool::kFalse;
+    app->show_in_search = apps::mojom::OptionalBool::kFalse;
+    app->show_in_shelf = apps::mojom::OptionalBool::kFalse;
+  }
 
   return app;
 }
@@ -676,26 +765,15 @@ void ExtensionAppsChromeOs::GetMenuModelForChromeBrowserApp(
 
 content::WebContents* ExtensionAppsChromeOs::LaunchImpl(
     AppLaunchParams&& params) {
-  AppLaunchParams params_for_restore(params.app_id, params.container,
-                                     params.disposition, params.display_id,
-                                     params.launch_files, params.intent);
+  AppLaunchParams params_for_restore(
+      params.app_id, params.container, params.disposition, params.source,
+      params.display_id, params.launch_files, params.intent);
 
   auto* web_contents = ExtensionAppsBase::LaunchImpl(std::move(params));
 
   std::unique_ptr<full_restore::AppLaunchInfo> launch_info;
-  int session_id = GetSessionIdForRestoreFromWebContents(
-      params_for_restore.container, web_contents);
-  if (SessionID::IsValidValue(session_id)) {
-    // If the app is launched via browser, the browser session restore can
-    // restore the app after reboot, so we don't need to save the launch
-    // parameters to launch the app after reboot. Only the browser session id is
-    // saved as the window id, to restore the window stack, snap, etc. The app
-    // id is modified as the Chrome browser id, so that it won't be launched
-    // after reboot. Also for apps opened with tabs in one browser window, we
-    // don't need to save multiple records in the full restore data.
-    launch_info = std::make_unique<full_restore::AppLaunchInfo>(
-        extension_misc::kChromeAppId, session_id);
-  } else {
+  int session_id = GetSessionIdForRestoreFromWebContents(web_contents);
+  if (!SessionID::IsValidValue(session_id)) {
     // Save all launch information for platform apps, which can launch via
     // event, e.g. file app.
     launch_info = std::make_unique<full_restore::AppLaunchInfo>(
@@ -703,16 +781,18 @@ content::WebContents* ExtensionAppsChromeOs::LaunchImpl(
         params_for_restore.disposition, params_for_restore.display_id,
         std::move(params_for_restore.launch_files),
         std::move(params_for_restore.intent));
+    full_restore::SaveAppLaunchInfo(profile()->GetPath(),
+                                    std::move(launch_info));
   }
 
-  full_restore::SaveAppLaunchInfo(profile()->GetPath(), std::move(launch_info));
   return web_contents;
 }
 
 void ExtensionAppsChromeOs::UpdateAppDisabledState(
     const base::ListValue* disabled_system_features_pref,
     int feature,
-    const std::string& app_id) {
+    const std::string& app_id,
+    bool is_disabled_mode_changed) {
   const bool is_disabled =
       base::Contains(*disabled_system_features_pref, base::Value(feature));
   // Sometimes the policy is updated before the app is installed, so this way
@@ -720,7 +800,8 @@ void ExtensionAppsChromeOs::UpdateAppDisabledState(
   // and the app will be published with the correct readiness upon its
   // installation.
   const bool should_publish =
-      (base::Contains(disabled_apps_, app_id) != is_disabled);
+      (base::Contains(disabled_apps_, app_id) != is_disabled) ||
+      is_disabled_mode_changed;
 
   if (is_disabled) {
     disabled_apps_.insert(app_id);

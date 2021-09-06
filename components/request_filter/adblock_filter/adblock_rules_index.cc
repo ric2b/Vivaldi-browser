@@ -32,7 +32,7 @@ namespace {
 // The integer type used to represent N-grams.
 using NGram = uint64_t;
 // The hasher used for hashing N-grams.
-using NGramHasher = url_pattern_index::Uint64Hasher;
+using NGramHasher = url_pattern_index::Uint64ToUint32Hasher;
 // The hash table probe sequence used both by UrlPatternIndex and its builder.
 using NGramHashTableProber =
     url_pattern_index::DefaultProber<NGram, NGramHasher>;
@@ -84,6 +84,8 @@ struct ContentInjectionIndexTraversalResults {
       RulesIndex::ScriptletInjection scriptlet_injection;
       scriptlet_injection.first = kAbpSnippetsScriptletName;
       scriptlet_injection.second.push_back(std::move(abp_snippets_arguments));
+      injection_data.scriptlet_injections.push_back(
+          std::move(scriptlet_injection));
     }
 
     return injection_data;
@@ -426,9 +428,9 @@ void FindMatchingRuleInMap(
       url_spec, [](char) { return false; });
 
   for (uint64_t ngram : ngrams) {
-    const size_t slot_index = prober.FindSlot(
-        ngram, base::strict_cast<size_t>(hash_table->size()),
-        [hash_table, empty_slot](NGram ngram, size_t slot_index) {
+    const uint32_t slot_index = prober.FindSlot(
+        ngram, hash_table->size(),
+        [hash_table, empty_slot](NGram ngram, uint32_t slot_index) {
           const flat::NGramToRules* entry = hash_table->Get(slot_index);
           DCHECK_NE(entry, nullptr);
           return entry == empty_slot || entry->ngram() == ngram;

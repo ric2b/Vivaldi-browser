@@ -75,6 +75,7 @@
 #include "third_party/blink/renderer/core/inspector/identifiers_factory.h"
 #include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
 #include "third_party/blink/renderer/core/loader/appcache/application_cache_host.h"
+#include "third_party/blink/renderer/core/loader/back_forward_cache_loader_helper_for_frame.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
 #include "third_party/blink/renderer/core/loader/frame_resource_fetcher_properties.h"
@@ -183,14 +184,15 @@ mojom::FetchCacheMode DetermineFrameCacheMode(Frame* frame) {
 struct FrameFetchContext::FrozenState final : GarbageCollected<FrozenState> {
   FrozenState(const KURL& url,
               scoped_refptr<const SecurityOrigin> parent_security_origin,
-              const ContentSecurityPolicy* content_security_policy,
+              ContentSecurityPolicy* content_security_policy,
               net::SiteForCookies site_for_cookies,
               scoped_refptr<const SecurityOrigin> top_frame_origin,
               const ClientHintsPreferences& client_hints_preferences,
               float device_pixel_ratio,
               const String& user_agent,
               const base::Optional<UserAgentMetadata>& user_agent_metadata,
-              bool is_svg_image_chrome_client)
+              bool is_svg_image_chrome_client,
+              bool is_prerendering)
       : url(url),
         parent_security_origin(std::move(parent_security_origin)),
         content_security_policy(content_security_policy),
@@ -200,11 +202,12 @@ struct FrameFetchContext::FrozenState final : GarbageCollected<FrozenState> {
         device_pixel_ratio(device_pixel_ratio),
         user_agent(user_agent),
         user_agent_metadata(user_agent_metadata),
-        is_svg_image_chrome_client(is_svg_image_chrome_client) {}
+        is_svg_image_chrome_client(is_svg_image_chrome_client),
+        is_prerendering(is_prerendering) {}
 
   const KURL url;
   const scoped_refptr<const SecurityOrigin> parent_security_origin;
-  const Member<const ContentSecurityPolicy> content_security_policy;
+  const Member<ContentSecurityPolicy> content_security_policy;
   const net::SiteForCookies site_for_cookies;
   const scoped_refptr<const SecurityOrigin> top_frame_origin;
   const ClientHintsPreferences client_hints_preferences;
@@ -212,6 +215,7 @@ struct FrameFetchContext::FrozenState final : GarbageCollected<FrozenState> {
   const String user_agent;
   const base::Optional<UserAgentMetadata> user_agent_metadata;
   const bool is_svg_image_chrome_client;
+  const bool is_prerendering;
 
   void Trace(Visitor* visitor) const {
     visitor->Trace(content_security_policy);
@@ -232,7 +236,8 @@ ResourceFetcher* FrameFetchContext::CreateFetcherForCommittedDocument(
       frame->GetTaskRunner(TaskType::kNetworking),
       frame->GetTaskRunner(TaskType::kNetworkingUnfreezable),
       MakeGarbageCollected<LoaderFactoryForFrame>(loader, *frame->DomWindow()),
-      frame->DomWindow());
+      frame->DomWindow(),
+      MakeGarbageCollected<BackForwardCacheLoaderHelperForFrame>(*frame));
   init.use_counter =
       MakeGarbageCollected<DetachableUseCounter>(frame->DomWindow());
   init.console_logger = MakeGarbageCollected<DetachableConsoleLogger>(
@@ -512,6 +517,12 @@ void FrameFetchContext::PopulateResourceRequest(
     request.AddHttpHeaderField("CSP", "active");
 }
 
+bool FrameFetchContext::IsPrerendering() const {
+  if (GetResourceFetcherProperties().IsDetached())
+    return frozen_state_->is_prerendering;
+  return document_->IsPrerendering();
+}
+
 void FrameFetchContext::SetFirstPartyCookie(ResourceRequest& request) {
   // Set the first party for cookies url if it has not been set yet (new
   // requests). This value will be updated during redirects, consistent with
@@ -569,8 +580,7 @@ void FrameFetchContext::DispatchDidBlockRequest(
                          fetch_initiator_info, blocked_reason, resource_type);
 }
 
-const ContentSecurityPolicy*
-FrameFetchContext::GetContentSecurityPolicyForWorld(
+ContentSecurityPolicy* FrameFetchContext::GetContentSecurityPolicyForWorld(
     const DOMWrapperWorld* world) const {
   if (GetResourceFetcherProperties().IsDetached())
     return frozen_state_->content_security_policy;
@@ -688,8 +698,7 @@ const SecurityOrigin* FrameFetchContext::GetParentSecurityOrigin() const {
   return parent->GetSecurityContext()->GetSecurityOrigin();
 }
 
-const ContentSecurityPolicy* FrameFetchContext::GetContentSecurityPolicy()
-    const {
+ContentSecurityPolicy* FrameFetchContext::GetContentSecurityPolicy() const {
   if (GetResourceFetcherProperties().IsDetached())
     return frozen_state_->content_security_policy;
   return document_->domWindow()->GetContentSecurityPolicy();
@@ -757,7 +766,7 @@ FetchContext* FrameFetchContext::Detach() {
       Url(), GetParentSecurityOrigin(), GetContentSecurityPolicy(),
       GetSiteForCookies(), GetTopFrameOrigin(), GetClientHintsPreferences(),
       GetDevicePixelRatio(), GetUserAgent(), GetUserAgentMetadata(),
-      IsSVGImageChromeClient());
+      IsSVGImageChromeClient(), IsPrerendering());
   document_loader_ = nullptr;
   document_ = nullptr;
   return this;

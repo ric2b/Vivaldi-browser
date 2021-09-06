@@ -5,6 +5,7 @@
 #include "chrome/browser/web_applications/system_web_app_manager.h"
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -33,6 +34,7 @@
 #include "chrome/browser/web_applications/components/web_app_ui_manager.h"
 #include "chrome/browser/web_applications/components/web_app_utils.h"
 #include "chrome/browser/web_applications/components/web_application_info.h"
+#include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/common/chrome_features.h"
@@ -48,15 +50,18 @@
 #include "content/public/browser/url_data_source.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_features.h"
+#include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/app_list/internal_app_id_constants.h"
-#include "base/values.h"
-#include "chrome/browser/chromeos/policy/system_features_disable_list_policy_handler.h"
 #include "chrome/browser/chromeos/web_applications/camera_system_web_app_info.h"
 #include "chrome/browser/chromeos/web_applications/connectivity_diagnostics_system_web_app_info.h"
+#include "chrome/browser/chromeos/web_applications/crosh_system_web_app_info.h"
 #include "chrome/browser/chromeos/web_applications/diagnostics_system_web_app_info.h"
+#include "chrome/browser/chromeos/web_applications/eche_app_info.h"
 #include "chrome/browser/chromeos/web_applications/help_app_web_app_info.h"
 #include "chrome/browser/chromeos/web_applications/media_web_app_info.h"
 #include "chrome/browser/chromeos/web_applications/os_settings_web_app_info.h"
@@ -68,12 +73,8 @@
 #include "chromeos/components/connectivity_diagnostics/url_constants.h"
 #include "chromeos/components/help_app_ui/url_constants.h"
 #include "chromeos/components/media_app_ui/url_constants.h"
-#include "chromeos/constants/chromeos_features.h"
-#include "chromeos/constants/chromeos_pref_names.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
-#include "components/policy/core/common/policy_pref_names.h"
 #include "extensions/common/constants.h"
-
 #if !defined(OFFICIAL_BUILD)
 #include "chrome/browser/chromeos/web_applications/file_manager_web_app_info.h"
 #include "chrome/browser/chromeos/web_applications/sample_system_web_app_info.h"
@@ -150,6 +151,8 @@ base::flat_map<SystemAppType, SystemAppInfo> CreateSystemWebApps(
         SystemAppInfo(
             "Diagnostics", GURL("chrome://diagnostics"),
             base::BindRepeating(&CreateWebAppInfoForDiagnosticsSystemWebApp)));
+    infos.at(SystemAppType::DIAGNOSTICS).minimum_window_size = {600, 390};
+    infos.at(SystemAppType::DIAGNOSTICS).show_in_launcher = false;
   }
 
   infos.emplace(SystemAppType::SETTINGS,
@@ -160,15 +163,22 @@ base::flat_map<SystemAppType, SystemAppInfo> CreateSystemWebApps(
       web_app::kSettingsAppId, ash::kInternalAppIdSettings};
   // Large enough to see the heading text "Settings" in the top-left.
   infos.at(SystemAppType::SETTINGS).minimum_window_size = {300, 100};
+  infos.at(SystemAppType::SETTINGS).capture_navigations = true;
 
-  if (SystemWebAppManager::IsAppEnabled(SystemAppType::TERMINAL)) {
-    infos.emplace(
-        SystemAppType::TERMINAL,
-        SystemAppInfo(
-            "Terminal", GURL(chrome::kChromeUIUntrustedTerminalURL),
-            base::BindRepeating(&CreateWebAppInfoForTerminalSystemWebApp)));
-    infos.at(SystemAppType::TERMINAL).single_window = false;
-  }
+  infos.emplace(SystemAppType::CROSH,
+                SystemAppInfo("Crosh", GURL(chrome::kChromeUIUntrustedCroshURL),
+                              base::BindRepeating(
+                                  &CreateWebAppInfoForCroshSystemWebApp)));
+  infos.at(SystemAppType::CROSH).single_window = false;
+  infos.at(SystemAppType::CROSH).show_in_launcher = false;
+  infos.at(SystemAppType::CROSH).show_in_search = false;
+
+  infos.emplace(
+      SystemAppType::TERMINAL,
+      SystemAppInfo(
+          "Terminal", GURL(chrome::kChromeUIUntrustedTerminalURL),
+          base::BindRepeating(&CreateWebAppInfoForTerminalSystemWebApp)));
+  infos.at(SystemAppType::TERMINAL).single_window = false;
 
   if (SystemWebAppManager::IsAppEnabled(SystemAppType::HELP)) {
     infos.emplace(
@@ -222,6 +232,20 @@ base::flat_map<SystemAppType, SystemAppInfo> CreateSystemWebApps(
             GURL(chromeos::kChromeUIConnectivityDiagnosticsUrl),
             base::BindRepeating(
                 &CreateWebAppInfoForConnectivityDiagnosticsSystemWebApp)));
+    infos.at(SystemAppType::CONNECTIVITY_DIAGNOSTICS).show_in_launcher = false;
+    infos.at(SystemAppType::CONNECTIVITY_DIAGNOSTICS).show_in_search = false;
+  }
+
+  if (SystemWebAppManager::IsAppEnabled(SystemAppType::ECHE)) {
+    infos.emplace(
+        SystemAppType::ECHE,
+        SystemAppInfo("Eche", GURL("chrome://eche-app"),
+                      base::BindRepeating(&CreateWebAppInfoForEcheApp)));
+    infos.at(SystemAppType::ECHE).capture_navigations = true;
+    infos.at(SystemAppType::ECHE).show_in_launcher = false;
+    infos.at(SystemAppType::ECHE).show_in_search = false;
+    infos.at(SystemAppType::ECHE).is_resizeable = false;
+    infos.at(SystemAppType::ECHE).is_maximizable = false;
   }
 
 #if !defined(OFFICIAL_BUILD)
@@ -254,6 +278,9 @@ base::flat_map<SystemAppType, SystemAppInfo> CreateSystemWebApps(
       {{GetOrigin("chrome://sample-system-web-app"), {"Frobulate"}},
        {GetOrigin("chrome-untrusted://sample-system-web-app"), {"Frobulate"}}});
   infos.at(SystemAppType::SAMPLE).capture_navigations = true;
+  infos.at(SystemAppType::SAMPLE).timer_info = SystemAppBackgroundTaskInfo(
+      base::TimeDelta::FromSeconds(30),
+      GURL("chrome://sample-system-web-app/timer.html"));
 #endif  // !defined(OFFICIAL_BUILD)
 
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -297,42 +324,7 @@ ExternalInstallOptions CreateInstallOptionsForSystemApp(
   return install_options;
 }
 
-std::set<SystemAppType> GetDisabledSystemWebApps() {
-  std::set<SystemAppType> disabled_system_apps;
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  PrefService* const local_state = g_browser_process->local_state();
-  if (!local_state)  // Sometimes it's not available in tests.
-    return disabled_system_apps;
-
-  const base::ListValue* disabled_system_features_pref =
-      local_state->GetList(policy::policy_prefs::kSystemFeaturesDisableList);
-  if (!disabled_system_features_pref)
-    return disabled_system_apps;
-
-  for (const auto& entry : *disabled_system_features_pref) {
-    switch (entry.GetInt()) {
-      case policy::SystemFeature::kCamera:
-        disabled_system_apps.insert(SystemAppType::CAMERA);
-        break;
-      case policy::SystemFeature::kOsSettings:
-        disabled_system_apps.insert(SystemAppType::SETTINGS);
-        break;
-      case policy::SystemFeature::kScanning:
-        disabled_system_apps.insert(SystemAppType::SCANNING);
-        break;
-    }
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-  return disabled_system_apps;
-}
-
 }  // namespace
-
-SystemAppInfo::SystemAppInfo(const std::string& internal_name,
-                             const GURL& install_url)
-    : internal_name(internal_name), install_url(install_url) {}
 
 SystemAppInfo::SystemAppInfo(const std::string& internal_name,
                              const GURL& install_url,
@@ -366,8 +358,9 @@ bool SystemWebAppManager::IsAppEnabled(SystemAppType type) {
     case SystemAppType::SETTINGS:
       return true;
     case SystemAppType::CAMERA:
-      return base::FeatureList::IsEnabled(
-          chromeos::features::kCameraSystemWebApp);
+      return true;
+    case SystemAppType::CROSH:
+      return true;
     case SystemAppType::TERMINAL:
       return true;
     case SystemAppType::MEDIA:
@@ -375,8 +368,7 @@ bool SystemWebAppManager::IsAppEnabled(SystemAppType type) {
     case SystemAppType::HELP:
       return true;
     case SystemAppType::PRINT_MANAGEMENT:
-      return base::FeatureList::IsEnabled(
-          chromeos::features::kPrintJobManagementApp);
+      return true;
     case SystemAppType::SCANNING:
       return base::FeatureList::IsEnabled(chromeos::features::kScanningUI);
     case SystemAppType::DIAGNOSTICS:
@@ -395,6 +387,8 @@ bool SystemWebAppManager::IsAppEnabled(SystemAppType type) {
       if (install_experimental_apps)
         NOTREACHED();
       return false;
+    case SystemAppType::ECHE:
+      return base::FeatureList::IsEnabled(chromeos::features::kEcheSWA);
   }
 #else
   return false;
@@ -432,8 +426,15 @@ SystemWebAppManager::SystemWebAppManager(Profile* profile)
 
 SystemWebAppManager::~SystemWebAppManager() = default;
 
+void SystemWebAppManager::StopBackgroundTasks() {
+  for (auto& task : tasks_) {
+    task->StopTask();
+  }
+}
+
 void SystemWebAppManager::Shutdown() {
   shutting_down_ = true;
+  StopBackgroundTasks();
 }
 
 void SystemWebAppManager::SetSubsystems(
@@ -441,12 +442,14 @@ void SystemWebAppManager::SetSubsystems(
     AppRegistrar* registrar,
     AppRegistryController* registry_controller,
     WebAppUiManager* ui_manager,
-    OsIntegrationManager* os_integration_manager) {
+    OsIntegrationManager* os_integration_manager,
+    WebAppPolicyManager* web_app_policy_manager) {
   pending_app_manager_ = pending_app_manager;
   registrar_ = registrar;
   registry_controller_ = registry_controller;
   ui_manager_ = ui_manager;
   os_integration_manager_ = os_integration_manager;
+  web_app_policy_manager_ = web_app_policy_manager;
 }
 
 void SystemWebAppManager::Start() {
@@ -475,7 +478,8 @@ void SystemWebAppManager::Start() {
     UpdateLastAttemptedInfo();
   }
 
-  const auto disabled_system_apps = GetDisabledSystemWebApps();
+  const auto disabled_system_apps =
+      web_app_policy_manager_->GetDisabledSystemWebApps();
 
   for (const auto& app : system_app_infos_) {
     install_options_list.push_back(CreateInstallOptionsForSystemApp(
@@ -492,21 +496,6 @@ void SystemWebAppManager::Start() {
                        weak_ptr_factory_.GetWeakPtr(),
                        should_force_install_apps, install_start_time));
   }
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  PrefService* const local_state = g_browser_process->local_state();
-  if (local_state) {  // Sometimes it's not available in tests.
-    local_state_pref_change_registrar_.Init(local_state);
-
-    // Sometimes this function gets called twice in tests.
-    if (!local_state_pref_change_registrar_.IsObserved(
-            policy::policy_prefs::kSystemFeaturesDisableList)) {
-      local_state_pref_change_registrar_.Add(
-          policy::policy_prefs::kSystemFeaturesDisableList,
-          base::Bind(&SystemWebAppManager::OnAppsPolicyChanged,
-                     base::Unretained(this)));
-    }
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 void SystemWebAppManager::InstallSystemAppsForTesting() {
@@ -659,6 +648,21 @@ bool SystemWebAppManager::ShouldShowInSearch(SystemAppType type) const {
   return it->second.show_in_search;
 }
 
+bool SystemWebAppManager::IsResizeableWindow(SystemAppType type) const {
+  auto it = system_app_infos_.find(type);
+  if (it == system_app_infos_.end())
+    return false;
+
+  return it->second.is_resizeable;
+}
+bool SystemWebAppManager::IsMaximizableWindow(SystemAppType type) const {
+  auto it = system_app_infos_.find(type);
+  if (it == system_app_infos_.end())
+    return false;
+
+  return it->second.is_maximizable;
+}
+
 base::Optional<SystemAppType> SystemWebAppManager::GetCapturingSystemAppForURL(
     const GURL& url) const {
   if (!HasSystemWebAppScheme(url))
@@ -705,6 +709,11 @@ gfx::Size SystemWebAppManager::GetMinimumWindowSize(const AppId& app_id) const {
 void SystemWebAppManager::SetSystemAppsForTesting(
     base::flat_map<SystemAppType, SystemAppInfo> system_apps) {
   system_app_infos_ = std::move(system_apps);
+}
+
+const std::vector<std::unique_ptr<SystemAppBackgroundTask>>&
+SystemWebAppManager::GetBackgroundTasksForTesting() {
+  return tasks_;
 }
 
 void SystemWebAppManager::SetUpdatePolicyForTesting(UpdatePolicy policy) {
@@ -834,11 +843,27 @@ void SystemWebAppManager::OnAppsSynchronized(
 
   RecordSystemWebAppInstallResults(install_results);
 
+  for (const auto& it : system_app_infos_) {
+    const SystemAppInfo& app_info = it.second;
+
+    if (app_info.timer_info) {
+      tasks_.push_back(std::make_unique<SystemAppBackgroundTask>(
+          profile_, app_info.timer_info.value()));
+    }
+  }
   // May be called more than once in tests.
   if (!on_apps_synchronized_->is_signaled()) {
     on_apps_synchronized_->Signal();
-    OnAppsPolicyChanged();
+    web_app_policy_manager_->OnAppsPolicyChanged();
+    // TODO(http://crbug/1173187): Don't create SWA background tasks that are
+    // associated with a disabled SWA.
   }
+
+  // Start the tasks async to give any code running in an on_app_synchronized
+  // context a chance to finish first.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(&SystemWebAppManager::StartBackgroundTasks,
+                                weak_ptr_factory_.GetWeakPtr()));
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   bool is_camera_app_installed =
@@ -846,6 +871,12 @@ void SystemWebAppManager::OnAppsSynchronized(
   profile_->GetPrefs()->SetBoolean(chromeos::prefs::kHasCameraAppMigratedToSWA,
                                    is_camera_app_installed);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+}
+
+void SystemWebAppManager::StartBackgroundTasks() const {
+  for (const auto& task : tasks_) {
+    task->StartTask();
+  }
 }
 
 bool SystemWebAppManager::ShouldForceInstallApps() const {
@@ -906,25 +937,6 @@ bool SystemWebAppManager::CheckAndIncrementRetryAttempts() {
     return false;
   }
   return true;
-}
-
-void SystemWebAppManager::OnAppsPolicyChanged() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (!on_apps_synchronized_->is_signaled())
-    return;
-
-  auto disabled_system_apps = GetDisabledSystemWebApps();
-
-  for (const auto& app_type_to_app_info : system_app_infos_) {
-    const bool is_disabled =
-        base::Contains(disabled_system_apps, app_type_to_app_info.first);
-    base::Optional<AppId> app_id =
-        GetAppIdForSystemApp(app_type_to_app_info.first);
-    if (app_id.has_value()) {
-      registry_controller_->SetAppIsDisabled(app_id.value(), is_disabled);
-    }
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 }  // namespace web_app

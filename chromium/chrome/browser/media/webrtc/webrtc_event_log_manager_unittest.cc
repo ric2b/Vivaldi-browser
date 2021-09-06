@@ -69,7 +69,6 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/scoped_user_manager.h"
 #endif
@@ -77,7 +76,7 @@
 namespace webrtc_event_logging {
 
 #if defined(OS_WIN)
-#define NumberToStringType base::NumberToString16
+#define NumberToStringType base::NumberToWString
 #else
 #define NumberToStringType base::NumberToString
 #endif

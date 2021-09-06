@@ -51,7 +51,6 @@
 #include "ui/gfx/geometry/size.h"
 
 #if defined(OS_WIN)
-#include <base/win/windows_types.h>
 #include "components/crash/core/app/crash_switches.h"
 #include "components/crash/core/app/run_as_crashpad_handler_win.h"
 #include "sandbox/win/src/sandbox_types.h"
@@ -105,7 +104,11 @@ bool ParseFontRenderHinting(
 }
 
 GURL ConvertArgumentToURL(const base::CommandLine::StringType& arg) {
+#if defined(OS_WIN)
+  GURL url(base::WideToUTF8(arg));
+#else
   GURL url(arg);
+#endif
   if (url.is_valid() && url.has_scheme())
     return url;
 
@@ -138,7 +141,7 @@ base::FilePath GetSSLKeyLogFile(const base::CommandLine* command_line) {
   env->GetVar("SSLKEYLOGFILE", &path_str);
 #if defined(OS_WIN)
   // base::Environment returns environment variables in UTF-8 on Windows.
-  return base::FilePath(base::UTF8ToUTF16(path_str));
+  return base::FilePath(base::UTF8ToWide(path_str));
 #else
   return base::FilePath(path_str);
 #endif
@@ -839,13 +842,12 @@ void RunChildProcessIfNeeded(int argc, const char** argv) {
 
   int rc = RunContentMain(builder.Build(),
                           base::OnceCallback<void(HeadlessBrowser*)>());
-#if defined(OS_WIN)
-  // Use TerminateProcess instead of exit to avoid shutdown crashes and
-  // slowdowns on shutdown.
-  ::TerminateProcess(::GetCurrentProcess(), rc);
-#else   // defined(OS_WIN)
-  exit(rc);
-#endif  // defined(OS_WIN)
+
+  // Note that exiting from here means that base::AtExitManager objects will not
+  // have a chance to be destroyed (typically in main/WinMain).
+  // Use TerminateCurrentProcessImmediately instead of exit to avoid shutdown
+  // crashes and slowdowns on shutdown.
+  base::Process::TerminateCurrentProcessImmediately(rc);
 }
 
 int HeadlessBrowserMain(

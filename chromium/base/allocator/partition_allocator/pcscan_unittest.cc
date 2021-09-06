@@ -11,7 +11,7 @@
 #include "base/allocator/partition_allocator/partition_alloc_features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if ALLOW_PCSCAN
+#if PA_ALLOW_PCSCAN
 
 namespace base {
 namespace internal {
@@ -22,7 +22,9 @@ class PCScanTest : public testing::Test {
     PartitionAllocGlobalInit([](size_t) { LOG(FATAL) << "Out of memory"; });
     allocator_.init({PartitionOptions::Alignment::kRegular,
                      PartitionOptions::ThreadCache::kDisabled,
-                     PartitionOptions::PCScan::kForcedEnabledForTesting});
+                     PartitionOptions::Quarantine::kAllowed,
+                     PartitionOptions::RefCount::kDisabled});
+    PCScan<ThreadSafe>::Instance().RegisterScannableRoot(allocator_.root());
   }
   ~PCScanTest() override {
     allocator_.root()->PurgeMemory(PartitionPurgeDecommitEmptySlotSpans |
@@ -80,7 +82,8 @@ FullSlotSpanAllocation GetFullSlotSpan(ThreadSafePartitionRoot& root,
       last = root.AdjustPointerForExtrasSubtract(ptr);
   }
 
-  EXPECT_EQ(SlotSpan::FromPointer(first), SlotSpan::FromPointer(last));
+  EXPECT_EQ(SlotSpan::FromSlotStartPtr(first),
+            SlotSpan::FromSlotStartPtr(last));
   if (bucket.num_system_pages_per_slot_span == NumSystemPagesPerPartitionPage())
     EXPECT_EQ(reinterpret_cast<size_t>(first) & PartitionPageBaseMask(),
               reinterpret_cast<size_t>(last) & PartitionPageBaseMask());
@@ -95,11 +98,11 @@ FullSlotSpanAllocation GetFullSlotSpan(ThreadSafePartitionRoot& root,
           root.AdjustPointerForExtrasAdd(last)};
 }
 
-bool IsInFreeList(void* object) {
-  auto* slot_span = SlotSpan::FromPointerNoAlignmentCheck(object);
+bool IsInFreeList(void* slot_start) {
+  auto* slot_span = SlotSpan::FromSlotStartPtr(slot_start);
   for (auto* entry = slot_span->freelist_head; entry;
        entry = entry->GetNext()) {
-    if (entry == object)
+    if (entry == slot_start)
       return true;
   }
   return false;
@@ -167,13 +170,11 @@ template <typename SourceList, typename ValueList>
 void TestDanglingReference(PCScanTest& test,
                            SourceList* source,
                            ValueList* value) {
-  auto* source_root = ThreadSafePartitionRoot::FromPointerInNormalBucketPool(
-      reinterpret_cast<char*>(source));
   auto* value_root = ThreadSafePartitionRoot::FromPointerInNormalBucketPool(
       reinterpret_cast<char*>(value));
   {
     // Free |value| and leave the dangling reference in |source|.
-    ValueList::Destroy(*source_root, value);
+    ValueList::Destroy(*value_root, value);
     // Check that |value| is in the quarantine now.
     EXPECT_TRUE(test.IsInQuarantine(value));
     // Run PCScan.
@@ -232,8 +233,8 @@ TEST_F(PCScanTest, DanglingReferenceSameSlotSpanButDifferentPages) {
 
   // Assert that the first and the last objects are in the same slot span but on
   // different partition pages.
-  ASSERT_EQ(SlotSpan::FromPointerNoAlignmentCheck(full_slot_span.first),
-            SlotSpan::FromPointerNoAlignmentCheck(full_slot_span.last));
+  ASSERT_EQ(SlotSpan::FromSlotInnerPtr(full_slot_span.first),
+            SlotSpan::FromSlotInnerPtr(full_slot_span.last));
   ASSERT_NE(
       reinterpret_cast<size_t>(full_slot_span.first) & PartitionPageBaseMask(),
       reinterpret_cast<size_t>(full_slot_span.last) & PartitionPageBaseMask());
@@ -260,11 +261,9 @@ TEST_F(PCScanTest, DanglingReferenceFromFullPage) {
   // Assert that the first and the last objects are in different slot spans but
   // in the same bucket.
   SlotSpan* source_slot_span =
-      ThreadSafePartitionRoot::SlotSpan::FromPointerNoAlignmentCheck(
-          source_addr);
+      ThreadSafePartitionRoot::SlotSpan::FromSlotInnerPtr(source_addr);
   SlotSpan* value_slot_span =
-      ThreadSafePartitionRoot::SlotSpan::FromPointerNoAlignmentCheck(
-          value_addr);
+      ThreadSafePartitionRoot::SlotSpan::FromSlotInnerPtr(value_addr);
   ASSERT_NE(source_slot_span, value_slot_span);
   ASSERT_EQ(source_slot_span->bucket, value_slot_span->bucket);
 
@@ -313,14 +312,17 @@ TEST_F(PCScanTest, DanglingInterPartitionReference) {
   using SourceList = List<64>;
   using ValueList = SourceList;
 
-  ThreadSafePartitionRoot source_root(
-      {PartitionOptions::Alignment::kRegular,
-       PartitionOptions::ThreadCache::kDisabled,
-       PartitionOptions::PCScan::kForcedEnabledForTesting});
-  ThreadSafePartitionRoot value_root(
-      {PartitionOptions::Alignment::kRegular,
-       PartitionOptions::ThreadCache::kDisabled,
-       PartitionOptions::PCScan::kForcedEnabledForTesting});
+  ThreadSafePartitionRoot source_root({PartitionOptions::Alignment::kRegular,
+                                       PartitionOptions::ThreadCache::kDisabled,
+                                       PartitionOptions::Quarantine::kAllowed,
+                                       PartitionOptions::RefCount::kDisabled});
+  ThreadSafePartitionRoot value_root({PartitionOptions::Alignment::kRegular,
+                                      PartitionOptions::ThreadCache::kDisabled,
+                                      PartitionOptions::Quarantine::kAllowed,
+                                      PartitionOptions::RefCount::kDisabled});
+
+  PCScan<ThreadSafe>::Instance().RegisterScannableRoot(&source_root);
+  PCScan<ThreadSafe>::Instance().RegisterScannableRoot(&value_root);
 
   auto* source = SourceList::Create(source_root);
   auto* value = ValueList::Create(value_root);
@@ -329,8 +331,66 @@ TEST_F(PCScanTest, DanglingInterPartitionReference) {
   TestDanglingReference(*this, source, value);
 }
 
+TEST_F(PCScanTest, DanglingReferenceToNonScannablePartition) {
+  using SourceList = List<64>;
+  using ValueList = SourceList;
+
+  ThreadSafePartitionRoot source_root({PartitionOptions::Alignment::kRegular,
+                                       PartitionOptions::ThreadCache::kDisabled,
+                                       PartitionOptions::Quarantine::kAllowed,
+                                       PartitionOptions::RefCount::kDisabled});
+  ThreadSafePartitionRoot value_root({PartitionOptions::Alignment::kRegular,
+                                      PartitionOptions::ThreadCache::kDisabled,
+                                      PartitionOptions::Quarantine::kAllowed,
+                                      PartitionOptions::RefCount::kDisabled});
+
+  PCScan<ThreadSafe>::Instance().RegisterScannableRoot(&source_root);
+  PCScan<ThreadSafe>::Instance().RegisterNonScannableRoot(&value_root);
+
+  auto* source = SourceList::Create(source_root);
+  auto* value = ValueList::Create(value_root);
+  source->next = value;
+
+  TestDanglingReference(*this, source, value);
+}
+
+TEST_F(PCScanTest, DanglingReferenceFromNonScannablePartition) {
+  using SourceList = List<64>;
+  using ValueList = SourceList;
+
+  ThreadSafePartitionRoot source_root(
+      {PartitionOptions::Alignment::kRegular,
+       PartitionOptions::ThreadCache::kDisabled,
+       base::PartitionOptions::Quarantine::kAllowed,
+       PartitionOptions::RefCount::kDisabled});
+  ThreadSafePartitionRoot value_root(
+      {PartitionOptions::Alignment::kRegular,
+       PartitionOptions::ThreadCache::kDisabled,
+       base::PartitionOptions::Quarantine::kAllowed,
+       PartitionOptions::RefCount::kDisabled});
+
+  PCScan<ThreadSafe>::Instance().RegisterNonScannableRoot(&source_root);
+  PCScan<ThreadSafe>::Instance().RegisterScannableRoot(&value_root);
+
+  auto* source = SourceList::Create(source_root);
+  auto* value = ValueList::Create(value_root);
+  source->next = value;
+
+  // Free |value| and leave the dangling reference in |source|.
+  ValueList::Destroy(source_root, value);
+  // Check that |value| is in the quarantine now.
+  EXPECT_TRUE(IsInQuarantine(value));
+  // Run PCScan.
+  RunPCScan();
+  // Check that the object is no longer in the quarantine since the pointer to
+  // it was not scanned from the non-scannable partition.
+  EXPECT_FALSE(IsInQuarantine(value));
+  // Check that the object is in the freelist now.
+  EXPECT_TRUE(IsInFreeList(value_root.AdjustPointerForExtrasSubtract(value)));
+}
+
 }  // namespace internal
 }  // namespace base
 
-#endif  // ALLOW_PCSCAN
+#endif  // PA_ALLOW_PCSCAN
 #endif  // defined(MEMORY_TOOL_REPLACES_ALLOCATOR)

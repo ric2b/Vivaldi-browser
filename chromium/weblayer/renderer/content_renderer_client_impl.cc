@@ -8,6 +8,8 @@
 #include "build/build_config.h"
 #include "components/autofill/content/renderer/autofill_agent.h"
 #include "components/autofill/content/renderer/password_autofill_agent.h"
+#include "components/content_capture/common/content_capture_features.h"
+#include "components/content_capture/renderer/content_capture_sender.h"
 #include "components/content_settings/renderer/content_settings_agent_impl.h"
 #include "components/error_page/common/error.h"
 #include "components/grit/components_scaled_resources.h"
@@ -18,13 +20,16 @@
 #include "components/no_state_prefetch/renderer/prerender_render_frame_observer.h"
 #include "components/no_state_prefetch/renderer/prerender_utils.h"
 #include "components/page_load_metrics/renderer/metrics_render_frame_observer.h"
+#include "components/subresource_filter/content/renderer/ad_resource_tracker.h"
 #include "components/subresource_filter/content/renderer/subresource_filter_agent.h"
 #include "components/subresource_filter/content/renderer/unverified_ruleset_dealer.h"
 #include "components/subresource_filter/core/common/common_features.h"
+#include "components/webapps/renderer/web_page_metadata_agent.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/render_view.h"
 #include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/platform/web_runtime_features.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "weblayer/common/features.h"
 #include "weblayer/renderer/error_page_helper.h"
@@ -35,6 +40,7 @@
 #if defined(OS_ANDROID)
 #include "components/android_system_error_page/error_page_populator.h"
 #include "components/cdm/renderer/android_key_systems.h"
+#include "components/embedder_support/android/common/url_constants.h"
 #include "components/spellcheck/renderer/spellcheck.h"           // nogncheck
 #include "components/spellcheck/renderer/spellcheck_provider.h"  // nogncheck
 #include "content/public/renderer/render_thread.h"
@@ -81,10 +87,8 @@ void ContentRendererClientImpl::RenderThreadStarted() {
     local_interface_provider_ = std::make_unique<SpellcheckInterfaceProvider>();
     spellcheck_ = std::make_unique<SpellCheck>(local_interface_provider_.get());
   }
-  // TODO(sky): refactor. This comes from chrome/common/url_constants.cc's
-  // kAndroidAppScheme.
   blink::WebSecurityPolicy::RegisterURLSchemeAsAllowedForReferrer(
-      blink::WebString::FromUTF8("android-app"));
+      blink::WebString::FromUTF8(embedder_support::kAndroidAppScheme));
 #endif
 
   content::RenderThread* thread = content::RenderThread::Get();
@@ -118,13 +122,17 @@ void ContentRendererClientImpl::RenderFrameCreated(
   if (weblayer_observer_)
     agent->SetContentSettingRules(weblayer_observer_->content_setting_rules());
 
-  new page_load_metrics::MetricsRenderFrameObserver(render_frame);
+  auto* metrics_render_frame_observer =
+      new page_load_metrics::MetricsRenderFrameObserver(render_frame);
 
-  // TODO(crbug.com/1116095): Bring up AdResourceTracker?
+  auto ad_resource_tracker =
+      std::make_unique<subresource_filter::AdResourceTracker>();
+  metrics_render_frame_observer->SetAdResourceTracker(
+      ad_resource_tracker.get());
   auto* subresource_filter_agent =
       new subresource_filter::SubresourceFilterAgent(
           render_frame, subresource_filter_ruleset_dealer_.get(),
-          /*ad_resource_tracker=*/nullptr);
+          std::move(ad_resource_tracker));
   subresource_filter_agent->Initialize();
 
 #if defined(OS_ANDROID)
@@ -134,6 +142,14 @@ void ContentRendererClientImpl::RenderFrameCreated(
                          local_interface_provider_.get());
 #endif
   new js_injection::JsCommunication(render_frame);
+
+  if (render_frame->IsMainFrame())
+    new webapps::WebPageMetadataAgent(render_frame);
+
+  if (content_capture::features::IsContentCaptureEnabled()) {
+    new content_capture::ContentCaptureSender(
+        render_frame, render_frame_observer->associated_interfaces());
+  }
 
   if (!render_frame->IsMainFrame()) {
     auto* main_frame_no_state_prefetch_helper =
@@ -151,7 +167,7 @@ void ContentRendererClientImpl::RenderFrameCreated(
 
 void ContentRendererClientImpl::RenderViewCreated(
     content::RenderView* render_view) {
-  new prerender::NoStatePrefetchClient(render_view);
+  new prerender::NoStatePrefetchClient(render_view->GetWebView());
 }
 
 SkBitmap* ContentRendererClientImpl::GetSadPluginBitmap() {
@@ -199,6 +215,7 @@ void ContentRendererClientImpl::AddSupportedKeySystems(
 
 void ContentRendererClientImpl::
     SetRuntimeFeaturesDefaultsBeforeBlinkInitialization() {
+  blink::WebRuntimeFeatures::EnablePerformanceManagerInstrumentation(true);
 #if defined(OS_ANDROID)
   // Web Share is experimental by default, and explicitly enabled on Android
   // (for both Chrome and WebLayer).

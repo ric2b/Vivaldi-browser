@@ -10,7 +10,6 @@
 #include "base/run_loop.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
@@ -19,12 +18,12 @@
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
-#include "chrome/browser/ui/user_manager.h"
+#include "chrome/browser/ui/profile_picker.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/profile_waiter.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 
@@ -78,9 +77,9 @@ IN_PROC_BROWSER_TEST_F(ProfileListDesktopBrowserTest, MAYBE_SignOut) {
   Profile* current_profile = browser()->profile();
   ProfileAttributesStorage& storage =
       profile_manager->GetProfileAttributesStorage();
-  ProfileAttributesEntry* entry;
-  ASSERT_TRUE(storage.GetProfileAttributesWithPath(current_profile->GetPath(),
-                                                   &entry));
+  ProfileAttributesEntry* entry =
+      storage.GetProfileAttributesWithPath(current_profile->GetPath());
+  ASSERT_NE(entry, nullptr);
 
   std::unique_ptr<AvatarMenu> menu = CreateAvatarMenu(&storage);
   menu->RebuildMenu();
@@ -88,9 +87,7 @@ IN_PROC_BROWSER_TEST_F(ProfileListDesktopBrowserTest, MAYBE_SignOut) {
   BrowserList* browser_list = BrowserList::GetInstance();
   EXPECT_EQ(1u, browser_list->size());
 
-  content::WindowedNotificationObserver system_profile_created_observer(
-      chrome::NOTIFICATION_PROFILE_CREATED,
-      content::NotificationService::AllSources());
+  ProfileWaiter profile_waiter;
 
   EXPECT_FALSE(entry->IsSigninRequired());
   profiles::LockProfile(current_profile);
@@ -103,8 +100,8 @@ IN_PROC_BROWSER_TEST_F(ProfileListDesktopBrowserTest, MAYBE_SignOut) {
   // Signing out brings up the User Manager which we should close before exit.
   // But the User Manager is shown only when the system profile is created,
   // which happens asynchronously.
-  system_profile_created_observer.Wait();
-  UserManager::Hide();
+  profile_waiter.WaitForProfileAdded();
+  ProfilePicker::Hide();
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)

@@ -37,6 +37,7 @@ import java.util.Set;
 
 // Vivaldi
 import org.chromium.chrome.browser.ChromeApplication;
+import org.vivaldi.browser.firstrun.VivaldiWelcomeFragment;
 
 /**
  * Handles the First Run Experience sequences shown to the user launching Chrome for the first time.
@@ -131,9 +132,15 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
      * Defines a sequence of pages to be shown (depending on parameters etc).
      */
     private void createPageSequence() {
+        // Vivaldi - Welcome Page changes
+        FirstRunPage firstRunPage = ChromeApplication.isVivaldi()
+                ? new VivaldiWelcomeFragment.Page()
+                : new ToSAndUMAFirstRunFragment.Page();
+
         mPages.add(shouldCreateEnterpriseCctTosPage()
                         ? new TosAndUmaFirstRunFragmentWithEnterpriseSupport.Page()
-                        : new ToSAndUMAFirstRunFragment.Page());
+                        : firstRunPage) ;
+
         mFreProgressStates.add(FRE_PROGRESS_WELCOME_SHOWN);
         // Other pages will be created by createPostNativeAndPoliciesPageSequence() after
         // native and policy service have been initialized.
@@ -240,11 +247,6 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
                 }
 
                 mFreProperties = freProperties;
-                if (TextUtils.isEmpty(mResultSignInAccountName)) {
-                    mResultSignInAccountName = mFreProperties.getString(
-                            SigninFirstRunFragment.FORCE_SIGNIN_ACCOUNT_TO);
-                }
-
                 createPageSequence();
                 if (areNativeAndPoliciesInitialized()) {
                     createPostNativeAndPoliciesPageSequence();

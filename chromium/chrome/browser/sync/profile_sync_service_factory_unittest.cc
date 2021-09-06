@@ -28,11 +28,11 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_features.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/sync/wifi_configuration_sync_service_factory.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
 #include "chromeos/components/sync_wifi/wifi_configuration_sync_service.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/shill/shill_clients.h"
 #include "chromeos/dbus/shill/shill_manager_client.h"
 #include "chromeos/network/network_handler.h"
@@ -78,7 +78,7 @@ class ProfileSyncServiceFactoryTest : public testing::Test {
 
   // Returns the collection of default datatypes.
   std::vector<syncer::ModelType> DefaultDatatypes() {
-    static_assert(41 + 1 /* notes */ == syncer::ModelType::NUM_ENTRIES,
+    static_assert(39 + 1 /* notes */ == syncer::ModelType::NUM_ENTRIES,
                   "When adding a new type, you probably want to add it here as "
                   "well (assuming it is already enabled).");
 

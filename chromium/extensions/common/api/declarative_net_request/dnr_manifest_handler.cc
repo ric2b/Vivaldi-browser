@@ -13,7 +13,6 @@
 #include "extensions/common/api/declarative_net_request.h"
 #include "extensions/common/api/declarative_net_request/constants.h"
 #include "extensions/common/api/declarative_net_request/dnr_manifest_data.h"
-#include "extensions/common/api/declarative_net_request/utils.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/extension_resource.h"
 #include "extensions/common/manifest_constants.h"
@@ -34,7 +33,6 @@ DNRManifestHandler::~DNRManifestHandler() = default;
 bool DNRManifestHandler::Parse(Extension* extension, base::string16* error) {
   DCHECK(extension->manifest()->HasKey(
       dnr_api::ManifestKeys::kDeclarativeNetRequest));
-  DCHECK(IsAPIAvailable());
 
   if (!PermissionsParser::HasAPIPermission(
           extension, APIPermission::kDeclarativeNetRequest)) {
@@ -46,7 +44,7 @@ bool DNRManifestHandler::Parse(Extension* extension, base::string16* error) {
 
   dnr_api::ManifestKeys manifest_keys;
   if (!dnr_api::ManifestKeys::ParseFromDictionary(
-          *extension->manifest()->value(), &manifest_keys, error)) {
+          extension->manifest()->available_values(), &manifest_keys, error)) {
     return false;
   }
   std::vector<dnr_api::Ruleset> rulesets =
@@ -126,8 +124,6 @@ bool DNRManifestHandler::Parse(Extension* extension, base::string16* error) {
 bool DNRManifestHandler::Validate(const Extension* extension,
                                   std::string* error,
                                   std::vector<InstallWarning>* warnings) const {
-  DCHECK(IsAPIAvailable());
-
   DNRManifestData* data =
       static_cast<DNRManifestData*>(extension->GetManifestData(
           dnr_api::ManifestKeys::kDeclarativeNetRequest));

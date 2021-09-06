@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
-#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
@@ -18,7 +17,10 @@
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
 #include "base/test/bind.h"
-#include "base/test/scoped_feature_list.h"
+#include "chrome/browser/ash/certificate_provider/certificate_provider_service.h"
+#include "chrome/browser/ash/certificate_provider/certificate_provider_service_factory.h"
+#include "chrome/browser/ash/login/demo_mode/demo_session.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
@@ -28,12 +30,8 @@
 #include "chrome/browser/chromeos/arc/session/arc_service_launcher.h"
 #include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/test/test_arc_session_manager.h"
-#include "chrome/browser/chromeos/certificate_provider/certificate_provider_service.h"
-#include "chrome/browser/chromeos/certificate_provider/certificate_provider_service_factory.h"
-#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/chrome_device_id_helper.h"
@@ -45,7 +43,6 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_profile.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "components/account_id/account_id.h"
 #include "components/arc/arc_features.h"
@@ -197,16 +194,9 @@ class FakeAuthInstance : public mojom::AuthInstance {
   DISALLOW_COPY_AND_ASSIGN(FakeAuthInstance);
 };
 
-// Features that will be enabled in the given test.
-using EnabledFeatures = std::vector<base::Feature>;
-
-class ArcAuthServiceTest : public InProcessBrowserTest,
-                           public testing::WithParamInterface<EnabledFeatures> {
+class ArcAuthServiceTest : public InProcessBrowserTest {
  protected:
-  ArcAuthServiceTest() {
-    scoped_feature_list_.InitWithFeatures(GetParam() /* enabled_features */,
-                                          {} /* disabled_features */);
-  }
+  ArcAuthServiceTest() = default;
 
   // InProcessBrowserTest:
   ~ArcAuthServiceTest() override = default;
@@ -448,7 +438,6 @@ class ArcAuthServiceTest : public InProcessBrowserTest,
  private:
   std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
   base::ScopedTempDir temp_dir_;
-  base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<TestingProfile> profile_;
   network::TestURLLoaderFactory test_url_loader_factory_;
   scoped_refptr<network::SharedURLLoaderFactory> test_shared_loader_factory_;
@@ -467,13 +456,7 @@ class ArcAuthServiceTest : public InProcessBrowserTest,
   DISALLOW_COPY_AND_ASSIGN(ArcAuthServiceTest);
 };
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    ArcAuthServiceTest,
-    ::testing::Values(EnabledFeatures{},
-                      EnabledFeatures{kEnableSecondaryAccountsForChild}));
-
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, GetPrimaryAccountForGaiaAccounts) {
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest, GetPrimaryAccountForGaiaAccounts) {
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
   const std::pair<std::string, mojom::ChromeAccountType>
       primary_account = RequestPrimaryAccount();
@@ -481,7 +464,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, GetPrimaryAccountForGaiaAccounts) {
   EXPECT_EQ(mojom::ChromeAccountType::USER_ACCOUNT, primary_account.second);
 }
 
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, GetPrimaryAccountForChildAccounts) {
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest, GetPrimaryAccountForChildAccounts) {
   SetAccountAndProfile(user_manager::USER_TYPE_CHILD);
   const std::pair<std::string, mojom::ChromeAccountType>
       primary_account = RequestPrimaryAccount();
@@ -489,7 +472,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, GetPrimaryAccountForChildAccounts) {
   EXPECT_EQ(mojom::ChromeAccountType::CHILD_ACCOUNT, primary_account.second);
 }
 
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest,
                        GetPrimaryAccountForActiveDirectoryAccounts) {
   SetAccountAndProfile(user_manager::USER_TYPE_ACTIVE_DIRECTORY);
   const std::pair<std::string, mojom::ChromeAccountType>
@@ -499,7 +482,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
             primary_account.second);
 }
 
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, GetPrimaryAccountForPublicAccounts) {
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest, GetPrimaryAccountForPublicAccounts) {
   SetAccountAndProfile(user_manager::USER_TYPE_PUBLIC_ACCOUNT);
   const std::pair<std::string, mojom::ChromeAccountType>
       primary_account = RequestPrimaryAccount();
@@ -507,7 +490,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, GetPrimaryAccountForPublicAccounts) {
   EXPECT_EQ(mojom::ChromeAccountType::ROBOT_ACCOUNT, primary_account.second);
 }
 
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest,
                        GetPrimaryAccountForOfflineDemoAccounts) {
   chromeos::DemoSession::SetDemoConfigForTesting(
       chromeos::DemoSession::DemoModeConfig::kOffline);
@@ -522,7 +505,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
 
 // Tests that when ARC requests account info for a non-managed account,
 // Chrome supplies the info configured in SetAccountAndProfile() method.
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, SuccessfulBackgroundFetch) {
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest, SuccessfulBackgroundFetch) {
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
   test_url_loader_factory()->AddResponse(arc::kAuthTokenExchangeEndPoint,
                                          GetFakeAuthTokenResponse());
@@ -541,7 +524,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, SuccessfulBackgroundFetch) {
   EXPECT_FALSE(auth_instance().account_info()->is_managed);
 }
 
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest,
                        ReAuthenticatePrimaryAccountSucceeds) {
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
   test_url_loader_factory()->AddResponse(arc::kAuthTokenExchangeEndPoint,
@@ -562,7 +545,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
   EXPECT_FALSE(auth_instance().sign_in_persistent_error());
 }
 
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest,
                        RetryAuthTokenExchangeRequestOnUnauthorizedError) {
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
 
@@ -584,7 +567,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
   ASSERT_TRUE(auth_instance().account_info());
 }
 
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest,
                        ReAuthenticatePrimaryAccountFailsForInvalidAccount) {
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
   test_url_loader_factory()->AddResponse(arc::kAuthTokenExchangeEndPoint,
@@ -600,7 +583,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
             auth_instance().auth_code_status());
 }
 
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, FetchSecondaryAccountInfoSucceeds) {
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest, FetchSecondaryAccountInfoSucceeds) {
   // Add a Secondary Account.
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
   SeedAccountInfo(kSecondaryAccountEmail);
@@ -623,7 +606,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, FetchSecondaryAccountInfoSucceeds) {
   EXPECT_FALSE(auth_instance().sign_in_persistent_error());
 }
 
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest,
                        FetchSecondaryAccountInfoFailsForInvalidAccounts) {
   // Add a Secondary Account.
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
@@ -642,7 +625,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
             auth_instance().auth_code_status());
 }
 
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest,
                        FetchSecondaryAccountInfoInvalidRefreshToken) {
   const AccountInfo account_info = SetupGaiaAccount(kSecondaryAccountEmail);
   SetInvalidRefreshTokenForAccount(account_info.account_id);
@@ -661,7 +644,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
   EXPECT_TRUE(auth_instance().sign_in_persistent_error());
 }
 
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest,
                        FetchSecondaryAccountRefreshTokenHasPersistentError) {
   const AccountInfo account_info = SetupGaiaAccount(kSecondaryAccountEmail);
   UpdatePersistentErrorOfRefreshTokenForAccount(
@@ -681,7 +664,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
   EXPECT_TRUE(auth_instance().sign_in_persistent_error());
 }
 
-IN_PROC_BROWSER_TEST_P(
+IN_PROC_BROWSER_TEST_F(
     ArcAuthServiceTest,
     FetchSecondaryAccountInfoReturnsErrorForNotFoundAccounts) {
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
@@ -698,7 +681,7 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_TRUE(auth_instance().sign_in_persistent_error());
 }
 
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, FetchGoogleAccountsFromArc) {
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest, FetchGoogleAccountsFromArc) {
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
 
   EXPECT_FALSE(arc_google_accounts_callback_called());
@@ -712,7 +695,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, FetchGoogleAccountsFromArc) {
             arc_google_accounts()[0]->gaia_id);
 }
 
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest,
                        FetchGoogleAccountsFromArcWorksAcrossConnectionResets) {
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
 
@@ -735,7 +718,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
             arc_google_accounts()[0]->gaia_id);
 }
 
-IN_PROC_BROWSER_TEST_P(
+IN_PROC_BROWSER_TEST_F(
     ArcAuthServiceTest,
     PrimaryAccountReauthIsNotAttemptedJustAfterProvisioning) {
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
@@ -750,7 +733,7 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_EQ(initial_num_calls, auth_instance().num_account_upserted_calls());
 }
 
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest,
                        UnAuthenticatedAccountsAreNotPropagated) {
   const AccountInfo account_info = SetupGaiaAccount(kSecondaryAccountEmail);
 
@@ -762,7 +745,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
   EXPECT_EQ(initial_num_calls, auth_instance().num_account_upserted_calls());
 }
 
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, AccountUpdatesArePropagated) {
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest, AccountUpdatesArePropagated) {
   AccountInfo account_info = SetupGaiaAccount(kSecondaryAccountEmail);
 
   SetInvalidRefreshTokenForAccount(account_info.account_id);
@@ -777,7 +760,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, AccountUpdatesArePropagated) {
   EXPECT_EQ(kSecondaryAccountEmail, auth_instance().last_upserted_account());
 }
 
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, AccountRemovalsArePropagated) {
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest, AccountRemovalsArePropagated) {
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
   SeedAccountInfo(kSecondaryAccountEmail);
 
@@ -857,13 +840,9 @@ class ArcRobotAccountAuthServiceTest : public ArcAuthServiceTest {
   DISALLOW_COPY_AND_ASSIGN(ArcRobotAccountAuthServiceTest);
 };
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         ArcRobotAccountAuthServiceTest,
-                         ::testing::Values(EnabledFeatures{}));
-
 // Tests that when ARC requests account info for a demo session account,
 // Chrome supplies the info configured in SetAccountAndProfile() above.
-IN_PROC_BROWSER_TEST_P(ArcRobotAccountAuthServiceTest, GetDemoAccount) {
+IN_PROC_BROWSER_TEST_F(ArcRobotAccountAuthServiceTest, GetDemoAccount) {
   chromeos::DemoSession::SetDemoConfigForTesting(
       chromeos::DemoSession::DemoModeConfig::kOnline);
   chromeos::DemoSession::StartIfInDemoMode();
@@ -888,7 +867,7 @@ IN_PROC_BROWSER_TEST_P(ArcRobotAccountAuthServiceTest, GetDemoAccount) {
   EXPECT_FALSE(auth_instance().account_info()->is_managed);
 }
 
-IN_PROC_BROWSER_TEST_P(ArcRobotAccountAuthServiceTest, GetOfflineDemoAccount) {
+IN_PROC_BROWSER_TEST_F(ArcRobotAccountAuthServiceTest, GetOfflineDemoAccount) {
   chromeos::DemoSession::SetDemoConfigForTesting(
       chromeos::DemoSession::DemoModeConfig::kOffline);
   chromeos::DemoSession::StartIfInDemoMode();
@@ -908,7 +887,7 @@ IN_PROC_BROWSER_TEST_P(ArcRobotAccountAuthServiceTest, GetOfflineDemoAccount) {
   EXPECT_TRUE(auth_instance().account_info()->is_managed);
 }
 
-IN_PROC_BROWSER_TEST_P(ArcRobotAccountAuthServiceTest,
+IN_PROC_BROWSER_TEST_F(ArcRobotAccountAuthServiceTest,
                        GetDemoAccountOnAuthTokenFetchFailure) {
   chromeos::DemoSession::SetDemoConfigForTesting(
       chromeos::DemoSession::DemoModeConfig::kOnline);
@@ -935,7 +914,7 @@ IN_PROC_BROWSER_TEST_P(ArcRobotAccountAuthServiceTest,
   EXPECT_TRUE(auth_instance().account_info()->is_managed);
 }
 
-IN_PROC_BROWSER_TEST_P(ArcRobotAccountAuthServiceTest,
+IN_PROC_BROWSER_TEST_F(ArcRobotAccountAuthServiceTest,
                        RequestPublicAccountInfo) {
   SetAccountAndProfile(user_manager::USER_TYPE_PUBLIC_ACCOUNT);
   profile()->GetProfilePolicyConnector()->OverrideIsManagedForTesting(true);
@@ -961,7 +940,7 @@ IN_PROC_BROWSER_TEST_P(ArcRobotAccountAuthServiceTest,
 
 // Tests that when ARC requests account info for a child account and
 // Chrome supplies the info configured in SetAccountAndProfile() above.
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, ChildAccountFetch) {
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest, ChildAccountFetch) {
   SetAccountAndProfile(user_manager::USER_TYPE_CHILD);
   EXPECT_TRUE(profile()->IsChild());
   test_url_loader_factory()->AddResponse(arc::kAuthTokenExchangeEndPoint,
@@ -981,7 +960,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, ChildAccountFetch) {
   EXPECT_FALSE(auth_instance().account_info()->is_managed);
 }
 
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, ChildTransition) {
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest, ChildTransition) {
   SetAccountAndProfile(user_manager::USER_TYPE_CHILD);
 
   ArcSessionManager* session = ArcSessionManager::Get();
@@ -1088,21 +1067,20 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, ChildTransition) {
   }
 }
 
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest,
                        RegularUserSecondaryAccountsArePropagated) {
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
   SeedAccountInfo(kSecondaryAccountEmail);
   EXPECT_EQ(2, auth_instance().num_account_upserted_calls());
 }
 
-// Tests that child account propagation depends on the feature flag.
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
+// Tests child account propagation for Family Link user.
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest,
                        ChildUserSecondaryAccountsPropagation) {
   SetAccountAndProfile(user_manager::USER_TYPE_CHILD);
   SeedAccountInfo(kSecondaryAccountEmail);
   EXPECT_TRUE(profile()->IsChild());
-  EXPECT_EQ(arc::IsSecondaryAccountForChildEnabled() ? 2 : 1,
-            auth_instance().num_account_upserted_calls());
+  EXPECT_EQ(2, auth_instance().num_account_upserted_calls());
 }
 
 }  // namespace arc

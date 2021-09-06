@@ -85,9 +85,11 @@ void SessionService::SetTabExtData(const SessionID& window_id,
   ScheduleCommand(sessions::CreateSetExtDataCommand(tab_id, ext_data));
 }
 
-void SessionService::Observe(int type,
-                             const content::NotificationSource& source,
-                             const content::NotificationDetails& details) {
+bool SessionService::VivaldiObserve(
+    int type,
+    const content::NotificationSource& source,
+    const content::NotificationDetails& details) {
+  // Returns true if notification handled
   switch (type) {
     case content::NOTIFICATION_EXTDATA_UPDATED: {
       content::WebContents* web_contents =
@@ -95,15 +97,15 @@ void SessionService::Observe(int type,
       sessions::SessionTabHelper* session_tab_helper =
           sessions::SessionTabHelper::FromWebContents(web_contents);
       if (!session_tab_helper)
-        return;
+        return true;
       SetTabExtData(session_tab_helper->window_id(),
                     session_tab_helper->session_id(),
                     web_contents->GetExtData());
-      break;
+      return true;
     }
 
     default:
-      NOTREACHED();
+      return false;
   }
 }
 

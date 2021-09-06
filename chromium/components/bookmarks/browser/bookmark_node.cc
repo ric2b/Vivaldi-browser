@@ -44,9 +44,6 @@ const char BookmarkNode::kMobileBookmarksNodeGuid[] =
     "00000000-0000-4000-a000-000000000004";
 const char BookmarkNode::kManagedNodeGuid[] =
     "00000000-0000-4000-a000-000000000005";
-const char BookmarkNode::kVivaldiTrashNodeGuid[] =
-    "00000000-0000-4000-a000-000000040000";
-
 
 BookmarkNode::BookmarkNode(int64_t id, const base::GUID& guid, const GURL& url)
     : BookmarkNode(id, guid, url, url.is_empty() ? FOLDER : URL, false) {}

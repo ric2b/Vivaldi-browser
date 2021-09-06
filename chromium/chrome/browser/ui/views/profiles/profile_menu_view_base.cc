@@ -47,6 +47,8 @@
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/flex_layout_types.h"
+#include "ui/views/metadata/metadata_header_macros.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/view_class_properties.h"
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
@@ -164,6 +166,8 @@ gfx::ImageSkia SizeImageModel(const ui::ImageModel& image_model,
 // TODO(crbug.com/1146998): Adjust button size to be 16x16.
 class CircularImageButton : public views::ImageButton {
  public:
+  METADATA_HEADER(CircularImageButton);
+
   CircularImageButton(PressedCallback callback,
                       const gfx::VectorIcon& icon,
                       const base::string16& text,
@@ -210,6 +214,9 @@ class CircularImageButton : public views::ImageButton {
   const SkColor background_profile_color_;
   bool show_border_;
 };
+
+BEGIN_METADATA(CircularImageButton, views::ImageButton)
+END_METADATA
 
 class FeatureButtonIconView : public views::ImageView {
  public:
@@ -308,6 +315,7 @@ class AvatarImageView : public views::ImageView {
 
 class SyncButton : public HoverButton {
  public:
+  METADATA_HEADER(SyncButton);
   SyncButton(PressedCallback callback,
              ProfileMenuViewBase* root_view,
              const base::string16& clickable_text)
@@ -323,6 +331,9 @@ class SyncButton : public HoverButton {
  private:
   const ProfileMenuViewBase* root_view_;
 };
+
+BEGIN_METADATA(SyncButton, HoverButton)
+END_METADATA
 
 class SyncImageView : public views::ImageView {
  public:
@@ -573,7 +584,9 @@ void ProfileMenuViewBase::SetProfileIdentityInfo(
 
   auto avatar_image_view = std::make_unique<AvatarImageView>(image_model, this);
 
-#if defined(OS_LINUX)
+// TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
+// complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   // crbug.com/1161166: Orca does not read the accessible window title of the
   // bubble, so we duplicate it in the top-level menu item. To be revisited
   // after considering other options, including fixes on the AT side.

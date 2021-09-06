@@ -8,7 +8,9 @@
 #include <memory>
 #include <utility>
 
-#include "ash/public/cpp/ambient/ambient_ui_model.h"
+#include "ash/components/audio/cras_audio_handler.h"
+#include "ash/constants/ash_features.h"
+#include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/assistant/controller/assistant_alarm_timer_controller.h"
 #include "ash/public/cpp/assistant/controller/assistant_controller.h"
@@ -24,9 +26,6 @@
 #include "base/timer/timer.h"
 #include "build/buildflag.h"
 #include "chromeos/assistant/buildflags.h"
-#include "chromeos/audio/cras_audio_handler.h"
-#include "chromeos/constants/chromeos_features.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager/power_supply_properties.pb.h"
 #include "chromeos/services/assistant/assistant_interaction_logger.h"
@@ -52,8 +51,6 @@
 #include "chromeos/assistant/internal/internal_constants.h"
 #include "chromeos/services/assistant/assistant_manager_service_impl.h"
 #include "chromeos/services/assistant/assistant_settings_impl.h"
-#include "chromeos/services/assistant/utils.h"
-#include "services/device/public/mojom/battery_monitor.mojom.h"
 #endif
 
 namespace chromeos {
@@ -61,7 +58,6 @@ namespace assistant {
 
 namespace {
 
-using chromeos::assistant::features::IsAmbientAssistantEnabled;
 using CommunicationErrorType = AssistantManagerService::CommunicationErrorType;
 
 constexpr char kScopeAuthGcm[] = "https://www.googleapis.com/auth/gcm";
@@ -106,27 +102,13 @@ base::Optional<std::string> GetDeviceIdOverride() {
 }
 #endif
 
-// Returns true if the system is currently in Ambient Mode (with ambient screen
-// shown or hidden, but not closed).
-bool InAmbientMode() {
-  DCHECK(chromeos::features::IsAmbientModeEnabled());
-  return ash::AmbientUiModel::Get()->ui_visibility() !=
-         ash::AmbientUiVisibility::kClosed;
-}
-
 // In the signed-out mode, we are going to run Assistant service without
 // using user's signed in account information.
 bool IsSignedOutMode() {
-  // We will switch the Libassitsant mode to signed-out/signed-in when user
-  // enters/exits the ambient mode.
-  const bool entered_ambient_mode =
-      IsAmbientAssistantEnabled() && InAmbientMode();
-
-  // Note that we shouldn't toggle the flag to true when exiting ambient
-  // mode if we have been using fake gaia login, e.g. in the Tast test.
-  return entered_ambient_mode ||
-         base::CommandLine::ForCurrentProcess()->HasSwitch(
-             chromeos::switches::kDisableGaiaServices);
+  // One example of using fake gaia login is in our automation tests, i.e.
+  // Assistant Tast tests.
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kDisableGaiaServices);
 }
 
 }  // namespace
@@ -254,9 +236,6 @@ void Service::Init() {
 
   ash::AssistantState::Get()->AddObserver(this);
 
-  if (IsAmbientAssistantEnabled())
-    ambient_ui_model_observer_.Add(ash::AmbientUiModel::Get());
-
   DCHECK(!assistant_manager_service_);
 
   RequestAccessToken();
@@ -373,19 +352,6 @@ void Service::OnStateChanged(AssistantManagerService::State new_state) {
   UpdateListeningState();
 }
 
-void Service::OnAmbientUiVisibilityChanged(
-    ash::AmbientUiVisibility visibility) {
-  DCHECK(IsAmbientAssistantEnabled());
-
-  if (IsSignedOutMode()) {
-    UpdateAssistantManagerState();
-  } else {
-    // Refresh the access_token before we switch back to signed-in mode in case
-    // that we don't have any auth_token cached before.
-    RequestAccessToken();
-  }
-}
-
 void Service::UpdateAssistantManagerState() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto* assistant_state = ash::AssistantState::Get();
@@ -438,8 +404,6 @@ void Service::UpdateAssistantManagerState() {
     case AssistantManagerService::State::RUNNING:
       if (assistant_state->settings_enabled().value()) {
         assistant_manager_service_->SetUser(GetUserInfo());
-        if (IsAmbientAssistantEnabled())
-          assistant_manager_service_->EnableAmbientMode(InAmbientMode());
         assistant_manager_service_->EnableHotword(ShouldEnableHotword());
         assistant_manager_service_->SetArcPlayStoreEnabled(
             assistant_state->arc_play_store_enabled().value());
@@ -547,12 +511,8 @@ Service::CreateAndReturnAssistantManagerService() {
     return std::move(assistant_manager_service_for_testing_);
 
 #if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
-  mojo::PendingRemote<device::mojom::BatteryMonitor> battery_monitor;
-  AssistantClient::Get()->RequestBatteryMonitor(
-      battery_monitor.InitWithNewPipeAndPassReceiver());
-
-  auto delegate = std::make_unique<AssistantManagerServiceDelegateImpl>(
-      std::move(battery_monitor), context());
+  auto delegate =
+      std::make_unique<AssistantManagerServiceDelegateImpl>(context());
 
   // |assistant_manager_service_| is only created once.
   DCHECK(pending_url_loader_factory_);

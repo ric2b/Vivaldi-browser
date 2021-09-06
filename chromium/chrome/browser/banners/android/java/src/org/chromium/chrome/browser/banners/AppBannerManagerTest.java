@@ -76,6 +76,7 @@ import org.chromium.chrome.browser.ui.appmenu.AppMenuTestSupport;
 import org.chromium.chrome.browser.webapps.PwaInstallBottomSheetView;
 import org.chromium.chrome.browser.webapps.WebappDataStorage;
 import org.chromium.chrome.test.ChromeActivityTestRule;
+import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.InfoBarUtil;
@@ -89,13 +90,13 @@ import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.infobars.InfoBar;
 import org.chromium.components.infobars.InfoBarAnimationListener;
 import org.chromium.components.infobars.InfoBarUiItem;
-import org.chromium.components.signin.AccountManagerFacadeProvider;
-import org.chromium.components.signin.test.util.FakeAccountManagerFacade;
 import org.chromium.components.site_engagement.SiteEngagementService;
+import org.chromium.components.webapps.AppBannerManager;
+import org.chromium.components.webapps.AppData;
+import org.chromium.components.webapps.AppDetailsDelegate;
 import org.chromium.components.webapps.installable.InstallableAmbientBadgeInfoBar;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.TouchCommon;
 import org.chromium.content_public.common.ContentUrlConstants;
@@ -103,6 +104,7 @@ import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
 import org.chromium.ui.modaldialog.ModalDialogProperties.ButtonType;
 import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.widget.ButtonCompat;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -119,6 +121,9 @@ public class AppBannerManagerTest {
 
     @Rule
     public CustomTabActivityTestRule mCustomTabActivityTestRule = new CustomTabActivityTestRule();
+
+    @Rule
+    public ChromeBrowserTestRule mChromeBrowserTestRule = new ChromeBrowserTestRule();
 
     @Rule
     public MockitoRule mMockitoRule = MockitoJUnit.rule().strictness(Strictness.STRICT_STUBS);
@@ -161,7 +166,7 @@ public class AppBannerManagerTest {
         private String mReferrer;
 
         @Override
-        protected void getAppDetailsAsynchronously(
+        public void getAppDetailsAsynchronously(
                 Observer observer, String url, String packageName, String referrer, int iconSize) {
             mNumRetrieved += 1;
             mObserver = observer;
@@ -229,8 +234,8 @@ public class AppBannerManagerTest {
         AppBannerManager.setIsSupported(true);
         ShortcutHelper.setDelegateForTests(new ShortcutHelper.Delegate() {
             @Override
-            public void addShortcutToHomescreen(
-                    String title, Bitmap icon, boolean iconAdaptive, Intent shortcutIntent) {
+            public void addShortcutToHomescreen(String id, String title, Bitmap icon,
+                    boolean iconAdaptive, Intent shortcutIntent) {
                 // Ignore to prevent adding homescreen shortcuts.
             }
         });
@@ -242,9 +247,6 @@ public class AppBannerManagerTest {
                 mOnEventCallback.notifyCalled();
             }
         };
-
-        AccountManagerFacadeProvider.setInstanceForTests(new FakeAccountManagerFacade(null));
-        NativeLibraryTestUtils.loadNativeLibraryAndInitBrowserProcess();
 
         ThreadUtils.runOnUiThreadBlocking(() -> {
             Profile profile = Profile.getLastUsedRegularProfile();
@@ -423,11 +425,19 @@ public class AppBannerManagerTest {
         tapAndWaitForModalBanner(tab);
     }
 
-    private void triggerBottomSheet(
-            ChromeActivityTestRule<? extends ChromeActivity> rule, String url) throws Exception {
+    private void triggerBottomSheet(ChromeActivityTestRule<? extends ChromeActivity> rule,
+            String url, boolean click) throws Exception {
         resetEngagementForUrl(url, 10);
         rule.loadUrlInNewTab(ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
         navigateToUrlAndWaitForBannerManager(rule, url);
+
+        if (click) {
+            final ChromeActivity activity = rule.getActivity();
+            TouchCommon.singleClickView(activity.getActivityTab().getView());
+            waitUntilBottomSheetStatus(rule, BottomSheetController.SheetState.FULL);
+            return;
+        }
+
         waitUntilBottomSheetStatus(rule, BottomSheetController.SheetState.PEEK);
     }
 
@@ -459,7 +469,7 @@ public class AppBannerManagerTest {
         ThreadUtils.runOnUiThread(() -> {
             Assert.assertEquals(1,
                     RecordHistogram.getHistogramValueCountForTesting(
-                            "Webapp.Install.InstallEvent", 4));
+                            "Webapp.Install.InstallEvent", 4 /* API_BROWSER_TAB */));
         });
 
         // Make sure that the splash screen icon was downloaded.
@@ -500,7 +510,7 @@ public class AppBannerManagerTest {
         ThreadUtils.runOnUiThread(() -> {
             Assert.assertEquals(1,
                     RecordHistogram.getHistogramValueCountForTesting(
-                            "Webapp.Install.InstallEvent", 5));
+                            "Webapp.Install.InstallEvent", 5 /* API_CUSTOM_TAB */));
         });
 
         // Make sure that the splash screen icon was downloaded.
@@ -535,7 +545,6 @@ public class AppBannerManagerTest {
     }
 
     @Test
-    @DisabledTest(message = "https://crbug.com/1166410")
     @SmallTest
     @Feature({"AppBanners"})
     public void testAppInstalledModalNativeAppBannerBrowserTabWithUrl() throws Exception {
@@ -553,7 +562,6 @@ public class AppBannerManagerTest {
     }
 
     @Test
-    @DisabledTest(message = "https://crbug.com/1166410")
     @SmallTest
     @Feature({"AppBanners"})
     public void testAppInstalledModalNativeAppBannerCustomTab() throws Exception {
@@ -612,7 +620,6 @@ public class AppBannerManagerTest {
     }
 
     @Test
-    @DisabledTest(message = "https://crbug.com/1166410")
     @SmallTest
     @Feature({"AppBanners"})
     public void testModalNativeAppBannerCanBeTriggeredMultipleTimesBrowserTab() throws Exception {
@@ -748,7 +755,8 @@ public class AppBannerManagerTest {
     public void testBottomSheet() throws Exception {
         triggerBottomSheet(mTabbedActivityTestRule,
                 WebappTestPage.getServiceWorkerUrlWithManifest(
-                        mTestServer, WEB_APP_MANIFEST_FOR_BOTTOM_SHEET_INSTALL));
+                        mTestServer, WEB_APP_MANIFEST_FOR_BOTTOM_SHEET_INSTALL),
+                /*click=*/false);
 
         View toolbar = mBottomSheetController.getCurrentSheetContent().getToolbarView();
         View content = mBottomSheetController.getCurrentSheetContent().getContentView();
@@ -759,7 +767,7 @@ public class AppBannerManagerTest {
             TouchCommon.singleClickView(dragHandle);
         });
 
-        waitUntilBottomSheetStatus(mTabbedActivityTestRule, BottomSheetController.SheetState.HALF);
+        waitUntilBottomSheetStatus(mTabbedActivityTestRule, BottomSheetController.SheetState.FULL);
 
         TextView appName =
                 toolbar.findViewById(PwaInstallBottomSheetView.getAppNameViewIdForTesting());
@@ -767,13 +775,12 @@ public class AppBannerManagerTest {
                 toolbar.findViewById(PwaInstallBottomSheetView.getAppOriginViewIdForTesting());
         TextView description =
                 content.findViewById(PwaInstallBottomSheetView.getDescViewIdForTesting());
-        TextView categories =
-                content.findViewById(PwaInstallBottomSheetView.getCategoriesViewIdForTesting());
 
         Assert.assertEquals("PWA Bottom Sheet", appName.getText());
         Assert.assertTrue(appOrigin.getText().toString().startsWith("http://127.0.0.1:"));
-        Assert.assertEquals("App description", description.getText());
-        Assert.assertEquals("Categories: cats, memes.", categories.getText());
+        Assert.assertEquals("Lorem ipsum dolor sit amet, consectetur adipiscing elit, "
+                        + "sed do eiusmod tempor incididunt ut labore et dolore magna aliqua",
+                description.getText());
 
         // Collapse the bottom sheet.
         TestThreadUtils.runOnUiThreadBlocking(() -> {
@@ -791,6 +798,66 @@ public class AppBannerManagerTest {
 
         waitUntilBottomSheetStatus(
                 mTabbedActivityTestRule, BottomSheetController.SheetState.HIDDEN);
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"AppBanners"})
+    @CommandLineFlags.Add("enable-features=" + ChromeFeatureList.PWA_INSTALL_USE_BOTTOMSHEET)
+    public void testAppInstalledEventBottomSheet() throws Exception {
+        triggerBottomSheet(mTabbedActivityTestRule,
+                WebappTestPage.getServiceWorkerUrlWithManifestAndAction(mTestServer,
+                        WEB_APP_MANIFEST_FOR_BOTTOM_SHEET_INSTALL,
+                        "call_stashed_prompt_on_click_verify_appinstalled"),
+                /*click=*/true);
+
+        View toolbar = mBottomSheetController.getCurrentSheetContent().getToolbarView();
+
+        // Install app from the bottom sheet.
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            ButtonCompat buttonInstall = toolbar.findViewById(
+                    PwaInstallBottomSheetView.getButtonInstallViewIdForTesting());
+            TouchCommon.singleClickView(buttonInstall);
+        });
+
+        waitUntilBottomSheetStatus(
+                mTabbedActivityTestRule, BottomSheetController.SheetState.HIDDEN);
+
+        // The appinstalled event should fire (and cause the title to change).
+        new TabTitleObserver(mTabbedActivityTestRule.getActivity().getActivityTab(),
+                "Got appinstalled: listener, attr")
+                .waitForTitleUpdate(3);
+
+        ThreadUtils.runOnUiThread(() -> {
+            Assert.assertEquals(1,
+                    RecordHistogram.getHistogramValueCountForTesting(
+                            "Webapp.Install.InstallEvent", 4 /* API_BROWSER_TAB */));
+        });
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"AppBanners"})
+    @CommandLineFlags.Add("enable-features=" + ChromeFeatureList.PWA_INSTALL_USE_BOTTOMSHEET)
+    public void testDismissBottomSheetResolvesUserChoice() throws Exception {
+        triggerBottomSheet(mTabbedActivityTestRule,
+                WebappTestPage.getServiceWorkerUrlWithManifestAndAction(mTestServer,
+                        WEB_APP_MANIFEST_FOR_BOTTOM_SHEET_INSTALL, "call_stashed_prompt_on_click"),
+                /*click=*/true);
+
+        // Dismiss the bottom sheet.
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mBottomSheetController.hideContent(
+                    mBottomSheetController.getCurrentSheetContent(), false);
+        });
+
+        waitUntilBottomSheetStatus(
+                mTabbedActivityTestRule, BottomSheetController.SheetState.HIDDEN);
+
+        // Ensure userChoice is resolved.
+        new TabTitleObserver(
+                mTabbedActivityTestRule.getActivity().getActivityTab(), "Got userChoice: dismissed")
+                .waitForTitleUpdate(3);
     }
 
     @Test

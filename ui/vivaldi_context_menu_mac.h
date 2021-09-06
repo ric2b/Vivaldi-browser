@@ -34,6 +34,7 @@ class VivaldiContextMenuMac : public vivaldi::VivaldiContextMenu {
             vivaldi::ContextMenuPostitionDelegate* delegate) override;
   bool Show() override;
   void SetIcon(const gfx::Image& icon, int id) override;
+  void SetParentView(gfx::NativeView parent_view) override;
 
  private:
   NSView* GetActiveNativeView();
@@ -42,6 +43,7 @@ class VivaldiContextMenuMac : public vivaldi::VivaldiContextMenu {
   content::WebContents* web_contents_;
   ui::SimpleMenuModel* menu_model_;
   gfx::Rect rect_;
+  NSView* parent_view_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiContextMenuMac);
 };

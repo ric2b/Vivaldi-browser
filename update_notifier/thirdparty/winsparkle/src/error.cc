@@ -63,7 +63,7 @@ std::string GetWin32ErrorMessage(const char* api_function,
                            reinterpret_cast<LPWSTR>(&buf), 0, nullptr);
   if (n != 0) {
     message += " - ";
-    message += base::UTF16ToUTF8(base::StringPiece16(buf, n));
+    message += base::WideToUTF8(base::WStringPiece(buf, n));
     LocalFree(buf);
   }
 

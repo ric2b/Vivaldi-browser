@@ -220,29 +220,42 @@
       }
     ]
   },
+  "fuchsia-builder-perf-fyi": {
+    "additional_compile_targets": [
+      "web_engine_shell_pkg",
+      "http_pkg",
+      "cast_runner_pkg",
+      "web_runner_pkg",
+      "chromedriver",
+      "chromium_builder_perf"
+    ]
+  },
   "fuchsia-perf-fyi": {
     "isolated_scripts": [
       {
         "args": [
+          "hardware_accelerated_feature",
+          "--show-stdout",
+          "--browser=web-engine-shell",
+          "--passthrough",
           "-v",
-          "--browser=release",
-          "--upload-results",
-          "--test-shard-map-filename=fuchsia-perf-fyi_map.json",
-          "--output-format=histograms",
-          "--experimental-tbmv3-metrics"
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc",
+          "--device=custom",
+          "--custom-device-target=internal.astro_target"
         ],
-        "isolate_name": "performance_test_suite",
+        "isolate_name": "fuchsia_telemetry_gpu_integration_test",
         "merge": {
           "script": "//tools/perf/process_perf_results.py"
         },
-        "name": "performance_test_suite",
+        "name": "fuchsia_telemetry_gpu_integration_test",
         "override_compile_targets": [
-          "performance_test_suite"
+          "fuchsia_telemetry_gpu_integration_test"
         ],
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "cpu": null,
               "device_type": "Astro",
               "os": "Fuchsia",
               "pool": "chrome.tests"
@@ -252,54 +265,7 @@
           "hard_timeout": 21600,
           "ignore_task_failure": false,
           "io_timeout": 21600,
-          "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 1
-        },
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      }
-    ]
-  },
-  "lacros-eve-perf-fyi": {
-    "isolated_scripts": [
-      {
-        "args": [
-          "-v",
-          "--browser=lacros-chrome",
-          "--upload-results",
-          "--test-shard-map-filename=lacros-eve-perf-fyi_map.json",
-          "--remote=variable_chromeos_device_hostname"
-        ],
-        "isolate_name": "performance_test_suite",
-        "merge": {
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "performance_test_suite",
-        "override_compile_targets": [
-          "performance_test_suite"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "device_type": "eve",
-              "gpu": null,
-              "os": "ChromeOS",
-              "pool": "chrome.tests"
-            }
-          ],
-          "expiration": 7200,
-          "hard_timeout": 21600,
-          "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 1
+          "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "trigger_script": {
           "args": [

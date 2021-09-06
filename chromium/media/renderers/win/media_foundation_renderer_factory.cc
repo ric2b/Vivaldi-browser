@@ -21,8 +21,7 @@ std::unique_ptr<Renderer> MediaFoundationRendererFactory::CreateRenderer(
     AudioRendererSink* /*audio_renderer_sink*/,
     VideoRendererSink* /*video_renderer_sink*/,
     RequestOverlayInfoCB /*request_overlay_info_cb*/,
-    const gfx::ColorSpace& /*target_color_space*/,
-    bool use_platform_media_pipeline) {
+    const gfx::ColorSpace& /*target_color_space*/) {
   // TODO(xhwang): Investigate how to set |muted| and update after composition
   // is connected.
   auto renderer = std::make_unique<MediaFoundationRenderer>(

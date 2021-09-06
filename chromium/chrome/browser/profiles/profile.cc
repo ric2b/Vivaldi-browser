@@ -6,8 +6,10 @@
 
 #include <string>
 
+#include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
@@ -19,21 +21,20 @@
 #include "components/language/core/browser/pref_names.h"
 #include "components/media_router/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
-#include "components/prefs/pref_service.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/variations/variations.mojom.h"
 #include "components/variations/variations_client.h"
 #include "components/variations/variations_ids_provider.h"
-#include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_source.h"
+#include "content/public/browser/cors_origin_pattern_setter.h"
+#include "content/public/browser/shared_cors_origin_access_list.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_switches.h"
 #include "base/command_line.h"
-#include "chromeos/constants/chromeos_switches.h"
 #endif
 
 #if defined(OS_ANDROID)
@@ -43,7 +44,6 @@
 #endif
 
 #if !defined(OS_ANDROID)
-#include "chrome/browser/first_run/first_run.h"
 #include "content/public/browser/host_zoom_map.h"
 #endif
 
@@ -135,17 +135,15 @@ std::ostream& operator<<(std::ostream& out,
 base::android::ScopedJavaLocalRef<jobject>
 Profile::OTRProfileID::ConvertToJavaOTRProfileID(JNIEnv* env) const {
   return Java_OTRProfileID_Constructor(
-      env, base::android::ConvertUTF16ToJavaString(
-               env, base::ASCIIToUTF16(profile_id_)));
+      env, base::android::ConvertUTF8ToJavaString(env, profile_id_));
 }
 
 // static
 Profile::OTRProfileID Profile::OTRProfileID::ConvertFromJavaOTRProfileID(
     JNIEnv* env,
     const base::android::JavaRef<jobject>& j_otr_profile_id) {
-  return OTRProfileID(
-      base::UTF16ToASCII(base::android::ConvertJavaStringToUTF16(
-          env, Java_OTRProfileID_getProfileID(env, j_otr_profile_id))));
+  return OTRProfileID(base::android::ConvertJavaStringToUTF8(
+      env, Java_OTRProfileID_getProfileID(env, j_otr_profile_id)));
 }
 
 // static
@@ -153,9 +151,8 @@ base::android::ScopedJavaLocalRef<jobject>
 JNI_OTRProfileID_CreateUniqueOTRProfileID(
     JNIEnv* env,
     const base::android::JavaParamRef<jstring>& j_profile_id_prefix) {
-  Profile::OTRProfileID profile_id =
-      Profile::OTRProfileID::CreateUnique(base::UTF16ToASCII(
-          base::android::ConvertJavaStringToUTF16(env, j_profile_id_prefix)));
+  Profile::OTRProfileID profile_id = Profile::OTRProfileID::CreateUnique(
+      base::android::ConvertJavaStringToUTF8(env, j_profile_id_prefix));
   return profile_id.ConvertToJavaOTRProfileID(env);
 }
 
@@ -167,12 +164,14 @@ base::android::ScopedJavaLocalRef<jobject> JNI_OTRProfileID_GetPrimaryID(
 
 std::string Profile::OTRProfileID::Serialize() const {
   JNIEnv* env = base::android::AttachCurrentThread();
-  return ConvertJavaStringToUTF8(
+  return base::android::ConvertJavaStringToUTF8(
       env, Java_OTRProfileID_serialize(env, ConvertToJavaOTRProfileID(env)));
 }
 #endif
 
-Profile::Profile() {
+Profile::Profile()
+    : shared_cors_origin_access_list_(
+          content::SharedCorsOriginAccessList::Create()) {
 #if DCHECK_IS_ON()
   base::AutoLock lock(g_profile_instances_lock.Get());
   g_profile_instances.Get().insert(this);
@@ -258,9 +257,6 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
 #endif  // defined(OS_ANDROID)
   registry->RegisterBooleanPref(prefs::kSessionExitedCleanly, true);
   registry->RegisterStringPref(prefs::kSessionExitType, std::string());
-  registry->RegisterInt64Pref(prefs::kSiteEngagementLastUpdateTime, 0,
-                              PrefRegistry::LOSSY_PREF);
-  registry->RegisterBooleanPref(prefs::kSSLErrorOverrideAllowed, true);
   registry->RegisterBooleanPref(prefs::kDisableExtensions, false);
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   registry->RegisterBooleanPref(extensions::pref_names::kAlertsInitialized,
@@ -420,22 +416,9 @@ bool Profile::ShouldPersistSessionCookies() const {
   return false;
 }
 
-bool Profile::IsNewProfile() const {
-#if !defined(OS_ANDROID)
-  // The profile is new if the preference files has just been created, except on
-  // first run, because the installer may create a preference file. See
-  // https://crbug.com/728402
-  if (first_run::IsChromeFirstRun())
-    return true;
-#endif
-
-  return GetOriginalProfile()->GetPrefs()->GetInitializationStatus() ==
-         PrefService::INITIALIZATION_STATUS_CREATED_NEW_PREF_STORE;
-}
-
 void Profile::MaybeSendDestroyedNotification() {
   TRACE_EVENT1("shutdown", "Profile::MaybeSendDestroyedNotification", "profile",
-               this);
+               static_cast<void*>(this));
 
   if (!sent_destroyed_notification_) {
     sent_destroyed_notification_ = true;
@@ -518,4 +501,66 @@ variations::VariationsClient* Profile::GetVariationsClient() {
   if (!chrome_variations_client_)
     chrome_variations_client_ = std::make_unique<ChromeVariationsClient>(this);
   return chrome_variations_client_.get();
+}
+
+content::SharedCorsOriginAccessList* Profile::GetSharedCorsOriginAccessList() {
+  return shared_cors_origin_access_list_.get();
+}
+
+void Profile::SetCorsOriginAccessListForOrigin(
+    TargetBrowserContexts target_mode,
+    const url::Origin& source_origin,
+    std::vector<network::mojom::CorsOriginPatternPtr> allow_patterns,
+    std::vector<network::mojom::CorsOriginPatternPtr> block_patterns,
+    base::OnceClosure closure) {
+  using content::CorsOriginPatternSetter;
+  switch (target_mode) {
+    case content::BrowserContext::TargetBrowserContexts::kSingleContext: {
+      SetCorsOriginAccessListForThisContextOnly(
+          source_origin, std::move(allow_patterns), std::move(block_patterns),
+          std::move(closure));
+      break;
+    }
+
+    case content::BrowserContext::TargetBrowserContexts::kAllRelatedContexts: {
+      Profile* regular_profile = GetOriginalProfile();
+      std::vector<Profile*> otr_profiles = GetAllOffTheRecordProfiles();
+      // We need one callback for modifying the `regular_profile`, and one for
+      // each off-the-record profile.
+      auto barrier_closure =
+          BarrierClosure(1 + otr_profiles.size(), std::move(closure));
+      regular_profile->SetCorsOriginAccessListForThisContextOnly(
+          source_origin, CorsOriginPatternSetter::ClonePatterns(allow_patterns),
+          CorsOriginPatternSetter::ClonePatterns(block_patterns),
+          barrier_closure);
+      for (Profile* otr : otr_profiles) {
+        otr->SetCorsOriginAccessListForThisContextOnly(
+            source_origin,
+            CorsOriginPatternSetter::ClonePatterns(allow_patterns),
+            CorsOriginPatternSetter::ClonePatterns(block_patterns),
+            barrier_closure);
+      }
+      break;
+    }
+  }
+}
+
+void Profile::SetCorsOriginAccessListForThisContextOnly(
+    const url::Origin& source_origin,
+    std::vector<network::mojom::CorsOriginPatternPtr> allow_patterns,
+    std::vector<network::mojom::CorsOriginPatternPtr> block_patterns,
+    base::OnceClosure closure) {
+  using content::CorsOriginPatternSetter;
+  auto barrier_closure = BarrierClosure(2, std::move(closure));
+  base::MakeRefCounted<CorsOriginPatternSetter>(
+      source_origin, CorsOriginPatternSetter::ClonePatterns(allow_patterns),
+      CorsOriginPatternSetter::ClonePatterns(block_patterns), barrier_closure)
+      ->ApplyToEachStoragePartition(this);
+
+  // Keep the per-profile access list up to date so that we can use this to
+  // restore NetworkContext settings at anytime, e.g. on restarting the
+  // network service.
+  shared_cors_origin_access_list_->SetForOrigin(
+      source_origin, std::move(allow_patterns), std::move(block_patterns),
+      barrier_closure);
 }

@@ -72,6 +72,9 @@ enum Milestone {
   kM91 = 91,
   kM92 = 92,
   kM93 = 93,
+  kM94 = 94,
+  kM95 = 95,
+  kM96 = 96,
 };
 
 // Returns estimated milestone dates as milliseconds since January 1, 1970.
@@ -136,6 +139,12 @@ base::Time::Exploded MilestoneDate(Milestone milestone) {
       return {2021, 7, 0, 20, 4};
     case kM93:
       return {2021, 8, 0, 31, 4};
+    case kM94:
+      return {2021, 10, 0, 12, 4};
+    case kM95:
+      return {2021, 11, 0, 30, 4};
+    case kM96:
+      return {2022, 1, 0, 25, 4};
   }
 
   NOTREACHED();
@@ -556,11 +565,13 @@ DeprecationInfo GetDeprecationInfo(WebFeature feature) {
                   "RTCConfiguration.encodedInsertableStreams", kM88,
                   "6321945865879552")};
 
+    case WebFeature::kRTCConstraintEnableRtpDataChannelsFalse:
     case WebFeature::kRTCConstraintEnableRtpDataChannelsTrue:
-      return {"RTP data channel", kM88,
-              ReplacedWillBeRemoved("RTP data channels",
-                                    "standard SCTP data channels", kM90,
-                                    "6485681910054912")};
+      return {
+          "RTP data channel", kM88,
+          "RTP data channels are no longer supported. "
+          "The \"RtpDataChannels\" constraint is currently ignored, and may "
+          "cause an error at a later date."};
 
     case WebFeature::kCSSSelectorWebkitDetailsMarker:
       if (!RuntimeEnabledFeatures::SummaryListItemEnabled())
@@ -571,6 +582,16 @@ DeprecationInfo GetDeprecationInfo(WebFeature feature) {
                   " See https://chromestatus.com/feature/6730096436051968 for "
                   "more details."};
 
+    case WebFeature::kV8SpeechRecognitionEvent_Interpretation_AttributeGetter:
+      return {"V8SpeechRecognitionEvent_Interpretation_AttributeGetter", kM91,
+              WillBeRemoved("SpeechRecognitionEvent's interpretation attribute",
+                            kM91, "5769608873115648")};
+
+    case WebFeature::kV8SpeechRecognitionEvent_Emma_AttributeGetter:
+      return {"V8SpeechRecognitionEvent_Emma_AttributeGetter", kM91,
+              WillBeRemoved("SpeechRecognitionEvent's emma attribute", kM91,
+                            "5769608873115648")};
+
     case WebFeature::kRTCPeerConnectionSdpSemanticsPlanB:
       return {"RTCPeerConnectionSdpSemanticsPlanB", kM93,
               "Plan B SDP semantics, which is used when constructing an "
@@ -580,6 +601,35 @@ DeprecationInfo GetDeprecationInfo(WebFeature feature) {
               "format, \"unified-plan\", has been used by default since M72 "
               "(January, 2019). Dropping support for Plan B is targeted for "
               "M93 (Canary: July 15, 2021; Stable: August 24, 2021)."};
+
+    case WebFeature::kRTCPeerConnectionSdpSemanticsPlanBWithReverseOriginTrial:
+      return {"RTCPeerConnectionSdpSemanticsPlanBWithReverseOriginTrial", kM96,
+              "Plan B SDP semantics, which is used when constructing an "
+              "RTCPeerConnection with {sdpSemantics:\"plan-b\"}, is a legacy "
+              "version of the Session Description Protocol that has severe "
+              "compatibility issues on modern browsers. The standardized SDP "
+              "format, \"unified-plan\", has been used by default since M72 "
+              "(January, 2019). Dropping support for Plan B is targeted for "
+              "M93 (Canary: July 15, 2021; Stable: August 24, 2021), but "
+              "because you have opted in to the Reverse Origin Trial, you have "
+              "until M96 (Canary: November, 2021; Stable: January, 2022)."};
+
+    case WebFeature::kAddressSpaceUnknownNonSecureContextEmbeddedPrivate:
+    case WebFeature::kAddressSpaceUnknownNonSecureContextEmbeddedLocal:
+    case WebFeature::kAddressSpacePublicNonSecureContextEmbeddedPrivate:
+    case WebFeature::kAddressSpacePublicNonSecureContextEmbeddedLocal:
+    case WebFeature::kAddressSpacePrivateNonSecureContextEmbeddedLocal:
+      return {"InsecurePrivateNetworkSubresourceRequest", kM92,
+              "The website requested a subresource from a "
+              "network that it could only access because of its users' "
+              "privileged network position. These requests expose non-public "
+              "devices and servers to the internet, increasing the risk of a "
+              "cross-site request forgery (CSRF) attack, and/or information "
+              "leakage. To mitigate these risks, Chrome deprecates requests to "
+              "non-public subresources when initiated from non-secure "
+              "contexts, and will start blocking them in Chrome 92 (July "
+              "2021). See https://chromestatus.com/feature/5436853517811712 "
+              "for more details."};
 
     // Features that aren't deprecated don't have a deprecation message.
     default:

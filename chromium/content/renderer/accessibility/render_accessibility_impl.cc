@@ -57,7 +57,6 @@ using blink::WebDocument;
 using blink::WebElement;
 using blink::WebLocalFrame;
 using blink::WebNode;
-using blink::WebRect;
 using blink::WebSettings;
 using blink::WebView;
 
@@ -284,9 +283,9 @@ void RenderAccessibilityImpl::HitTest(
     // request. Instead, the mojo reply should be used directly.
     if (event_to_fire != ax::mojom::Event::kNone) {
       const std::vector<ui::AXEventIntent> intents;
-      HandleAXEvent(ui::AXEvent(ax_object.AxID(), event_to_fire,
-                                ax::mojom::EventFrom::kAction, intents,
-                                request_id));
+      HandleAXEvent(ui::AXEvent(
+          ax_object.AxID(), event_to_fire, ax::mojom::EventFrom::kAction,
+          ax::mojom::Action::kHitTest, intents, request_id));
     }
 
     // Reply with the result.
@@ -309,7 +308,7 @@ void RenderAccessibilityImpl::HitTest(
     // Remote frames don't have access to the information from the visual
     // viewport regarding the visual viewport offset, so we adjust the
     // coordinates before sending them to the remote renderer.
-    WebRect rect = ax_object.GetBoundsInFrameCoordinates();
+    gfx::Rect rect = ax_object.GetBoundsInFrameCoordinates();
     // The following transformation of the input point is naive, but works
     // fairly well. It will fail with CSS transforms that rotate or shear.
     // https://crbug.com/981959.
@@ -317,7 +316,7 @@ void RenderAccessibilityImpl::HitTest(
     gfx::PointF viewport_offset = web_view->VisualViewportOffset();
     transformed_point +=
         gfx::Vector2d(viewport_offset.x(), viewport_offset.y()) -
-        gfx::Rect(rect).OffsetFromOrigin();
+        rect.OffsetFromOrigin();
   }
 
   std::move(callback).Run(mojom::HitTestResponse::New(
@@ -346,44 +345,21 @@ void RenderAccessibilityImpl::PerformAction(const ui::AXActionData& data) {
       AXActionTargetFactory::CreateFromNodeId(document, plugin_tree_source_,
                                               data.focus_node_id);
 
+  if (target->PerformAction(data))
+    return;
+
   switch (data.action) {
-    case ax::mojom::Action::kBlur:
-      root.Focus();
+    case ax::mojom::Action::kBlur: {
+      ui::AXActionData action_data;
+      action_data.action = ax::mojom::Action::kFocus;
+      root.PerformAction(action_data);
       break;
-    case ax::mojom::Action::kClearAccessibilityFocus:
-      target->ClearAccessibilityFocus();
-      break;
-    case ax::mojom::Action::kDecrement:
-      target->Decrement();
-      break;
-    case ax::mojom::Action::kDoDefault:
-      target->Click();
-      break;
+    }
     case ax::mojom::Action::kGetImageData:
       OnGetImageData(target.get(), data.target_rect.size());
       break;
-    case ax::mojom::Action::kIncrement:
-      target->Increment();
-      break;
-    case ax::mojom::Action::kScrollToMakeVisible:
-      target->ScrollToMakeVisibleWithSubFocus(
-          data.target_rect, data.horizontal_scroll_alignment,
-          data.vertical_scroll_alignment, data.scroll_behavior);
-      break;
-    case ax::mojom::Action::kScrollToPoint:
-      target->ScrollToGlobalPoint(data.target_point);
-      break;
     case ax::mojom::Action::kLoadInlineTextBoxes:
       OnLoadInlineTextBoxes(target.get());
-      break;
-    case ax::mojom::Action::kFocus:
-      target->Focus();
-      break;
-    case ax::mojom::Action::kSetAccessibilityFocus:
-      target->SetAccessibilityFocus();
-      break;
-    case ax::mojom::Action::kSetScrollOffset:
-      target->SetScrollOffset(data.target_point);
       break;
     case ax::mojom::Action::kSetSelection:
       anchor->SetSelection(anchor.get(), data.anchor_offset, focus.get(),
@@ -391,15 +367,25 @@ void RenderAccessibilityImpl::PerformAction(const ui::AXActionData& data) {
       HandleAXEvent(
           ui::AXEvent(root.AxID(), ax::mojom::Event::kLayoutComplete));
       break;
+    case ax::mojom::Action::kScrollToMakeVisible:
+      target->ScrollToMakeVisibleWithSubFocus(
+          data.target_rect, data.horizontal_scroll_alignment,
+          data.vertical_scroll_alignment, data.scroll_behavior);
+      break;
+    case ax::mojom::Action::kClearAccessibilityFocus:
+    case ax::mojom::Action::kDecrement:
+    case ax::mojom::Action::kDoDefault:
+    case ax::mojom::Action::kIncrement:
+    case ax::mojom::Action::kScrollToPoint:
+    case ax::mojom::Action::kFocus:
+    case ax::mojom::Action::kSetAccessibilityFocus:
+    case ax::mojom::Action::kSetScrollOffset:
     case ax::mojom::Action::kSetSequentialFocusNavigationStartingPoint:
-      target->SetSequentialFocusNavigationStartingPoint();
-      break;
     case ax::mojom::Action::kSetValue:
-      target->SetValue(data.value);
-      break;
     case ax::mojom::Action::kShowContextMenu:
-      target->ShowContextMenu();
+      // These are all handled by PerformAction.
       break;
+
     case ax::mojom::Action::kScrollBackward:
     case ax::mojom::Action::kScrollForward:
     case ax::mojom::Action::kScrollUp:
@@ -425,7 +411,8 @@ void RenderAccessibilityImpl::PerformAction(const ui::AXActionData& data) {
         CreateAXImageAnnotator();
         // Walk the tree to discover images, and mark them dirty so that
         // they get added to the annotator.
-        MarkAllAXObjectsDirty(ax::mojom::Role::kImage);
+        MarkAllAXObjectsDirty(ax::mojom::Role::kImage,
+                              ax::mojom::Action::kAnnotatePageImages);
       }
       break;
     case ax::mojom::Action::kSignalEndOfTest:
@@ -463,11 +450,14 @@ void RenderAccessibilityImpl::HandleWebAccessibilityEvent(
   HandleAXEvent(event);
 }
 
-void RenderAccessibilityImpl::MarkWebAXObjectDirty(const WebAXObject& obj,
-                                                   bool subtree) {
+void RenderAccessibilityImpl::MarkWebAXObjectDirty(
+    const WebAXObject& obj,
+    bool subtree,
+    ax::mojom::Action event_from_action) {
   DirtyObject dirty_object;
   dirty_object.obj = obj;
   dirty_object.event_from = ax::mojom::EventFrom::kAction;
+  dirty_object.event_from_action = event_from_action;
   dirty_objects_.push_back(dirty_object);
 
   if (subtree)
@@ -742,7 +732,9 @@ void RenderAccessibilityImpl::ShowPluginContextMenu() {
   std::unique_ptr<ui::AXActionTarget> target =
       AXActionTargetFactory::CreateFromNodeId(document, plugin_tree_source_,
                                               obj.AxID());
-  target->ShowContextMenu();
+  ui::AXActionData action_data;
+  action_data.action = ax::mojom::Action::kShowContextMenu;
+  target->PerformAction(action_data);
 }
 
 WebDocument RenderAccessibilityImpl::GetMainDocument() {
@@ -895,6 +887,7 @@ void RenderAccessibilityImpl::SendPendingAccessibilityEvents() {
         DirtyObject dirty_object;
         dirty_object.obj = obj;
         dirty_object.event_from = event.event_from;
+        dirty_object.event_from_action = event.event_from_action;
         dirty_object.event_intents = event.event_intents;
         dirty_objects.push_back(dirty_object);
       }
@@ -910,6 +903,7 @@ void RenderAccessibilityImpl::SendPendingAccessibilityEvents() {
       DirtyObject dirty_object;
       dirty_object.obj = obj;
       dirty_object.event_from = event.event_from;
+      dirty_object.event_from_action = event.event_from_action;
       dirty_object.event_intents = event.event_intents;
       dirty_objects.push_back(dirty_object);
     }
@@ -974,6 +968,7 @@ void RenderAccessibilityImpl::SendPendingAccessibilityEvents() {
 
     ui::AXTreeUpdate update;
     update.event_from = dirty_objects[i].event_from;
+    update.event_from_action = dirty_objects[i].event_from_action;
     update.event_intents = dirty_objects[i].event_intents;
     // If there's a plugin, force the tree data to be generated in every
     // message so the plugin can merge its own tree data changes.
@@ -1208,7 +1203,9 @@ void RenderAccessibilityImpl::StartOrStopLabelingImages(ui::AXMode old_mode,
   }
 }
 
-void RenderAccessibilityImpl::MarkAllAXObjectsDirty(ax::mojom::Role role) {
+void RenderAccessibilityImpl::MarkAllAXObjectsDirty(
+    ax::mojom::Role role,
+    ax::mojom::Action event_from_action) {
   ScopedFreezeBlinkAXTreeSource freeze(tree_source_.get());
   base::queue<WebAXObject> objs_to_explore;
   objs_to_explore.push(tree_source_->GetRoot());
@@ -1217,7 +1214,7 @@ void RenderAccessibilityImpl::MarkAllAXObjectsDirty(ax::mojom::Role role) {
     objs_to_explore.pop();
 
     if (obj.Role() == role)
-      MarkWebAXObjectDirty(obj, /* subtree */ false);
+      MarkWebAXObjectDirty(obj, /* subtree */ false, event_from_action);
 
     std::vector<blink::WebAXObject> children;
     tree_source_->GetChildren(obj, &children);

@@ -11,6 +11,7 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="1037492556044956303">Idinagdag ang <ph name="DEVICE_NAME" /></translation>
 <translation id="1047017786576569492">hindi buo</translation>
 <translation id="1047773237499189053">May available na bagong feature, gamitin ang Pataas na arrow key para matuto pa.</translation>
+<translation id="1052916631016577720">Pag-scan ng Item</translation>
 <translation id="1056775291175587022">Walang network</translation>
 <translation id="1059194134494239015"><ph name="DISPLAY_NAME" />: <ph name="RESOLUTION" /></translation>
 <translation id="108486256082349153">Cellular: <ph name="ADDRESS" /></translation>
@@ -24,6 +25,7 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="1165712434476988950">Kailangang mag-restart ng device para mailapat ang update.</translation>
 <translation id="1175572348579024023">Mag-scroll</translation>
 <translation id="1178581264944972037">I-pause</translation>
+<translation id="1181037720776840403">Alisin</translation>
 <translation id="118532027333893379">Mag-tap kahit saan para i-capture ang full screen</translation>
 <translation id="1190609913194133056">Notification Center</translation>
 <translation id="1195412055398077112">overscan</translation>
@@ -147,6 +149,7 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="2220572644011485463">PIN o password</translation>
 <translation id="2222338659135520253">Kinakailangang mag-sign in</translation>
 <translation id="2222841058024245321">Desk 7</translation>
+<translation id="2224075387478458881">Hindi pinapayagan ang pag-record ng screen kapag may nakikitang protektadong content</translation>
 <translation id="225680501294068881">Nag-i-scan para sa mga device...</translation>
 <translation id="2268130516524549846">Hindi pinagana ang Bluetooth</translation>
 <translation id="2268813581635650749">I-sign out ang lahat</translation>
@@ -239,7 +242,6 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="3038571455154067151">Para mag-sign in, ilagay ang iyong access code ng magulang sa Family Link</translation>
 <translation id="3039939407102840004">Nasa <ph name="PERCENTAGE" /> (na) porsyento ang baterya ng stylus.</translation>
 <translation id="3045488863354895414">Magandang hapon,</translation>
-<translation id="3051128274746680507">Malapit nang alisin ang iyong profile ng pinangangasiwaang user. Mag-sign in para matuto pa.</translation>
 <translation id="3055162170959710888">Ginamit mo ang device na ito nang <ph name="USED_TIME" /> ngayong araw</translation>
 <translation id="3077734595579995578">shift</translation>
 <translation id="3081696990447829002">I-expand ang menu</translation>
@@ -252,13 +254,11 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
 <translation id="3126069444801937830">I-restart upang mag-update</translation>
 <translation id="3139942575505304791">Desk 1</translation>
-<translation id="3147157020428159854">Huminto ang pag-record ng screen</translation>
 <translation id="315116470104423982">Data sa mobile</translation>
 <translation id="3151786313568798007">Oryentasyon</translation>
 <translation id="3153444934357957346">Maaari ka lang magkaroon ng hanggang <ph name="MULTI_PROFILE_USER_LIMIT" /> (na) account sa maraming pag-sign in.</translation>
 <translation id="3154351730702813399">Maaaring subaybayan ng admin ng device ang iyong aktibidad sa pag-browse.</translation>
 <translation id="3181441307743005334">Posibleng magtagal nang ilang sandali ang pag-restart</translation>
-<translation id="3190230207529484457">Hindi pinapayagan ang screen capture habang may pinoprotektahang content</translation>
 <translation id="3202010236269062730">{NUM_DEVICES,plural, =1{Nakakonekta sa isang device}one{Nakakonekta sa # device}other{Nakakonekta sa # na device}}</translation>
 <translation id="320207200541803018">Magtakda ng timer</translation>
 <translation id="3203405173652969239">Naka-enable ang Switch Access</translation>
@@ -267,7 +267,6 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="3226991577105957773">+<ph name="COUNT" /> pa</translation>
 <translation id="3236488194889173876">Walang available na mobile network</translation>
 <translation id="3249513730522716925">Inilipat ang Window na <ph name="WINDOW_TITLE" /> sa Desk na <ph name="TARGET_DESK" /> mula sa <ph name="ACTIVE_DESK" /></translation>
-<translation id="3252068179161473151"><ph name="WIRELESS_PROVIDER" />, Lakas ng signal <ph name="SIGNAL_STRENGTH" /> porsyento.</translation>
 <translation id="3255483164551725916">Ano'ng maaari mong gawin?</translation>
 <translation id="3269597722229482060">Mag-right Click</translation>
 <translation id="3289674678944039601">Nagcha-charge sa pamamagitan ng adapter</translation>
@@ -306,6 +305,7 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="3571734092741541777">I-set up</translation>
 <translation id="3573179567135747900">Palitan pabalik sa "<ph name="FROM_LOCALE" />" (kailangang i-restart)</translation>
 <translation id="3576141592585647168">Baguhin ang timezone</translation>
+<translation id="3593039967545720377">I-access ang history ng iyong clipboard sa pamamagitan ng pagpindot sa <ph name="SHORTCUT_KEY_NAME" /> + V para tingnan ang clipboard mo. Kumopya ng item para magsimula.</translation>
 <translation id="3593646411856133110">Mag-swipe pataas at i-hold para makita ang mga nakabukas na app</translation>
 <translation id="3595596368722241419">Puno na ang baterya</translation>
 <translation id="3604801046548457007">Ginawa ang Desk <ph name="DESK_TITILE" /></translation>
@@ -349,6 +349,7 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="3901991538546252627">Kumokonekta sa <ph name="NAME" /></translation>
 <translation id="3943857333388298514">Paste</translation>
 <translation id="394485226368336402">Mga setting ng audio</translation>
+<translation id="3945319193631853098">I-tap para tapusin ang pag-set up</translation>
 <translation id="3945867833895287237">Kumokonekta sa hotspot...</translation>
 <translation id="3962859241508114581">Nakaraang Track</translation>
 <translation id="3969043077941541451">I-off</translation>
@@ -393,10 +394,12 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4321776623976362024">Napindot mo ang keyboard shortcut para sa mataas na contrast. Gusto mo ba itong i-on?</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
+<translation id="4333628967105022692">Hindi sinusuportahan ang Lacros kapag maraming user ang naka-sign in.</translation>
 <translation id="4338109981321384717">Magnifying glass</translation>
 <translation id="4351433414020964307">Naglo-load ang Assistant...</translation>
 <translation id="4356930093361201197">high-contrast mode</translation>
 <translation id="4371348193907997655">Mga Cast Setting</translation>
+<translation id="4378479437904450384"><ph name="WIRELESS_PROVIDER" />, lakas ng signal <ph name="SIGNAL_STRENGTH" /> porsyento</translation>
 <translation id="4378551569595875038">Kumokonekta...</translation>
 <translation id="4379531060876907730">Ito ang iyong mga stylus tool</translation>
 <translation id="4389184120735010762">Napindot mo ang keyboard shortcut para sa naka-dock na magnifier. Gusto mo ba itong i-on?</translation>
@@ -404,6 +407,7 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="4421231901400348175">Pagbabahagi ng kontrol sa iyong screen gamit ang <ph name="HELPER_NAME" /> sa pamamagitan ng Remote Assistance.</translation>
 <translation id="4424159417645388645">Desk 5</translation>
 <translation id="4430019312045809116">Volume</translation>
+<translation id="4449692009715125625">{NUM_NOTIFICATIONS,plural, =1{1 mahalagang notification}one{# mahalagang notification}other{# na mahalagang notification}}</translation>
 <translation id="4450893287417543264">Huwag ipakitang muli</translation>
 <translation id="445864333228800152">Magandang gabi,</translation>
 <translation id="4458688154122353284">Ihinto ang pag-record ng screen</translation>
@@ -475,6 +479,10 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="4961318399572185831">I-cast ang screen</translation>
 <translation id="4969092041573468113"><ph name="HOURS" />h <ph name="MINUTES" />m <ph name="SECONDS" />s</translation>
 <translation id="4975771730019223894">Pag-badge ng app</translation>
+<translation id="4977493774330778463"><ph name="NUM_IMPORTANT_NOTIFICATION" />:
+        <ph name="NOTIFICATION_1" />,
+        <ph name="NOTIFICATION_2" />,
+        <ph name="NUM_OTHER_NOTIFICATION" /></translation>
 <translation id="5003993274120026347">Susunod na pangungusap</translation>
 <translation id="5030687792513154421">Tapos na ang oras</translation>
 <translation id="5033299697334913360">Mag-click kahit saan para i-capture ang full screen</translation>
@@ -488,6 +496,7 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="5168181903108465623">I-cast ang mga available na device</translation>
 <translation id="5170568018924773124">Ipinakita sa folder</translation>
 <translation id="5176318573511391780">I-record ang hindi buong screen</translation>
+<translation id="5206057955438543357">{NUM_NOTIFICATIONS,plural, =1{1 pang notification}one{# pang notification}other{# pang notification}}</translation>
 <translation id="5207949376430453814">I-highlight ang text caret</translation>
 <translation id="5208059991603368177">Naka-on</translation>
 <translation id="5222676887888702881">Mag-sign out</translation>
@@ -556,6 +565,7 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="5825969630400862129">Mga setting ng mga nakakonektang device</translation>
 <translation id="5837036133683224804">Ihinto ang <ph name="ROUTE_TITLE" /> sa <ph name="RECEIVER_NAME" /></translation>
 <translation id="5860033963881614850">Naka-off</translation>
+<translation id="5860491529813859533">I-on</translation>
 <translation id="5876666360658629066">Ilagay ang code ng magulang</translation>
 <translation id="5881540930187678962">I-set up ang Phone Hub sa ibang pagkakataon</translation>
 <translation id="5895138241574237353">I-restart</translation>
@@ -587,6 +597,7 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="6043212731627905357">Hindi gumagana ang monitor na ito sa iyong <ph name="DEVICE_TYPE" /> (hindi sinusuportahan ang monitor).</translation>
 <translation id="6043994281159824495">Mag-sign out ngayon</translation>
 <translation id="6047696787498798094">Matitigil ang screen sharing kapag nagpalit ka ng user. Gusto mo bang magpatuloy?</translation>
+<translation id="6050368268239407309">Mga tool sa presentation</translation>
 <translation id="6054305421211936131">Mag-sign in gamit ang smart card</translation>
 <translation id="6059276912018042191">Mga kamakailang tab ng Chrome</translation>
 <translation id="6062360702481658777">Awtomatiko kang masa-sign out sa loob ng <ph name="LOGOUT_TIME_LEFT" />.</translation>
@@ -597,10 +608,10 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="612734058257491180">Hindi available ang Google Assistant sa session ng bisita.</translation>
 <translation id="6137566720514957455">Buksan ang alisin ang dialog para sa <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="615957422585914272">Ipakita ang on-screen na keyboard</translation>
-<translation id="6164005077879661055">Permanenteng matatanggal ang lahat ng file at lokal na data na kaugnay ng pinangangasiwaang user sa oras na alisin ang pinangangasiwaang user na ito. Maaari pa ring makita ng manager ang mga nabisitang website at setting para sa pinangangasiwaang user na ito sa <ph name="MANAGEMENT_URL" />.</translation>
 <translation id="6165508094623778733">Matuto pa</translation>
 <translation id="6179832488876878285">Puwede mong i-pin ang iyong mahahalagang file dito. Buksan ang app na Mga File para magsimula.</translation>
 <translation id="622484624075952240">Down</translation>
+<translation id="6231419273573514727">Posibleng maging limitado ang performance ng peripheral</translation>
 <translation id="6236290670123303279">Pamahalaan ang Mga Setting</translation>
 <translation id="6237231532760393653">1X</translation>
 <translation id="6254629735336163724">Naka-lock sa horizontal</translation>
@@ -617,6 +628,7 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="6376931439017688372">Naka-on ang Bluetooth</translation>
 <translation id="6381109794406942707">Para i-unlock ang device, ilagay ang iyong PIN.</translation>
 <translation id="639644700271529076">Naka-off ang CAPS LOCK</translation>
+<translation id="6396835948284782440">Pindutin nang matagal ang [Esc] para lumabas.</translation>
 <translation id="6406704438230478924">altgr</translation>
 <translation id="6424520630891723617"><ph name="SECURITY_STATUS" />, Lakas ng Signal <ph name="SIGNAL_STRENGTH" /></translation>
 <translation id="642644398083277086">I-clear ang lahat ng notification</translation>
@@ -661,6 +673,7 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="6715542151869432661">Walang nahanap na mobile device.</translation>
 <translation id="6723839937902243910">Power</translation>
 <translation id="6727969043791803658">Nakakonekta, <ph name="BATTERY_PERCENTAGE" />% ang baterya</translation>
+<translation id="6732800389263199929">+<ph name="COUNT" /></translation>
 <translation id="6751052314767925245">Ipinapatupad ng iyong administrator</translation>
 <translation id="6751826523481687655">Naka-on ang pag-trace ng performance</translation>
 <translation id="6752912906630585008">Inalis ang Desk na <ph name="REMOVED_DESK" /> at isinama sa Desk na <ph name="RECEIVE_DESK" /></translation>
@@ -672,6 +685,7 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="6818242057446442178">Bumalik nang paisa-isang salita</translation>
 <translation id="6820676911989879663">Magpahinga!</translation>
 <translation id="6850010208275816200">Naka-full screen ang iyong kasalukuyang app. Kung hihingin ng app ang iyong password, umalis muna sa full screen.</translation>
+<translation id="6852052252232534364">I-activate</translation>
 <translation id="6857725247182211756"><ph name="SECONDS" /> seg</translation>
 <translation id="6857811139397017780">I-activate <ph name="NETWORKSERVICE" /></translation>
 <translation id="685782768769951078">{NUM_DIGITS,plural, =1{Isang digit na lang ang natitira}one{# digit na lang ang natitira}other{# na digit na lang ang natitira}}</translation>
@@ -695,6 +709,7 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="7029814467594812963">Lumabas sa session</translation>
 <translation id="703425375924687388"><ph name="QUERY_NAME" />, Google Assistant</translation>
 <translation id="7042322267639375032">I-collapse ang lugar ng status</translation>
+<translation id="7055910611768509537">Hindi nagamit ang stylus sa loob ng mahigit isang linggo</translation>
 <translation id="7066646422045619941">Na-disable ng iyong administrator ang network na ito.</translation>
 <translation id="7067196344162293536">Awtomatikong pag-rotate</translation>
 <translation id="7068360136237591149">Magbukas ng mga file</translation>
@@ -720,6 +735,7 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="7346909386216857016">Ok, nakuha ko</translation>
 <translation id="7348093485538360975">Nasa screen na keyboard</translation>
 <translation id="735745346212279324">Nakadiskonekta ang VPN</translation>
+<translation id="7360036564632145207">Kapag binago mo ang iyong setting ng proteksyon sa pag-access ng data para sa mga peripheral, mao-optimize ang performance</translation>
 <translation id="7371404428569700291">I-record ang window</translation>
 <translation id="7377169924702866686">Naka-on ang Caps Lock.</translation>
 <translation id="7378203170292176219">Mag-drag para pumili ng bahaging ire-record</translation>
@@ -728,11 +744,13 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="7392563512730092880">Puwede kang mag-set up sa ibang pagkakataon mula sa Mga Setting anumang oras.</translation>
 <translation id="7398254312354928459">Lumipat ng koneksyon ng network</translation>
 <translation id="7405710164030118432">Para i-unlock ang device, ilagay ang iyong access code ng magulang sa Family Link</translation>
+<translation id="7406608787870898861">Tapusin ang pag-set up ng iyong mobile network</translation>
 <translation id="741244894080940828">conversion</translation>
 <translation id="7413851974711031813">Pindutin ang escape para isara</translation>
 <translation id="742594950370306541">Ginagamit ang camera.</translation>
 <translation id="742608627846767349">Magandang umaga,</translation>
 <translation id="743058460480092004">Ginagamit ang camera at mikropono.</translation>
+<translation id="7434543979546293336">Minarkahan bilang pangunahing ideya</translation>
 <translation id="7452560014878697800">May application na gumagamit ng iyong camera</translation>
 <translation id="7456049842111127849">Capture Mode, <ph name="SOURCE" /> <ph name="TYPE" /> ang default.</translation>
 <translation id="7461924472993315131">I-pin</translation>
@@ -776,6 +794,7 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="7780159184141939021">I-rotate ang Screen</translation>
 <translation id="7796353162336583443">I-tap ang button ng stylus sa shelf upang magsulat ng tala, mag-screenshot, gamitin ang Google Assistant, laser pointer, o magnifying glass.</translation>
 <translation id="7798302898096527229">Pindutin ang Search o Shift upang kanselahin.</translation>
+<translation id="7807966291075028781">Hindi sinusuportahan ang peripheral sa Guest mode para sa mga panseguridad na dahilan</translation>
 <translation id="7814236020522506259"><ph name="HOUR" /> at <ph name="MINUTE" /></translation>
 <translation id="7829386189513694949">Malakas ang signal</translation>
 <translation id="7837740436429729974">Oras na</translation>
@@ -844,6 +863,7 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="8345019317483336363">Napili ang window ng <ph name="WINDOW_TITLE" /></translation>
 <translation id="8351131234907093545">Gumawa ng tala</translation>
 <translation id="8371779926711439835">Sumulong nang paisa-isang titik</translation>
+<translation id="8371991222807690464">Posibleng maging limitado ang performance ng peripheral sa Guest mode</translation>
 <translation id="8375916635258623388">Awtomatikong kokonekta ang <ph name="DEVICE_NAME" /> na ito at ang iyong telepono</translation>
 <translation id="8380784334203145311">Magandang gabi,</translation>
 <translation id="8388750414311082622">Hindi puwedeng alisin ang huling desk.</translation>
@@ -946,6 +966,8 @@ Narito ang ilang bagay na puwede mong subukang simulan.</translation>
 <translation id="9091626656156419976">Naalis ang display na <ph name="DISPLAY_NAME" /></translation>
 <translation id="9098969848082897657">I-silent ang telepono</translation>
 <translation id="9099154003160514616">Available ang update sa Lacros</translation>
+<translation id="9105450214093926548">Hindi sinusuportahan ang pag-sign in ng pangalawang user habang tumatakbo ang Lacros browser. Gumamit na lang ng pangalawang profile ng browser sa Lacros o isara ang Lacros at subukan ulit.</translation>
+<translation id="9133335900048457298">Hindi puwedeng mag-record ng protektadong content</translation>
 <translation id="9151726767154816831">I-restart at i-powerwash upang i-update</translation>
 <translation id="9166331175924255663">I-toggle ang mataas na visibility ng Nearby Share.</translation>
 <translation id="9168436347345867845">Gawin ito sa ibang pagkakataon</translation>

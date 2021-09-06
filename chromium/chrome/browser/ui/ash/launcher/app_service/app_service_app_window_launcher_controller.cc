@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/app_list/internal_app_id_constants.h"
 #include "ash/public/cpp/app_types.h"
 #include "ash/public/cpp/multi_user_window_manager.h"
@@ -31,13 +32,13 @@
 #include "chrome/browser/ui/ash/launcher/arc_app_window.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/crostini_app_window.h"
+#include "chrome/browser/ui/ash/launcher/lacros_app_window.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "components/account_id/account_id.h"
 #include "components/exo/shell_surface_base.h"
@@ -159,11 +160,11 @@ void AppServiceAppWindowLauncherController::ActiveUserChanged(
 void AppServiceAppWindowLauncherController::AdditionalUserAddedToSession(
     Profile* profile) {
   // Each users InstanceRegister needs to be observed.
-  proxy_ = apps::AppServiceProxyFactory::GetForProfile(profile);
-  proxy_->InstanceRegistry().AddObserver(this);
+  auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile);
+  proxy->InstanceRegistry().AddObserver(this);
   profile_list_.push_back(profile);
 
-  app_service_instance_helper_->AdditionalUserAddedToSession(profile);
+  app_service_instance_helper_->AdditionalUserAddedToSession();
 }
 
 void AppServiceAppWindowLauncherController::OnWindowInitialized(
@@ -414,6 +415,7 @@ void AppServiceAppWindowLauncherController::AddWindowToShelf(
   if (base::Contains(aura_window_to_app_window_, window))
     return;
 
+  // TODO(jamescook): Clean up this block. The code is repetitive.
   AppWindowBase* app_window;
   if (arc::GetWindowTaskId(window) != arc::kNoTaskId) {
     std::unique_ptr<ArcAppWindow> app_window_ptr =
@@ -422,6 +424,11 @@ void AppServiceAppWindowLauncherController::AddWindowToShelf(
             arc::ArcAppShelfId::FromString(shelf_id.app_id),
             views::Widget::GetWidgetForNativeWindow(window), this,
             owner()->profile());
+    app_window = app_window_ptr.get();
+    aura_window_to_app_window_[window] = std::move(app_window_ptr);
+  } else if (crosapi::browser_util::IsLacrosWindow(window)) {
+    auto app_window_ptr = std::make_unique<LacrosAppWindow>(
+        shelf_id, views::Widget::GetWidgetForNativeWindow(window));
     app_window = app_window_ptr.get();
     aura_window_to_app_window_[window] = std::move(app_window_ptr);
   } else if (crostini_tracker_ &&
@@ -526,7 +533,7 @@ void AppServiceAppWindowLauncherController::RegisterWindow(
         ->SetIcon(*ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
             IDR_LOGO_PLUGIN_VM_DEFAULT_192));
     // Set fullscreen properties.
-    if (base::FeatureList::IsEnabled(chromeos::features::kPluginVmFullscreen)) {
+    if (base::FeatureList::IsEnabled(ash::features::kPluginVmFullscreen)) {
       exo::SetShellUseImmersiveForFullscreen(window, false);
       window->SetProperty(chromeos::kEscHoldToExitFullscreen, true);
     }

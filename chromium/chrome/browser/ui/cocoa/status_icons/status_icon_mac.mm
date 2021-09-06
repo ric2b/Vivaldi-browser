@@ -14,6 +14,8 @@
 #include "ui/gfx/image/image_skia.h"
 #include "ui/message_center/public/cpp/notifier_id.h"
 
+#include "app/vivaldi_apptools.h"
+
 @interface StatusItemController : NSObject {
   StatusIconMac* _statusIcon; // weak
 }
@@ -67,6 +69,10 @@ NSStatusItem* StatusIconMac::item() {
 void StatusIconMac::SetImage(const gfx::ImageSkia& image) {
   if (!image.isNull()) {
     NSImage* ns_image = skia::SkBitmapToNSImage(*image.bitmap());
+    if (vivaldi::IsVivaldiRunning() && ns_image) {
+      // VB-77541
+      [ns_image setTemplate:YES];
+    }
     if (ns_image)
       [item() setImage:ns_image];
   }

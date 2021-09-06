@@ -226,9 +226,10 @@ struct SameSizeAsDocumentLoader
   scoped_refptr<SharedBuffer> data_buffer;
   base::UnguessableToken devtools_navigation_token;
   WebURLLoader::DeferType defers_loading;
+  bool last_navigation_had_transient_user_activation;
   bool had_sticky_activation;
-  bool had_transient_activation;
   bool is_browser_initiated;
+  bool is_prerendering;
   bool is_same_origin_navigation;
   bool has_text_fragment_token;
   bool was_discarded;
@@ -340,11 +341,11 @@ DocumentLoader::DocumentLoader(
       in_commit_data_(false),
       data_buffer_(SharedBuffer::Create()),
       devtools_navigation_token_(params_->devtools_navigation_token),
+      last_navigation_had_transient_user_activation_(
+          params_->had_transient_user_activation),
       had_sticky_activation_(params_->is_user_activated),
-      had_transient_activation_(
-          LocalFrame::HasTransientUserActivation(frame_) ||
-          params_->had_transient_activation),
       is_browser_initiated_(params_->is_browser_initiated),
+      is_prerendering_(params_->is_prerendering),
       was_discarded_(params_->was_discarded),
       loading_srcdoc_(url_.IsAboutSrcdocURL()),
       loading_url_as_empty_document_(!params_->is_static_data &&
@@ -406,7 +407,10 @@ DocumentLoader::DocumentLoader(
   }
 
   // The document URL needs to be added to the head of the list as that is
-  // where the redirects originated.
+  // where the redirects originated. Note that this is currently broken if we
+  // don't reuse the RenderFrame (e.g. cross-site navigations) - this will
+  // result in an empty URL or about:blank in that case.
+  // TODO(https://crbug.com/1171210): Fix this.
   if (is_client_redirect_)
     redirect_chain_.push_back(frame_->GetDocument()->Url());
 
@@ -464,8 +468,10 @@ DocumentLoader::CreateWebNavigationParamsToCloneDocument() {
       std::move(service_worker_network_provider_);
   params->devtools_navigation_token = devtools_navigation_token_;
   params->is_user_activated = had_sticky_activation_;
-  params->had_transient_activation = had_transient_activation_;
+  params->had_transient_user_activation =
+      last_navigation_had_transient_user_activation_;
   params->is_browser_initiated = is_browser_initiated_;
+  params->is_prerendering = is_prerendering_;
   params->was_discarded = was_discarded_;
   params->web_bundle_physical_url = web_bundle_physical_url_;
   params->web_bundle_claimed_url = web_bundle_claimed_url_;
@@ -625,6 +631,16 @@ static SinglePageAppNavigationType CategorizeSinglePageAppNavigation(
   }
   NOTREACHED();
   return kSPANavTypeSameDocumentBackwardOrForward;
+}
+
+void DocumentLoader::RunURLAndHistoryUpdateSteps(
+    const KURL& new_url,
+    scoped_refptr<SerializedScriptValue> data,
+    mojom::blink::ScrollRestorationType scroll_restoration_type,
+    WebFrameLoadType type) {
+  UpdateForSameDocumentNavigation(new_url, kSameDocumentNavigationHistoryApi,
+                                  std::move(data), scroll_restoration_type,
+                                  type, true);
 }
 
 void DocumentLoader::UpdateForSameDocumentNavigation(
@@ -946,7 +962,14 @@ void DocumentLoader::FinishedLoading(base::TimeTicks finish_time) {
   }
 }
 
-void DocumentLoader::HandleRedirect(const KURL& current_request_url) {
+void DocumentLoader::HandleRedirect(
+    WebNavigationParams::RedirectInfo& redirect) {
+  ResourceResponse redirect_response =
+      redirect.redirect_response.ToResourceResponse();
+  const KURL& url_before_redirect = redirect_response.CurrentRequestUrl();
+  url_ = redirect.new_url;
+  const KURL& url_after_redirect = url_;
+
   // Browser process should have already checked that redirecting url is
   // allowed to display content from the target origin.
   // When the referrer page is in an unsigned Web Bundle file in local
@@ -955,12 +978,35 @@ void DocumentLoader::HandleRedirect(const KURL& current_request_url) {
   // to the file's URL (file:///tmp/a.wbn?https://example.com/page.html). In
   // this case, CanDisplay() returns false, and web_bundle_claimed_url must not
   // be null.
-  CHECK(SecurityOrigin::Create(current_request_url)->CanDisplay(url_) ||
+  CHECK(SecurityOrigin::Create(url_before_redirect)
+            ->CanDisplay(url_after_redirect) ||
         !params_->web_bundle_claimed_url.IsNull());
 
+  // Update the HTTP method of this document to the method used by the redirect.
+  AtomicString new_http_method = redirect.new_http_method;
+  if (http_method_ != new_http_method) {
+    http_body_ = nullptr;
+    http_content_type_ = g_null_atom;
+    http_method_ = new_http_method;
+  }
+
+  if (redirect.new_referrer.IsEmpty()) {
+    referrer_ = Referrer(Referrer::NoReferrer(), redirect.new_referrer_policy);
+  } else {
+    referrer_ = Referrer(redirect.new_referrer, redirect.new_referrer_policy);
+  }
+
+  // TODO(dgozman): check whether clearing origin policy is intended behavior.
+  origin_policy_ = base::nullopt;
+  probe::WillSendNavigationRequest(
+      probe::ToCoreProbeSink(GetFrame()), main_resource_identifier_, this,
+      url_after_redirect, http_method_, http_body_.get());
+
+  navigation_timing_info_->AddRedirect(redirect_response, url_after_redirect);
+
   DCHECK(!GetTiming().FetchStart().is_null());
-  redirect_chain_.push_back(url_);
-  GetTiming().AddRedirect(current_request_url, url_);
+  redirect_chain_.push_back(url_after_redirect);
+  GetTiming().AddRedirect(url_before_redirect, url_after_redirect);
 }
 
 bool DocumentLoader::ShouldReportTimingInfoToParent() {
@@ -1102,6 +1148,7 @@ mojom::CommitResult DocumentLoader::CommitSameDocumentNavigation(
     WebFrameLoadType frame_load_type,
     HistoryItem* history_item,
     ClientRedirectPolicy client_redirect_policy,
+    bool has_transient_user_activation,
     LocalDOMWindow* origin_window,
     bool has_event,
     std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) {
@@ -1112,19 +1159,25 @@ mojom::CommitResult DocumentLoader::CommitSameDocumentNavigation(
     page->HistoryNavigationVirtualTimePauser().UnpauseVirtualTime();
 
   if (!frame_->IsNavigationAllowed())
-    return mojom::CommitResult::Aborted;
+    return mojom::blink::CommitResult::Aborted;
+
+  if (frame_->GetDocument()->IsFrameSet()) {
+    // Navigations in a frameset are always cross-document. Renderer-initiated
+    // navigations in a frameset will be deferred to the browser, and all
+    // renderer-initiated navigations are treated as cross-document. So this one
+    // must have been browser-initiated, where it was not aware that the
+    // document is a frameset. In that case we just restart the navigation,
+    // making it cross-document. This gives a consistent outcome for all
+    // navigations in a frameset.
+    return mojom::blink::CommitResult::RestartCrossDocument;
+  }
 
   if (!IsBackForwardLoadType(frame_load_type)) {
     // In the case of non-history navigations, check that this is a
-    // same-document navigation. If not, the navigation should restart as a
-    // cross-document navigation.
-    if (!url.HasFragmentIdentifier() ||
-        !EqualIgnoringFragmentIdentifier(frame_->GetDocument()->Url(), url) ||
-        frame_->GetDocument()->IsFrameSet()) {
-      // TODO(danakj): Convert to a CHECK() and stop doing RestartCrossDocument.
-      NOTREACHED();
-      return mojom::CommitResult::RestartCrossDocument;
-    }
+    // same-document navigation. The browser should not send invalid
+    // same-document navigations.
+    CHECK(url.HasFragmentIdentifier());
+    CHECK(EqualIgnoringFragmentIdentifier(frame_->GetDocument()->Url(), url));
   }
 
   // If the requesting document is cross-origin, perform the navigation
@@ -1138,11 +1191,13 @@ mojom::CommitResult DocumentLoader::CommitSameDocumentNavigation(
             WTF::Bind(&DocumentLoader::CommitSameDocumentNavigationInternal,
                       WrapWeakPersistent(this), url, frame_load_type,
                       WrapPersistent(history_item), client_redirect_policy,
-                      !!origin_window, has_event, std::move(extra_data)));
+                      has_transient_user_activation, !!origin_window, has_event,
+                      std::move(extra_data)));
   } else {
-    CommitSameDocumentNavigationInternal(url, frame_load_type, history_item,
-                                         client_redirect_policy, origin_window,
-                                         has_event, std::move(extra_data));
+    CommitSameDocumentNavigationInternal(
+        url, frame_load_type, history_item, client_redirect_policy,
+        has_transient_user_activation, origin_window, has_event,
+        std::move(extra_data));
   }
   return mojom::CommitResult::Ok;
 }
@@ -1152,6 +1207,7 @@ void DocumentLoader::CommitSameDocumentNavigationInternal(
     WebFrameLoadType frame_load_type,
     HistoryItem* history_item,
     ClientRedirectPolicy client_redirect,
+    bool has_transient_user_activation,
     bool is_content_initiated,
     bool has_event,
     std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) {
@@ -1191,6 +1247,10 @@ void DocumentLoader::CommitSameDocumentNavigationInternal(
   }
   is_client_redirect_ =
       client_redirect == ClientRedirectPolicy::kClientRedirect;
+
+  last_navigation_had_transient_user_activation_ =
+      has_transient_user_activation;
+
   bool same_item_sequence_number =
       history_item_ && history_item &&
       history_item_->ItemSequenceNumber() == history_item->ItemSequenceNumber();
@@ -1377,31 +1437,8 @@ void DocumentLoader::StartLoadingInternal() {
                                    main_resource_identifier_, this, url_,
                                    http_method_, http_body_.get());
 
-  for (size_t i = 0; i < params_->redirects.size(); ++i) {
-    WebNavigationParams::RedirectInfo& redirect = params_->redirects[i];
-    url_ = redirect.new_url;
-    AtomicString new_http_method = redirect.new_http_method;
-    if (http_method_ != new_http_method) {
-      http_body_ = nullptr;
-      http_content_type_ = g_null_atom;
-      http_method_ = new_http_method;
-    }
-    if (redirect.new_referrer.IsEmpty()) {
-      referrer_ =
-          Referrer(Referrer::NoReferrer(), redirect.new_referrer_policy);
-    } else {
-      referrer_ = Referrer(redirect.new_referrer, redirect.new_referrer_policy);
-    }
-
-    // TODO(dgozman): check whether clearing origin policy is intended behavior.
-    origin_policy_ = base::nullopt;
-    probe::WillSendNavigationRequest(probe::ToCoreProbeSink(GetFrame()),
-                                     main_resource_identifier_, this, url_,
-                                     http_method_, http_body_.get());
-    ResourceResponse redirect_response =
-        redirect.redirect_response.ToResourceResponse();
-    navigation_timing_info_->AddRedirect(redirect_response, url_);
-    HandleRedirect(redirect_response.CurrentRequestUrl());
+  for (WebNavigationParams::RedirectInfo& redirect : params_->redirects) {
+    HandleRedirect(redirect);
   }
 
   if (!frame_->IsMainFrame()) {
@@ -1674,14 +1711,25 @@ scoped_refptr<SecurityOrigin> DocumentLoader::CalculateOrigin(
     auto* owner_context = frame_->PagePopupOwner()->GetExecutionContext();
     origin = owner_context->GetSecurityOrigin()->IsolatedCopy();
   } else if (owner_document && owner_document->domWindow()) {
+    // Prefer taking `origin` from `owner_document` if one is available - this
+    // will correctly inherit/alias `SecurityOrigin::domain_` from the
+    // `owner_document` (note that the
+    // `SecurityOrigin::CreateWithReferenceOrigin` fallback below A) doesn't
+    // preserve `domain_` via `url::Origin` and B) doesn't alias the origin /
+    // `domain_` - changes in the "about:blank" document do not affect the
+    // initiator document).
     origin = owner_document->domWindow()->GetMutableSecurityOrigin();
   } else {
     // Otherwise, create an origin that propagates precursor information
     // as needed. For non-opaque origins, this creates a standard tuple
     // origin, but for opaque origins, it creates an origin with the
     // initiator origin as the precursor.
-    origin = SecurityOrigin::CreateWithReferenceOrigin(url_,
-                                                       requestor_origin_.get());
+    scoped_refptr<const SecurityOrigin> precursor = requestor_origin_;
+    // For urn: resources served from WebBundles, use the Bundle's origin
+    // as the precursor.
+    if (url_.ProtocolIs("urn") && response_.WebBundleURL().IsValid())
+      precursor = SecurityOrigin::Create(response_.WebBundleURL());
+    origin = SecurityOrigin::CreateWithReferenceOrigin(url_, precursor.get());
   }
 
   if ((sandbox_flags & network::mojom::blink::WebSandboxFlags::kOrigin) !=
@@ -1743,7 +1791,8 @@ bool ShouldReuseDOMWindow(LocalDOMWindow* window,
 }
 
 WindowAgent* GetWindowAgentForOrigin(LocalFrame* frame,
-                                     SecurityOrigin* origin) {
+                                     SecurityOrigin* origin,
+                                     bool is_origin_keyed) {
   // TODO(keishi): Also check if AllowUniversalAccessFromFileURLs might
   // dynamically change.
   bool has_potential_universal_access_privilege =
@@ -1751,7 +1800,17 @@ WindowAgent* GetWindowAgentForOrigin(LocalFrame* frame,
       frame->GetSettings()->GetAllowUniversalAccessFromFileURLs();
   return frame->window_agent_factory().GetAgentForOrigin(
       has_potential_universal_access_privilege,
-      V8PerIsolateData::MainThreadIsolate(), origin);
+      V8PerIsolateData::MainThreadIsolate(), origin, is_origin_keyed);
+}
+
+// Inheriting cases use their agent's "is origin-keyed" value, which is set
+// by whatever they're inheriting from.
+//
+// javascript: URLs use the calling page as their Url() value, so we need to
+// include them explicitly.
+bool ShouldInheritExplicitOriginKeying(const KURL& url, CommitReason reason) {
+  return Document::ShouldInheritSecurityOriginFromOwner(url) ||
+         reason == CommitReason::kJavascriptUrl;
 }
 
 void DocumentLoader::InitializeWindow(Document* owner_document) {
@@ -1764,6 +1823,15 @@ void DocumentLoader::InitializeWindow(Document* owner_document) {
                              ? SecurityOrigin::CreateUniqueOpaque()
                              : CalculateOrigin(owner_document, sandbox_flags);
 
+  bool origin_agent_cluster = origin_agent_cluster_;
+  if (ShouldInheritExplicitOriginKeying(Url(), commit_reason_) &&
+      owner_document && owner_document->domWindow()) {
+    // Since we're inheriting the owner document's origin, we should also use
+    // its OriginAgentCluster (OAC) in determining which WindowAgent to use,
+    // overriding the OAC value sent in the commit params.
+    origin_agent_cluster =
+        owner_document->domWindow()->GetAgent()->IsExplicitlyOriginKeyed();
+  }
   // In some rare cases, we'll re-use a LocalDOMWindow for a new Document. For
   // example, when a script calls window.open("..."), the browser gives
   // JavaScript a window synchronously but kicks off the load in the window
@@ -1773,7 +1841,8 @@ void DocumentLoader::InitializeWindow(Document* owner_document) {
   // LocalDOMWindow to the Document that results from the network load. See also
   // Document::IsSecureTransitionTo.
   if (!ShouldReuseDOMWindow(frame_->DomWindow(), security_origin.get())) {
-    auto* agent = GetWindowAgentForOrigin(frame_.Get(), security_origin.get());
+    auto* agent = GetWindowAgentForOrigin(frame_.Get(), security_origin.get(),
+                                          origin_agent_cluster);
     frame_->SetDOMWindow(MakeGarbageCollected<LocalDOMWindow>(*frame_, agent));
 
     if (origin_policy_.has_value()) {
@@ -1786,21 +1855,13 @@ void DocumentLoader::InitializeWindow(Document* owner_document) {
       frame_->DomWindow()->SetOriginPolicyIds(ids);
     }
 
-    // Inheriting cases use their agent's "is origin-keyed" value, which is set
-    // by whatever they're inheriting from.
-    //
-    // javascript: URLs use the calling page as their Url() value, so we need to
-    // exclude them explicitly.
-    //
     // TODO(https://crbug.com/1111897): This call is likely to happen happen
     // multiple times per agent, since navigations can happen multiple times per
     // agent. This is subpar. Currently a DCHECK guards against it happening
     // multiple times *with different values*, but ideally we would use a better
     // architecture.
-    if (!Document::ShouldInheritSecurityOriginFromOwner(Url()) &&
-        commit_reason_ != CommitReason::kJavascriptUrl) {
-      agent->SetIsOriginKeyed(origin_agent_cluster_);
-    }
+    if (!ShouldInheritExplicitOriginKeying(Url(), commit_reason_))
+      agent->SetIsExplicitlyOriginKeyed(origin_agent_cluster_);
   } else {
     if (frame_->GetSettings()->GetShouldReuseGlobalForUnownedMainFrame() &&
         frame_->IsMainFrame()) {
@@ -1808,8 +1869,8 @@ void DocumentLoader::InitializeWindow(Document* owner_document) {
       // window to be reused, we should not inherit the initial empty document's
       // Agent, which was a universal access Agent.
       // This happens only in android webview.
-      frame_->DomWindow()->ResetWindowAgent(
-          GetWindowAgentForOrigin(frame_.Get(), security_origin.get()));
+      frame_->DomWindow()->ResetWindowAgent(GetWindowAgentForOrigin(
+          frame_.Get(), security_origin.get(), origin_agent_cluster));
     }
     frame_->DomWindow()->ClearForReuse();
   }
@@ -1871,14 +1932,36 @@ void DocumentLoader::CommitNavigation() {
   // inherit an aliased security context.
   Document* owner_document = nullptr;
 
-  // TODO(dcheng): This differs from the behavior of both IE and Firefox: the
-  // origin is inherited from the document that loaded the URL.
+  // Calculate `owner_document` from which the committing navigation should
+  // inherit the cookie URL and inherit/alias the SecurityOrigin.
   if (Document::ShouldInheritSecurityOriginFromOwner(Url())) {
+    // Base `owner_frame` on parent-or-opener heuristic.
     Frame* owner_frame = frame_->Tree().Parent();
-    if (!owner_frame)
+    if (!owner_frame && !url_.IsAboutSrcdocURL())
       owner_frame = frame_->Loader().Opener();
-    if (auto* owner_local_frame = DynamicTo<LocalFrame>(owner_frame))
+
+    // `owner_document` has to come from a local frame and
+    // 1) for "about:srcdoc" has to be the parent
+    // 2) for other cases ("about:blank" and initial empty document) has to be
+    //    the initiator/requestor of the navigation - see:
+    //    https://html.spec.whatwg.org/multipage/browsers.html#determining-the-origin
+    // The parent-or-owner heuristic above might not find the actual initiator
+    // of the navigation in the 2nd case (e.g. see the
+    // SameSiteSiblingToAboutBlank_CrossSiteTop testcase).  To limit (but not
+    // eliminate :-/) incorrect cases we require that `owner_document`'s origin
+    // is same origin with `requestor_origin`.
+    //
+    // TODO(https://crbug.com/1176291): Improve heuristics for finding the
+    // correct initiator, to properly inherit/alias `document.domain` in more
+    // cases.
+    auto* owner_local_frame = DynamicTo<LocalFrame>(owner_frame);
+    if (owner_local_frame &&
+        (url_.IsAboutSrcdocURL() || !requestor_origin_ ||
+         owner_local_frame->GetSecurityContext()
+             ->GetSecurityOrigin()
+             ->IsSameOriginWith(requestor_origin_.get()))) {
       owner_document = owner_local_frame->GetDocument();
+    }
   }
 
   LocalDOMWindow* previous_window = frame_->DomWindow();
@@ -1926,6 +2009,7 @@ void DocumentLoader::CommitNavigation() {
           .WithWindow(frame_->DomWindow(), owner_document)
           .ForInitialEmptyDocument(commit_reason_ ==
                                    CommitReason::kInitialization)
+          .ForPrerendering(is_prerendering_)
           .WithURL(Url())
           .WithTypeFrom(MimeType())
           .WithSrcdocDocument(loading_srcdoc_)
@@ -2034,7 +2118,7 @@ void DocumentLoader::CommitNavigation() {
     // Notify the browser process about the commit.
     FrameNavigationDisabler navigation_disabler(*frame_);
     if (commit_reason_ == CommitReason::kInitialization) {
-      GetLocalFrameClient().DidCreateInitialEmptyDocument();
+      // There's no observers yet so nothing to notify.
     } else if (IsJavaScriptURLOrXSLTCommit()) {
       GetLocalFrameClient().DidCommitDocumentReplacementNavigation(this);
     } else {

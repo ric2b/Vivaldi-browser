@@ -283,7 +283,7 @@ void V4L2VideoEncodeAccelerator::InitializeTask(const Config& config,
 
   native_input_mode_ =
       config.storage_type.value_or(Config::StorageType::kShmem) ==
-      Config::StorageType::kDmabuf;
+      Config::StorageType::kGpuMemoryBuffer;
 
   input_queue_ = device_->GetQueue(V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
   output_queue_ = device_->GetQueue(V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
@@ -509,7 +509,7 @@ bool V4L2VideoEncodeAccelerator::InitInputMemoryType(const Config& config) {
       case Config::StorageType::kShmem:
         input_memory_type_ = V4L2_MEMORY_USERPTR;
         break;
-      case Config::StorageType::kDmabuf:
+      case Config::StorageType::kGpuMemoryBuffer:
         input_memory_type_ = V4L2_MEMORY_DMABUF;
         break;
     }
@@ -860,6 +860,7 @@ void V4L2VideoEncodeAccelerator::MaybeFlushImageProcessor() {
               << "|image_processor_|. Move the flush request to the encoder";
     image_processor_input_queue_.pop();
     encoder_input_queue_.emplace(nullptr, false);
+    Enqueue();
   }
 }
 
@@ -1765,11 +1766,12 @@ bool V4L2VideoEncodeAccelerator::InitControls(const Config& config) {
 
   // Optional controls:
   // - Enable macroblock-level bitrate control.
-  // - Set GOP length, or default 0 to disable periodic key frames.
+
   device_->SetExtCtrls(V4L2_CTRL_CLASS_MPEG,
-                       {V4L2ExtCtrl(V4L2_CID_MPEG_VIDEO_MB_RC_ENABLE, 1),
-                        V4L2ExtCtrl(V4L2_CID_MPEG_VIDEO_GOP_SIZE,
-                                    config.gop_length.value_or(0))});
+                       {V4L2ExtCtrl(V4L2_CID_MPEG_VIDEO_MB_RC_ENABLE, 1)});
+
+  // - Set GOP length, or default 0 to disable periodic key frames.
+  device_->SetGOPLength(config.gop_length.value_or(0));
 
   return true;
 }

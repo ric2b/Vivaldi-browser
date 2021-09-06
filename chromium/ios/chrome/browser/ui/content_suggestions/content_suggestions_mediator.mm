@@ -21,7 +21,7 @@
 #import "components/reading_list/ios/reading_list_model_bridge_observer.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/ntp_tiles/most_visited_sites_observer_bridge.h"
-#include "ios/chrome/browser/pref_names.h"
+#import "ios/chrome/browser/policy/policy_util.h"
 #import "ios/chrome/browser/pref_names.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_discover_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_item.h"
@@ -139,6 +139,9 @@ const NSInteger kMaxNumMostVisitedTiles = 4;
 // Number of unread items in reading list model.
 @property(nonatomic, assign) NSInteger readingListUnreadCount;
 
+// Whether the incognito mode is available.
+@property(nonatomic, assign) BOOL incognitoAvailable;
+
 @end
 
 @implementation ContentSuggestionsMediator
@@ -160,6 +163,7 @@ const NSInteger kMaxNumMostVisitedTiles = 4;
     isGoogleDefaultSearchProvider:(BOOL)isGoogleDefaultSearchProvider {
   self = [super init];
   if (self) {
+    _incognitoAvailable = !IsIncognitoModeDisabled(prefService);
     _contentSuggestionsEnabled =
         prefService->FindPreference(prefs::kArticlesForYouEnabled);
     if (!IsDiscoverFeedEnabled()) {
@@ -578,6 +582,7 @@ const NSInteger kMaxNumMostVisitedTiles = 4;
     ContentSuggestionsMostVisitedItem* item =
         ConvertNTPTile(tile, self.mostVisitedSectionInfo);
     item.commandHandler = self.commandHandler;
+    item.incognitoAvailable = self.incognitoAvailable;
     [self.faviconMediator fetchFaviconForMostVisited:item];
     [self.freshMostVisitedItems addObject:item];
   }
@@ -808,7 +813,6 @@ const NSInteger kMaxNumMostVisitedTiles = 4;
 }
 
 - (void)setDiscoverFeed:(UIViewController*)discoverFeed {
-  DCHECK(_discoverFeed != discoverFeed);
   _discoverFeed = discoverFeed;
   _discoverItem.discoverFeed = _discoverFeed;
   // The UICollectionView -reloadData method is a no-op if it is called at the

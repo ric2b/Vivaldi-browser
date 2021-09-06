@@ -28,7 +28,6 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_text_input_info.h"
 #include "third_party/blink/public/platform/web_text_input_type.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -61,7 +60,7 @@ class CORE_EXPORT InputMethodController final
   };
 
   explicit InputMethodController(LocalDOMWindow&, LocalFrame&);
-  virtual ~InputMethodController();
+  ~InputMethodController() override;
   void Trace(Visitor*) const override;
 
   // international text input composition
@@ -134,7 +133,7 @@ class CORE_EXPORT InputMethodController final
 
   // Returns either the focused editable element's control bounds or the
   // EditContext's control and selection bounds if available.
-  void GetLayoutBounds(WebRect* control_bounds, WebRect* selection_bounds);
+  void GetLayoutBounds(gfx::Rect* control_bounds, gfx::Rect* selection_bounds);
 
   // Sets the state of the VK show()/hide() calls from virtualkeyboard.
   void SetVirtualKeyboardVisibilityRequest(

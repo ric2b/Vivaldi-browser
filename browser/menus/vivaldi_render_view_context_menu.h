@@ -28,13 +28,20 @@ class VivaldiRenderViewContextMenu: public RenderViewContextMenu {
   using Container = extensions::vivaldi::context_menu::Container;
 
   VivaldiRenderViewContextMenu(content::RenderFrameHost* render_frame_host,
-                         const content::ContextMenuParams& params);
+                         const content::ContextMenuParams& params,
+                         gfx::NativeView parent_view);
   ~VivaldiRenderViewContextMenu() override;
+
+  class Delegate {
+   public:
+    virtual void OnDestroyed(VivaldiRenderViewContextMenu* menu) = 0;
+  };
 
   // Called by the owner of this controller.
   static VivaldiRenderViewContextMenu* Create(
       content::RenderFrameHost* render_frame_host,
-      const content::ContextMenuParams& params);
+      const content::ContextMenuParams& params,
+      gfx::NativeView parent_view);
   // Called by the JS api request.
   static VivaldiRenderViewContextMenu* GetActive(int id);
   // Returns true for the context menu requests we want to set up from UI.
@@ -104,12 +111,16 @@ class VivaldiRenderViewContextMenu: public RenderViewContextMenu {
   // Access to the model to allow setting up the menu in an external builder.
   ui::SimpleMenuModel* root_menu_model() { return &menu_model_; }
 
+  gfx::NativeView parent_view() { return parent_view_; }
 
   void SetCommandId(int command_id, int api_id);
   // Returns true if command id is mapped to an IDC value.
   bool IsCommandIdStatic(int command_id) const;
-  void SetDelegate(ui::SimpleMenuModel::Delegate* delegate) {
-    delegate_ = delegate;
+  void SetModelDelegate(ui::SimpleMenuModel::Delegate* delegate) {
+    model_delegate_ = delegate;
+  }
+  void SetMenuDelegate(Delegate* delegate) {
+    menu_delegate_ = delegate;
   }
 
  private:
@@ -125,11 +136,13 @@ class VivaldiRenderViewContextMenu: public RenderViewContextMenu {
   static int active_id_counter_;
 
   int id_;
+  gfx::NativeView parent_view_;
   content::WebContents* const embedder_web_contents_;
   IdToIntMap command_id_map_;
   IdToSimpleMenuModelMap menu_model_map_;
   // Delegate that handles commands with dynamic id.
-  ui::SimpleMenuModel::Delegate* delegate_ = nullptr;
+  ui::SimpleMenuModel::Delegate* model_delegate_ = nullptr;
+  Delegate* menu_delegate_ = nullptr;
   bool is_executing_command_ = false;
   ui::SimpleMenuModel* populating_menu_model_ = nullptr;
 

@@ -18,16 +18,10 @@ struct ContentInjectionRuleCore {
   ContentInjectionRuleCore& operator=(ContentInjectionRuleCore&& other);
   bool operator==(const ContentInjectionRuleCore& other) const;
 
-  ContentInjectionRuleCore Clone();
-
   bool is_allow_rule = false;
 
   std::vector<std::string> included_domains;
   std::vector<std::string> excluded_domains;
-
- private:
-  ContentInjectionRuleCore(ContentInjectionRuleCore& other);
-  ContentInjectionRuleCore& operator=(ContentInjectionRuleCore& other) = delete;
 };
 
 struct CosmeticRule {

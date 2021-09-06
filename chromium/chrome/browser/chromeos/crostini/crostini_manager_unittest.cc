@@ -18,6 +18,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
+#include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/chromeos/crostini/ansible/ansible_management_test_helper.h"
 #include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
 #include "chrome/browser/chromeos/crostini/crostini_test_util.h"
@@ -26,7 +27,6 @@
 #include "chrome/browser/chromeos/crostini/fake_crostini_features.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/policy/powerwash_requirements_checker.h"
-#include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/component_updater/fake_cros_component_manager.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/common/chrome_features.h"
@@ -168,7 +168,8 @@ class CrostiniManagerTest : public testing::Test {
     crostini_manager()->InstallTermina(
         base::BindOnce([](base::OnceClosure callback,
                           CrostiniResult) { std::move(callback).Run(); },
-                       run_loop.QuitClosure()));
+                       run_loop.QuitClosure()),
+        /*is_initial_install=*/false);
     run_loop.Run();
   }
 

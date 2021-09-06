@@ -87,6 +87,11 @@ struct PlatformVideoConfig {
   VideoRotation rotation;
 };
 
+struct Strides {
+  size_t stride_Y;
+  size_t stride_UV;
+};
+
 }  // namespace media
 
 #endif  // PLATFORM_MEDIA_COMMON_PLATFORM_MEDIA_PIPELINE_TYPES_H_

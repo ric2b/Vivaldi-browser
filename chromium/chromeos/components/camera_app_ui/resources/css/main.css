@@ -24,6 +24,9 @@
   --exit-easing: cubic-bezier(0.4, 0, 1, 1);
 
   /* App specific settings */
+  --default-font-family: 'Google Sans', sans-serif;
+  --fixed-width-font-family: 'Cousine', monospace;
+
   --focus-color: rgba(var(--blue-600-dark-rgb), 0.7);
 }
 
@@ -36,8 +39,6 @@ audio {
 }
 
 body {
-  --default-font-family: 'Google Sans', sans-serif;
-
   background: black;
   bottom: 0;
   font-family: var(--default-font-family);
@@ -52,7 +53,13 @@ body {
 }
 
 button,
-input,
+input {
+  --focus-ring-size: 3px;
+}
+
+button,
+input[type=radio],
+input[type=checkbox],
 label {
   background-color: transparent;
   border-radius: 4px;
@@ -64,14 +71,13 @@ label {
   position: relative;
 }
 
-input {
+input[type=radio],
+input[type=checkbox] {
   -webkit-appearance: none;
 }
 
 body.tab-navigation button:focus::after,
 body.tab-navigation input:focus::after {
-  --focus-ring-size: 3px;
-
   border: 2px solid var(--focus-color);
   border-radius: 4px;
   bottom: calc(-1 * var(--focus-ring-size));
@@ -380,14 +386,12 @@ body.tab-navigation .mode-item>input:focus + span::after {
 }
 
 button.shutter {
+  --focus-ring-size: 9px;
+
   display: none;
   height: 60px;
   width: 60px;
   z-index: 1;  /* On top of transforming switch-mode buttons. */
-}
-
-body.tab-navigation button.shutter:focus::after {
-  --focus-ring-size: 9px;
 }
 
 body.video #recordvideo,
@@ -593,6 +597,8 @@ body.mode-switching:not(.streaming) #camera-mode {
 }
 
 #switch-device {
+  --focus-ring-size: 8px;
+
   background-image: url(/images/camera_button_switch_device.svg);
   height: var(--big-icon);
   width: var(--big-icon);
@@ -609,10 +615,6 @@ body.mode-switching:not(.streaming) #camera-mode {
   100% {
     transform: rotate(-180deg);
   }
-}
-
-body.tab-navigation #switch-device:focus::after {
-  --focus-ring-size: 8px;
 }
 
 #gallery-enter {
@@ -839,7 +841,8 @@ body.streaming .preview-content {
 }
 
 body.mirror .preview-content ,
-body.mirror #preview-focus {
+body.mirror #preview-focus,
+body.mirror #preview-face-overlay {
   transform: scaleX(-1);
 }
 
@@ -854,6 +857,11 @@ body.mirror #preview-focus {
 #preview-focus-aim {
   position: absolute;
   transform: translate(-50%, -50%);
+}
+
+#preview-face-overlay {
+  pointer-events: none;
+  position: absolute;
 }
 
 #preview-video {
@@ -874,7 +882,7 @@ body.mirror:not(.streaming) #preview-video {
   transform: scale(-1.03, 1.03);
 }
 
-#preview-metadata {
+#expert-controls {
   font-size: 14px;
   left: 60px;
   position: absolute;
@@ -882,25 +890,34 @@ body.mirror:not(.streaming) #preview-video {
   top: 10px;
 }
 
-.metadata-row {
+#expert-controls input[type=range] {
+  vertical-align: middle;
+}
+
+.expert-control-row {
   margin-top: 5px;
 }
 
-.metadata-category {
-  background-color: rgba(255, 255, 255, 0.7);
+#expert-controls .title {
+  background-color: rgb(0, 128, 0);
   border-radius: 3px;
-  color: grey;
+  color: white;
   display: inline;
   font-weight: bold;
   padding: 1px 3px 1px 3px;
 }
 
-.mode-on .metadata-category {
-  background-color: rgb(0, 128, 0);
-  color: white;
+#expert-controls input,
+#expert-controls select {
+  pointer-events: auto;
 }
 
-.metadata-value {
+#expert-controls .metadata-row:not(.mode-on) .title {
+  background-color: rgba(255, 255, 255, 0.7);
+  color: grey;
+}
+
+#expert-controls .value {
   background-color: rgba(255, 255, 255, 0.3);
   border-radius: 3px;
   display: inline;
@@ -924,7 +941,7 @@ body.mirror:not(.streaming) #preview-video {
   top: 0;
 }
 
-body:not(.streaming) #preview-metadata,
+body:not(.streaming) #expert-controls,
 body:not(.streaming) #preview-grid,
 body:not(.streaming) #preview-focus,
 body:not(.streaming) #open-settings,
@@ -933,15 +950,17 @@ body:not(.streaming) #options-group {
   visibility: hidden;
 }
 
-body:not(.expert) #preview-metadata,
-body:not(.expert) #preview-metadata::before,
-body:not(.show-metadata) #preview-metadata,
-body:not(.show-metadata) #preview-metadata::before {
-  visibility: hidden;
+body:not(.expert) #settings-expert,
+body:not(.expert) #expert-controls,
+body:not(.show-metadata) #expert-controls>.metadata-row,
+body:not(.video) #expert-controls>.video-option-row,
+body:not(.custom-video-parameters) #expert-controls>.video-option-row {
+  display: none;
 }
 
-body:not(.expert) #settings-expert {
-  display: none;
+#video-profile,
+#video-level {
+  pointer-events: auto;
 }
 
 #preview-grid-horizontal {
@@ -1066,14 +1085,15 @@ body.recording-ui-paused #record-time {
 }
 
 body.recording-ui-paused #record-time .icon,
-body:not(.recording-ui-paused) #record-time [i18n-content=record_video_paused_msg] {
+body:not(.recording-ui-paused) #record-time [i18n-text=record_video_paused_msg] {
   display: none;
 }
 
 #record-time #record-time-msg,
-#record-time [i18n-content=record_video_paused_msg] {
+#record-time [i18n-text=record_video_paused_msg] {
   color: white;
   flex-shrink: 0;
+  font-family: var(--fixed-width-font-family);
   font-size: 13px;
 }
 
@@ -1166,29 +1186,40 @@ body:not(.recording-ui-paused) #record-time [i18n-content=record_video_paused_ms
 }
 
 #banner {
+  --bottom-down: -130px;
+  --bottom-up: 31px;
   background: white;
   border-radius: 8px;
-  bottom: -130px;
+  bottom: var(--bottom-up);
   display: none;
   padding: 26px 29px;
   width: 460px;
 }
 
 #banner.animate {
-  animation: emerge 6000ms var(--enter-easing);
+  --present-duration: 5000ms;
+  --hide-delay: calc(var(--moderate2-duration) + var(--present-duration));
+  animation:
+    show-banner var(--moderate2-duration) var(--enter-easing),
+    hide-banner var(--moderate2-duration) var(--hide-delay) var(--exit-easing);
   display: block;
 }
 
-@keyframes emerge {
-  0%,
-  100% {
-    bottom: -130;
+@keyframes show-banner {
+  0% {
+    bottom: var(--bottom-down);
   }
-  8%,
-  92% {
-    /* exit-easing. We cannot use variable here (https://crbug.com/1066798) */
-    animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
-    bottom: 31px;
+  100% {
+    bottom: var(--bottom-up);
+  }
+}
+
+@keyframes hide-banner {
+  0% {
+    bottom: var(--bottom-up);
+  }
+  100% {
+    bottom: var(--bottom-down);
   }
 }
 
@@ -1344,11 +1375,11 @@ body:not(.has-front-camera):not(.has-back-camera) #builtin-video-header {
   display: none;
 }
 
-body.grid-3x3 .description span[i18n-content=label_grid_3x3],
-body.grid-4x4 .description span[i18n-content=label_grid_4x4],
-body.grid-golden .description span[i18n-content=label_grid_golden],
-body.timer-3s .description span[i18n-content=label_timer_3s],
-body.timer-10s .description span[i18n-content=label_timer_10s],
+body.grid-3x3 .description span[i18n-text=label_grid_3x3],
+body.grid-4x4 .description span[i18n-text=label_grid_4x4],
+body.grid-golden .description span[i18n-text=label_grid_golden],
+body.timer-3s .description span[i18n-text=label_timer_3s],
+body.timer-10s .description span[i18n-text=label_timer_10s],
 .menu-item.resol-item .description span {
   display: inline;
 }
@@ -1384,7 +1415,10 @@ body.tab-navigation button.menu-item:focus::after {
   right: 2px;
 }
 
-.menu-header .icon {
+.menu-header button.icon {
+  /* Icon image is small enough and won't be covered by -1px */
+  --focus-ring-size: -1px;
+
   background-image: url(/images/settings_button_back.svg);
 }
 
@@ -1605,25 +1639,29 @@ body.photo.scan-barcode .barcode-scan-box {
   --text-expand-button-height: 40px;
   --text-line-height: 24px;
   --text-padding-vertical: 8px;
+  /* Avoid collision with scan-box and preview-box */
+  --top: max(8px, min(10%, 33.33% - var(--text-line-height) -
+      var(--text-expand-button-height) - 2 * var(--text-padding-vertical) -
+      var(--min-scanbox-distance)));
 
   left: 50%;
   max-width: min(80%, var(--chip-max-width));
   opacity: 1;
   pointer-events: auto;
   position: absolute;
-  /* Avoid collision with scan-box and preview-box */
-  top: max(8px, min(10%, 33.33% - var(--text-line-height) -
-      var(--text-expand-button-height) - 2 * var(--text-padding-vertical) -
-      var(--min-scanbox-distance)));
+  top: var(--top);
   transform: translateX(-50%);
-  transition: opacity var(--moderate1-duration) var(--standard-easing);
+  transition: opacity var(--fast2-duration) linear,
+              top var(--fast2-duration) var(--standard-easing);
   z-index: 50;
 }
 
 .barcode-chip-container.invisible {
   opacity: 0;
-  transition: opacity var(--moderate1-duration) var(--standard-easing),
-              visibility 0s var(--moderate1-duration);
+  top: calc(var(--top) + 2px);
+  transition: opacity var(--fast2-duration) linear,
+              top var(--fast2-duration) var(--standard-easing),
+              visibility 0s var(--fast2-duration);
 }
 
 .barcode-chip-url {

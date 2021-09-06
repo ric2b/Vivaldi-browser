@@ -53,6 +53,7 @@
 #include "storage/browser/test/fake_blob.h"
 #include "storage/browser/test/mock_quota_manager_proxy.h"
 #include "storage/browser/test/mock_special_storage_policy.h"
+#include "storage/common/quota/padding_key.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
 #include "url/origin.h"
@@ -425,11 +426,6 @@ blink::mojom::FetchAPIResponsePtr SetCacheName(
   return response;
 }
 
-std::unique_ptr<crypto::SymmetricKey> CreateTestPaddingKey() {
-  return crypto::SymmetricKey::Import(crypto::SymmetricKey::HMAC_SHA1,
-                                      "abc123");
-}
-
 void OnBadMessage(std::string* result) {
   *result = "CSDH_UNEXPECTED_OPERATION";
 }
@@ -453,8 +449,7 @@ class TestCacheStorageCache : public LegacyCacheStorageCache {
                                 quota_manager_proxy,
                                 std::move(blob_storage_context),
                                 0 /* cache_size */,
-                                0 /* cache_padding */,
-                                CreateTestPaddingKey()),
+                                0 /* cache_padding */),
         delay_backend_creation_(false) {}
 
   ~TestCacheStorageCache() override { base::RunLoop().RunUntilIdle(); }
@@ -565,12 +560,12 @@ class CacheStorageCacheTest : public testing::Test {
 
     quota_policy_ = base::MakeRefCounted<storage::MockSpecialStoragePolicy>();
     mock_quota_manager_ = base::MakeRefCounted<storage::MockQuotaManager>(
-        is_incognito, temp_dir_path_, base::ThreadTaskRunnerHandle::Get().get(),
-        quota_policy_.get());
+        is_incognito, temp_dir_path_, base::ThreadTaskRunnerHandle::Get(),
+        quota_policy_);
     SetQuota(1024 * 1024 * 100);
 
     quota_manager_proxy_ = base::MakeRefCounted<storage::MockQuotaManagerProxy>(
-        mock_quota_manager_.get(), base::ThreadTaskRunnerHandle::Get().get());
+        mock_quota_manager_.get(), base::ThreadTaskRunnerHandle::Get());
 
     CreateRequests(blob_storage_context);
 
@@ -597,7 +592,6 @@ class CacheStorageCacheTest : public testing::Test {
   }
 
   void TearDown() override {
-    quota_manager_proxy_->SimulateQuotaManagerDestroyed();
     disk_cache::FlushCacheThreadForTesting();
     content::RunAllTasksUntilIdle();
   }
@@ -650,6 +644,18 @@ class CacheStorageCacheTest : public testing::Test {
     return response;
   }
 
+  blink::mojom::FetchAPIResponsePtr CreateOpaqueResponse() {
+    auto response = CreateBlobBodyResponse();
+    response->response_type = network::mojom::FetchResponseType::kOpaque;
+    response->response_time = base::Time::Now();
+
+    // CacheStorage depends on fetch to provide the opaque response padding
+    // value now.  We prepolute a padding value here to simulate that.
+    response->padding = 10;
+
+    return response;
+  }
+
   blink::mojom::FetchAPIResponsePtr CreateBlobBodyResponseWithQuery() {
     blink::mojom::FetchAPIResponsePtr response = CreateBlobBodyResponse();
     response->url_list = {BodyUrlWithQuery()};
@@ -660,21 +666,21 @@ class CacheStorageCacheTest : public testing::Test {
   blink::mojom::FetchAPIResponsePtr CreateNoBodyResponse() {
     return blink::mojom::FetchAPIResponse::New(
         std::vector<GURL>({NoBodyUrl()}), 200, "OK",
-        network::mojom::FetchResponseType::kDefault,
+        network::mojom::FetchResponseType::kDefault, /*padding=*/0,
         network::mojom::FetchResponseSource::kUnspecified,
         base::flat_map<std::string, std::string>(kHeaders.cbegin(),
                                                  kHeaders.cend()),
-        base::nullopt /* mime_type */, net::HttpRequestHeaders::kGetMethod,
-        nullptr /* blob */, blink::mojom::ServiceWorkerResponseError::kUnknown,
-        response_time_, std::string() /* cache_storage_cache_name */,
-        std::vector<std::string>() /* cors_exposed_header_names */,
-        nullptr /* side_data_blob */,
-        nullptr /* side_data_blob_for_cache_put */,
+        /*mime_type=*/base::nullopt, net::HttpRequestHeaders::kGetMethod,
+        /*blob=*/nullptr, blink::mojom::ServiceWorkerResponseError::kUnknown,
+        response_time_, /*cache_storage_cache_name=*/std::string(),
+        /*cors_exposed_header_names=*/std::vector<std::string>(),
+        /*side_data_blob=*/nullptr,
+        /*side_data_blob_cache_put=*/nullptr,
         network::mojom::ParsedHeaders::New(),
         net::HttpResponseInfo::CONNECTION_INFO_UNKNOWN,
-        "unknown" /* alpn_negotiated_protocol */,
-        false /* loaded_with_credentials */, false /* was_fetched_via_spdy */,
-        false /* has_range_requested */);
+        /*alpn_negotiated_protocol=*/"unknown",
+        /*was_fetched_via_spdy=*/false, /*has_range_requested=*/false,
+        /*auth_challenge_info=*/base::nullopt);
   }
 
   void CopySideDataToResponse(const std::string& uuid,
@@ -958,6 +964,8 @@ class CacheStorageCacheTest : public testing::Test {
   bool TestResponseType(network::mojom::FetchResponseType response_type) {
     blink::mojom::FetchAPIResponsePtr body_response = CreateBlobBodyResponse();
     body_response->response_type = response_type;
+    if (storage::ShouldPadResponseType(response_type))
+      body_response->padding = 10;
     EXPECT_TRUE(Put(body_request_, std::move(body_response)));
     EXPECT_TRUE(Match(body_request_));
     EXPECT_TRUE(Delete(body_request_));
@@ -2204,9 +2212,6 @@ TEST_F(CacheStorageCacheTest, VerifyOpaqueSizePadding) {
   blink::mojom::FetchAPIResponsePtr non_opaque_response =
       CreateBlobBodyResponse();
   non_opaque_response->response_time = response_time;
-  EXPECT_EQ(0, LegacyCacheStorageCache::CalculateResponsePadding(
-                   *non_opaque_response, CreateTestPaddingKey().get(),
-                   0 /* side_data_size */));
   EXPECT_TRUE(Put(non_opaque_request, std::move(non_opaque_response)));
   int64_t unpadded_no_data_cache_size = Size();
 
@@ -2224,9 +2229,6 @@ TEST_F(CacheStorageCacheTest, VerifyOpaqueSizePadding) {
   blink::mojom::FetchAPIResponsePtr non_opaque_response_clone =
       CreateBlobBodyResponse();
   non_opaque_response_clone->response_time = response_time;
-  EXPECT_EQ(0, LegacyCacheStorageCache::CalculateResponsePadding(
-                   *non_opaque_response_clone, CreateTestPaddingKey().get(),
-                   unpadded_side_data_size));
 
   // Now write an identically sized opaque response.
   blink::mojom::FetchAPIRequestPtr opaque_request =
@@ -2235,14 +2237,10 @@ TEST_F(CacheStorageCacheTest, VerifyOpaqueSizePadding) {
   // Same URL length means same cache sizes (ignoring padding).
   EXPECT_EQ(opaque_request->url.spec().length(),
             non_opaque_request->url.spec().length());
-  blink::mojom::FetchAPIResponsePtr opaque_response(CreateBlobBodyResponse());
-  opaque_response->response_type = network::mojom::FetchResponseType::kOpaque;
+  blink::mojom::FetchAPIResponsePtr opaque_response(CreateOpaqueResponse());
   opaque_response->response_time = response_time;
 
   EXPECT_TRUE(Put(opaque_request, std::move(opaque_response)));
-  // This test is fragile. Right now it deterministically adds non-zero padding.
-  // But if the url, padding key, or padding algorithm change it might become
-  // zero.
   int64_t size_after_opaque_put = Size();
   int64_t opaque_padding = size_after_opaque_put -
                            2 * unpadded_no_data_cache_size -
@@ -2266,39 +2264,15 @@ TEST_F(CacheStorageCacheTest, VerifyOpaqueSizePadding) {
   // And delete the opaque response entirely.
   EXPECT_TRUE(Delete(opaque_request));
   EXPECT_EQ(unpadded_total_resource_size, Size());
-
-  // Now write an identically sized opaque response with the
-  // loaded_with_credentials flag set.
-  blink::mojom::FetchAPIRequestPtr credentialed_opaque_request =
-      BackgroundFetchSettledFetch::CloneRequest(non_opaque_request);
-  credentialed_opaque_request->url = GURL("http://example.com/opaque.html");
-  // Same URL length means same cache sizes (ignoring padding).
-  EXPECT_EQ(credentialed_opaque_request->url.spec().length(),
-            non_opaque_request->url.spec().length());
-  blink::mojom::FetchAPIResponsePtr credentialed_opaque_response(
-      CreateBlobBodyResponse());
-  credentialed_opaque_response->response_type =
-      network::mojom::FetchResponseType::kOpaque;
-  credentialed_opaque_response->response_time = response_time;
-  credentialed_opaque_response->loaded_with_credentials = true;
-
-  EXPECT_TRUE(Put(credentialed_opaque_request,
-                  std::move(credentialed_opaque_response)));
-
-  int64_t size_after_credentialed_opaque_put = Size();
-  int64_t credentialed_opaque_padding = size_after_credentialed_opaque_put -
-                                        2 * unpadded_no_data_cache_size -
-                                        unpadded_side_data_size;
-  ASSERT_NE(credentialed_opaque_padding, opaque_padding);
 }
 
 TEST_F(CacheStorageCacheTest, TestDifferentOpaqueSideDataSizes) {
   blink::mojom::FetchAPIRequestPtr request =
       BackgroundFetchSettledFetch::CloneRequest(body_request_);
-  blink::mojom::FetchAPIResponsePtr response(CreateBlobBodyResponse());
-  response->response_type = network::mojom::FetchResponseType::kOpaque;
-  base::Time response_time(base::Time::Now());
-  response->response_time = response_time;
+  blink::mojom::FetchAPIResponsePtr response(CreateOpaqueResponse());
+
+  auto response_time = response->response_time;
+
   EXPECT_TRUE(Put(request, std::move(response)));
   int64_t opaque_cache_size_no_side_data = Size();
 
@@ -2310,8 +2284,7 @@ TEST_F(CacheStorageCacheTest, TestDifferentOpaqueSideDataSizes) {
   int64_t opaque_cache_size_with_side_data = Size();
   EXPECT_NE(opaque_cache_size_with_side_data, opaque_cache_size_no_side_data);
 
-  // Write side data of a different size. The size should not affect the padding
-  // at all.
+  // Write side data of a different size. The padding should change.
   const std::string large_side_data(2048, 'X');
   EXPECT_NE(large_side_data.length(), small_side_data.length());
   scoped_refptr<net::IOBuffer> buffer2 =
@@ -2319,7 +2292,7 @@ TEST_F(CacheStorageCacheTest, TestDifferentOpaqueSideDataSizes) {
   EXPECT_TRUE(WriteSideData(request->url, response_time, buffer2,
                             large_side_data.length()));
   int side_data_delta = large_side_data.length() - small_side_data.length();
-  EXPECT_EQ(opaque_cache_size_with_side_data + side_data_delta, Size());
+  EXPECT_NE(opaque_cache_size_with_side_data + side_data_delta, Size());
 }
 
 TEST_F(CacheStorageCacheTest, TestDoubleOpaquePut) {
@@ -2328,16 +2301,14 @@ TEST_F(CacheStorageCacheTest, TestDoubleOpaquePut) {
 
   base::Time response_time(base::Time::Now());
 
-  blink::mojom::FetchAPIResponsePtr response(CreateBlobBodyResponse());
-  response->response_type = network::mojom::FetchResponseType::kOpaque;
+  blink::mojom::FetchAPIResponsePtr response(CreateOpaqueResponse());
   response->response_time = response_time;
   EXPECT_TRUE(Put(request, std::move(response)));
   int64_t size_after_first_put = Size();
 
   blink::mojom::FetchAPIRequestPtr request2 =
       BackgroundFetchSettledFetch::CloneRequest(body_request_);
-  blink::mojom::FetchAPIResponsePtr response2(CreateBlobBodyResponse());
-  response2->response_type = network::mojom::FetchResponseType::kOpaque;
+  blink::mojom::FetchAPIResponsePtr response2(CreateOpaqueResponse());
   response2->response_time = response_time;
   EXPECT_TRUE(Put(request2, std::move(response2)));
 

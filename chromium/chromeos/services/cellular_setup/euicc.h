@@ -7,6 +7,7 @@
 
 #include "chromeos/dbus/hermes/hermes_euicc_client.h"
 #include "chromeos/dbus/hermes/hermes_profile_client.h"
+#include "chromeos/network/cellular_inhibitor.h"
 #include "chromeos/services/cellular_setup/public/mojom/esim_manager.mojom.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 
@@ -15,6 +16,9 @@ class ObjectPath;
 }  // namespace dbus
 
 namespace chromeos {
+
+class CellularESimProfile;
+
 namespace cellular_setup {
 
 class ESimProfile;
@@ -39,8 +43,10 @@ class Euicc : public mojom::Euicc {
   void RequestPendingProfiles(RequestPendingProfilesCallback callback) override;
   void GetEidQRCode(GetEidQRCodeCallback callback) override;
 
-  // Updates list of eSIM profiles for this euicc from D-Bus.
-  void UpdateProfileList();
+  // Updates list of eSIM profiles for this euicc from with the given
+  // |esim_profile_states|.
+  void UpdateProfileList(
+      const std::vector<CellularESimProfile>& esim_profile_states);
 
   // Updates properties for this Euicc from D-Bus.
   void UpdateProperties();
@@ -59,18 +65,35 @@ class Euicc : public mojom::Euicc {
   using ProfileInstallResultCallback =
       base::OnceCallback<void(mojom::ProfileInstallResult)>;
 
-  void OnProfileInstallResult(InstallProfileFromActivationCodeCallback callback,
-                              HermesResponseStatus status,
-                              const dbus::ObjectPath* object_path);
-  void OnRequestPendingEventsResult(RequestPendingProfilesCallback callback,
-                                    HermesResponseStatus status);
+  void PerformInstallProfileFromActivationCode(
+      const std::string& activation_code,
+      const std::string& confirmation_code,
+      InstallProfileFromActivationCodeCallback callback,
+      std::unique_ptr<CellularInhibitor::InhibitLock> inhibit_lock);
+  void OnProfileInstallResult(
+      InstallProfileFromActivationCodeCallback callback,
+      std::unique_ptr<CellularInhibitor::InhibitLock> inhibit_lock,
+      HermesResponseStatus status,
+      const dbus::ObjectPath* object_path);
+  void PerformRequestPendingProfiles(
+      RequestPendingProfilesCallback callback,
+      std::unique_ptr<CellularInhibitor::InhibitLock> inhibit_lock);
+  void OnRequestPendingProfilesResult(
+      RequestPendingProfilesCallback callback,
+      std::unique_ptr<CellularInhibitor::InhibitLock> inhibit_lock,
+      HermesResponseStatus status);
   mojom::ProfileInstallResult GetPendingProfileInfoFromActivationCode(
       const std::string& activation_code,
       ESimProfile** profile_info);
-  ESimProfile* GetOrCreateESimProfile(
-      const dbus::ObjectPath& carrier_profile_path);
-  void RemoveUntrackedProfiles(
-      const std::set<dbus::ObjectPath>& new_profile_paths);
+  // Updates an ESimProfile in |esim_profiles_| with values from given
+  // |esim_profile_state| or creates new one if it doesn't exist. Returns
+  // pointer to ESimProfile object if one was created.
+  ESimProfile* UpdateOrCreateESimProfile(
+      const CellularESimProfile& esim_profile_state);
+  // Removes any ESimProfile object in |esim_profiles_| that doesn't exists in
+  // given |esim_profile_states|. Returns true if any profiles were removed.
+  bool RemoveUntrackedProfiles(
+      const std::vector<CellularESimProfile>& esim_profile_states);
 
   // Reference to ESimManager that owns this Euicc.
   ESimManager* esim_manager_;
@@ -78,6 +101,10 @@ class Euicc : public mojom::Euicc {
   mojom::EuiccPropertiesPtr properties_;
   dbus::ObjectPath path_;
   std::vector<std::unique_ptr<ESimProfile>> esim_profiles_;
+  // Maps profile dbus paths to InstallProfileFromActivation method callbacks
+  // that are pending creation of a new ESimProfile object.
+  std::map<dbus::ObjectPath, InstallProfileFromActivationCodeCallback>
+      install_calls_pending_create_;
 
   base::WeakPtrFactory<Euicc> weak_ptr_factory_{this};
 };

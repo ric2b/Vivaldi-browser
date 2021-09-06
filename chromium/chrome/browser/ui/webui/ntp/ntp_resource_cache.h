@@ -122,7 +122,6 @@ class NTPResourceCache : public content::NotificationObserver,
 
   Profile* profile_;
 
-  scoped_refptr<base::RefCountedMemory> new_tab_html_;
   scoped_refptr<base::RefCountedMemory> new_tab_css_;
   scoped_refptr<base::RefCountedMemory> new_tab_guest_html_;
   scoped_refptr<base::RefCountedMemory> new_tab_guest_signed_in_html_;

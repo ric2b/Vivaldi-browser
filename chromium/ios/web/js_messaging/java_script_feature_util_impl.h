@@ -11,12 +11,18 @@
 
 namespace web {
 
+class BrowserState;
 class JavaScriptFeature;
 
 namespace java_script_features {
 
 // Returns the JavaScriptFeatures built in to //ios/web.
-std::vector<JavaScriptFeature*> GetBuiltInJavaScriptFeatures();
+std::vector<JavaScriptFeature*> GetBuiltInJavaScriptFeatures(
+    BrowserState* browser_state);
+
+// For testing only: Force next webview creation to reset plugin placeholder
+// information.
+void ResetPluginPlaceholderJavaScriptFeature();
 
 }  // namespace java_script_features
 }  // namespace web

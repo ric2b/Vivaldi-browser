@@ -12,7 +12,7 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/values.h"
-#include "chrome/browser/chromeos/settings/device_settings_service.h"
+#include "chrome/browser/ash/settings/device_settings_service.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
 #include "chromeos/dbus/session_manager/session_manager_client.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -33,7 +33,7 @@ class OwnerKeyUtil;
 
 namespace chromeos {
 
-enum FeatureFlagsMigrationStatus {
+enum class FeatureFlagsMigrationStatus {
   kNoFeatureFlags,
   kAlreadyMigrated,
   kMigrationPerformed,
@@ -52,8 +52,6 @@ class OwnerSettingsServiceChromeOS : public ownership::OwnerSettingsService,
                                      public SessionManagerClient::Observer,
                                      public DeviceSettingsService::Observer {
  public:
-  typedef base::Callback<void(bool success)> OnManagementSettingsSetCallback;
-
   struct ManagementSettings {
     ManagementSettings();
     ~ManagementSettings();
@@ -201,5 +199,10 @@ class OwnerSettingsServiceChromeOS : public ownership::OwnerSettingsService,
 };
 
 }  // namespace chromeos
+
+// TODO(https://crbug.com/1164001): remove when moved to chrome/browser/ash/.
+namespace ash {
+using ::chromeos::OwnerSettingsServiceChromeOS;
+}
 
 #endif  // CHROME_BROWSER_CHROMEOS_OWNERSHIP_OWNER_SETTINGS_SERVICE_CHROMEOS_H_

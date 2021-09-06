@@ -19,7 +19,6 @@
 using notes_helper::AddFolder;
 using notes_helper::AddNote;
 using notes_helper::AllModelsMatch;
-using notes_helper::AllModelsMatchVerifier;
 using notes_helper::ContainsDuplicateNotes;
 using notes_helper::CountNotesWithContentMatching;
 using notes_helper::CreateAutoIndexedContent;

@@ -46,7 +46,6 @@
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_event_handler.h"
 #include "content/browser/renderer_host/ui_events_helper.h"
-#include "content/common/input_messages.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/common/content_features.h"
@@ -125,7 +124,7 @@
 #include "ui/base/ime/virtual_keyboard_controller.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #endif
@@ -326,6 +325,9 @@ RenderWidgetHostViewAura::RenderWidgetHostViewAura(
 
   cursor_manager_.reset(new CursorManager(this));
 
+  SetOverscrollControllerEnabled(
+      base::FeatureList::IsEnabled(features::kOverscrollHistoryNavigation));
+
   selection_controller_client_.reset(
       new TouchSelectionControllerClientAura(this));
   CreateSelectionController();
@@ -415,17 +417,7 @@ void RenderWidgetHostViewAura::InitAsPopup(
 }
 
 void RenderWidgetHostViewAura::Show() {
-  // If the viz::LocalSurfaceId is invalid, we may have been evicted,
-  // and no other visual properties have since been changed. Allocate a new id
-  // and start synchronizing.
-  if (!window_->GetLocalSurfaceId().is_valid()) {
-    window_->AllocateLocalSurfaceId();
-    SynchronizeVisualProperties(cc::DeadlinePolicy::UseDefaultDeadline(),
-                                window_->GetLocalSurfaceId());
-  }
-
-  window_->Show();
-  WasUnOccluded();
+  ShowWithVisibility(Visibility::VISIBLE);
 }
 
 void RenderWidgetHostViewAura::Hide() {
@@ -497,8 +489,7 @@ ui::TextInputClient* RenderWidgetHostViewAura::GetTextInputClient() {
 }
 
 RenderFrameHostImpl* RenderWidgetHostViewAura::GetFocusedFrame() const {
-  FrameTreeNode* focused_frame =
-      host()->delegate()->GetFrameTree()->GetFocusedFrame();
+  FrameTreeNode* focused_frame = host()->frame_tree()->GetFocusedFrame();
   if (!focused_frame)
     return nullptr;
   return focused_frame->current_frame_host();
@@ -737,6 +728,27 @@ void RenderWidgetHostViewAura::SetIsLoading(bool is_loading) {
 void RenderWidgetHostViewAura::RenderProcessGone() {
   UpdateCursorIfOverSelf();
   Destroy();
+}
+
+void RenderWidgetHostViewAura::ShowWithVisibility(
+    Visibility web_contents_visibility) {
+  // If the viz::LocalSurfaceId is invalid, we may have been evicted,
+  // and no other visual properties have since been changed. Allocate a new id
+  // and start synchronizing.
+  if (!window_->GetLocalSurfaceId().is_valid()) {
+    window_->AllocateLocalSurfaceId();
+    SynchronizeVisualProperties(cc::DeadlinePolicy::UseDefaultDeadline(),
+                                window_->GetLocalSurfaceId());
+  }
+
+  window_->Show();
+  WasUnOccluded();
+#if defined(OS_WIN)
+  if (web_contents_visibility == Visibility::HIDDEN &&
+      legacy_render_widget_host_HWND_) {
+    legacy_render_widget_host_HWND_->Hide();
+  }
+#endif  // defined(OS_WIN)
 }
 
 void RenderWidgetHostViewAura::Destroy() {
@@ -1512,7 +1524,7 @@ bool RenderWidgetHostViewAura::SetAutocorrectRange(
         "InputMethod.Assistive.Autocorrect.Count",
         TextInputClient::SubClass::kRenderWidgetHostViewAura);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     auto* input_method_manager =
         chromeos::input_method::InputMethodManager::Get();
     if (input_method_manager &&
@@ -1937,7 +1949,8 @@ void RenderWidgetHostViewAura::OnHostMovedInPixels(
 ////////////////////////////////////////////////////////////////////////////////
 // RenderWidgetHostViewAura, RenderFrameMetadataProvider::Observer
 // implementation:
-void RenderWidgetHostViewAura::OnRenderFrameMetadataChangedAfterActivation() {
+void RenderWidgetHostViewAura::OnRenderFrameMetadataChangedAfterActivation(
+    base::TimeTicks activation_time) {
   const cc::RenderFrameMetadata& metadata =
       host()->render_frame_metadata_provider()->LastRenderFrameMetadata();
   SetContentBackgroundColor(metadata.root_background_color);
@@ -2171,8 +2184,7 @@ void RenderWidgetHostViewAura::Shutdown() {
 
 bool RenderWidgetHostViewAura::ShouldVirtualKeyboardOverlayContent() const {
   // overlaycontent flag can only be set from main frame.
-  RenderFrameHostImpl* frame =
-      host()->delegate()->GetFrameTree()->GetMainFrame();
+  RenderFrameHostImpl* frame = host()->frame_tree()->GetMainFrame();
   if (!frame)
     return false;
 
@@ -2183,8 +2195,7 @@ void RenderWidgetHostViewAura::NotifyVirtualKeyboardOverlayRect(
     const gfx::Rect& keyboard_rect) {
   // geometrychange event can only be fired on main frame and not focused frame
   // which could be an iframe.
-  RenderFrameHostImpl* frame =
-      host()->delegate()->GetFrameTree()->GetMainFrame();
+  RenderFrameHostImpl* frame = host()->frame_tree()->GetMainFrame();
   if (!frame)
     return;
   frame->NotifyVirtualKeyboardOverlayRect(keyboard_rect);
@@ -2580,7 +2591,8 @@ void RenderWidgetHostViewAura::ScrollFocusedEditableNodeIntoRect(
   input_handler->ScrollFocusedEditableNodeIntoRect(node_rect);
 }
 
-void RenderWidgetHostViewAura::OnSynchronizedDisplayPropertiesChanged() {
+void RenderWidgetHostViewAura::OnSynchronizedDisplayPropertiesChanged(
+    bool rotation) {
   SynchronizeVisualProperties(cc::DeadlinePolicy::UseDefaultDeadline(),
                               base::nullopt);
 }
@@ -2667,6 +2679,7 @@ void RenderWidgetHostViewAura::InvalidateLocalSurfaceIdOnEviction() {
 }
 
 void RenderWidgetHostViewAura::ProcessDisplayMetricsChanged() {
+  // TODO(crbug.com/1169291): Unify per-platform DisplayObserver instances.
   needs_to_update_display_metrics_ = false;
   UpdateScreenInfo(window_);
   current_cursor_.SetDisplayInfo(

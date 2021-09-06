@@ -19,7 +19,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
-#include "chrome/browser/web_applications/system_web_app_manager_browsertest.h"
+#include "chrome/browser/web_applications/test/system_web_app_browsertest_base.h"
 #include "chrome/browser/web_applications/test/web_app_test.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -421,8 +421,7 @@ class SystemWebAppSessionRestoreTestChromeOS
   SystemWebAppSessionRestoreTestChromeOS()
       : SystemWebAppManagerBrowserTest(/*install_mock=*/false) {
     maybe_installation_ =
-        web_app::TestSystemWebAppInstallation::SetUpStandaloneSingleWindowApp(
-            install_from_web_app_info());
+        web_app::TestSystemWebAppInstallation::SetUpStandaloneSingleWindowApp();
     maybe_installation_->set_update_policy(
         web_app::SystemWebAppManager::UpdatePolicy::kOnVersionChange);
   }
@@ -467,6 +466,6 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppSessionRestoreTestChromeOS,
   }
 }
 
-INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_MANIFEST_INSTALL_P(
+INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
     SystemWebAppSessionRestoreTestChromeOS);
 INSTANTIATE_TEST_SUITE_P(All, SessionRestoreTestChromeOS, ::testing::Bool());

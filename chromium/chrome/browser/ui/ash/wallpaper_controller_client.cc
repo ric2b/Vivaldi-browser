@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 
+#include "ash/constants/ash_switches.h"
 #include "base/bind.h"
 #include "base/hash/sha1.h"
 #include "base/path_service.h"
@@ -22,7 +23,6 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/cryptohome/system_salt_getter.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/prefs/pref_service.h"
@@ -33,7 +33,6 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
-#include "ui/display/types/display_constants.h"
 
 namespace {
 
@@ -501,8 +500,7 @@ void WallpaperControllerClient::OpenWallpaperPicker() {
       apps::GetEventFlags(apps::mojom::LaunchContainer::kLaunchContainerWindow,
                           WindowOpenDisposition::NEW_WINDOW,
                           false /* preferred_containner */),
-      apps::mojom::LaunchSource::kFromChromeInternal,
-      display::kInvalidDisplayId);
+      apps::mojom::LaunchSource::kFromChromeInternal);
 }
 
 void WallpaperControllerClient::MaybeClosePreviewWallpaper() {

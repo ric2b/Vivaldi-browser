@@ -33,6 +33,7 @@
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "cc/mojom/render_frame_metadata.mojom.h"
+#include "components/power_scheduler/power_mode_voter.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/browser/renderer_host/frame_token_message_queue.h"
@@ -100,6 +101,7 @@ namespace content {
 class AgentSchedulingGroupHost;
 class BrowserAccessibilityManager;
 class FlingSchedulerBase;
+class FrameTree;
 class InputRouter;
 class MockRenderWidgetHost;
 class PeakGpuMemoryTracker;
@@ -151,6 +153,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
  public:
   // See the constructor for documentations.
   static std::unique_ptr<RenderWidgetHostImpl> Create(
+      FrameTree* frame_tree,
       RenderWidgetHostDelegate* delegate,
       AgentSchedulingGroupHost& agent_scheduling_host,
       int32_t routing_id,
@@ -166,6 +169,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // - ShutdownAndDestroyWidget(also_delete = true) is called.
   // - its RenderProcess exit.
   static RenderWidgetHostImpl* CreateSelfOwned(
+      FrameTree* frame_tree,
       RenderWidgetHostDelegate* delegate,
       AgentSchedulingGroupHost& agent_scheduling_host,
       int32_t routing_id,
@@ -185,6 +189,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // Use RenderWidgetHostImpl::From(rwh) to downcast a RenderWidgetHost to a
   // RenderWidgetHostImpl.
   static RenderWidgetHostImpl* From(RenderWidgetHost* rwh);
+
+  FrameTree* frame_tree() const { return frame_tree_; }
 
   void set_new_content_rendering_delay_for_testing(
       const base::TimeDelta& delay) {
@@ -221,7 +227,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void ForwardGestureEvent(
       const blink::WebGestureEvent& gesture_event) override;
   RenderProcessHost* GetProcess() override;
-  int GetRoutingID() override;
+  int GetRoutingID() final;
   RenderWidgetHostViewBase* GetView() override;
   bool IsCurrentlyUnresponsive() override;
   bool SynchronizeVisualProperties() override;
@@ -307,6 +313,10 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void SetPopupBounds(const gfx::Rect& bounds,
                       SetPopupBoundsCallback callback) override;
 
+  // Update the stored set of visual properties for the renderer. If 'propagate'
+  // is true, the new properties will be sent to the renderer process.
+  bool UpdateVisualProperties(bool propagate);
+
   // Notification that the screen info has changed.
   void NotifyScreenInfoChanged();
 
@@ -329,11 +339,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 
   RenderWidgetHostDelegate* delegate() const { return delegate_; }
 
-  // Allocate and bind new widget interfaces.
-  std::pair<mojo::PendingAssociatedRemote<blink::mojom::WidgetHost>,
-            mojo::PendingAssociatedReceiver<blink::mojom::Widget>>
-  BindNewWidgetInterfaces();
-
   // Bind the provided widget interfaces.
   void BindWidgetInterfaces(
       mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost> widget_host,
@@ -343,11 +348,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void BindPopupWidgetInterface(
       mojo::PendingAssociatedReceiver<blink::mojom::PopupWidgetHost>
           popup_widget_host);
-
-  // Allocate and bind new frame widget interfaces.
-  std::pair<mojo::PendingAssociatedRemote<blink::mojom::FrameWidgetHost>,
-            mojo::PendingAssociatedReceiver<blink::mojom::FrameWidget>>
-  BindNewFrameWidgetInterfaces();
 
   // Bind the provided frame widget interfaces.
   void BindFrameWidgetInterfaces(
@@ -367,16 +367,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // satisfied we are notified through Init(). This will always happen after
   // RendererWidgetCreated().
   void Init();
-
-  // OH NO DO NOT CALL THIS.
-  // This is called from RenderViewHost in order to mark itself as "live" even
-  // though there is actually no Widget created in the renderer, as there is no
-  // main frame attached to the RenderViewHost.
-  // TODO(crbug.com/419087): Remove this, and have RenderViewHost track its own
-  // live-ness. Then checks for a null `view_` in this class can just check
-  // `renderer_widget_created_` instead. And have RenderViewHost tell this class
-  // when the main frame goes away and thus the renderer widget along with it.
-  void SetRendererWidgetCreatedForInactiveRenderView();
 
   // Returns true if the frame content needs be stored before being evicted.
   bool ShouldShowStaleContentOnEviction();
@@ -500,7 +490,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // Resolves the given callback once all effects of prior input have been
   // fully realized.
   void WaitForInputProcessed(SyntheticGestureParams::GestureType type,
-                             SyntheticGestureParams::GestureSourceType source,
+                             content::mojom::GestureSourceType source,
                              base::OnceClosure callback);
 
   // Resolves the given callback once all effects of previously forwarded input
@@ -661,11 +651,15 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   //
   // This has the side effect of resetting state that should match a newly
   // created RenderWidget in the renderer.
+  //
+  // TODO(dcheng): Tests call this directly but shouldn't have to. Investigate
+  // getting rid of this.
   blink::VisualProperties GetInitialVisualProperties();
 
   // Pushes updated visual properties to the renderer as well as whether the
   // focused node should be scrolled into view.
-  bool SynchronizeVisualProperties(bool scroll_focused_node_into_view);
+  bool SynchronizeVisualProperties(bool scroll_focused_node_into_view,
+                                   bool propagate = true);
 
   // Similar to SynchronizeVisualProperties(), but performed even if
   // |visual_properties_ack_pending_| is set.  Used to guarantee that the
@@ -709,7 +703,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 
   // Signals that a frame with token |frame_token| was finished processing. If
   // there are any queued messages belonging to it, they will be processed.
-  void DidProcessFrame(uint32_t frame_token);
+  void DidProcessFrame(uint32_t frame_token, base::TimeTicks activation_time);
 
   mojo::Remote<viz::mojom::InputTargetClient>& input_target_client() {
     return input_target_client_;
@@ -823,6 +817,19 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   base::Optional<blink::VisualProperties>
   GetLastVisualPropertiesSentToRendererForTesting();
 
+  base::Optional<blink::VisualProperties> LastComputedVisualProperties() const;
+
+  // Generates widget creation params that will be passed to the renderer to
+  // create a new widget. As a side effect, this resets various widget and frame
+  // widget Mojo interfaces and rebinds them, passing the new endpoints in the
+  // returned params.
+  mojom::CreateFrameWidgetParamsPtr BindAndGenerateCreateFrameWidgetParams();
+  // TODO(danakj): This is a CreateNewWindow()-specific version of the above
+  // helper to work around the fact that things are in a weird state. Figure out
+  // why that's happening and remove this.
+  mojom::CreateFrameWidgetParamsPtr
+  BindAndGenerateCreateFrameWidgetParamsForNewWindow();
+
   // NOTE(david@vivaldi.com): Returns the status of the device
   // emulation.
   bool IsDeviceEmulationActive() { return device_emulation_active_; }
@@ -838,6 +845,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // If this object outlives |delegate|, DetachDelegate() must be called when
   // |delegate| goes away.
   RenderWidgetHostImpl(
+      FrameTree* frame_tree,
       bool self_owned,
       RenderWidgetHostDelegate* delegate,
       AgentSchedulingGroupHost& agent_scheduling_host,
@@ -1059,7 +1067,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // RenderFrameMetadataProvider::Observer implementation.
   void OnRenderFrameMetadataChangedBeforeActivation(
       const cc::RenderFrameMetadata& metadata) override;
-  void OnRenderFrameMetadataChangedAfterActivation() override;
+  void OnRenderFrameMetadataChangedAfterActivation(
+      base::TimeTicks activation_time) override;
   void OnRenderFrameSubmission() override {}
   void OnLocalSurfaceIdChanged(
       const cc::RenderFrameMetadata& metadata) override;
@@ -1095,6 +1104,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 
   // An expiry time for resetting the pending_user_activation_timer_.
   static const base::TimeDelta kActivationNotificationExpireTime;
+
+  FrameTree* frame_tree_;
 
   // RenderWidgetHost are either:
   // - Owned by RenderViewHostImpl.
@@ -1235,9 +1246,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 
   // The observers watching us.
   base::ObserverList<RenderWidgetHostObserver> observers_;
-
-  // TODO(https://crbug.com/1153966): Remove this after closing this bug.
-  int observers_size_for_debug_ = 0;
 
   // This is true if the renderer is currently unresponsive.
   bool is_unresponsive_ = false;
@@ -1390,6 +1398,9 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   mojo::AssociatedRemote<blink::mojom::Widget> blink_widget_;
 
   mojo::Remote<blink::mojom::WidgetCompositor> widget_compositor_;
+
+  std::unique_ptr<power_scheduler::PowerModeVoter> power_mode_input_voter_;
+  std::unique_ptr<power_scheduler::PowerModeVoter> power_mode_loading_voter_;
 
   // NOTE(david@vivaldi.com): |device_emulation_active_| indicates if the device
   // emulation is active for this specific RenderWidgetHostImpl.

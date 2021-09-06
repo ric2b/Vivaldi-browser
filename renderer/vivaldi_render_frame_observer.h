@@ -1,3 +1,5 @@
+// Copyright (c) 2021 Vivaldi Technologies AS. All rights reserved.
+
 #ifndef EXTENSIONS_HELPER_VIVALDI_RENDER_FRAME_OBSERVER_H_
 #define EXTENSIONS_HELPER_VIVALDI_RENDER_FRAME_OBSERVER_H_
 

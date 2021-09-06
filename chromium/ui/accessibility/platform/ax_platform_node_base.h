@@ -28,6 +28,8 @@ namespace ui {
 
 struct AXNodeData;
 
+// TODO(nektar): Move this struct over to AXNode so that it can be accessed by
+// AXPosition.
 struct AX_EXPORT AXHypertext {
   AXHypertext();
   ~AXHypertext();
@@ -68,7 +70,6 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   gfx::NativeViewAccessible ChildAtIndex(int index) const;
 
   std::string GetName() const;
-  base::string16 GetNameAsString16() const;
 
   // This returns nullopt if there's no parent, it's unable to find the child in
   // the list of its parent's children, or its parent doesn't have children.
@@ -275,14 +276,14 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   bool HasFocus();
 
   // If this node is a leaf, returns the visible accessible name of this node.
-  // Otherwise represents every non-leaf child node with a special "embedded
-  // object character", and every leaf child node with its visible accessible
+  // Otherwise represents every non-textual child node with a special "embedded
+  // object character", and every textual child node with its visible accessible
   // name. This is how displayed text and embedded objects are represented in
   // ATK and IA2 APIs.
   base::string16 GetHypertext() const;
 
-  // Returns the text of this node and all descendant nodes; including text
-  // found in embedded objects.
+  // Returns the text that is found inside this node and all its descendants;
+  // including text found in embedded objects.
   //
   // Only text displayed on screen is included. Text from ARIA and HTML
   // attributes that is either not displayed on screen, or outside this node,
@@ -346,8 +347,8 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
 
   ui::TextAttributeList ComputeTextAttributes() const;
 
-  // Get the number of items selected. It checks kMultiselectable and
-  // kFocusable. and uses GetSelectedItems to get the selected number.
+  // Get the number of items selected. It checks kMultiselectable and uses
+  // GetSelectedItems to get the selected number.
   int GetSelectionCount() const;
 
   // If this object is a container that supports selectable children, returns
@@ -402,7 +403,7 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
 #if BUILDFLAG(USE_ATK)
   using PlatformAttributeList = AtkAttributeSet*;
 #else
-  using PlatformAttributeList = std::vector<base::string16>;
+  using PlatformAttributeList = std::vector<std::wstring>;
 #endif
 
   // Compute the attributes exposed via platform accessibility objects and put

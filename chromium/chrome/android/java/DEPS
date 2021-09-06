@@ -32,6 +32,7 @@ include_rules = [
   "+components/browser_ui/settings/android",
   "+components/browser_ui/styles/android",
   "+components/browser_ui/widget/android",
+  "+components/component_updater/android/java/src/org/chromium/components/component_updater",
   "+components/crash/android/java",
   "+components/dom_distiller/content/browser/android/java/src/org/chromium/components/dom_distiller/content",
   "+components/dom_distiller/core/android/java/src/org/chromium/components/dom_distiller/core",
@@ -67,10 +68,8 @@ specific_include_rules = {
   # Special-case where monochrome composes chrome+webview
   "MonochromeApplication\.java": [
     "+android_webview/nonembedded/java/src/org/chromium/android_webview/nonembedded/WebViewApkApplication.java",
-    "+android_webview/glue/java/src/com/android/webview/chromium/WebViewLibraryPreloader.java",
   ],
   "SplitMonochromeApplication\.java": [
     "+android_webview/nonembedded/java/src/org/chromium/android_webview/nonembedded/WebViewApkApplication.java",
-    "+android_webview/glue/java/src/com/android/webview/chromium/WebViewLibraryPreloader.java",
   ],
 }

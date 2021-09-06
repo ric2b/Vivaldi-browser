@@ -35,6 +35,7 @@ class MEDIA_EXPORT WMFVideoDecoder : public VideoDecoder {
   void Decode(scoped_refptr<DecoderBuffer> buffer,
               DecodeCB decode_cb) override;
   void Reset(base::OnceClosure closure) override;
+  VideoDecoderType GetDecoderType() const override;
 
  private:
   WMFDecoderImpl<DemuxerStream::VIDEO> impl_;

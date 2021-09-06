@@ -335,18 +335,6 @@
         ]
       },
       {
-        "name": "onCloseAllTabsDone",
-        "type": "function",
-        "description": "",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "windowId",
-            "description": "Id of the Vivaldi window where the tabstrip is empty."
-          }
-        ]
-      },
-      {
         "name": "onWebContentsDidStartNavigation",
         "type": "function",
         "description": "Fired when the webcontents mainframe embedded by the VivaldiBrowserWindow start loading. Happens reloaded and first load.",

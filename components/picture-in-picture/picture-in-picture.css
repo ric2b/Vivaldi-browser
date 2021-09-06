@@ -9,6 +9,8 @@
 .vivaldi-picture-in-picture-container {
   position: relative;
   cursor: pointer;
+  overflow: hidden;
+  height: 45px;
 }
 
 .vivaldi-picture-in-picture-button {
@@ -47,12 +49,27 @@
   cursor: default;
 }
 
+@keyframes fadeOut {
+  0% {
+    opacity: 1;
+    height: 45px;
+  }
+  99% {
+    opacity: 0;
+    height: 45px;
+  }
+  100% {
+    opacity: 0;
+    height: 0;
+  }
+}
+
 .vivaldi-picture-in-picture-container:not(:hover).transparent,
 .vivaldi-picture-in-picture-container.fullscreen {
-  opacity: 0;
-  transition: opacity 1s cubic-bezier(0.25, 0.1, 0.25, 1);
+  height: 0;
+  animation: fadeOut cubic-bezier(0.25, 0.1, 0.25, 1) 1s 1 normal forwards;
 }
 
 .vivaldi-picture-in-picture-container.initial {
-  opacity: 0;
+  height: 0;
 }

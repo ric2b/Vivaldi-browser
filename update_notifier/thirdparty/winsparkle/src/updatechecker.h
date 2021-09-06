@@ -45,12 +45,8 @@ namespace winsparkle {
  */
 int CompareVersions(const std::string& a, const std::string& b);
 
-time_t GetLastUpdateCheckTime();
-
 // Check for updates and return a valid  appcast if so.
-//
-// manual - should be true if the user manually triggered the update check.
-std::unique_ptr<Appcast> CheckForUpdates(bool manual, Error& error);
+std::unique_ptr<Appcast> CheckForUpdates(int download_flags, Error& error);
 
 }  // namespace winsparkle
 

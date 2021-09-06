@@ -58,7 +58,7 @@ class Extension;
 }
 
 namespace autofill {
-class SaveCardBubbleView;
+class AutofillBubbleBase;
 class LocalCardMigrationBubble;
 class SaveCardBubbleController;
 class LocalCardMigrationBubbleController;
@@ -84,19 +84,29 @@ class VivaldiAutofillBubbleHandler : public autofill::AutofillBubbleHandler {
   VivaldiAutofillBubbleHandler();
   ~VivaldiAutofillBubbleHandler() override;
 
-  autofill::SaveCardBubbleView* ShowSaveCreditCardBubble(
+  autofill::AutofillBubbleBase* ShowSaveCreditCardBubble(
       content::WebContents* web_contents,
       autofill::SaveCardBubbleController* controller,
       bool is_user_gesture) override;
 
-  autofill::LocalCardMigrationBubble* ShowLocalCardMigrationBubble(
+  autofill::AutofillBubbleBase* ShowLocalCardMigrationBubble(
       content::WebContents* web_contents,
       autofill::LocalCardMigrationBubbleController* controller,
+      bool is_user_gesture) override;
+
+  autofill::AutofillBubbleBase* ShowOfferNotificationBubble(
+      content::WebContents* web_contents,
+      autofill::OfferNotificationBubbleController* controller,
       bool is_user_gesture) override;
 
   autofill::SaveUPIBubble* ShowSaveUPIBubble(
       content::WebContents* contents,
       autofill::SaveUPIBubbleController* controller) override;
+
+  autofill::AutofillBubbleBase* ShowSaveAddressProfileBubble(
+      content::WebContents* web_contents,
+      autofill::SaveAddressProfileBubbleController* controller,
+      bool is_user_gesture) override;
 
   void OnPasswordSaved() override {}
 
@@ -144,9 +154,6 @@ class VivaldiBrowserWindow final
   }
 
   VivaldiNativeAppWindowViews* views() const { return views_.get(); }
-
-  // Used when the tabstrip closes all tabs on exit.
-  void AllTabsClosed(int window_id);
 
   // Takes ownership of |browser|.
   void SetBrowser(std::unique_ptr<Browser> browser);
@@ -304,7 +311,7 @@ class VivaldiBrowserWindow final
   void UpdateCustomTabBarVisibility(bool visible, bool animate) override {}
   SharingDialog* ShowSharingDialog(content::WebContents* contents,
                                    SharingDialogData data) override;
-  void ShowHatsBubble(const std::string& site_id,
+  void ShowHatsDialog(const std::string& site_id,
                       base::OnceClosure success_callback,
                       base::OnceClosure failure_callback) override {}
   std::unique_ptr<content::EyeDropper> OpenEyeDropper(

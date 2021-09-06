@@ -453,6 +453,14 @@ void ServiceWorkerVersion::StartWorker(ServiceWorkerMetrics::EventType purpose,
     return;
   }
 
+  if (is_running_start_callbacks_) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(&ServiceWorkerVersion::StartWorker,
+                                  weak_factory_.GetWeakPtr(), purpose,
+                                  std::move(callback)));
+    return;
+  }
+
   // Ensure the live registration during starting worker so that the worker can
   // get associated with it in
   // ServiceWorkerHost::CompleteStartWorkerPreparation.
@@ -1870,6 +1878,7 @@ void ServiceWorkerVersion::StartWorkerInternal() {
   params->ua_metadata = GetContentClient()->browser()->GetUserAgentMetadata();
   params->is_installed = IsInstalled(status_);
   params->script_url_to_skip_throttling = updated_script_url_;
+  params->main_script_load_params = std::move(main_script_load_params_);
 
   if (IsInstalled(status())) {
     DCHECK(!installed_scripts_sender_);
@@ -2277,8 +2286,10 @@ void ServiceWorkerVersion::FinishStartWorker(
     blink::ServiceWorkerStatusCode status) {
   std::vector<StatusCallback> callbacks;
   callbacks.swap(start_callbacks_);
+  is_running_start_callbacks_ = true;
   for (auto& callback : callbacks)
     std::move(callback).Run(status);
+  is_running_start_callbacks_ = false;
 }
 
 void ServiceWorkerVersion::CleanUpExternalRequest(

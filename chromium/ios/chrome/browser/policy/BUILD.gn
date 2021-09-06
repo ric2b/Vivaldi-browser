@@ -55,6 +55,7 @@ source_set("policy") {
     "//components/signin/public/base",
     "//components/strings:components_strings_grit",
     "//components/translate/core/browser:translate_pref_names",
+    "//components/unified_consent:unified_consent",
     "//components/variations",
     "//components/variations/service",
     "//components/version_info:version_info",
@@ -75,6 +76,20 @@ source_set("policy") {
   ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("policy_util") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "policy_util.h",
+    "policy_util.mm",
+  ]
+  deps = [
+    ":feature_flags",
+    "//base",
+    "//components/prefs",
+    "//ios/chrome/browser:pref_names",
+  ]
 }
 
 source_set("feature_flags") {
@@ -191,6 +206,7 @@ source_set("eg2_tests") {
 
   sources = [
     "policy_egtest.mm",
+    "policy_incognito_mode_availability_egtest.mm",
     "policy_platform_provider_egtest.mm",
   ]
 
@@ -205,6 +221,7 @@ source_set("eg2_tests") {
     "//components/policy/core/common:common_constants",
     "//components/strings",
     "//ios/chrome/app/strings:ios_strings_grit",
+    "//ios/chrome/browser:chrome_url_constants",
     "//ios/chrome/browser:pref_names",
     "//ios/chrome/browser:utils",
     "//ios/chrome/browser/translate:eg_test_support+eg2",
@@ -215,6 +232,7 @@ source_set("eg2_tests") {
     "//ios/chrome/browser/ui/settings/language:language_ui_constants",
     "//ios/chrome/browser/ui/settings/password:password_constants",
     "//ios/chrome/browser/ui/table_view/cells:cells_constants",
+    "//ios/chrome/browser/ui/toolbar/public:constants",
     "//ios/chrome/test/earl_grey:eg_test_support+eg2",
     "//ios/testing/earl_grey:eg_test_support+eg2",
     "//ios/third_party/earl_grey2:test_lib",

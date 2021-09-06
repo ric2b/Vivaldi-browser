@@ -30,14 +30,16 @@
 #include "base/check.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
+#include "base/strings/utf_string_conversions.h"
 #include "ui/base/l10n/l10n_util.h"
 
-#include "app/vivaldi_resources.h"
 #include "update_notifier/thirdparty/winsparkle/src/appcast.h"
 #include "update_notifier/thirdparty/winsparkle/src/config.h"
 #include "update_notifier/thirdparty/winsparkle/src/settings.h"
 #include "update_notifier/thirdparty/winsparkle/src/threads.h"
 #include "update_notifier/thirdparty/winsparkle/src/updatedownloader.h"
+#include "update_notifier/update_notifier_utils.h"
+#include "vivaldi/update_notifier/grit/vivaldi_native_strings.h"
 
 #define wxNO_NET_LIB
 #define wxNO_XML_LIB
@@ -84,6 +86,8 @@
 #endif
 
 namespace winsparkle {
+
+using vivaldi_update_notifier::GetTranslation;
 
 /*--------------------------------------------------------------------------*
                                   helpers
@@ -289,7 +293,7 @@ class WinSparkleDialog : public wxDialog {
 WinSparkleDialog::WinSparkleDialog()
     : wxDialog(NULL,
                wxID_ANY,
-               l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_DIALOG_TITLE),
+               GetTranslation(IDS_UPDATE_NOTIFICATION_DIALOG_TITLE),
                wxDefaultPosition,
                wxDefaultSize,
                wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER | wxDIALOG_NO_PARENT) {
@@ -380,7 +384,7 @@ class UpdateDialog : public WinSparkleDialog {
   // change state into "update error"
   void StateUpdateError(Error error);
   // change state into "a new version is available"
-  void StateUpdateAvailable(Appcast info);
+  void StateUpdateAvailable();
   // change state into "downloading update"
   void StateDownloading();
   // update download progress
@@ -471,7 +475,7 @@ UpdateDialog::UpdateDialog() : m_timer(this) {
 
   wxStaticText* notesLabel = new wxStaticText(
       this, wxID_ANY,
-      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_REALEASE_NOTES_LABEL));
+      GetTranslation(IDS_UPDATE_NOTIFICATION_REALEASE_NOTES_LABEL));
   SetBoldFont(notesLabel);
   m_releaseNotesSizer->Add(notesLabel, wxSizerFlags().Border(wxTOP, PX(10)));
   if (m_webBrowser)
@@ -487,18 +491,16 @@ UpdateDialog::UpdateDialog() : m_timer(this) {
   m_updateButtonsSizer = new wxBoxSizer(wxHORIZONTAL);
   m_updateButtonsSizer->Add(
       new wxButton(this, ID_SKIP_VERSION,
-                   l10n_util::GetStringUTF16(
-                       IDS_UPDATE_NOTIFICATION_SKIP_VERSION_LABEL)),
+                   GetTranslation(IDS_UPDATE_NOTIFICATION_SKIP_VERSION_LABEL)),
       wxSizerFlags().Border(wxRIGHT, PX(20)));
   m_updateButtonsSizer->AddStretchSpacer(1);
   m_updateButtonsSizer->Add(
       new wxButton(this, ID_REMIND_LATER,
-                   l10n_util::GetStringUTF16(
-                       IDS_UPDATE_NOTIFICATION_REMIND_LATER_LABEL)),
+                   GetTranslation(IDS_UPDATE_NOTIFICATION_REMIND_LATER_LABEL)),
       wxSizerFlags().Border(wxRIGHT, PX(10)));
-  m_installButton = new wxButton(
-      this, ID_INSTALL,
-      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_GET_UPDATE_LABEL));
+  m_installButton =
+      new wxButton(this, ID_INSTALL,
+                   GetTranslation(IDS_UPDATE_NOTIFICATION_GET_UPDATE_LABEL));
   m_updateButtonsSizer->Add(m_installButton, wxSizerFlags());
   m_buttonSizer->Add(m_updateButtonsSizer, wxSizerFlags(1));
 
@@ -510,10 +512,9 @@ UpdateDialog::UpdateDialog() : m_timer(this) {
 
   m_runInstallerButtonSizer = new wxBoxSizer(wxHORIZONTAL);
   // TODO: make this "Install and relaunch"
-  m_runInstallerButton =
-      new wxButton(this, ID_RUN_INSTALLER,
-                   l10n_util::GetStringUTF16(
-                       IDS_UPDATE_NOTIFICATION_LAUNCH_INSTALLER_LABEL));
+  m_runInstallerButton = new wxButton(
+      this, ID_RUN_INSTALLER,
+      GetTranslation(IDS_UPDATE_NOTIFICATION_LAUNCH_INSTALLER_LABEL));
   m_runInstallerButtonSizer->AddStretchSpacer(1);
   m_runInstallerButtonSizer->Add(m_runInstallerButton,
                                  wxSizerFlags(0).Border(wxLEFT));
@@ -596,7 +597,7 @@ void UpdateDialog::OnRunInstaller(wxCommandEvent& event) {
   m_runInstallerButton->Disable();
 
   m_message->SetLabel(
-      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_LAUNCHING_MESSAGE));
+      GetTranslation(IDS_UPDATE_NOTIFICATION_LAUNCHING_MESSAGE));
   g_delegate->WinsparkleLaunchInstaller();
 }
 
@@ -612,11 +613,10 @@ bool UpdateDialog::SetMessage(const std::wstring& text, int width) {
 void UpdateDialog::StateCheckingUpdates() {
   LayoutChangesGuard guard(this);
 
-  SetMessage(
-      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_CHECKING_MESSAGE));
+  SetMessage(GetTranslation(IDS_UPDATE_NOTIFICATION_CHECKING_MESSAGE));
 
   m_closeButton->SetLabel(
-      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_CANCEL_BUTTON));
+      GetTranslation(IDS_UPDATE_NOTIFICATION_CANCEL_BUTTON));
   EnablePulsing(true);
 
   HIDE(m_heading);
@@ -632,14 +632,12 @@ void UpdateDialog::StateCheckingUpdates() {
 void UpdateDialog::StateNoUpdateFound() {
   LayoutChangesGuard guard(this);
 
-  m_heading->SetLabel(
-      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_UPTODATE_TITLE));
+  m_heading->SetLabel(GetTranslation(IDS_UPDATE_NOTIFICATION_UPTODATE_TITLE));
 
-  SetMessage(l10n_util::GetStringFUTF16(IDS_UPDATE_NOTIFICATION_UPTODATE_TEXT,
-                                        GetConfig().app_version));
+  SetMessage(GetTranslation(IDS_UPDATE_NOTIFICATION_UPTODATE_TEXT,
+                            GetConfig().app_version));
 
-  m_closeButton->SetLabel(
-      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_CLOSE_BUTTON));
+  m_closeButton->SetLabel(GetTranslation(IDS_UPDATE_NOTIFICATION_CLOSE_BUTTON));
   m_closeButton->SetFocus();
   EnablePulsing(false);
 
@@ -658,8 +656,7 @@ void UpdateDialog::StateUpdateError(Error error) {
 
   LayoutChangesGuard guard(this);
 
-  m_heading->SetLabel(
-      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_ERROR_TITLE));
+  m_heading->SetLabel(GetTranslation(IDS_UPDATE_NOTIFICATION_ERROR_TITLE));
 
   int message_id = 0;
   switch (error.kind()) {
@@ -685,18 +682,16 @@ void UpdateDialog::StateUpdateError(Error error) {
       break;
   }
 
-  std::wstring msg =
-      message_id ? l10n_util::GetStringUTF16(message_id) : std::wstring();
+  std::wstring msg = message_id ? GetTranslation(message_id) : std::wstring();
   if (error.kind() != Error::kCancelled) {
     msg += L"\n\n";
-    msg += l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_ERROR_DETAILS);
+    msg += GetTranslation(IDS_UPDATE_NOTIFICATION_ERROR_DETAILS);
     msg += L"\n\n";
-    msg += base::UTF8ToUTF16(error.message());
+    msg += base::UTF8ToWide(error.message());
   }
   SetMessage(msg);
 
-  m_closeButton->SetLabel(
-      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_CLOSE_BUTTON));
+  m_closeButton->SetLabel(GetTranslation(IDS_UPDATE_NOTIFICATION_CLOSE_BUTTON));
   m_closeButton->SetFocus();
   EnablePulsing(false);
 
@@ -710,9 +705,7 @@ void UpdateDialog::StateUpdateError(Error error) {
   MakeResizable(false);
 }
 
-void UpdateDialog::StateUpdateAvailable(Appcast appcast) {
-  m_appcast = std::move(appcast);
-
+void UpdateDialog::StateUpdateAvailable() {
   const bool showRelnotes =
       m_appcast.ReleaseNotesURL.is_valid() && m_webBrowser;
 
@@ -720,15 +713,15 @@ void UpdateDialog::StateUpdateAvailable(Appcast appcast) {
     LayoutChangesGuard guard(this);
 
     m_heading->SetLabel(
-        l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_NEW_VERSION_TITLE));
+        GetTranslation(IDS_UPDATE_NOTIFICATION_NEW_VERSION_TITLE));
 
     if (!m_appcast.HasDownload())
-      m_installButton->SetLabel(l10n_util::GetStringUTF16(
-          IDS_UPDATE_NOTIFICATION_SHOW_WEBSITE_LABEL));
+      m_installButton->SetLabel(
+          GetTranslation(IDS_UPDATE_NOTIFICATION_SHOW_WEBSITE_LABEL));
 
-    base::string16 message = l10n_util::GetStringFUTF16(
+    std::wstring message = GetTranslation(
         IDS_UPDATE_NOTIFICATION_NEW_VERSION_QUESTION,
-        base::UTF8ToUTF16(m_appcast.Version), GetConfig().app_version);
+        base::UTF8ToWide(m_appcast.Version), GetConfig().app_version);
     SetMessage(message, showRelnotes ? RELNOTES_WIDTH : MESSAGE_AREA_WIDTH);
 
     EnablePulsing(false);
@@ -748,18 +741,17 @@ void UpdateDialog::StateUpdateAvailable(Appcast appcast) {
   // Only show the release notes now that the layout was updated, as it may
   // take some time to load the MSIE control:
   if (showRelnotes) {
-    m_webBrowser->LoadURL(base::UTF8ToUTF16(m_appcast.ReleaseNotesURL.spec()));
+    m_webBrowser->LoadURL(base::UTF8ToWide(m_appcast.ReleaseNotesURL.spec()));
   }
 }
 
 void UpdateDialog::StateDownloading() {
   LayoutChangesGuard guard(this);
 
-  SetMessage(
-      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_DOWNLOADING_MESSAGE));
+  SetMessage(GetTranslation(IDS_UPDATE_NOTIFICATION_DOWNLOADING_MESSAGE));
 
   m_closeButton->SetLabel(
-      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_CANCEL_BUTTON));
+      GetTranslation(IDS_UPDATE_NOTIFICATION_CANCEL_BUTTON));
   EnablePulsing(false);
 
   HIDE(m_heading);
@@ -793,7 +785,7 @@ void UpdateDialog::DownloadProgress(DownloadReport report) {
           m_progress->SetRange(total);
         }
         m_progress->SetValue(downloaded);
-        label = l10n_util::GetStringFUTF16(
+        label = GetTranslation(
             IDS_UPDATE_NOTIFICATION_DOWNLOADING_PROGRESS_DETAILS,
             wxFileName::GetHumanReadableSize(downloaded, "", 1, wxSIZE_CONV_SI)
                 .ToStdWstring(),
@@ -811,15 +803,15 @@ void UpdateDialog::DownloadProgress(DownloadReport report) {
     }
     case DownloadReport::kVerificationStart:
       m_progress->Pulse();
-      if (!SetMessage(l10n_util::GetStringUTF16(
-              IDS_UPDATE_NOTIFICATION_VERIFYING_MESSAGE)))
+      if (!SetMessage(
+              GetTranslation(IDS_UPDATE_NOTIFICATION_VERIFYING_MESSAGE)))
         return;
       HIDE(m_progressLabel);
       break;
     case DownloadReport::kDeltaExtraction:
       m_progress->Pulse();
-      if (!SetMessage(l10n_util::GetStringUTF16(
-              IDS_UPDATE_NOTIFICATION_EXTRACTING_MESSAGE)))
+      if (!SetMessage(
+              GetTranslation(IDS_UPDATE_NOTIFICATION_EXTRACTING_MESSAGE)))
         return;
       break;
   }
@@ -834,8 +826,7 @@ void UpdateDialog::StateDownloaded() {
 
   LayoutChangesGuard guard(this);
 
-  SetMessage(
-      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_LAUNCH_INSTALLER_TEXT));
+  SetMessage(GetTranslation(IDS_UPDATE_NOTIFICATION_LAUNCH_INSTALLER_TEXT));
 
   m_progress->SetRange(1);
   m_progress->SetValue(1);
@@ -951,7 +942,7 @@ App::App() {
 }
 
 wxLayoutDirection App::GetLayoutDirection() const {
-  wxString lang = base::UTF8ToUTF16(GetConfig().locale);
+  wxString lang = base::UTF8ToWide(GetConfig().language);
   lang.Replace("-", "_");
   const wxLanguageInfo* info = wxLocale::FindLanguageInfo(lang);
   return info ? info->LayoutDirection : wxLayout_Default;
@@ -992,7 +983,12 @@ void App::OnUpdateCheckDone(wxThreadEvent& event) {
   } else if (!result.appcast.IsValid()) {
     update_dialog_->StateNoUpdateFound();
   } else {
-    update_dialog_->StateUpdateAvailable(std::move(result.appcast));
+    update_dialog_->m_appcast = std::move(result.appcast);
+    if (g_install_mode) {
+      update_dialog_->StateDownloading();
+    } else {
+      update_dialog_->StateUpdateAvailable();
+    }
   }
   update_dialog_->ShowAsMainWindow();
 }

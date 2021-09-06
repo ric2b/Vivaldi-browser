@@ -43,6 +43,8 @@ class AVFMediaReader {
 
   bool Initialize(base::scoped_nsobject<AVAsset> asset);
 
+  media::Strides GetStrides();
+
   int bitrate() const;
   base::TimeDelta duration() const;
   base::TimeDelta start_time() const;

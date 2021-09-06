@@ -106,12 +106,12 @@
     "includes": [1220],
     "structures": [1240],
   },
+  "chrome/browser/resources/feedback_webui/feedback_resources.grd": {
+    "includes": [1250],
+  },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/bookmarks/bookmarks_resources.grd": {
     "META": {"sizes": {"includes": [50],}},
     "includes": [1260],
-  },
-  "chrome/browser/resources/chromeos/cellular_setup/cellular_setup_resources.grd": {
-    "structures": [1360],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/emoji_picker/resources.grd": {
     "META": {"sizes": {"includes": [20]}},
@@ -121,8 +121,9 @@
     "META": {"sizes": {"includes": [35]}},
     "includes": [1370],
   },
-  "chrome/browser/resources/chromeos/multidevice_setup/multidevice_setup_resources.grd": {
-    "structures": [1400],
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/multidevice_setup/multidevice_setup_resources.grd": {
+    "META": {"sizes": {"includes": [10]}},
+    "includes": [1380],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/commander/commander_resources.grd": {
     "META": {"sizes": {"includes": [15]}},
@@ -147,6 +148,10 @@
   "chrome/browser/resources/local_ntp/local_ntp_resources.grd": {
     "includes": [1620],
   },
+   "chrome/browser/resources/webid/webid_resources.grd": {
+    "includes": [1622],
+    "structures": [1626],
+  },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/nearby_internals/nearby_internals_resources.grd": {
     "META": {"sizes": {"includes": [20]}},
     "includes": [1630],
@@ -155,9 +160,17 @@
     "META": {"sizes": {"includes": [100]}},
     "includes": [1640],
   },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/memories/resources.grd": {
+    "META": {"sizes": {"includes": [40]}},
+    "includes": [1660],
+  },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/new_tab_page/resources.grd": {
     "META": {"sizes": {"includes": [200]}},
     "includes": [1680],
+  },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/ntp4/apps_resources.grd": {
+    "META": {"sizes": {"includes": [40]}},
+    "includes": [1705],
   },
   "chrome/browser/resources/preinstalled_web_apps/resources.grd": {
     "includes": [1710],
@@ -238,6 +251,18 @@
     "META": {"sizes": {"includes": [10],}},
     "includes": [2030],
   },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/internet_config_dialog/internet_config_dialog_resources.grd": {
+    "META": {"sizes": {"includes": [10],}},
+    "includes": [2040],
+  },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/internet_detail_dialog/internet_detail_dialog_resources.grd": {
+    "META": {"sizes": {"includes": [10],}},
+    "includes": [2050],
+  },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/network_ui/network_ui_resources.grd": {
+    "META": {"sizes": {"includes": [10]}},
+    "includes": [2065],
+  },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/gaia_auth_host/resources.grd": {
     "META": {"sizes": {"includes": [10],}},
     "includes": [2080],
@@ -250,7 +275,8 @@
     "META": {"sizes": {"includes": [10],}},
     "includes": [2100],
   },
-  "chrome/browser/resources/net_internals/net_internals_resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/net_internals/resources.grd": {
+    "META": {"sizes": {"includes": [20]}},
     "includes": [2120],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/omnibox/resources.grd": {
@@ -261,7 +287,8 @@
     "META": {"sizes": {"includes": [20]}},
     "includes": [2160],
   },
-  "chrome/browser/resources/sync_file_system_internals/sync_file_system_internals_resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/sync_file_system_internals/resources.grd": {
+    "META": {"sizes": {"includes": [20]}},
     "includes": [2180],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/usb_internals/resources.grd": {
@@ -282,7 +309,8 @@
   "components/resources/dev_ui_components_resources.grd": {
     "includes": [2260],
   },
-  "content/browser/resources/media/media_internals_resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/content/browser/resources/media/resources.grd": {
+    "META": {"sizes": {"includes": [10],}},
     "includes": [2270],
   },
   "content/browser/webrtc/resources/resources.grd": {
@@ -321,9 +349,9 @@
     "META": {"align": 100},
     "messages": [2500],
   },
-  "chromeos/components/camera_app_ui/resources/camera_app_resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/chromeos/components/camera_app_ui/chromeos_camera_app_resources.grd": {
+    "META": {"sizes": {"includes": [300],}},
     "includes": [2505],
-    "structures": [2510],
   },
   "chromeos/components/camera_app_ui/resources/strings/camera_strings.grd": {
     "messages": [2515],
@@ -386,6 +414,14 @@
   },
   "chromeos/resources/chromeos_resources.grd": {
     "includes": [2660],
+  },
+  "<(SHARED_INTERMEDIATE_DIR)/chromeos/components/eche_app_ui/chromeos_eche_app_resources.grd": {
+    "META": {"sizes": {"includes": [50],}},
+    "includes": [2670],
+  },
+  "chromeos/components/eche_app_ui/resources/prod/eche_bundle_resources.grd": {
+    "META": {"sizes": {"includes": [50],}},
+    "includes": [2680],
   },
   # END chromeos/ section.
 

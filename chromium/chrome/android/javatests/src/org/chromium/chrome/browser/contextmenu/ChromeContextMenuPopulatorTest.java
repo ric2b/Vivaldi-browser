@@ -12,10 +12,12 @@ import static org.mockito.Mockito.when;
 import static org.chromium.chrome.browser.contextmenu.RevampedContextMenuItemProperties.MENU_ID;
 import static org.chromium.chrome.browser.contextmenu.RevampedContextMenuItemProperties.TEXT;
 
+import android.app.Activity;
 import android.util.Pair;
 
 import androidx.test.filters.SmallTest;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -23,6 +25,8 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
+import org.chromium.base.ActivityState;
+import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.UiThreadTest;
@@ -38,6 +42,7 @@ import org.chromium.components.embedder_support.contextmenu.ContextMenuParams;
 import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
+import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.base.MenuSourceType;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.url.GURL;
@@ -58,6 +63,8 @@ public class ChromeContextMenuPopulatorTest {
     private static final String IMAGE_SRC_URL = "http://www.blah.com/image.jpg";
     private static final String IMAGE_TITLE_TEXT = "IMAGE!";
 
+    @Mock
+    private Activity mActivity;
     @Mock
     private ContextMenuItemDelegate mItemDelegate;
     @Mock
@@ -82,7 +89,8 @@ public class ChromeContextMenuPopulatorTest {
 
         NativeLibraryTestUtils.loadNativeLibraryNoBrowserProcess();
 
-        when(mItemDelegate.getPageUrl()).thenReturn(new GURL(PAGE_URL));
+        GURL pageUrl = new GURL(PAGE_URL);
+        when(mItemDelegate.getPageUrl()).thenReturn(pageUrl);
         when(mItemDelegate.isIncognitoSupported()).thenReturn(true);
         when(mItemDelegate.isOpenInOtherWindowSupported()).thenReturn(true);
         when(mItemDelegate.supportsCall()).thenReturn(true);
@@ -98,6 +106,16 @@ public class ChromeContextMenuPopulatorTest {
         features.put(ChromeFeatureList.READ_LATER, false);
 
         ChromeFeatureList.setTestFeatures(features);
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            ApplicationStatus.onStateChangeForTesting(mActivity, ActivityState.CREATED);
+        });
+    }
+
+    @After
+    public void tearDown() {
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { ApplicationStatus.resetActivitiesForInstrumentationTests(); });
     }
 
     private void initializePopulator(@ContextMenuMode int mode, ContextMenuParams params) {

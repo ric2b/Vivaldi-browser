@@ -42,6 +42,26 @@ test(function() {
 }, 'Testing EditContext English typing');
 
 test(function() {
+  const iframe = document.createElement("iframe");
+  document.body.appendChild(iframe);
+  const childDocument = iframe.contentDocument;
+  const childDiv = childDocument.createElement('div');
+  iframe.remove();
+  childDiv.editContext = new EditContext();
+}, 'Setting .editContext on a stray div should not crash.');
+
+test(function() {
+  const editContext = new EditContext();
+  assert_not_equals(editContext, null);
+  const test = document.getElementById('test');
+  assert_equals(test.editContext, null);
+  test.editContext = editContext;
+  assert_equals(test.editContext, editContext);
+  test.editContext = null;
+  assert_equals(test.editContext, null);
+}, 'Testing Element.editContext');
+
+test(function() {
   const editContext = new EditContext();
   assert_not_equals(editContext, null);
   const test = document.getElementById('test');

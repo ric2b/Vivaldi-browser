@@ -15,13 +15,13 @@
 #include "cc/animation/animation_id_provider.h"
 #include "cc/animation/animation_timeline.h"
 #include "cc/animation/keyframe_effect.h"
-#include "cc/animation/keyframed_animation_curve.h"
 #include "cc/animation/scroll_offset_animation_curve.h"
 #include "cc/animation/scroll_offset_animation_curve_factory.h"
-#include "cc/animation/transform_operations.h"
 #include "cc/test/animation_test_common.h"
 #include "cc/test/animation_timelines_test_common.h"
+#include "ui/gfx/animation/keyframe/keyframed_animation_curve.h"
 #include "ui/gfx/geometry/box_f.h"
+#include "ui/gfx/transform_operations.h"
 
 namespace cc {
 namespace {
@@ -43,9 +43,7 @@ class ElementAnimationsTest : public AnimationTimelinesTest {
   ElementAnimationsTest() = default;
   ~ElementAnimationsTest() override = default;
 
-  void SetUp() override {
-    AnimationTimelinesTest::SetUp();
-  }
+  void SetUp() override { AnimationTimelinesTest::SetUp(); }
 
   void CreateImplTimelineAndAnimation() override {
     AnimationTimelinesTest::CreateImplTimelineAndAnimation();
@@ -276,11 +274,11 @@ TEST_F(ElementAnimationsTest,
       KeyframeModel::TargetPropertyId(TargetProperty::SCROLL_OFFSET)));
   animation_->AddKeyframeModel(std::move(animation_fixed));
   PushProperties();
-  EXPECT_VECTOR2DF_EQ(initial_value, animation_impl_->keyframe_effect()
-                                         ->GetKeyframeModelById(animation1_id)
-                                         ->curve()
-                                         ->ToScrollOffsetAnimationCurve()
-                                         ->GetValue(base::TimeDelta()));
+  auto* scroll_curve = ScrollOffsetAnimationCurve::ToScrollOffsetAnimationCurve(
+      animation_impl_->keyframe_effect()
+          ->GetKeyframeModelById(animation1_id)
+          ->curve());
+  EXPECT_VECTOR2DF_EQ(initial_value, scroll_curve->GetValue(base::TimeDelta()));
   animation_->RemoveKeyframeModel(animation1_id);
 
   // Animation without initial value set.
@@ -293,12 +291,12 @@ TEST_F(ElementAnimationsTest,
       KeyframeModel::TargetPropertyId(TargetProperty::SCROLL_OFFSET)));
   animation_->AddKeyframeModel(std::move(keyframe_model));
   PushProperties();
+  scroll_curve = static_cast<ScrollOffsetAnimationCurve*>(
+      animation_impl_->keyframe_effect()
+          ->GetKeyframeModelById(animation2_id)
+          ->curve());
   EXPECT_VECTOR2DF_EQ(provider_initial_value,
-                      animation_impl_->keyframe_effect()
-                          ->GetKeyframeModelById(animation2_id)
-                          ->curve()
-                          ->ToScrollOffsetAnimationCurve()
-                          ->GetValue(base::TimeDelta()));
+                      scroll_curve->GetValue(base::TimeDelta()));
   animation_->RemoveKeyframeModel(animation2_id);
 }
 
@@ -753,7 +751,7 @@ TEST_F(ElementAnimationsTest, AnimationsAreDeleted) {
 // Tests that transitioning opacity from 0 to 1 works as expected.
 
 static std::unique_ptr<KeyframeModel> CreateKeyframeModel(
-    std::unique_ptr<AnimationCurve> curve,
+    std::unique_ptr<gfx::AnimationCurve> curve,
     int group_id,
     TargetProperty::Type property) {
   return KeyframeModel::Create(std::move(curve), 0, group_id,
@@ -766,9 +764,10 @@ TEST_F(ElementAnimationsTest, TrivialTransition) {
 
   auto events = CreateEventsForTesting();
 
-  std::unique_ptr<KeyframeModel> to_add(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
-      1, TargetProperty::OPACITY));
+  std::unique_ptr<KeyframeModel> to_add(
+      CreateKeyframeModel(std::unique_ptr<gfx::AnimationCurve>(
+                              new FakeFloatTransition(1.0, 0.f, 1.f)),
+                          1, TargetProperty::OPACITY));
   int keyframe_model_id = to_add->id();
 
   EXPECT_FALSE(
@@ -1347,9 +1346,10 @@ TEST_F(ElementAnimationsTest,
 
   auto events = CreateEventsForTesting();
 
-  std::unique_ptr<KeyframeModel> to_add(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
-      1, TargetProperty::OPACITY));
+  std::unique_ptr<KeyframeModel> to_add(
+      CreateKeyframeModel(std::unique_ptr<gfx::AnimationCurve>(
+                              new FakeFloatTransition(1.0, 0.f, 1.f)),
+                          1, TargetProperty::OPACITY));
   to_add->set_needs_synchronized_start_time(true);
   int keyframe_model_id = to_add->id();
 
@@ -1392,11 +1392,13 @@ TEST_F(ElementAnimationsTest, TrivialQueuing) {
   int animation1_id = 1;
   int animation2_id = 2;
   animation_->AddKeyframeModel(KeyframeModel::Create(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
+      std::unique_ptr<gfx::AnimationCurve>(
+          new FakeFloatTransition(1.0, 0.f, 1.f)),
       animation1_id, 1,
       KeyframeModel::TargetPropertyId(TargetProperty::OPACITY)));
   animation_->AddKeyframeModel(KeyframeModel::Create(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 1.f, 0.5f)),
+      std::unique_ptr<gfx::AnimationCurve>(
+          new FakeFloatTransition(1.0, 1.f, 0.5f)),
       animation2_id, 2,
       KeyframeModel::TargetPropertyId(TargetProperty::OPACITY)));
 
@@ -1451,17 +1453,19 @@ TEST_F(ElementAnimationsTest, Interrupt) {
 
   auto events = CreateEventsForTesting();
 
-  animation_->AddKeyframeModel(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
-      1, TargetProperty::OPACITY));
+  animation_->AddKeyframeModel(
+      CreateKeyframeModel(std::unique_ptr<gfx::AnimationCurve>(
+                              new FakeFloatTransition(1.0, 0.f, 1.f)),
+                          1, TargetProperty::OPACITY));
   animation_->Tick(kInitialTickTime);
   animation_->UpdateState(true, events.get());
   EXPECT_TRUE(animation_->keyframe_effect()->HasTickingKeyframeModel());
   EXPECT_EQ(0.f, client_.GetOpacity(element_id_, ElementListType::ACTIVE));
 
-  std::unique_ptr<KeyframeModel> to_add(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 1.f, 0.5f)),
-      2, TargetProperty::OPACITY));
+  std::unique_ptr<KeyframeModel> to_add(
+      CreateKeyframeModel(std::unique_ptr<gfx::AnimationCurve>(
+                              new FakeFloatTransition(1.0, 1.f, 0.5f)),
+                          2, TargetProperty::OPACITY));
   animation_->AbortKeyframeModelsWithProperty(TargetProperty::OPACITY, false);
   animation_->AddKeyframeModel(std::move(to_add));
 
@@ -1486,14 +1490,15 @@ TEST_F(ElementAnimationsTest, ScheduleTogetherWhenAPropertyIsBlocked) {
   auto events = CreateEventsForTesting();
 
   animation_->AddKeyframeModel(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeTransformTransition(1)), 1,
+      std::unique_ptr<gfx::AnimationCurve>(new FakeTransformTransition(1)), 1,
       TargetProperty::TRANSFORM));
   animation_->AddKeyframeModel(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeTransformTransition(1)), 2,
+      std::unique_ptr<gfx::AnimationCurve>(new FakeTransformTransition(1)), 2,
       TargetProperty::TRANSFORM));
-  animation_->AddKeyframeModel(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
-      2, TargetProperty::OPACITY));
+  animation_->AddKeyframeModel(
+      CreateKeyframeModel(std::unique_ptr<gfx::AnimationCurve>(
+                              new FakeFloatTransition(1.0, 0.f, 1.f)),
+                          2, TargetProperty::OPACITY));
 
   animation_->Tick(kInitialTickTime);
   animation_->UpdateState(true, events.get());
@@ -1521,14 +1526,16 @@ TEST_F(ElementAnimationsTest, ScheduleTogetherWithAnAnimWaiting) {
   auto events = CreateEventsForTesting();
 
   animation_->AddKeyframeModel(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeTransformTransition(2)), 1,
+      std::unique_ptr<gfx::AnimationCurve>(new FakeTransformTransition(2)), 1,
       TargetProperty::TRANSFORM));
-  animation_->AddKeyframeModel(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
-      1, TargetProperty::OPACITY));
-  animation_->AddKeyframeModel(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 1.f, 0.5f)),
-      2, TargetProperty::OPACITY));
+  animation_->AddKeyframeModel(
+      CreateKeyframeModel(std::unique_ptr<gfx::AnimationCurve>(
+                              new FakeFloatTransition(1.0, 0.f, 1.f)),
+                          1, TargetProperty::OPACITY));
+  animation_->AddKeyframeModel(
+      CreateKeyframeModel(std::unique_ptr<gfx::AnimationCurve>(
+                              new FakeFloatTransition(1.0, 1.f, 0.5f)),
+                          2, TargetProperty::OPACITY));
 
   // Animations with id 1 should both start now.
   animation_->Tick(kInitialTickTime);
@@ -1559,9 +1566,10 @@ TEST_F(ElementAnimationsTest, TrivialLooping) {
 
   auto events = CreateEventsForTesting();
 
-  std::unique_ptr<KeyframeModel> to_add(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
-      1, TargetProperty::OPACITY));
+  std::unique_ptr<KeyframeModel> to_add(
+      CreateKeyframeModel(std::unique_ptr<gfx::AnimationCurve>(
+                              new FakeFloatTransition(1.0, 0.f, 1.f)),
+                          1, TargetProperty::OPACITY));
   to_add->set_iterations(3);
   animation_->AddKeyframeModel(std::move(to_add));
 
@@ -1603,9 +1611,10 @@ TEST_F(ElementAnimationsTest, InfiniteLooping) {
 
   auto events = CreateEventsForTesting();
 
-  std::unique_ptr<KeyframeModel> to_add(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
-      1, TargetProperty::OPACITY));
+  std::unique_ptr<KeyframeModel> to_add(
+      CreateKeyframeModel(std::unique_ptr<gfx::AnimationCurve>(
+                              new FakeFloatTransition(1.0, 0.f, 1.f)),
+                          1, TargetProperty::OPACITY));
   to_add->set_iterations(std::numeric_limits<double>::infinity());
   animation_->AddKeyframeModel(std::move(to_add));
 
@@ -1648,9 +1657,10 @@ TEST_F(ElementAnimationsTest, PauseResume) {
 
   auto events = CreateEventsForTesting();
 
-  animation_->AddKeyframeModel(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
-      1, TargetProperty::OPACITY));
+  animation_->AddKeyframeModel(
+      CreateKeyframeModel(std::unique_ptr<gfx::AnimationCurve>(
+                              new FakeFloatTransition(1.0, 0.f, 1.f)),
+                          1, TargetProperty::OPACITY));
 
   animation_->Tick(kInitialTickTime);
   animation_->UpdateState(true, events.get());
@@ -1694,14 +1704,16 @@ TEST_F(ElementAnimationsTest, AbortAGroupedAnimation) {
 
   const int keyframe_model_id = 2;
   animation_->AddKeyframeModel(KeyframeModel::Create(
-      std::unique_ptr<AnimationCurve>(new FakeTransformTransition(1)), 1, 1,
-      KeyframeModel::TargetPropertyId(TargetProperty::TRANSFORM)));
+      std::unique_ptr<gfx::AnimationCurve>(new FakeTransformTransition(1)), 1,
+      1, KeyframeModel::TargetPropertyId(TargetProperty::TRANSFORM)));
   animation_->AddKeyframeModel(KeyframeModel::Create(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(2.0, 0.f, 1.f)),
+      std::unique_ptr<gfx::AnimationCurve>(
+          new FakeFloatTransition(2.0, 0.f, 1.f)),
       keyframe_model_id, 1,
       KeyframeModel::TargetPropertyId(TargetProperty::OPACITY)));
   animation_->AddKeyframeModel(KeyframeModel::Create(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 1.f, 0.75f)),
+      std::unique_ptr<gfx::AnimationCurve>(
+          new FakeFloatTransition(1.0, 1.f, 0.75f)),
       3, 2, KeyframeModel::TargetPropertyId(TargetProperty::OPACITY)));
 
   animation_->Tick(kInitialTickTime);
@@ -1736,9 +1748,10 @@ TEST_F(ElementAnimationsTest, PushUpdatesWhenSynchronizedStartTimeNeeded) {
 
   auto events = CreateEventsForTesting();
 
-  std::unique_ptr<KeyframeModel> to_add(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(2.0, 0.f, 1.f)),
-      0, TargetProperty::OPACITY));
+  std::unique_ptr<KeyframeModel> to_add(
+      CreateKeyframeModel(std::unique_ptr<gfx::AnimationCurve>(
+                              new FakeFloatTransition(2.0, 0.f, 1.f)),
+                          0, TargetProperty::OPACITY));
   to_add->set_needs_synchronized_start_time(true);
   animation_->AddKeyframeModel(std::move(to_add));
 
@@ -1769,7 +1782,7 @@ TEST_F(ElementAnimationsTest, SkipUpdateState) {
   auto events = CreateEventsForTesting();
 
   std::unique_ptr<KeyframeModel> first_keyframe_model(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeTransformTransition(1)), 1,
+      std::unique_ptr<gfx::AnimationCurve>(new FakeTransformTransition(1)), 1,
       TargetProperty::TRANSFORM));
   first_keyframe_model->set_is_controlling_instance_for_test(true);
   animation_->AddKeyframeModel(std::move(first_keyframe_model));
@@ -1777,9 +1790,10 @@ TEST_F(ElementAnimationsTest, SkipUpdateState) {
   animation_->Tick(kInitialTickTime);
   animation_->UpdateState(true, events.get());
 
-  std::unique_ptr<KeyframeModel> second_keyframe_model(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
-      2, TargetProperty::OPACITY));
+  std::unique_ptr<KeyframeModel> second_keyframe_model(
+      CreateKeyframeModel(std::unique_ptr<gfx::AnimationCurve>(
+                              new FakeFloatTransition(1.0, 0.f, 1.f)),
+                          2, TargetProperty::OPACITY));
   second_keyframe_model->set_is_controlling_instance_for_test(true);
   animation_->AddKeyframeModel(std::move(second_keyframe_model));
 
@@ -1815,9 +1829,10 @@ TEST_F(ElementAnimationsTest, InactiveObserverGetsTicked) {
   auto events = CreateEventsForTesting();
 
   const int id = 1;
-  animation_impl_->AddKeyframeModel(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.5f, 1.f)),
-      id, TargetProperty::OPACITY));
+  animation_impl_->AddKeyframeModel(
+      CreateKeyframeModel(std::unique_ptr<gfx::AnimationCurve>(
+                              new FakeFloatTransition(1.0, 0.5f, 1.f)),
+                          id, TargetProperty::OPACITY));
   animation_impl_->GetKeyframeModel(TargetProperty::OPACITY)
       ->set_affects_active_elements(false);
 
@@ -1889,19 +1904,21 @@ TEST_F(ElementAnimationsTest, AbortKeyframeModelsWithProperty) {
   // Start with several animations, and allow some of them to reach the finished
   // state.
   animation_->AddKeyframeModel(KeyframeModel::Create(
-      std::unique_ptr<AnimationCurve>(new FakeTransformTransition(1.0)), 1, 1,
-      KeyframeModel::TargetPropertyId(TargetProperty::TRANSFORM)));
+      std::unique_ptr<gfx::AnimationCurve>(new FakeTransformTransition(1.0)), 1,
+      1, KeyframeModel::TargetPropertyId(TargetProperty::TRANSFORM)));
   animation_->AddKeyframeModel(KeyframeModel::Create(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
+      std::unique_ptr<gfx::AnimationCurve>(
+          new FakeFloatTransition(1.0, 0.f, 1.f)),
       2, 2, KeyframeModel::TargetPropertyId(TargetProperty::OPACITY)));
   animation_->AddKeyframeModel(KeyframeModel::Create(
-      std::unique_ptr<AnimationCurve>(new FakeTransformTransition(1.0)), 3, 3,
-      KeyframeModel::TargetPropertyId(TargetProperty::TRANSFORM)));
+      std::unique_ptr<gfx::AnimationCurve>(new FakeTransformTransition(1.0)), 3,
+      3, KeyframeModel::TargetPropertyId(TargetProperty::TRANSFORM)));
   animation_->AddKeyframeModel(KeyframeModel::Create(
-      std::unique_ptr<AnimationCurve>(new FakeTransformTransition(2.0)), 4, 4,
-      KeyframeModel::TargetPropertyId(TargetProperty::TRANSFORM)));
+      std::unique_ptr<gfx::AnimationCurve>(new FakeTransformTransition(2.0)), 4,
+      4, KeyframeModel::TargetPropertyId(TargetProperty::TRANSFORM)));
   animation_->AddKeyframeModel(KeyframeModel::Create(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
+      std::unique_ptr<gfx::AnimationCurve>(
+          new FakeFloatTransition(1.0, 0.f, 1.f)),
       5, 5, KeyframeModel::TargetPropertyId(TargetProperty::OPACITY)));
 
   animation_->Tick(kInitialTickTime);
@@ -2092,9 +2109,9 @@ TEST_F(ElementAnimationsTest, ImplThreadTakeoverAnimationGetsDeleted) {
   EXPECT_EQ(1u, events->events_.size());
   EXPECT_EQ(AnimationEvent::TAKEOVER, events->events_[0].type);
   EXPECT_EQ(TicksFromSecondsF(123), events->events_[0].animation_start_time);
-  EXPECT_EQ(
-      target_value,
-      events->events_[0].curve->ToScrollOffsetAnimationCurve()->target_value());
+  EXPECT_EQ(target_value, static_cast<ScrollOffsetAnimationCurve*>(
+                              events->events_[0].curve.get())
+                              ->target_value());
   EXPECT_EQ(nullptr,
             animation_impl_->GetKeyframeModel(TargetProperty::SCROLL_OFFSET));
 
@@ -2130,13 +2147,14 @@ TEST_F(ElementAnimationsTest, FinishedEventsForGroup) {
 
   // Add two animations with the same group id but different durations.
   std::unique_ptr<KeyframeModel> first_keyframe_model(KeyframeModel::Create(
-      std::unique_ptr<AnimationCurve>(new FakeTransformTransition(2.0)), 1,
+      std::unique_ptr<gfx::AnimationCurve>(new FakeTransformTransition(2.0)), 1,
       group_id, KeyframeModel::TargetPropertyId(TargetProperty::TRANSFORM)));
   first_keyframe_model->set_is_controlling_instance_for_test(true);
   animation_impl_->AddKeyframeModel(std::move(first_keyframe_model));
 
   std::unique_ptr<KeyframeModel> second_keyframe_model(KeyframeModel::Create(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
+      std::unique_ptr<gfx::AnimationCurve>(
+          new FakeFloatTransition(1.0, 0.f, 1.f)),
       2, group_id, KeyframeModel::TargetPropertyId(TargetProperty::OPACITY)));
   second_keyframe_model->set_is_controlling_instance_for_test(true);
   animation_impl_->AddKeyframeModel(std::move(second_keyframe_model));
@@ -2184,14 +2202,15 @@ TEST_F(ElementAnimationsTest, FinishedAndAbortedEventsForGroup) {
 
   // Add two animations with the same group id.
   std::unique_ptr<KeyframeModel> first_keyframe_model(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeTransformTransition(1.0)), 1,
+      std::unique_ptr<gfx::AnimationCurve>(new FakeTransformTransition(1.0)), 1,
       TargetProperty::TRANSFORM));
   first_keyframe_model->set_is_controlling_instance_for_test(true);
   animation_impl_->AddKeyframeModel(std::move(first_keyframe_model));
 
-  std::unique_ptr<KeyframeModel> second_keyframe_model(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
-      1, TargetProperty::OPACITY));
+  std::unique_ptr<KeyframeModel> second_keyframe_model(
+      CreateKeyframeModel(std::unique_ptr<gfx::AnimationCurve>(
+                              new FakeFloatTransition(1.0, 0.f, 1.f)),
+                          1, TargetProperty::OPACITY));
   second_keyframe_model->set_is_controlling_instance_for_test(true);
   animation_impl_->AddKeyframeModel(std::move(second_keyframe_model));
 
@@ -2224,29 +2243,30 @@ TEST_F(ElementAnimationsTest, MaximumAnimationScaleNotScaled) {
   AttachTimelineAnimationLayer();
   CreateImplTimelineAndAnimation();
 
-  EXPECT_EQ(kInvalidScale, animation_impl_->keyframe_effect()->MaximumScale(
-                               ElementListType::PENDING));
-  EXPECT_EQ(kInvalidScale, animation_impl_->keyframe_effect()->MaximumScale(
-                               ElementListType::ACTIVE));
+  EXPECT_EQ(kInvalidScale,
+            element_animations_impl_->MaximumScale(ElementListType::PENDING));
+  EXPECT_EQ(kInvalidScale,
+            element_animations_impl_->MaximumScale(ElementListType::ACTIVE));
 
-  animation_impl_->AddKeyframeModel(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
-      1, TargetProperty::OPACITY));
+  animation_impl_->AddKeyframeModel(
+      CreateKeyframeModel(std::unique_ptr<gfx::AnimationCurve>(
+                              new FakeFloatTransition(1.0, 0.f, 1.f)),
+                          1, TargetProperty::OPACITY));
 
   // Opacity animations aren't non-translation transforms.
-  EXPECT_EQ(kInvalidScale, animation_impl_->keyframe_effect()->MaximumScale(
-                               ElementListType::PENDING));
-  EXPECT_EQ(kInvalidScale, animation_impl_->keyframe_effect()->MaximumScale(
-                               ElementListType::ACTIVE));
+  EXPECT_EQ(kInvalidScale,
+            element_animations_impl_->MaximumScale(ElementListType::PENDING));
+  EXPECT_EQ(kInvalidScale,
+            element_animations_impl_->MaximumScale(ElementListType::ACTIVE));
 
-  std::unique_ptr<KeyframedTransformAnimationCurve> curve1(
-      KeyframedTransformAnimationCurve::Create());
+  std::unique_ptr<gfx::KeyframedTransformAnimationCurve> curve1(
+      gfx::KeyframedTransformAnimationCurve::Create());
 
-  TransformOperations operations1;
+  gfx::TransformOperations operations1;
   curve1->AddKeyframe(
-      TransformKeyframe::Create(base::TimeDelta(), operations1, nullptr));
+      gfx::TransformKeyframe::Create(base::TimeDelta(), operations1, nullptr));
   operations1.AppendTranslate(10.0, 15.0, 0.0);
-  curve1->AddKeyframe(TransformKeyframe::Create(
+  curve1->AddKeyframe(gfx::TransformKeyframe::Create(
       base::TimeDelta::FromSecondsD(1.0), operations1, nullptr));
 
   std::unique_ptr<KeyframeModel> keyframe_model(KeyframeModel::Create(
@@ -2255,10 +2275,69 @@ TEST_F(ElementAnimationsTest, MaximumAnimationScaleNotScaled) {
   animation_impl_->AddKeyframeModel(std::move(keyframe_model));
 
   // The only transform animation we've added is a translation.
-  EXPECT_EQ(1.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::PENDING));
-  EXPECT_EQ(1.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::ACTIVE));
+  EXPECT_EQ(1.f,
+            element_animations_impl_->MaximumScale(ElementListType::PENDING));
+  EXPECT_EQ(1.f,
+            element_animations_impl_->MaximumScale(ElementListType::ACTIVE));
+}
+
+TEST_F(ElementAnimationsTest, MaximumAnimationNonCalculatableScale) {
+  CreateTestLayer(true, false);
+  AttachTimelineAnimationLayer();
+  CreateImplTimelineAndAnimation();
+
+  std::unique_ptr<gfx::KeyframedTransformAnimationCurve> curve1(
+      gfx::KeyframedTransformAnimationCurve::Create());
+
+  gfx::TransformOperations operations1;
+  operations1.AppendScale(2.0, 2.0, 2.0);
+  operations1.AppendPerspective(100);
+  curve1->AddKeyframe(
+      gfx::TransformKeyframe::Create(base::TimeDelta(), operations1, nullptr));
+  operations1.AppendTranslate(10.0, 15.0, 0.0);
+  curve1->AddKeyframe(gfx::TransformKeyframe::Create(
+      base::TimeDelta::FromSecondsD(1.0), operations1, nullptr));
+
+  std::unique_ptr<KeyframeModel> keyframe_model(KeyframeModel::Create(
+      std::move(curve1), 2, 2,
+      KeyframeModel::TargetPropertyId(TargetProperty::TRANSFORM)));
+  animation_impl_->AddKeyframeModel(std::move(keyframe_model));
+
+  // All keyframes have perspective, so the ElementAnimations' scale is not
+  // calculatable.
+  EXPECT_EQ(kInvalidScale,
+            element_animations_impl_->MaximumScale(ElementListType::PENDING));
+  EXPECT_EQ(kInvalidScale,
+            element_animations_impl_->MaximumScale(ElementListType::ACTIVE));
+}
+
+TEST_F(ElementAnimationsTest, MaximumAnimationPartialNonCalculatableScale) {
+  CreateTestLayer(true, false);
+  AttachTimelineAnimationLayer();
+  CreateImplTimelineAndAnimation();
+
+  std::unique_ptr<gfx::KeyframedTransformAnimationCurve> curve1(
+      gfx::KeyframedTransformAnimationCurve::Create());
+
+  gfx::TransformOperations operations1;
+  operations1.AppendScale(2.0, 2.0, 2.0);
+  curve1->AddKeyframe(
+      gfx::TransformKeyframe::Create(base::TimeDelta(), operations1, nullptr));
+  operations1.AppendPerspective(100);
+  curve1->AddKeyframe(gfx::TransformKeyframe::Create(
+      base::TimeDelta::FromSecondsD(1.0), operations1, nullptr));
+
+  std::unique_ptr<KeyframeModel> keyframe_model(KeyframeModel::Create(
+      std::move(curve1), 2, 2,
+      KeyframeModel::TargetPropertyId(TargetProperty::TRANSFORM)));
+  animation_impl_->AddKeyframeModel(std::move(keyframe_model));
+
+  // Though some keyframes have perspective and the scale is not calculatable,
+  // we use the other keyframes to calculate the ElementAnimations' scale.
+  EXPECT_EQ(2.f,
+            element_animations_impl_->MaximumScale(ElementListType::PENDING));
+  EXPECT_EQ(2.f,
+            element_animations_impl_->MaximumScale(ElementListType::ACTIVE));
 }
 
 TEST_F(ElementAnimationsTest, MaximumScale) {
@@ -2266,16 +2345,16 @@ TEST_F(ElementAnimationsTest, MaximumScale) {
   AttachTimelineAnimationLayer();
   CreateImplTimelineAndAnimation();
 
-  std::unique_ptr<KeyframedTransformAnimationCurve> curve1(
-      KeyframedTransformAnimationCurve::Create());
+  std::unique_ptr<gfx::KeyframedTransformAnimationCurve> curve1(
+      gfx::KeyframedTransformAnimationCurve::Create());
 
-  TransformOperations operations1a;
+  gfx::TransformOperations operations1a;
   operations1a.AppendScale(2.0, 3.0, 4.0);
   curve1->AddKeyframe(
-      TransformKeyframe::Create(base::TimeDelta(), operations1a, nullptr));
-  TransformOperations operations1b;
+      gfx::TransformKeyframe::Create(base::TimeDelta(), operations1a, nullptr));
+  gfx::TransformOperations operations1b;
   operations1b.AppendScale(5.0, 4.0, 3.0);
-  curve1->AddKeyframe(TransformKeyframe::Create(
+  curve1->AddKeyframe(gfx::TransformKeyframe::Create(
       base::TimeDelta::FromSecondsD(1.0), operations1b, nullptr));
   std::unique_ptr<KeyframeModel> keyframe_model(KeyframeModel::Create(
       std::move(curve1), 1, 1,
@@ -2283,27 +2362,27 @@ TEST_F(ElementAnimationsTest, MaximumScale) {
   keyframe_model->set_affects_active_elements(false);
   animation_impl_->AddKeyframeModel(std::move(keyframe_model));
 
-  EXPECT_EQ(5.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::PENDING));
-  EXPECT_EQ(kInvalidScale, animation_impl_->keyframe_effect()->MaximumScale(
-                               ElementListType::ACTIVE));
+  EXPECT_EQ(5.f,
+            element_animations_impl_->MaximumScale(ElementListType::PENDING));
+  EXPECT_EQ(kInvalidScale,
+            element_animations_impl_->MaximumScale(ElementListType::ACTIVE));
 
   animation_impl_->ActivateKeyframeModels();
-  EXPECT_EQ(5.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::PENDING));
-  EXPECT_EQ(5.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::ACTIVE));
+  EXPECT_EQ(5.f,
+            element_animations_impl_->MaximumScale(ElementListType::PENDING));
+  EXPECT_EQ(5.f,
+            element_animations_impl_->MaximumScale(ElementListType::ACTIVE));
 
-  std::unique_ptr<KeyframedTransformAnimationCurve> curve2(
-      KeyframedTransformAnimationCurve::Create());
+  std::unique_ptr<gfx::KeyframedTransformAnimationCurve> curve2(
+      gfx::KeyframedTransformAnimationCurve::Create());
 
-  TransformOperations operations2a;
+  gfx::TransformOperations operations2a;
   operations2a.AppendScale(1.0, 2.0, 3.0);
   curve2->AddKeyframe(
-      TransformKeyframe::Create(base::TimeDelta(), operations2a, nullptr));
-  TransformOperations operations2b;
+      gfx::TransformKeyframe::Create(base::TimeDelta(), operations2a, nullptr));
+  gfx::TransformOperations operations2b;
   operations2b.AppendScale(6.0, 5.0, 4.0);
-  curve2->AddKeyframe(TransformKeyframe::Create(
+  curve2->AddKeyframe(gfx::TransformKeyframe::Create(
       base::TimeDelta::FromSecondsD(1.0), operations2b, nullptr));
 
   animation_impl_->RemoveKeyframeModel(1);
@@ -2316,16 +2395,16 @@ TEST_F(ElementAnimationsTest, MaximumScale) {
   keyframe_model->set_affects_active_elements(false);
   animation_impl_->AddKeyframeModel(std::move(keyframe_model));
 
-  std::unique_ptr<KeyframedTransformAnimationCurve> curve3(
-      KeyframedTransformAnimationCurve::Create());
+  std::unique_ptr<gfx::KeyframedTransformAnimationCurve> curve3(
+      gfx::KeyframedTransformAnimationCurve::Create());
 
-  TransformOperations operations3a;
+  gfx::TransformOperations operations3a;
   operations3a.AppendScale(5.0, 3.0, 1.0);
   curve3->AddKeyframe(
-      TransformKeyframe::Create(base::TimeDelta(), operations3a, nullptr));
-  TransformOperations operations3b;
+      gfx::TransformKeyframe::Create(base::TimeDelta(), operations3a, nullptr));
+  gfx::TransformOperations operations3b;
   operations3b.AppendScale(1.5, 2.5, 3.5);
-  curve3->AddKeyframe(TransformKeyframe::Create(
+  curve3->AddKeyframe(gfx::TransformKeyframe::Create(
       base::TimeDelta::FromSecondsD(1.0), operations3b, nullptr));
 
   keyframe_model = KeyframeModel::Create(
@@ -2334,25 +2413,25 @@ TEST_F(ElementAnimationsTest, MaximumScale) {
   keyframe_model->set_affects_active_elements(false);
   animation_impl_->AddKeyframeModel(std::move(keyframe_model));
 
-  EXPECT_EQ(6.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::PENDING));
-  EXPECT_EQ(kInvalidScale, animation_impl_->keyframe_effect()->MaximumScale(
-                               ElementListType::ACTIVE));
+  EXPECT_EQ(6.f,
+            element_animations_impl_->MaximumScale(ElementListType::PENDING));
+  EXPECT_EQ(kInvalidScale,
+            element_animations_impl_->MaximumScale(ElementListType::ACTIVE));
 
   animation_impl_->ActivateKeyframeModels();
-  EXPECT_EQ(6.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::PENDING));
-  EXPECT_EQ(6.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::ACTIVE));
+  EXPECT_EQ(6.f,
+            element_animations_impl_->MaximumScale(ElementListType::PENDING));
+  EXPECT_EQ(6.f,
+            element_animations_impl_->MaximumScale(ElementListType::ACTIVE));
 
   animation_impl_->keyframe_effect()->GetKeyframeModelById(2)->SetRunState(
       KeyframeModel::FINISHED, TicksFromSecondsF(0.0));
 
   // Only unfinished animations should be considered by MaximumAnimationScale.
-  EXPECT_EQ(5.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::PENDING));
-  EXPECT_EQ(5.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::ACTIVE));
+  EXPECT_EQ(5.f,
+            element_animations_impl_->MaximumScale(ElementListType::PENDING));
+  EXPECT_EQ(5.f,
+            element_animations_impl_->MaximumScale(ElementListType::ACTIVE));
 }
 
 TEST_F(ElementAnimationsTest, MaximumAnimationScaleWithDirection) {
@@ -2360,15 +2439,15 @@ TEST_F(ElementAnimationsTest, MaximumAnimationScaleWithDirection) {
   AttachTimelineAnimationLayer();
   CreateImplTimelineAndAnimation();
 
-  std::unique_ptr<KeyframedTransformAnimationCurve> curve1(
-      KeyframedTransformAnimationCurve::Create());
-  TransformOperations operations1;
+  std::unique_ptr<gfx::KeyframedTransformAnimationCurve> curve1(
+      gfx::KeyframedTransformAnimationCurve::Create());
+  gfx::TransformOperations operations1;
   operations1.AppendScale(1.0, 2.0, 3.0);
   curve1->AddKeyframe(
-      TransformKeyframe::Create(base::TimeDelta(), operations1, nullptr));
-  TransformOperations operations2;
+      gfx::TransformKeyframe::Create(base::TimeDelta(), operations1, nullptr));
+  gfx::TransformOperations operations2;
   operations2.AppendScale(4.0, 5.0, 6.0);
-  curve1->AddKeyframe(TransformKeyframe::Create(
+  curve1->AddKeyframe(gfx::TransformKeyframe::Create(
       base::TimeDelta::FromSecondsD(1.0), operations2, nullptr));
 
   std::unique_ptr<KeyframeModel> keyframe_model_owned(KeyframeModel::Create(
@@ -2381,61 +2460,61 @@ TEST_F(ElementAnimationsTest, MaximumAnimationScaleWithDirection) {
 
   // NORMAL direction with positive playback rate.
   keyframe_model->set_direction(KeyframeModel::Direction::NORMAL);
-  EXPECT_EQ(6.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::PENDING));
-  EXPECT_EQ(6.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::ACTIVE));
+  EXPECT_EQ(6.f,
+            element_animations_impl_->MaximumScale(ElementListType::PENDING));
+  EXPECT_EQ(6.f,
+            element_animations_impl_->MaximumScale(ElementListType::ACTIVE));
 
   // ALTERNATE direction with positive playback rate.
   keyframe_model->set_direction(KeyframeModel::Direction::ALTERNATE_NORMAL);
-  EXPECT_EQ(6.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::PENDING));
-  EXPECT_EQ(6.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::ACTIVE));
+  EXPECT_EQ(6.f,
+            element_animations_impl_->MaximumScale(ElementListType::PENDING));
+  EXPECT_EQ(6.f,
+            element_animations_impl_->MaximumScale(ElementListType::ACTIVE));
 
   // REVERSE direction with positive playback rate.
   keyframe_model->set_direction(KeyframeModel::Direction::REVERSE);
-  EXPECT_EQ(6.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::PENDING));
-  EXPECT_EQ(6.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::ACTIVE));
+  EXPECT_EQ(6.f,
+            element_animations_impl_->MaximumScale(ElementListType::PENDING));
+  EXPECT_EQ(6.f,
+            element_animations_impl_->MaximumScale(ElementListType::ACTIVE));
 
   // ALTERNATE reverse direction.
   keyframe_model->set_direction(KeyframeModel::Direction::REVERSE);
-  EXPECT_EQ(6.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::PENDING));
-  EXPECT_EQ(6.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::ACTIVE));
+  EXPECT_EQ(6.f,
+            element_animations_impl_->MaximumScale(ElementListType::PENDING));
+  EXPECT_EQ(6.f,
+            element_animations_impl_->MaximumScale(ElementListType::ACTIVE));
 
   keyframe_model->set_playback_rate(-1.0);
 
   // NORMAL direction with negative playback rate.
   keyframe_model->set_direction(KeyframeModel::Direction::NORMAL);
-  EXPECT_EQ(6.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::PENDING));
-  EXPECT_EQ(6.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::ACTIVE));
+  EXPECT_EQ(6.f,
+            element_animations_impl_->MaximumScale(ElementListType::PENDING));
+  EXPECT_EQ(6.f,
+            element_animations_impl_->MaximumScale(ElementListType::ACTIVE));
 
   // ALTERNATE direction with negative playback rate.
   keyframe_model->set_direction(KeyframeModel::Direction::ALTERNATE_NORMAL);
-  EXPECT_EQ(6.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::PENDING));
-  EXPECT_EQ(6.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::ACTIVE));
+  EXPECT_EQ(6.f,
+            element_animations_impl_->MaximumScale(ElementListType::PENDING));
+  EXPECT_EQ(6.f,
+            element_animations_impl_->MaximumScale(ElementListType::ACTIVE));
 
   // REVERSE direction with negative playback rate.
   keyframe_model->set_direction(KeyframeModel::Direction::REVERSE);
-  EXPECT_EQ(6.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::PENDING));
-  EXPECT_EQ(6.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::ACTIVE));
+  EXPECT_EQ(6.f,
+            element_animations_impl_->MaximumScale(ElementListType::PENDING));
+  EXPECT_EQ(6.f,
+            element_animations_impl_->MaximumScale(ElementListType::ACTIVE));
 
   // ALTERNATE reverse direction with negative playback rate.
   keyframe_model->set_direction(KeyframeModel::Direction::REVERSE);
-  EXPECT_EQ(6.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::PENDING));
-  EXPECT_EQ(6.f, animation_impl_->keyframe_effect()->MaximumScale(
-                     ElementListType::ACTIVE));
+  EXPECT_EQ(6.f,
+            element_animations_impl_->MaximumScale(ElementListType::PENDING));
+  EXPECT_EQ(6.f,
+            element_animations_impl_->MaximumScale(ElementListType::ACTIVE));
 }
 
 TEST_F(ElementAnimationsTest, NewlyPushedAnimationWaitsForActivation) {
@@ -3641,9 +3720,10 @@ TEST_F(ElementAnimationsTest, TestIsCurrentlyAnimatingProperty) {
   AttachTimelineAnimationLayer();
 
   // Create an animation that initially affects only pending elements.
-  std::unique_ptr<KeyframeModel> keyframe_model(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
-      1, TargetProperty::OPACITY));
+  std::unique_ptr<KeyframeModel> keyframe_model(
+      CreateKeyframeModel(std::unique_ptr<gfx::AnimationCurve>(
+                              new FakeFloatTransition(1.0, 0.f, 1.f)),
+                          1, TargetProperty::OPACITY));
   keyframe_model->set_affects_active_elements(false);
 
   animation_->AddKeyframeModel(std::move(keyframe_model));
@@ -3711,9 +3791,10 @@ TEST_F(ElementAnimationsTest, TestIsAnimatingPropertyTimeOffsetFillMode) {
 
   // Create an animation that initially affects only pending elements, and has
   // a start delay of 2 seconds.
-  std::unique_ptr<KeyframeModel> keyframe_model(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
-      1, TargetProperty::OPACITY));
+  std::unique_ptr<KeyframeModel> keyframe_model(
+      CreateKeyframeModel(std::unique_ptr<gfx::AnimationCurve>(
+                              new FakeFloatTransition(1.0, 0.f, 1.f)),
+                          1, TargetProperty::OPACITY));
   keyframe_model->set_fill_mode(KeyframeModel::FillMode::NONE);
   keyframe_model->set_time_offset(TimeDelta::FromMilliseconds(-2000));
   keyframe_model->set_affects_active_elements(false);
@@ -3789,9 +3870,10 @@ TEST_F(ElementAnimationsTest, DestroyTestMainLayerBeforePushProperties) {
   AttachTimelineAnimationLayer();
   EXPECT_EQ(0u, host_->ticking_animations_for_testing().size());
 
-  animation_->AddKeyframeModel(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 1.f, 0.5f)),
-      2, TargetProperty::OPACITY));
+  animation_->AddKeyframeModel(
+      CreateKeyframeModel(std::unique_ptr<gfx::AnimationCurve>(
+                              new FakeFloatTransition(1.0, 1.f, 0.5f)),
+                          2, TargetProperty::OPACITY));
   EXPECT_EQ(1u, host_->ticking_animations_for_testing().size());
 
   DestroyTestMainLayer();
@@ -3811,18 +3893,20 @@ TEST_F(ElementAnimationsTest, RemoveAndReAddAnimationToTicking) {
 
   // Add an animation and ensure the animation is in the host's ticking
   // animations. Remove the animation using RemoveFromTicking().
-  animation_->AddKeyframeModel(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 1.f, 0.5f)),
-      1, TargetProperty::OPACITY));
+  animation_->AddKeyframeModel(
+      CreateKeyframeModel(std::unique_ptr<gfx::AnimationCurve>(
+                              new FakeFloatTransition(1.0, 1.f, 0.5f)),
+                          1, TargetProperty::OPACITY));
   ASSERT_EQ(1u, host_->ticking_animations_for_testing().size());
   animation_->keyframe_effect()->RemoveFromTicking();
   ASSERT_EQ(0u, host_->ticking_animations_for_testing().size());
 
   // Ensure that adding a new animation will correctly update the ticking
   // animations list.
-  animation_->AddKeyframeModel(CreateKeyframeModel(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 1.f, 0.5f)),
-      2, TargetProperty::OPACITY));
+  animation_->AddKeyframeModel(
+      CreateKeyframeModel(std::unique_ptr<gfx::AnimationCurve>(
+                              new FakeFloatTransition(1.0, 1.f, 0.5f)),
+                          2, TargetProperty::OPACITY));
   EXPECT_EQ(1u, host_->ticking_animations_for_testing().size());
 }
 
@@ -3834,10 +3918,11 @@ TEST_F(ElementAnimationsTest, FinishedKeyframeModelsNotCopiedToImpl) {
   CreateImplTimelineAndAnimation();
 
   animation_->AddKeyframeModel(KeyframeModel::Create(
-      std::unique_ptr<AnimationCurve>(new FakeTransformTransition(1.0)), 1, 1,
-      KeyframeModel::TargetPropertyId(TargetProperty::TRANSFORM)));
+      std::unique_ptr<gfx::AnimationCurve>(new FakeTransformTransition(1.0)), 1,
+      1, KeyframeModel::TargetPropertyId(TargetProperty::TRANSFORM)));
   animation_->AddKeyframeModel(KeyframeModel::Create(
-      std::unique_ptr<AnimationCurve>(new FakeFloatTransition(2.0, 0.f, 1.f)),
+      std::unique_ptr<gfx::AnimationCurve>(
+          new FakeFloatTransition(2.0, 0.f, 1.f)),
       2, 2, KeyframeModel::TargetPropertyId(TargetProperty::OPACITY)));
 
   // Finish the first keyframe model.
@@ -3858,6 +3943,31 @@ TEST_F(ElementAnimationsTest, FinishedKeyframeModelsNotCopiedToImpl) {
   // Finished keyframe model doesn't get copied to impl thread.
   EXPECT_FALSE(animation_impl_->keyframe_effect()->GetKeyframeModelById(1));
   EXPECT_TRUE(animation_impl_->keyframe_effect()->GetKeyframeModelById(2));
+}
+
+TEST_F(ElementAnimationsTest, ClientAnimationState) {
+  client_.RegisterElementId(element_id_, ElementListType::ACTIVE);
+  AttachTimelineAnimationLayer();
+  CreateImplTimelineAndAnimation();
+
+  animation_->AddKeyframeModel(KeyframeModel::Create(
+      std::make_unique<FakeTransformTransition>(1.0), 1, 1,
+      KeyframeModel::TargetPropertyId(TargetProperty::TRANSFORM)));
+
+  auto* layer = client_.FindTestLayer(element_id_, ElementListType::ACTIVE);
+  EXPECT_TRUE(layer->is_currently_animating(TargetProperty::TRANSFORM));
+  EXPECT_EQ(1.f, layer->maximum_animation_scale());
+
+  // The client resets the cached data, simulating a property rebuild or a
+  // property push with different values.
+  layer->set_is_currently_animating(TargetProperty::TRANSFORM, false);
+  layer->set_maximum_animation_scale(kInvalidScale);
+
+  // The client should call this function which should refresh all data of the
+  // client.
+  element_animations_->InitClientAnimationState();
+  EXPECT_TRUE(layer->is_currently_animating(TargetProperty::TRANSFORM));
+  EXPECT_EQ(1.f, layer->maximum_animation_scale());
 }
 
 }  // namespace

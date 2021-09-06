@@ -33,24 +33,28 @@ constexpr int kHoldingSpaceTrayIconSmallPreviewSize = 28;
 constexpr int kHoldingSpaceTrayIconSize = 20;
 
 // Context menu commands.
-enum HoldingSpaceCommandId {
+enum class HoldingSpaceCommandId {
   kCopyImageToClipboard,
   kHidePreviews,
+  kRemoveItem,
   kPinItem,
   kShowInFolder,
   kShowPreviews,
   kUnpinItem,
-  kMaxValue = kUnpinItem
 };
 
 // View IDs.
-constexpr int kHoldingSpaceFilesAppChipId = 1;
-constexpr int kHoldingSpaceItemPinButtonId = 2;
-constexpr int kHoldingSpacePinnedFilesBubbleId = 3;
-constexpr int kHoldingSpaceRecentFilesBubbleId = 4;
-constexpr int kHoldingSpaceScreenCapturePlayIconId = 5;
-constexpr int kHoldingSpaceTrayDefaultIconId = 6;
-constexpr int kHoldingSpaceTrayPreviewsIconId = 7;
+constexpr int kHoldingSpaceDownloadsSectionHeaderId = 1;
+constexpr int kHoldingSpaceFilesAppChipId = 2;
+constexpr int kHoldingSpaceItemCheckmarkId = 3;
+constexpr int kHoldingSpaceItemImageId = 4;
+constexpr int kHoldingSpaceItemPinButtonId = 5;
+constexpr int kHoldingSpacePinnedFilesBubbleId = 6;
+constexpr int kHoldingSpaceRecentFilesBubbleId = 7;
+constexpr int kHoldingSpaceScreenCapturePlayIconId = 8;
+constexpr int kHoldingSpaceTrayDefaultIconId = 9;
+constexpr int kHoldingSpaceTrayDropTargetOverlayId = 10;
+constexpr int kHoldingSpaceTrayPreviewsIconId = 11;
 
 // The maximum allowed age for files restored into the holding space model.
 // Note that this is not enforced for pinned items.

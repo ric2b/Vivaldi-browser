@@ -36,21 +36,13 @@ using FormatTest = TestWithScheduler;
                                FILE_PATH_LITERAL(".golden")),               \
         &expected));                                                        \
     EXPECT_TRUE(commands::FormatStringToString(                             \
-        input, commands::TreeDumpMode::kInactive, &out, nullptr));          \
+        input, commands::TreeDumpMode::kInactive, &out));                   \
     EXPECT_EQ(expected, out);                                               \
     /* Make sure formatting the output doesn't cause further changes. */    \
     std::string out_again;                                                  \
     EXPECT_TRUE(commands::FormatStringToString(                             \
-        out, commands::TreeDumpMode::kInactive, &out_again, nullptr));      \
+        out, commands::TreeDumpMode::kInactive, &out_again));               \
     ASSERT_EQ(out, out_again);                                              \
-    /* Make sure we can roundtrip to json without any changes. */           \
-    std::string as_json;                                                    \
-    std::string unused;                                                     \
-    EXPECT_TRUE(commands::FormatStringToString(                             \
-        out_again, commands::TreeDumpMode::kJSON, &unused, &as_json));      \
-    std::string rewritten;                                                  \
-    EXPECT_TRUE(commands::FormatJsonToString(as_json, &rewritten));         \
-    ASSERT_EQ(out, rewritten);                                              \
   }
 
 // These are expanded out this way rather than a runtime loop so that

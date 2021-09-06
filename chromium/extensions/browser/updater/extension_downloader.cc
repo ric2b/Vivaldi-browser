@@ -600,6 +600,8 @@ void ExtensionDownloader::CreateManifestLoader() {
     // Non-webstore sources may require HTTP auth.
     resource_request->credentials_mode =
         network::mojom::CredentialsMode::kInclude;
+    resource_request->site_for_cookies =
+        net::SiteForCookies::FromUrl(active_request->full_url());
   }
 
   manifest_loader_ = network::SimpleURLLoader::Create(
@@ -1146,9 +1148,9 @@ void ExtensionDownloader::NotifyDelegateDownloadFinished(
   crx_info.expected_version = version;
   delegate_->OnExtensionDownloadFinished(
       crx_info, file_ownership_passed, url, ping_results_[id], request_ids,
-      from_cache ? base::BindRepeating(&ExtensionDownloader::CacheInstallDone,
-                                       weak_ptr_factory_.GetWeakPtr(),
-                                       base::Passed(&fetch_data))
+      from_cache ? base::BindOnce(&ExtensionDownloader::CacheInstallDone,
+                                  weak_ptr_factory_.GetWeakPtr(),
+                                  std::move(fetch_data))
                  : ExtensionDownloaderDelegate::InstallCallback());
   if (!from_cache)
     ping_results_.erase(id);
@@ -1178,6 +1180,9 @@ void ExtensionDownloader::CreateExtensionLoader() {
   if (fetch->credentials != ExtensionFetch::CREDENTIALS_COOKIES || !is_secure) {
     extension_loader_resource_request_->credentials_mode =
         network::mojom::CredentialsMode::kOmit;
+  } else {
+    extension_loader_resource_request_->site_for_cookies =
+        net::SiteForCookies::FromUrl(fetch->url);
   }
 
   if (fetch->credentials == ExtensionFetch::CREDENTIALS_OAUTH2_TOKEN &&
@@ -1420,8 +1425,8 @@ bool ExtensionDownloader::IterateFetchCredentialsAfterFailure(
         signin::ScopeSet webstore_scopes;
         webstore_scopes.insert(kWebstoreOAuth2Scope);
         identity_manager_->RemoveAccessTokenFromCache(
-            identity_manager_->GetPrimaryAccountId(), webstore_scopes,
-            access_token_);
+            identity_manager_->GetPrimaryAccountId(signin::ConsentLevel::kSync),
+            webstore_scopes, access_token_);
         access_token_.clear();
         return true;
       }

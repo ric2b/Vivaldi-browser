@@ -111,8 +111,7 @@ class FakeAdmin
     ADD_FAILURE() << "NotImplemented_: " << name;
   }
 
-  base::fuchsia::ScopedServiceBinding<
-      fuchsia::hardware::power::statecontrol::Admin>
+  base::ScopedServiceBinding<fuchsia::hardware::power::statecontrol::Admin>
       binding_;
   StateControlRebootReason last_reboot_reason_;
 };
@@ -135,7 +134,7 @@ class FakeLastRebootInfoProvider
     ADD_FAILURE() << "NotImplemented_: " << name;
   }
 
-  base::fuchsia::ScopedServiceBinding<fuchsia::feedback::LastRebootInfoProvider>
+  base::ScopedServiceBinding<fuchsia::feedback::LastRebootInfoProvider>
       binding_;
   fuchsia::feedback::LastReboot last_reboot_;
 };
@@ -184,15 +183,15 @@ class RebootFuchsiaTest: public ::testing::Test {
 
   StateControlRebootReason GetLastRebootReason() {
     StateControlRebootReason reason;
-    admin_.Post(FROM_HERE, &FakeAdmin::GetLastRebootReason, &reason);
+    admin_.AsyncCall(&FakeAdmin::GetLastRebootReason).WithArgs(&reason);
     thread_.FlushForTesting();
     return reason;
   }
 
   void SetLastReboot(fuchsia::feedback::LastReboot last_reboot) {
-    last_reboot_info_provider_.Post(FROM_HERE,
-                                    &FakeLastRebootInfoProvider::SetLastReboot,
-                                    std::move(last_reboot));
+    last_reboot_info_provider_
+        .AsyncCall(&FakeLastRebootInfoProvider::SetLastReboot)
+        .WithArgs(std::move(last_reboot));
     thread_.FlushForTesting();
   }
 

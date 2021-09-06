@@ -37,7 +37,6 @@
 #include "third_party/webrtc/api/video/video_frame.h"
 #include "third_party/webrtc/media/base/vp9_profile.h"
 #include "third_party/webrtc/modules/video_coding/codecs/h264/include/h264.h"
-#include "third_party/webrtc/rtc_base/bind.h"
 #include "third_party/webrtc/rtc_base/ref_count.h"
 #include "third_party/webrtc/rtc_base/ref_counted_object.h"
 #include "ui/gfx/color_space.h"
@@ -426,8 +425,12 @@ int32_t RTCVideoDecoderAdapter::Release() {
                     : WEBRTC_VIDEO_CODEC_OK;
 }
 
-const char* RTCVideoDecoderAdapter::ImplementationName() const {
-  return "ExternalDecoder";
+webrtc::VideoDecoder::DecoderInfo RTCVideoDecoderAdapter::GetDecoderInfo()
+    const {
+  DecoderInfo info;
+  info.implementation_name = "ExternalDecoder";
+  info.is_hardware_accelerated = true;
+  return info;
 }
 
 void RTCVideoDecoderAdapter::InitializeOnMediaThread(
@@ -613,7 +616,7 @@ void RTCVideoDecoderAdapter::FlushOnMediaThread(FlushDoneCB flush_success_cb,
   // Send EOS frame for flush.
   video_decoder_->Decode(
       media::DecoderBuffer::CreateEOSBuffer(),
-      WTF::BindRepeating(
+      WTF::Bind(
           [](FlushDoneCB flush_success, FlushDoneCB flush_fail,
              media::Status status) {
             if (status.is_ok())
@@ -621,7 +624,7 @@ void RTCVideoDecoderAdapter::FlushOnMediaThread(FlushDoneCB flush_success_cb,
             else
               std::move(flush_fail).Run();
           },
-          base::Passed(&flush_success_cb), base::Passed(&flush_fail_cb)));
+          std::move(flush_success_cb), std::move(flush_fail_cb)));
 }
 
 }  // namespace blink

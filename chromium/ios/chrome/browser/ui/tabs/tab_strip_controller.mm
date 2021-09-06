@@ -151,11 +151,9 @@ UIColor* BackgroundColor() {
     self.titleLabel.minimumScaleFactor = 0.1;
     self.titleLabel.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
 
-#if defined(__IPHONE_13_4)
     if (@available(iOS 13.4, *)) {
         self.pointerInteractionEnabled = YES;
     }
-#endif  // defined(__IPHONE_13_4)
   }
   return self;
 }
@@ -507,11 +505,9 @@ UIColor* BackgroundColor() {
                       action:@selector(recordUserMetrics:)
             forControlEvents:UIControlEventTouchUpInside];
 
-#if defined(__IPHONE_13_4)
     if (@available(iOS 13.4, *)) {
         _buttonNewTab.pointerInteractionEnabled = YES;
     }
-#endif  // defined(__IPHONE_13_4)
 
     [_tabStripView addSubview:_buttonNewTab];
 
@@ -1795,7 +1791,8 @@ UIColor* BackgroundColor() {
 }
 
 #pragma mark - ViewRevealingAnimatee
-- (void)willAnimateViewReveal:(ViewRevealState)currentViewRevealState {
+- (void)willAnimateViewRevealFromState:(ViewRevealState)currentViewRevealState
+                               toState:(ViewRevealState)nextViewRevealState {
   // Specifically when Smooth Scrolling is on, the background of the view
   // is non-clear to cover the WKWebView. In this case, make the tab strip
   // background clear as soon as view revealing begins so any animations that

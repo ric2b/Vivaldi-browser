@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/public/cpp/app_types.h"
 #include "base/feature_list.h"
@@ -14,7 +15,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "components/arc/arc_util.h"
 #include "components/arc/ime/arc_ime_bridge_impl.h"
@@ -689,6 +689,13 @@ void ArcImeService::OnDispatchingKeyEventPostIME(ui::KeyEvent* event) {
       event->properties() && (event->properties()->find(ui::kPropertyFromVK) !=
                               event->properties()->end());
   if (from_vk && IsCharacterKeyEvent(event) && IsTextInputActive(ime_type_))
+    event->SetHandled();
+
+  // Do no forward a fabricated key event which is not originated from a
+  // physical key event. Such a key event is a signal from IME to show they are
+  // going to insert/delete text. ARC apps should not see any key event caused
+  // by it.
+  if (event->key_code() == ui::VKEY_PROCESSKEY && IsTextInputActive(ime_type_))
     event->SetHandled();
 }
 

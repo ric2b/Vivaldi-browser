@@ -388,7 +388,7 @@ BaseFetchContext::CheckCSPForRequestInternal(
     return base::nullopt;
   }
 
-  const ContentSecurityPolicy* csp =
+  ContentSecurityPolicy* csp =
       GetContentSecurityPolicyForWorld(options.world_for_csp.get());
   if (csp &&
       !csp->AllowRequest(request_context, request_destination, url,
@@ -529,7 +529,7 @@ BaseFetchContext::CanRequestInternal(
 
   if (SendConversionRequestInsteadOfRedirecting(url, redirect_info,
                                                 reporting_disposition)) {
-    return ResourceRequestBlockedReason::kOther;
+    return ResourceRequestBlockedReason::kConversionRequest;
   }
 
   // Let the client have the final say into whether or not the load should

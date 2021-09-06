@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/profiles/profile_customization_bubble_sync_controller.h"
 
+#include "base/metrics/histogram_functions.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
@@ -79,14 +80,18 @@ ProfileCustomizationBubbleSyncController::
     : sync_service_(sync_service),
       theme_service_(theme_service),
       show_bubble_callback_(std::move(show_bubble_callback)),
-      suggested_profile_color_(suggested_profile_color) {
+      suggested_profile_color_(suggested_profile_color),
+      observation_start_time_(base::TimeTicks::Now()) {
   DCHECK(sync_service_);
   DCHECK(theme_service_);
   DCHECK(show_bubble_callback_);
 }
 
 ProfileCustomizationBubbleSyncController::
-    ~ProfileCustomizationBubbleSyncController() = default;
+    ~ProfileCustomizationBubbleSyncController() {
+  base::UmaHistogramTimes("Profile.SyncCustomizationBubbleDelay",
+                          base::TimeTicks::Now() - observation_start_time_);
+}
 
 void ProfileCustomizationBubbleSyncController::Init() {
   if (!CanSyncStart(sync_service_)) {
@@ -119,11 +124,17 @@ void ProfileCustomizationBubbleSyncController::OnStateChanged(
   }
 }
 
-void ProfileCustomizationBubbleSyncController::OnThemeSyncStarted() {
-  // Skip the bubble (and not use the default color) if the user got a
-  // non-default value from sync.
-  if (!theme_service_->UsingDefaultTheme() &&
-      !theme_service_->UsingSystemTheme()) {
+void ProfileCustomizationBubbleSyncController::OnThemeSyncStarted(
+    ThemeSyncableService::ThemeSyncState state) {
+  // Skip the bubble (and not use the default color) if the user got a custom
+  // value from sync (that is either already applied as a custom theme or
+  // triggered a custom theme installation).
+  const bool using_custom_theme = !theme_service_->UsingDefaultTheme() &&
+                                  !theme_service_->UsingSystemTheme();
+  const bool installing_custom_theme =
+      state ==
+      ThemeSyncableService::ThemeSyncState::kWaitingForExtensionInstallation;
+  if (using_custom_theme || installing_custom_theme) {
     SkipBubble();
     return;
   }

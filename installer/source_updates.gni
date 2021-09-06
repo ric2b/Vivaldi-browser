@@ -7,14 +7,19 @@ if (is_win) {
       "setup_resource.h",
     ]
     sources += [
+      "//vivaldi/installer/win/setup/setup.rc",
+      "//vivaldi/installer/win/setup/setup_resource.h",
+    ]
+  }
+
+  update_target("//chrome/installer/setup:lib") {
+    sources += [
       "//vivaldi/installer/util/vivaldi_install_dialog.cc",
       "//vivaldi/installer/util/vivaldi_install_dialog.h",
       "//vivaldi/installer/util/vivaldi_progress_dialog.cc",
       "//vivaldi/installer/util/vivaldi_progress_dialog.h",
       "//vivaldi/installer/util/vivaldi_setup_util.cc",
       "//vivaldi/installer/util/vivaldi_setup_util.h",
-      "//vivaldi/installer/win/setup/setup.rc",
-      "//vivaldi/installer/win/setup/setup_resource.h",
     ]
   }
 
@@ -53,6 +58,21 @@ if (is_win) {
       "//vivaldi/installer/vivaldi_install_modes.h",
       "//vivaldi/installer/util/vivaldi_install_constants.cc",
       "//vivaldi/installer/util/vivaldi_install_constants.h",
+      "//vivaldi/installer/util/vivaldi_static_install_helpers.cc",
+      "//vivaldi/installer/util/vivaldi_static_install_helpers.h",
+    ]
+  }
+
+  # We do not include //chrome/install_static:install_static_unittests in the
+  # vivaldi build, so add out test to a related test set that we do include. We
+  # also add the source files to simplify dependency management.
+  update_target("//components:components_unittests") {
+    sources += [
+      "//vivaldi/installer/util/vivaldi_install_constants.cc",
+      "//vivaldi/installer/util/vivaldi_install_constants.h",
+      "//vivaldi/installer/util/vivaldi_static_install_helpers.cc",
+      "//vivaldi/installer/util/vivaldi_static_install_helpers.h",
+      "//vivaldi/installer/util/vivaldi_static_install_helpers_unittest.cc",
     ]
   }
 }

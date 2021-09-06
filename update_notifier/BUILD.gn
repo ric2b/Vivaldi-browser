@@ -1,19 +1,22 @@
+import("//build/config/locales.gni")
 import("//build/config/win/console_app.gni")
 import("//build/config/win/manifest.gni")
 import("//chrome/process_version_rc_template.gni")
 
+import("//vivaldi/app/resources/vivaldi_grit.gni")
+import("//vivaldi/gn/config/locales.gni")
+
 executable("update_notifier") {
     deps = [
+      ":translation_strings_resource",
       ":update_notifier_version",
       "//base",
-      "//chrome/app/version_assembly:chrome_exe_manifest",
+      "//build/win:default_exe_manifest",
       "//chrome/common:constants",
       "//chrome/installer/util:with_no_strings",
       "//chrome/install_static:install_static_util",
       "//components/language/core/browser",
       "//components/version_info:generate_version_info",
-      "//components/prefs",
-      "//ui/base",
       "//vivaldi/app:resources",
       "//vivaldi/app:vivaldi_icon",
       "//vivaldi/browser:init_sparkle",
@@ -28,6 +31,8 @@ executable("update_notifier") {
       "update_notifier_manager.cc",
       "update_notifier_manager.h",
       "update_notifier_resources.h",
+      "update_notifier_utils.cc",
+      "update_notifier_utils.h",
       "update_notifier_window.cc",
       "update_notifier_window.h",
     ]
@@ -45,4 +50,33 @@ process_version_rc_template("update_notifier_version") {
     "update_notifier.ver",
   ]
   output = "$target_gen_dir/update_notifier_version.rc"
+}
+
+vivaldi_strings_grit_action("translation_strings") {
+  defines = [ "update_notifier=1" ]
+  source = "//vivaldi/app/native_resources/vivaldi_native_strings.grd"
+  resource_ids = "//vivaldi/app/gritsettings/resource_ids"
+}
+
+source_set("translation_strings_resource") {
+  # Create translations.rc that embeds all *.pak files. Each line should be in
+  # the following format:
+  # locale PAKFILE "locale.pak"
+  rc_lines = []
+  foreach(locale, locales_with_fake_bidi + vivaldi_pending_locales) {
+    locale_underscore = string_replace(locale, "-", "_")
+    file = "vivaldi_native_strings_$locale.pak"
+    line = "$locale_underscore PAKFILE \"$file\""
+
+    # Ensure that the generated file gets \r\n line endings.
+    rc_lines += [ line + "$0x0D" ]
+  }
+  write_file("$target_gen_dir/translations.rc", rc_lines)
+
+  sources = [
+    "$target_gen_dir/translations.rc",
+  ]
+  deps = [
+    ":translation_strings",
+  ]
 }

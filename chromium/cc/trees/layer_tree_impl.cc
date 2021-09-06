@@ -31,6 +31,7 @@
 #include "cc/base/histograms.h"
 #include "cc/base/math_util.h"
 #include "cc/base/synced_property.h"
+#include "cc/document_transition/document_transition_request.h"
 #include "cc/input/page_scale_animation.h"
 #include "cc/input/scrollbar_animation_controller.h"
 #include "cc/layers/effect_tree_layer_list_iterator.h"
@@ -660,6 +661,9 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
                          delegated_ink_metadata_->point().ToString());
     target_tree->set_delegated_ink_metadata(std::move(delegated_ink_metadata_));
   }
+
+  for (auto& request : TakeDocumentTransitionRequests())
+    target_tree->AddDocumentTransitionRequest(std::move(request));
 }
 
 void LayerTreeImpl::HandleTickmarksVisibilityChange() {
@@ -2145,7 +2149,6 @@ static void FindClosestMatchingLayer(const gfx::PointF& screen_space_point,
                                      LayerImpl* root_layer,
                                      const Functor& func,
                                      FindClosestMatchingLayerState* state) {
-  base::ElapsedTimer timer;
   // We want to iterate from front to back when hit testing.
   for (auto* layer : base::Reversed(*root_layer->layer_tree_impl())) {
     if (!func(layer))
@@ -2174,12 +2177,6 @@ static void FindClosestMatchingLayer(const gfx::PointF& screen_space_point,
       state->closest_distance = distance_to_intersection;
       state->closest_match = layer;
     }
-  }
-  if (const char* client_name = GetClientNameForMetrics()) {
-    UMA_HISTOGRAM_COUNTS_1M(
-        base::StringPrintf("Compositing.%s.HitTestTimeToFindClosestLayer",
-                           client_name),
-        timer.Elapsed().InMicroseconds());
   }
 }
 
@@ -2670,6 +2667,22 @@ std::string LayerTreeImpl::LayerListAsJson() const {
   }
   value.EndArray();
   return value.ToFormattedJSON();
+}
+
+void LayerTreeImpl::AddDocumentTransitionRequest(
+    std::unique_ptr<DocumentTransitionRequest> request) {
+  document_transition_requests_.push_back(std::move(request));
+  // We need to send the request to viz.
+  SetNeedsRedraw();
+}
+
+std::vector<std::unique_ptr<DocumentTransitionRequest>>
+LayerTreeImpl::TakeDocumentTransitionRequests() {
+  return std::move(document_transition_requests_);
+}
+
+bool LayerTreeImpl::HasDocumentTransitionRequests() const {
+  return !document_transition_requests_.empty();
 }
 
 }  // namespace cc

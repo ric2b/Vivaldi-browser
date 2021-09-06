@@ -96,9 +96,8 @@ class CORE_EXPORT NGConstraintSpace final {
     kRareDataPercentage
   };
 
-  // To ensure that the bfc_offset_, rare_data_ union doesn't get polluted,
-  // always initialize the bfc_offset_.
-  NGConstraintSpace() : bfc_offset_() {}
+  NGConstraintSpace()
+      : NGConstraintSpace({WritingMode::kHorizontalTb, TextDirection::kLtr}) {}
 
   NGConstraintSpace(const NGConstraintSpace& other)
       : available_size_(other.available_size_),
@@ -337,6 +336,15 @@ class CORE_EXPORT NGConstraintSpace final {
     return HasRareData() ? rare_data_->TableSectionIndex() : kNotFound;
   }
 
+  // If we're block-fragmented AND the fragmentainer block-size is known, return
+  // the total block-size of the fragmentainer that is to be created. This value
+  // is inherited by descendant constraint spaces, as long as we don't enter
+  // anything monolithic, or establish a nested fragmentation context. Note that
+  // the value returned here is the actual size that will be set on the physical
+  // fragment representing the fragmentainer, and 0 is an allowed value, even if
+  // the fragmentation spec requires us to fit at least 1px of content in each
+  // fragmentainer. See the utility function FragmentainerCapacity() for more
+  // details.
   LayoutUnit FragmentainerBlockSize() const {
     return HasRareData() ? rare_data_->fragmentainer_block_size
                          : kIndefiniteSize;
@@ -435,7 +443,18 @@ class CORE_EXPORT NGConstraintSpace final {
 
   bool IsFixedBlockSize() const { return bitfields_.is_fixed_block_size; }
 
-  // Whether a fixed block-size should be considered indefinite.
+  // Whether the block size should be considered indefinite.
+  // The constraint space can have any of the combinations:
+  // (1) !IsFixedBlockSize && !IsFixedBlockSizeIndefinite -- default. no special
+  //     handling needed.
+  // (2) !IsFixedBlockSize && IsFixedBlockSizeIndefinite -- Treat your height as
+  //     indefinite.
+  // (3) IsFixedBlockSize && !IsFixedBlockSizeIndefinite -- You must be this
+  //     size and your children can resolve % block size against it.
+  // (4) IsFixedBlockSize && IsFixedBlockSizeIndefinite -- You must be this
+  //     size but your children canNOT resolve % block size against it.
+  // TODO(dgrogan): This method needs a new name now that #2 above exists.
+  // Either IsBlockSizeIndefinite or ForceBlockSizeToIndefinite.
   bool IsFixedBlockSizeIndefinite() const {
     return bitfields_.is_fixed_block_size_indefinite;
   }
@@ -691,10 +710,10 @@ class CORE_EXPORT NGConstraintSpace final {
     return true;
   }
 
-  void ReplaceTableConstraintSpaceData(
-      const NGTableConstraintSpaceData& table_data) {
+  void ReplaceTableRowData(const NGTableConstraintSpaceData& table_data,
+                           const wtf_size_t row_index) {
     DCHECK(HasRareData());
-    rare_data_->ReplaceTableConstraintSpaceData(table_data);
+    rare_data_->ReplaceTableRowData(table_data, row_index);
   }
 
   String ToString() const;
@@ -1010,30 +1029,33 @@ class CORE_EXPORT NGConstraintSpace final {
       EnsureTableSectionData()->section_index = section_index;
     }
 
-    void ReplaceTableConstraintSpaceData(
-        const NGTableConstraintSpaceData& table_data) {
+    void ReplaceTableRowData(const NGTableConstraintSpaceData& table_data,
+                             wtf_size_t row_index) {
       DCHECK_EQ(data_union_type, kTableRowData);
-      DCHECK(table_data.IsTableSpecificDataEqual(
-          *(EnsureTableRowData()->table_data)));
-      EnsureTableRowData()->table_data = &table_data;
+      DCHECK(
+          table_data.IsTableSpecificDataEqual(*(table_row_data_.table_data)));
+      DCHECK(table_data.MaySkipRowLayout(*table_row_data_.table_data, row_index,
+                                         table_row_data_.row_index));
+      table_row_data_.table_data = &table_data;
+      table_row_data_.row_index = row_index;
     }
 
     const NGTableConstraintSpaceData* TableData() {
       if (data_union_type == kTableRowData)
-        return EnsureTableRowData()->table_data.get();
+        return table_row_data_.table_data.get();
       if (data_union_type == kTableSectionData)
-        return EnsureTableSectionData()->table_data.get();
+        return table_section_data_.table_data.get();
       return nullptr;
     }
 
-    wtf_size_t TableRowIndex() {
-      return data_union_type == kTableRowData ? EnsureTableRowData()->row_index
+    wtf_size_t TableRowIndex() const {
+      return data_union_type == kTableRowData ? table_row_data_.row_index
                                               : kNotFound;
     }
 
-    wtf_size_t TableSectionIndex() {
+    wtf_size_t TableSectionIndex() const {
       return data_union_type == kTableSectionData
-                 ? EnsureTableSectionData()->section_index
+                 ? table_section_data_.section_index
                  : kNotFound;
     }
 
@@ -1147,7 +1169,8 @@ class CORE_EXPORT NGConstraintSpace final {
     struct TableRowData {
       bool MaySkipLayout(const TableRowData& other) const {
         return table_data->IsTableSpecificDataEqual(*other.table_data) &&
-               table_data->MaySkipRowLayout(*other.table_data, row_index);
+               table_data->MaySkipRowLayout(*other.table_data, row_index,
+                                            other.row_index);
       }
       bool IsInitialForMaySkipLayout() const {
         return !table_data && row_index == kNotFound;
@@ -1160,8 +1183,8 @@ class CORE_EXPORT NGConstraintSpace final {
     struct TableSectionData {
       bool MaySkipLayout(const TableSectionData& other) const {
         return table_data->IsTableSpecificDataEqual(*other.table_data) &&
-               table_data->MaySkipSectionLayout(*other.table_data,
-                                                section_index);
+               table_data->MaySkipSectionLayout(
+                   *other.table_data, section_index, other.section_index);
       }
       bool IsInitialForMaySkipLayout() const {
         return !table_data && section_index == kNotFound;
@@ -1366,8 +1389,12 @@ class CORE_EXPORT NGConstraintSpace final {
     unsigned replaced_percentage_block_storage : 2;   // NGPercentageStorage
   };
 
+  // To ensure that the bfc_offset_, rare_data_ union doesn't get polluted,
+  // always initialize the bfc_offset_.
   explicit NGConstraintSpace(WritingDirectionMode writing_direction)
-      : bfc_offset_(), bitfields_(writing_direction) {}
+      : available_size_(kIndefiniteSize, kIndefiniteSize),
+        bfc_offset_(),
+        bitfields_(writing_direction) {}
 
   inline bool HasRareData() const { return bitfields_.has_rare_data; }
 

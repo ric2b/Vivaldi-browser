@@ -15,11 +15,10 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/containers/flat_map.h"
+#include "base/containers/fixed_flat_map.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
-#include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/numerics/math_constants.h"
 #include "base/ranges/algorithm.h"
@@ -441,9 +440,7 @@ void DownloadItemView::OnDownloadUpdated() {
     return;
   }
 
-  const Mode desired_mode = GetDesiredMode();
-  if ((mode_ != desired_mode) || (desired_mode == Mode::kNormal))
-    UpdateMode(desired_mode);
+  SetMode(GetDesiredMode());
 
   if (model_->GetState() == download::DownloadItem::COMPLETE &&
       model_->ShouldRemoveFromShelfWhenComplete()) {
@@ -673,7 +670,9 @@ DownloadItemView::Mode DownloadItemView::GetDesiredMode() const {
              : Mode::kNormal;
 }
 
-void DownloadItemView::UpdateMode(Mode mode) {
+void DownloadItemView::SetMode(Mode mode) {
+  if (mode_ == mode && mode != Mode::kNormal)
+    return;
   mode_ = mode;
   UpdateFilePathAndIcons();
   UpdateLabels();
@@ -719,6 +718,11 @@ void DownloadItemView::UpdateMode(Mode mode) {
   }
 
   shelf_->InvalidateLayout();
+  OnPropertyChanged(&mode_, views::kPropertyEffectsNone);
+}
+
+DownloadItemView::Mode DownloadItemView::GetMode() const {
+  return mode_;
 }
 
 void DownloadItemView::UpdateFilePathAndIcons() {
@@ -847,13 +851,13 @@ void DownloadItemView::UpdateAccessibleAlertAndAnimationsForNormalMode() {
     // for "in progress but paused", as the button ends up being refocused in
     // the actual use case, and the name of the button reports that the download
     // has been paused.
-    static const base::NoDestructor<base::flat_map<State, int>> kMap({
+    static constexpr auto kMap = base::MakeFixedFlatMap<State, int>({
         {State::INTERRUPTED, IDS_DOWNLOAD_FAILED_ACCESSIBLE_ALERT},
         {State::COMPLETE, IDS_DOWNLOAD_COMPLETE_ACCESSIBLE_ALERT},
         {State::CANCELLED, IDS_DOWNLOAD_CANCELLED_ACCESSIBLE_ALERT},
     });
     const base::string16 alert_text = l10n_util::GetStringFUTF16(
-        kMap->at(state), model_->GetFileNameToReportUser().LossyDisplayName());
+        kMap.at(state), model_->GetFileNameToReportUser().LossyDisplayName());
     announce_accessible_alert_soon_ = true;
     UpdateAccessibleAlert(alert_text);
   }
@@ -1138,11 +1142,16 @@ int DownloadItemView::GetLabelWidth(const views::StyledLabel& label) const {
 }
 
 void DownloadItemView::SetDropdownPressed(bool pressed) {
-  if (dropdown_pressed_ != pressed) {
-    dropdown_pressed_ = pressed;
-    dropdown_button_->SetHighlighted(dropdown_pressed_);
-    UpdateDropdownButtonImage();
-  }
+  if (dropdown_pressed_ == pressed)
+    return;
+  dropdown_pressed_ = pressed;
+  dropdown_button_->SetHighlighted(dropdown_pressed_);
+  UpdateDropdownButtonImage();
+  OnPropertyChanged(&dropdown_pressed_, views::kPropertyEffectsNone);
+}
+
+bool DownloadItemView::GetDropdownPressed() const {
+  return dropdown_pressed_;
 }
 
 void DownloadItemView::UpdateDropdownButtonImage() {
@@ -1211,7 +1220,7 @@ void DownloadItemView::ShowContextMenuImpl(const gfx::Rect& rect,
   // TODO(pkasting): Use an actual MenuButtonController and get rid of the
   // one-off reimplementation of pressed-locking and similar.
   static_cast<views::internal::RootView*>(GetWidget()->GetRootView())
-      ->SetMouseHandler(nullptr);
+      ->SetMouseAndGestureHandler(nullptr);
 
   const auto release_dropdown = [](DownloadItemView* view) {
     view->SetDropdownPressed(false);
@@ -1250,3 +1259,21 @@ bool DownloadItemView::SubmitDownloadToFeedbackService(
 void DownloadItemView::ExecuteCommand(DownloadCommands::Command command) {
   commands_.ExecuteCommand(command);
 }
+
+DEFINE_ENUM_CONVERTERS(
+    DownloadItemView::Mode,
+    {DownloadItemView::Mode::kNormal, base::ASCIIToUTF16("kNormal")},
+    {DownloadItemView::Mode::kDangerous, base::ASCIIToUTF16("kDangerous")},
+    {DownloadItemView::Mode::kMalicious, base::ASCIIToUTF16("kMalicious")},
+    {DownloadItemView::Mode::kMixedContentWarn,
+     base::ASCIIToUTF16("kMixedContentWarn")},
+    {DownloadItemView::Mode::kMixedContentBlock,
+     base::ASCIIToUTF16("kMixedContentBlock")})
+
+BEGIN_METADATA(DownloadItemView, views::View)
+ADD_READONLY_PROPERTY_METADATA(Mode, Mode)
+ADD_READONLY_PROPERTY_METADATA(base::string16, InProgressAccessibleAlertText)
+ADD_READONLY_PROPERTY_METADATA(gfx::RectF, IconBounds)
+ADD_READONLY_PROPERTY_METADATA(gfx::Size, ButtonSize)
+ADD_PROPERTY_METADATA(bool, DropdownPressed)
+END_METADATA

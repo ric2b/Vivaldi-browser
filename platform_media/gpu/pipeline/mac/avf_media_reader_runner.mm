@@ -54,8 +54,10 @@ void InitializeReader(AVFMediaReader* reader,
     }
 
     if (reader->has_video_track()) {
+      media::Strides strides = reader->GetStrides();
       video_config = GetPlatformVideoConfig(
-          reader->video_stream_format(), reader->video_transform());
+          reader->video_stream_format(), reader->video_transform(),
+          strides.stride_Y,strides.stride_UV);
       VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
               << " Using PlatformVideoConfig : "
               << Loggable(video_config);

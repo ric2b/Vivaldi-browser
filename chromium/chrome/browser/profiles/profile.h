@@ -11,16 +11,11 @@
 #include <string>
 #include <vector>
 
-#include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/observer_list.h"
-#include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "content/public/browser/browser_context.h"
-#include "mojo/public/cpp/bindings/remote.h"
-#include "services/network/public/mojom/network_context.mojom-forward.h"
-#include "url/gurl.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/scoped_java_ref.h"
@@ -31,6 +26,7 @@ class ChromeZoomLevelPrefs;
 #endif
 
 class ExtensionSpecialStoragePolicy;
+class GURL;
 class PrefService;
 class PrefStore;
 class ProfileDestroyer;
@@ -38,7 +34,9 @@ class ProfileKey;
 class TestingProfile;
 
 namespace base {
+class FilePath;
 class SequencedTaskRunner;
+class Time;
 }
 
 namespace content {
@@ -223,6 +221,7 @@ class Profile : public content::BrowserContext {
   virtual const OTRProfileID& GetOTRProfileID() const = 0;
 
   variations::VariationsClient* GetVariationsClient() override;
+  content::SharedCorsOriginAccessList* GetSharedCorsOriginAccessList() override;
 
   // Returns the creation time of this profile. This will either be the creation
   // time of the profile directory or, for ephemeral off-the-record profiles,
@@ -287,8 +286,6 @@ class Profile : public content::BrowserContext {
   virtual bool IsSupervised() const = 0;
   // Returns whether the profile is associated with a child account.
   virtual bool IsChild() const = 0;
-  // Returns whether the profile is a legacy supervised user profile.
-  virtual bool IsLegacySupervised() const = 0;
 
   // Returns whether opening browser windows is allowed in this profile. For
   // example, browser windows are not allowed in Sign-in profile on Chrome OS.
@@ -499,8 +496,7 @@ class Profile : public content::BrowserContext {
 
   // Returns whether the profile is new.  A profile is new if the browser has
   // not been shut down since the profile was created.
-  // This method is virtual in order to be overridden for tests.
-  virtual bool IsNewProfile() const;
+  virtual bool IsNewProfile() const = 0;
 
   // Notify observers of |OnProfileWillBeDestroyed| for this profile, if it has
   // not already been called. It is necessary because most Profiles are
@@ -520,6 +516,13 @@ class Profile : public content::BrowserContext {
 
   virtual void RecordMainFrameNavigation() = 0;
 
+  void SetCorsOriginAccessListForOrigin(
+      TargetBrowserContexts target_mode,
+      const url::Origin& source_origin,
+      std::vector<network::mojom::CorsOriginPatternPtr> allow_patterns,
+      std::vector<network::mojom::CorsOriginPatternPtr> block_patterns,
+      base::OnceClosure closure) override;
+
  protected:
   void set_is_guest_profile(bool is_guest_profile) {
     is_guest_profile_ = is_guest_profile;
@@ -529,9 +532,7 @@ class Profile : public content::BrowserContext {
     is_system_profile_ = is_system_profile;
   }
 
-  // Creates an OffTheRecordProfile which points to this Profile. The caller is
-  // responsible for sending a NOTIFICATION_PROFILE_CREATED when the profile is
-  // correctly assigned to its owner.
+  // Creates an OffTheRecordProfile which points to this Profile.
   static std::unique_ptr<Profile> CreateOffTheRecordProfile(
       Profile* parent,
       const OTRProfileID& otr_profile_id);
@@ -545,6 +546,13 @@ class Profile : public content::BrowserContext {
 
   // Returns whether the user has signed in this profile to an account.
   virtual bool IsSignedIn() = 0;
+
+  // TODO(lukasza): Move this method to the //content layer.
+  void SetCorsOriginAccessListForThisContextOnly(
+      const url::Origin& source_origin,
+      std::vector<network::mojom::CorsOriginPatternPtr> allow_patterns,
+      std::vector<network::mojom::CorsOriginPatternPtr> block_patterns,
+      base::OnceClosure closure);
 
  private:
   bool restored_last_session_ = false;
@@ -568,6 +576,10 @@ class Profile : public content::BrowserContext {
 
   class ChromeVariationsClient;
   std::unique_ptr<variations::VariationsClient> chrome_variations_client_;
+
+  // TODO(lukasza): Move this field to the //content layer.
+  scoped_refptr<content::SharedCorsOriginAccessList>
+      shared_cors_origin_access_list_;
 };
 
 // The comparator for profile pointers as key in a map.

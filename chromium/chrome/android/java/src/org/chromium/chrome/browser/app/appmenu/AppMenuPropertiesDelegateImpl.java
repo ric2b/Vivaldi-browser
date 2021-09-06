@@ -33,13 +33,13 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
-import org.chromium.chrome.browser.banners.AppBannerManager;
 import org.chromium.chrome.browser.banners.AppMenuVerbiage;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.device.DeviceConditions;
 import org.chromium.chrome.browser.download.DownloadUtils;
+import org.chromium.chrome.browser.feed.webfeed.WebFeedBridge;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -65,6 +65,7 @@ import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.webapk.lib.client.WebApkValidator;
+import org.chromium.components.webapps.AppBannerManager;
 import org.chromium.components.webapps.WebappsUtils;
 import org.chromium.net.ConnectionType;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -114,6 +115,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     // Keeps track of which menu item was shown when installable app is detected.
     private int mAddAppTitleShown;
     private final ModalDialogManager mModalDialogManager;
+    private final WebFeedBridge mWebFeedBridge;
 
     // The keys of the Map are menuitem ids, the first elements in the Pair are menuitem ids,
     // and the second elements in the Pair are AppMenuSimilarSelectionType. If users first
@@ -186,13 +188,14 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
      *         associated with the containing activity.
      * @param modalDialogManager The {@link ModalDialogManager} that should be used to show "Add To"
      *         dialog.
+     * @param webFeedBridge The {@link WebFeedBridge} used to show the Web Feed follow option.
      */
     public AppMenuPropertiesDelegateImpl(Context context, ActivityTabProvider activityTabProvider,
             MultiWindowModeStateDispatcher multiWindowModeStateDispatcher,
             TabModelSelector tabModelSelector, ToolbarManager toolbarManager, View decorView,
             @Nullable OneshotSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier,
             ObservableSupplier<BookmarkBridge> bookmarkBridgeSupplier,
-            ModalDialogManager modalDialogManager) {
+            ModalDialogManager modalDialogManager, WebFeedBridge webFeedBridge) {
         mContext = context;
         mIsTablet = DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext);
         mActivityTabProvider = activityTabProvider;
@@ -201,6 +204,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         mToolbarManager = toolbarManager;
         mDecorView = decorView;
         mModalDialogManager = modalDialogManager;
+        mWebFeedBridge = webFeedBridge;
 
         if (overviewModeBehaviorSupplier != null) {
             overviewModeBehaviorSupplier.onAvailable(mCallbackController.makeCancelable(
@@ -560,6 +564,20 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             menu.findItem(R.id.get_image_descriptions_id).setTitle(titleId);
         } else {
             menu.findItem(R.id.get_image_descriptions_id).setVisible(false);
+        }
+
+        // Enable web feed follow menu item if WebFeed feature is enabled.
+        MenuItem followMenuItem = menu.findItem(R.id.feed_follow_id);
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.WEB_FEED)) {
+            followMenuItem.setVisible(true);
+            WebFeedBridge.FollowedIds followedIds =
+                    mWebFeedBridge.getFollowedIds(currentTab.getUrl());
+            if (followedIds != null) {
+                followMenuItem.setIcon(R.drawable.ic_checkmark_24dp);
+                followMenuItem.setTitle(R.string.menu_following);
+            }
+        } else {
+            followMenuItem.setVisible(false);
         }
 
         // Disable find in page on the native NTP.

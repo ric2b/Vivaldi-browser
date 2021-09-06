@@ -41,7 +41,6 @@
 
 #include "base/auto_reset.h"
 #include "base/unguessable_token.h"
-#include "build/build_config.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
@@ -55,8 +54,6 @@
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_network_provider.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
-#include "third_party/blink/public/platform/web_mixed_content.h"
-#include "third_party/blink/public/platform/web_mixed_content_context_type.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
 #include "third_party/blink/public/web/web_history_item.h"
@@ -124,7 +121,6 @@
 #include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
 #include "third_party/blink/renderer/platform/network/network_utils.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
-#include "third_party/blink/renderer/platform/web_test_support.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
@@ -136,6 +132,7 @@ namespace blink {
 namespace {
 
 void ApplyOriginPolicy(ContentSecurityPolicy* csp,
+                       const KURL& response_url,
                        const WebOriginPolicy& origin_policy) {
   // When this function is called. The following lines of code happen
   // consecutively:
@@ -151,16 +148,23 @@ void ApplyOriginPolicy(ContentSecurityPolicy* csp,
   DCHECK(!csp->HasPolicyFromSource(
       network::mojom::ContentSecurityPolicySource::kOriginPolicy));
 
+  DCHECK(response_url.ProtocolIsInHTTPFamily());
+
+  scoped_refptr<SecurityOrigin> self_origin =
+      SecurityOrigin::Create(response_url);
+
   for (const auto& policy : origin_policy.content_security_policies) {
     csp->DidReceiveHeader(
-        policy, network::mojom::ContentSecurityPolicyType::kEnforce,
+        policy, *self_origin,
+        network::mojom::ContentSecurityPolicyType::kEnforce,
         network::mojom::ContentSecurityPolicySource::kOriginPolicy);
   }
 
   for (const auto& policy :
        origin_policy.content_security_policies_report_only) {
     csp->DidReceiveHeader(
-        policy, network::mojom::ContentSecurityPolicyType::kReport,
+        policy, *self_origin,
+        network::mojom::ContentSecurityPolicyType::kReport,
         network::mojom::ContentSecurityPolicySource::kOriginPolicy);
   }
 }
@@ -690,7 +694,8 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
   // Perform same document navigation.
   if (same_document_navigation) {
     document_loader_->CommitSameDocumentNavigation(
-        url, frame_load_type, nullptr, request.ClientRedirect(), origin_window,
+        url, frame_load_type, nullptr, request.ClientRedirect(),
+        resource_request.HasUserGesture(), origin_window,
         request.GetTriggeringEventInfo() !=
             mojom::blink::TriggeringEventInfo::kNotFromEvent,
         nullptr /* extra_data */);
@@ -730,7 +735,7 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
                            ->ExperimentalFeaturesEnabled()) {
     ContentSecurityPolicy* origin_window_csp =
         origin_window->GetContentSecurityPolicy();
-    initiator_csp = origin_window_csp->ExposeForNavigationalChecks();
+    initiator_csp = mojo::Clone(origin_window_csp->GetParsedPolicies());
     NavigationInitiatorImpl::From(*origin_window)
         .BindReceiver(navigation_initiator.InitWithNewPipeAndPassReceiver());
   }
@@ -822,6 +827,18 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
           request.JavascriptWorld().get())
           ? CSPDisposition::DO_NOT_CHECK
           : CSPDisposition::CHECK;
+
+  // If this is a subframe load to a urn: URL, allow loading from a Web Bundle
+  // attached to the parent document.
+  if (url.Protocol() == "urn") {
+    auto* parent_local_frame = DynamicTo<LocalFrame>(frame_->Tree().Parent());
+    if (parent_local_frame &&
+        parent_local_frame->DomWindow() == origin_window &&
+        origin_window->Fetcher()) {
+      origin_window->Fetcher()->AttachWebBundleTokenIfNeeded(resource_request);
+    }
+  }
+
   Client()->BeginNavigation(
       resource_request, request.GetFrameType(), origin_window,
       nullptr /* document_loader */, navigation_type,
@@ -831,7 +848,8 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
       should_check_main_world_csp, request.GetBlobURLToken(),
       request.GetInputStartTime(), request.HrefTranslate().GetString(),
       request.Impression(), std::move(initiator_csp), initiator_address_space,
-      std::move(navigation_initiator), request.GetInitiatorFrameToken());
+      std::move(navigation_initiator), request.GetInitiatorFrameToken(),
+      request.TakeInitiatorPolicyContainerKeepAliveHandle());
 }
 
 static void FillStaticResponseIfNeeded(WebNavigationParams* params,
@@ -1023,8 +1041,10 @@ void FrameLoader::CommitNavigation(
   DCHECK(content_security_policy);
 
   for (auto& csp : navigation_params->forced_content_security_policies) {
-    content_security_policy->AddPolicyFromHeaderValue(
-        csp, network::mojom::ContentSecurityPolicyType::kEnforce,
+    scoped_refptr<SecurityOrigin> self_origin =
+        SecurityOrigin::Create(navigation_params->url);
+    content_security_policy->DidReceiveHeader(
+        csp, *self_origin, network::mojom::ContentSecurityPolicyType::kEnforce,
         network::mojom::ContentSecurityPolicySource::kHTTP);
   }
 
@@ -1247,11 +1267,13 @@ void FrameLoader::CommitDocumentLoader(
   // Update the DocumentLoadTiming with the timings from the previous document
   // unload event.
   if (unload_timing.has_value()) {
-    document_loader_->GetTiming().SetHasSameOriginAsPreviousDocument(true);
+    document_loader_->GetTiming().SetCanRequestFromPreviousDocument(
+        unload_timing->can_request);
     document_loader_->GetTiming().MarkUnloadEventStart(
         unload_timing->unload_event_start);
     document_loader_->GetTiming().MarkUnloadEventEnd(
         unload_timing->unload_event_end);
+    document_loader_->GetTiming().MarkCommitNavigationEnd();
   }
 
   TakeObjectSnapshot();
@@ -1663,12 +1685,6 @@ void FrameLoader::ReportLegacyTLSVersion(const KURL& url,
       .SetIsAdResource(is_ad_resource)
       .Record(root.GetDocument()->UkmRecorder());
 
-  // Web tests use an outdated server on macOS. See https://crbug.com/936515.
-#if defined(OS_MAC)
-  if (WebTestSupport::IsRunningWebTest())
-    return;
-#endif
-
   String origin = SecurityOrigin::Create(url)->ToString();
   // To prevent log spam, only log the message once per origin.
   if (tls_version_warning_origins_.Contains(origin))
@@ -1714,16 +1730,15 @@ void FrameLoader::ReportLegacyTLSVersion(const KURL& url,
       console_message));
 }
 
-std::unique_ptr<TracedValue> FrameLoader::ToTracedValue() const {
-  auto traced_value = std::make_unique<TracedValue>();
-  traced_value->BeginDictionary("frame");
-  traced_value->SetString("id_ref", IdentifiersFactory::FrameId(frame_.Get()));
-  traced_value->EndDictionary();
-  traced_value->SetBoolean("isLoadingMainFrame", frame_->IsMainFrame());
-  traced_value->SetString(
-      "documentLoaderURL",
-      document_loader_ ? document_loader_->Url().GetString() : String());
-  return traced_value;
+void FrameLoader::WriteIntoTracedValue(perfetto::TracedValue context) const {
+  auto dict = std::move(context).WriteDictionary();
+  {
+    auto frame_dict = dict.AddDictionary("frame");
+    frame_dict.Add("id_ref", IdentifiersFactory::FrameId(frame_.Get()));
+  }
+  dict.Add("isLoadingMainFrame", frame_->IsMainFrame());
+  dict.Add("documentLoaderURL",
+           document_loader_ ? document_loader_->Url().GetString() : String());
 }
 
 inline void FrameLoader::TakeObjectSnapshot() const {
@@ -1731,8 +1746,7 @@ inline void FrameLoader::TakeObjectSnapshot() const {
     // We already logged TRACE_EVENT_OBJECT_DELETED_WITH_ID in detach().
     return;
   }
-  TRACE_EVENT_OBJECT_SNAPSHOT_WITH_ID("loading", "FrameLoader", this,
-                                      ToTracedValue());
+  TRACE_EVENT_OBJECT_SNAPSHOT_WITH_ID("loading", "FrameLoader", this, this);
 }
 
 ContentSecurityPolicy* FrameLoader::CreateCSPForInitialEmptyDocument() const {
@@ -1787,7 +1801,6 @@ ContentSecurityPolicy* FrameLoader::CreateCSP(
   // iframe/popup's script at a fine-grained level.
 
   ContentSecurityPolicy* csp = MakeGarbageCollected<ContentSecurityPolicy>();
-  csp->SetOverrideURLForSelf(response.CurrentRequestUrl());
 
   if (frame_->GetSettings()->GetBypassCSP())
     return csp;  // Empty CSP.
@@ -1797,25 +1810,7 @@ ContentSecurityPolicy* FrameLoader::CreateCSP(
 
   // Retrieve CSP stored in the OriginPolicy.
   if (origin_policy)
-    ApplyOriginPolicy(csp, origin_policy.value());
-
-  // Plugin inherits plugin's CSP from their navigation initiator.
-  DocumentInit::Type document_type =
-      DocumentInit::ComputeDocumentType(frame_, url, response.MimeType());
-  if (document_type == DocumentInit::Type::kPlugin) {
-    Frame* owner_frame = frame_->Parent() ? frame_->Parent() : frame_->Opener();
-    ContentSecurityPolicy* owner_csp =
-        owner_frame
-            ? owner_frame->GetSecurityContext()->GetContentSecurityPolicy()
-            : nullptr;
-    // TODO(andypaicu): This should always inherit the origin document's plugin
-    // types but because this could be a OOPIF document it might not have
-    // access. In this situation we fallback on using the parent/opener:
-    ContentSecurityPolicy* inherited_csp =
-        initiator_csp ? initiator_csp : owner_csp;
-    if (inherited_csp)
-      csp->CopyPluginTypesFrom(inherited_csp);
-  }
+    ApplyOriginPolicy(csp, url, origin_policy.value());
 
   return csp;
 }

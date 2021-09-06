@@ -55,7 +55,7 @@ if (!is_android) {
   }
 }
 
-update_target("//components/sync:rest_of_sync") {
+update_target("//components/sync/engine:engine") {
   deps += [
     "//vivaldi/sync/test:fake_server",
   ]

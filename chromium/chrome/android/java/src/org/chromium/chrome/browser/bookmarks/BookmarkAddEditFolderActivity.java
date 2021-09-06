@@ -28,7 +28,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.vivaldi.browser.bookmarks.VivaldiBookmarkAddEditFolderActivity;
-
 import org.chromium.chrome.browser.ChromeApplication;
 
 /**
@@ -159,7 +158,6 @@ public class BookmarkAddEditFolderActivity extends SynchronousInitializationActi
 
         if (mIsAddMode) {
             getSupportActionBar().setTitle(R.string.add_folder);
-            if (!ChromeApplication.isVivaldi())
             updateParent(mModel.getDefaultFolder());
         } else {
             // Edit mode
@@ -171,7 +169,6 @@ public class BookmarkAddEditFolderActivity extends SynchronousInitializationActi
             editText.setSelection(editText.getText().length());
             mParentTextView.setEnabled(bookmarkItem.isMovable());
         }
-        if (!ChromeApplication.isVivaldi())
         mParentTextView.setText(mModel.getBookmarkTitle(mParentId));
 
         View shadow = findViewById(R.id.shadow);
@@ -246,7 +243,6 @@ public class BookmarkAddEditFolderActivity extends SynchronousInitializationActi
     @Override
     protected void onStop() {
         if (!mIsAddMode && mModel.doesBookmarkExist(mFolderId) && !mFolderTitle.isEmpty()) {
-            if (!ChromeApplication.isVivaldi() || !mModel.isInsideTrashFolder(mFolderId))
             mModel.setBookmarkTitle(mFolderId, mFolderTitle.getTrimmedText());
         }
 
@@ -276,29 +272,4 @@ public class BookmarkAddEditFolderActivity extends SynchronousInitializationActi
         mParentId = newParent;
         mParentTextView.setText(mModel.getBookmarkTitle(mParentId));
     }
-
-    // Vivaldi
-    public static String getIntentIsAddMode() { return INTENT_IS_ADD_MODE; }
-    public static String getIntentBookmarkId() { return INTENT_BOOKMARK_ID; }
-    public BookmarkModel getModel() { return mModel; }
-    public BookmarkId getFolderId() { return mFolderId; }
-    public void updateParentVivaldi(BookmarkId newParent) {
-        if (newParent.getId() >= 0)
-            updateParent(newParent);
-        else
-            updateParent(mModel.getDefaultFolder());
-    }
-    public BookmarkId getParentId() { return mParentId; }
-    public boolean getIsAddMode() {
-        return mIsAddMode;
-    }
-    public void setDeleteButton(MenuItem deleteButton) { mDeleteButton = deleteButton; }
-    public void updateIsSpeedDial(BookmarkId newFolder) {
-
-    }
-    public void enableParentTextView(boolean enable) {
-        mParentTextView.setEnabled(enable);
-    }
-    public View getParentTextView() { return mParentTextView; }
-    public List<BookmarkId> getBookmarksToMove() { return mBookmarksToMove; }
 }

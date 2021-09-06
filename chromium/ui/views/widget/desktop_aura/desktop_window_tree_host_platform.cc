@@ -90,6 +90,20 @@ ui::PlatformWindowType GetPlatformWindowType(
   return ui::PlatformWindowType::kPopup;
 }
 
+ui::PlatformWindowShadowType GetPlatformWindowShadowType(
+    Widget::InitParams::ShadowType shadow_type) {
+  switch (shadow_type) {
+    case Widget::InitParams::ShadowType::kDefault:
+      return ui::PlatformWindowShadowType::kDefault;
+    case Widget::InitParams::ShadowType::kNone:
+      return ui::PlatformWindowShadowType::kNone;
+    case Widget::InitParams::ShadowType::kDrop:
+      return ui::PlatformWindowShadowType::kDrop;
+  }
+  NOTREACHED();
+  return ui::PlatformWindowShadowType::kNone;
+}
+
 ui::PlatformWindowInitProperties ConvertWidgetInitParamsToInitProperties(
     const Widget::InitParams& params) {
   ui::PlatformWindowInitProperties properties;
@@ -103,6 +117,7 @@ ui::PlatformWindowInitProperties ConvertWidgetInitParamsToInitProperties(
   properties.remove_standard_frame = params.remove_standard_frame;
   properties.workspace = params.workspace;
   properties.opacity = GetPlatformWindowOpacity(params.opacity);
+  properties.shadow_type = GetPlatformWindowShadowType(params.shadow_type);
 
   if (params.parent && params.parent->GetHost())
     properties.parent_widget = params.parent->GetHost()->GetAcceleratedWidget();
@@ -202,10 +217,12 @@ void DesktopWindowTreeHostPlatform::OnNativeWidgetCreated(
 
 void DesktopWindowTreeHostPlatform::OnWidgetInitDone() {
   // WindowShape is updated from ShapeRects transformed from
-  // NonClientView::GetWindowMask. We can guarantee that |NonClientView| is
-  // created OnWidgetInitDone.
-  WindowShapeUpdater::CreateWindowShapeUpdater(
-      this, this->desktop_native_widget_aura());
+  // NonClientView::GetWindowMask. We can guarantee that |NonClientView|
+  // is created OnWidgetInitDone.
+  if (ShouldUseLayerForShapedWindow()) {
+    WindowShapeUpdater::CreateWindowShapeUpdater(
+        this, this->desktop_native_widget_aura());
+  }
 }
 
 void DesktopWindowTreeHostPlatform::OnActiveWindowChanged(bool active) {}
@@ -216,12 +233,10 @@ DesktopWindowTreeHostPlatform::CreateTooltip() {
 }
 
 std::unique_ptr<aura::client::DragDropClient>
-DesktopWindowTreeHostPlatform::CreateDragDropClient(
-    DesktopNativeCursorManager* cursor_manager) {
+DesktopWindowTreeHostPlatform::CreateDragDropClient() {
   ui::WmDragHandler* drag_handler = ui::GetWmDragHandler(*(platform_window()));
   std::unique_ptr<DesktopDragDropClientOzone> drag_drop_client =
-      std::make_unique<DesktopDragDropClientOzone>(window(), cursor_manager,
-                                                   drag_handler);
+      std::make_unique<DesktopDragDropClientOzone>(window(), drag_handler);
   // Set a class property key, which allows |drag_drop_client| to be used for
   // drop action.
   SetWmDropHandler(platform_window(), drag_drop_client.get());
@@ -569,9 +584,7 @@ bool DesktopWindowTreeHostPlatform::ShouldUseNativeFrame() const {
 
 bool DesktopWindowTreeHostPlatform::ShouldWindowContentsBeTransparent() const {
   return platform_window()->ShouldWindowContentsBeTransparent() ||
-         const_cast<DesktopWindowTreeHostPlatform*>(this)
-             ->GetWindowMaskForWindowShape(GetBoundsInPixels().size())
-             .has_value();
+         ShouldUseLayerForShapedWindow();
 }
 
 void DesktopWindowTreeHostPlatform::FrameTypeChanged() {
@@ -668,7 +681,7 @@ gfx::Transform DesktopWindowTreeHostPlatform::GetRootTransform() const {
   // This might be called before the |platform_window| is created. Thus,
   // explicitly check if that exists before trying to access its visibility and
   // the display where it is shown.
-  if (platform_window() && IsVisible()) {
+  if (platform_window()) {
     display = display::Screen::GetScreen()->GetDisplayNearestWindow(
         GetWidget()->GetNativeWindow());
   }
@@ -751,18 +764,19 @@ DesktopWindowTreeHostPlatform::GetMaximumSizeForWindow() {
       .size();
 }
 
-base::Optional<SkPath>
-DesktopWindowTreeHostPlatform::GetWindowMaskForWindowShape(
-    const gfx::Size& size_in_pixels) {
-  if (GetWidget()->non_client_view()) {
-    SkPath window_mask;
-    // Some frame views define a custom (non-rectanguar) window mask.
-    // If so, use it to define the window shape. If not, fall through.
-    GetWidget()->non_client_view()->GetWindowMask(size_in_pixels, &window_mask);
-    if (!window_mask.isEmpty())
-      return window_mask;
-  }
-  return base::nullopt;
+SkPath DesktopWindowTreeHostPlatform::GetWindowMaskForWindowShapeInPixels() {
+  if (!GetWidget()->non_client_view())
+    return SkPath();
+
+  SkPath window_mask;
+  // Some frame views define a custom (non-rectanguar) window mask.
+  // If so, use it to define the window shape. If not, fall through.
+  GetWidget()->non_client_view()->GetWindowMask(
+      GetWindowBoundsInScreen().size(), &window_mask);
+  // Convert SkPath in DIPs to pixels.
+  if (!window_mask.isEmpty())
+    window_mask.transform(SkMatrix(GetRootTransform().matrix()));
+  return window_mask;
 }
 
 void DesktopWindowTreeHostPlatform::OnWorkspaceChanged() {
@@ -813,6 +827,10 @@ void DesktopWindowTreeHostPlatform::SetVisible(bool visible) {
 void DesktopWindowTreeHostPlatform::AddAdditionalInitProperties(
     const Widget::InitParams& params,
     ui::PlatformWindowInitProperties* properties) {}
+
+bool DesktopWindowTreeHostPlatform::ShouldUseLayerForShapedWindow() const {
+  return platform_window()->ShouldUseLayerForShapedWindow();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // DesktopWindowTreeHost:

@@ -7,20 +7,6 @@
 
 #include "platform_media/gpu/pipeline/win/wmf_media_pipeline.h"
 
-#include <mfidl.h>
-#include <d3d9.h>  // if included before |mfidl.h| breaks <propvarutil.h>
-#include <dxva2api.h>  // if included before |mfidl.h| breaks <propvarutil.h>
-
-#include <mfreadwrite.h>
-#include <wrl/client.h>
-#include <propvarutil.h>
-#include <Mferror.h>
-
-#include <algorithm>
-#include <string>
-#include <memory>
-#include <unordered_map>
-
 #include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
@@ -40,6 +26,20 @@
 #include "platform_media/common/win/mf_util.h"
 #include "platform_media/gpu/data_source/ipc_data_source.h"
 #include "platform_media/gpu/decoders/win/wmf_byte_stream.h"
+
+#include <d3d9.h>      // if included before |mfidl.h| breaks <propvarutil.h>
+#include <dxva2api.h>  // if included before |mfidl.h| breaks <propvarutil.h>
+#include <mfidl.h>
+
+#include <Mferror.h>
+#include <mfreadwrite.h>
+#include <propvarutil.h>
+#include <wrl/client.h>
+
+#include <algorithm>
+#include <memory>
+#include <string>
+#include <unordered_map>
 
 namespace media {
 

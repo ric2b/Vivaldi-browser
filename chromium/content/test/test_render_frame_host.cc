@@ -19,7 +19,6 @@
 #include "content/common/navigation_params.h"
 #include "content/common/navigation_params_utils.h"
 #include "content/public/browser/navigation_throttle.h"
-#include "content/public/common/navigation_policy.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
 #include "content/test/test_navigation_url_loader.h"
@@ -39,8 +38,8 @@
 #include "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
 #include "third_party/blink/public/mojom/frame/tree_scope_type.mojom.h"
+#include "third_party/blink/public/mojom/loader/mixed_content.mojom.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom.h"
-#include "third_party/blink/public/platform/web_mixed_content_context_type.h"
 #include "ui/base/page_transition_types.h"
 
 namespace content {
@@ -64,7 +63,8 @@ TestRenderFrameHost::TestRenderFrameHost(
     FrameTree* frame_tree,
     FrameTreeNode* frame_tree_node,
     int32_t routing_id,
-    const base::UnguessableToken& frame_token,
+    mojo::PendingAssociatedRemote<mojom::Frame> frame_remote,
+    const blink::LocalFrameToken& frame_token,
     RenderFrameHostImpl::LifecycleState lifecyle_state)
     : RenderFrameHostImpl(site_instance,
                           std::move(render_view_host),
@@ -72,6 +72,7 @@ TestRenderFrameHost::TestRenderFrameHost(
                           frame_tree,
                           frame_tree_node,
                           routing_id,
+                          std::move(frame_remote),
                           frame_token,
                           /*renderer_initiated_creation=*/false,
                           lifecyle_state),
@@ -91,9 +92,9 @@ MockRenderProcessHost* TestRenderFrameHost::GetProcess() {
   return static_cast<MockRenderProcessHost*>(RenderFrameHostImpl::GetProcess());
 }
 
-MockAgentSchedulingGroupHost& TestRenderFrameHost::agent_scheduling_group() {
+MockAgentSchedulingGroupHost& TestRenderFrameHost::GetAgentSchedulingGroup() {
   return static_cast<MockAgentSchedulingGroupHost&>(
-      RenderFrameHostImpl::agent_scheduling_group());
+      RenderFrameHostImpl::GetAgentSchedulingGroup());
 }
 
 TestRenderWidgetHost* TestRenderFrameHost::GetRenderWidgetHost() {
@@ -108,21 +109,22 @@ void TestRenderFrameHost::AddMessageToConsole(
   RenderFrameHostImpl::AddMessageToConsole(level, message);
 }
 
-void TestRenderFrameHost::ReportHeavyAdIssue(
-    blink::mojom::HeavyAdResolutionStatus resolution,
-    blink::mojom::HeavyAdReason reason) {
-  switch (reason) {
-    case blink::mojom::HeavyAdReason::kNetworkTotalLimit:
-      heavy_ad_issue_network_count_++;
-      break;
-    case blink::mojom::HeavyAdReason::kCpuTotalLimit:
-      heavy_ad_issue_cpu_total_count_++;
-      break;
-    case blink::mojom::HeavyAdReason::kCpuPeakLimit:
-      heavy_ad_issue_cpu_peak_count_++;
-      break;
+void TestRenderFrameHost::ReportInspectorIssue(
+    blink::mojom::InspectorIssueInfoPtr issue) {
+  if (issue->code == blink::mojom::InspectorIssueCode::kHeavyAdIssue) {
+    switch (issue->details->heavy_ad_issue_details->reason) {
+      case blink::mojom::HeavyAdReason::kNetworkTotalLimit:
+        heavy_ad_issue_network_count_++;
+        break;
+      case blink::mojom::HeavyAdReason::kCpuTotalLimit:
+        heavy_ad_issue_cpu_total_count_++;
+        break;
+      case blink::mojom::HeavyAdReason::kCpuPeakLimit:
+        heavy_ad_issue_cpu_peak_count_++;
+        break;
+    }
   }
-  RenderFrameHostImpl::ReportHeavyAdIssue(resolution, reason);
+  RenderFrameHostImpl::ReportInspectorIssue(std::move(issue));
 }
 
 bool TestRenderFrameHost::IsTestRenderFrameHost() const {
@@ -137,8 +139,7 @@ void TestRenderFrameHost::DidFailLoadWithError(const GURL& url,
 void TestRenderFrameHost::InitializeRenderFrameIfNeeded() {
   if (!render_view_host()->IsRenderViewLive()) {
     render_view_host()->GetProcess()->Init();
-    RenderViewHostTester::For(render_view_host())
-        ->CreateTestRenderView(base::nullopt, MSG_ROUTING_NONE, false);
+    RenderViewHostTester::For(render_view_host())->CreateTestRenderView();
   }
 }
 
@@ -152,11 +153,11 @@ TestRenderFrameHost* TestRenderFrameHost::AppendChildWithPolicy(
     const blink::ParsedFeaturePolicy& allow) {
   std::string frame_unique_name = base::GenerateGUID();
   OnCreateChildFrame(
-      GetProcess()->GetNextRoutingID(),
+      GetProcess()->GetNextRoutingID(), CreateStubFrameRemote(),
       CreateStubBrowserInterfaceBrokerReceiver(),
-      CreateStubPolicyContainerHostReceiver(),
+      CreateStubPolicyContainerBindParams(),
       blink::mojom::TreeScopeType::kDocument, frame_name, frame_unique_name,
-      false, base::UnguessableToken::Create(), base::UnguessableToken::Create(),
+      false, blink::LocalFrameToken(), base::UnguessableToken::Create(),
       blink::FramePolicy(
           {network::mojom::WebSandboxFlags::kNone, allow, {}, false}),
       blink::mojom::FrameOwnerProperties(),
@@ -303,7 +304,7 @@ void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
           false /* skip_service_worker */,
           blink::mojom::RequestContextType::HYPERLINK,
           network::mojom::RequestDestination::kDocument,
-          blink::WebMixedContentContextType::kBlockable,
+          blink::mojom::MixedContentContextType::kBlockable,
           false /* is_form_submission */,
           false /* was_initiated_by_link_click */,
           GURL() /* searchable_form_url */,
@@ -312,7 +313,8 @@ void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
           base::nullopt /* devtools_initiator_info */,
           nullptr /* trust_token_params */, base::nullopt /* impression */,
           base::TimeTicks() /* renderer_before_unload_start */,
-          base::TimeTicks() /* renderer_before_unload_end */);
+          base::TimeTicks() /* renderer_before_unload_end */,
+          base::nullopt /* web_bundle_token */);
   auto common_params = CreateCommonNavigationParams();
   common_params->url = url;
   common_params->initiator_origin = GetLastCommittedOrigin();
@@ -328,11 +330,11 @@ void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
       navigation_client_remote.InitWithNewEndpointAndPassReceiver());
   BeginNavigation(std::move(common_params), std::move(begin_params),
                   mojo::NullRemote(), std::move(navigation_client_remote),
-                  mojo::NullRemote());
+                  mojo::NullRemote(), mojo::NullRemote());
 }
 
 void TestRenderFrameHost::SimulateDidChangeOpener(
-    const base::Optional<base::UnguessableToken>& opener_frame_token) {
+    const base::Optional<blink::LocalFrameToken>& opener_frame_token) {
   DidChangeOpener(opener_frame_token);
 }
 
@@ -499,7 +501,8 @@ void TestRenderFrameHost::SendCommitFailedNavigation(
     int32_t error_code,
     const base::Optional<std::string>& error_page_content,
     std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
-        subresource_loader_factories) {
+        subresource_loader_factories,
+    blink::mojom::PolicyContainerPtr policy_container) {
   CHECK(navigation_client);
   commit_failed_callback_[navigation_request] =
       BuildCommitFailedNavigationCallback(navigation_request);
@@ -522,8 +525,8 @@ TestRenderFrameHost::BuildDidCommitParams(bool did_create_new_entry,
   params->method = "GET";
   params->http_status_code = response_code;
   params->history_list_was_cleared = simulate_history_list_was_cleared_;
-  params->original_request_url = url;
   params->post_id = -1;
+  params->redirects.push_back(url);
 
   // Simulate Blink assigning an item and document sequence number to the
   // navigation.
@@ -535,10 +538,7 @@ TestRenderFrameHost::BuildDidCommitParams(bool did_create_new_entry,
   // sequence numbers. Simulate this behavior here too.
   if (PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_TYPED)) {
     NavigationEntryImpl* entry =
-        static_cast<NavigationEntryImpl*>(frame_tree_node()
-                                              ->navigator()
-                                              .GetController()
-                                              ->GetLastCommittedEntry());
+        frame_tree_node()->navigator().controller().GetLastCommittedEntry();
     if (entry && entry->GetURL() == url) {
       FrameNavigationEntry* frame_entry =
           entry->GetFrameEntry(frame_tree_node());
@@ -590,10 +590,20 @@ TestRenderFrameHost::CreateStubBrowserInterfaceBrokerReceiver() {
 }
 
 // static
-mojo::PendingAssociatedReceiver<blink::mojom::PolicyContainerHost>
-TestRenderFrameHost::CreateStubPolicyContainerHostReceiver() {
-  return mojo::PendingAssociatedRemote<blink::mojom::PolicyContainerHost>()
-      .InitWithNewEndpointAndPassReceiver();
+mojo::PendingAssociatedRemote<mojom::Frame>
+TestRenderFrameHost::CreateStubFrameRemote() {
+  // There's no renderer to pass the receiver to in these tests.
+  mojo::AssociatedRemote<mojom::Frame> frame_remote;
+  mojo::PendingAssociatedReceiver<mojom::Frame> frame_receiver =
+      frame_remote.BindNewEndpointAndPassDedicatedReceiver();
+  return frame_remote.Unbind();
+}
+// static
+blink::mojom::PolicyContainerBindParamsPtr
+TestRenderFrameHost::CreateStubPolicyContainerBindParams() {
+  return blink::mojom::PolicyContainerBindParams::New(
+      mojo::PendingAssociatedRemote<blink::mojom::PolicyContainerHost>()
+          .InitWithNewEndpointAndPassReceiver());
 }
 
 void TestRenderFrameHost::SimulateLoadingCompleted(

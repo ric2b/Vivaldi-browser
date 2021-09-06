@@ -30,7 +30,6 @@
 
 #include "third_party/blink/public/web/web_ax_object.h"
 
-#include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/web/web_document.h"
@@ -41,7 +40,6 @@
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
-#include "third_party/blink/renderer/core/editing/markers/document_marker.h"
 #include "third_party/blink/renderer/core/editing/visible_position.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -60,6 +58,7 @@
 #include "third_party/blink/renderer/modules/accessibility/ax_selection.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/skia/include/core/SkMatrix44.h"
+#include "ui/accessibility/ax_action_data.h"
 
 namespace blink {
 
@@ -90,15 +89,22 @@ mojom::blink::ScrollAlignment::Behavior ToBlinkScrollAlignmentBehavior(
 // AXObjCache or AXObjectCacheImpl handles programmatic actions.
 class ScopedActionAnnotator {
  public:
-  explicit ScopedActionAnnotator(AXObject* obj)
+  ScopedActionAnnotator(AXObject* obj,
+                        ax::mojom::blink::Action event_from_action)
       : cache_(&obj->AXObjectCache()) {
-    DCHECK_EQ(cache_->active_event_from(), ax::mojom::blink::EventFrom::kNone)
+    std::pair<ax::mojom::blink::EventFrom, ax::mojom::blink::Action>
+        event_from_data = cache_->active_event_from_data();
+    DCHECK_EQ(event_from_data.first, ax::mojom::blink::EventFrom::kNone)
         << "Multiple ScopedActionAnnotator instances cannot be nested.";
-    cache_->set_active_event_from(ax::mojom::blink::EventFrom::kAction);
+    DCHECK_EQ(event_from_data.second, ax::mojom::blink::Action::kNone)
+        << "event_from_action must not be set before construction.";
+    cache_->set_active_event_from_data(ax::mojom::blink::EventFrom::kAction,
+                                       event_from_action);
   }
 
   ~ScopedActionAnnotator() {
-    cache_->set_active_event_from(ax::mojom::blink::EventFrom::kNone);
+    cache_->set_active_event_from_data(ax::mojom::blink::EventFrom::kNone,
+                                       ax::mojom::blink::Action::kNone);
   }
 
  private:
@@ -475,11 +481,11 @@ bool WebAXObject::CanvasHasFallbackContent() const {
   return private_->CanvasHasFallbackContent();
 }
 
-WebString WebAXObject::ImageDataUrl(const WebSize& max_size) const {
+WebString WebAXObject::ImageDataUrl(const gfx::Size& max_size) const {
   if (IsDetached())
     return WebString();
 
-  return private_->ImageDataUrl(max_size);
+  return private_->ImageDataUrl(IntSize(max_size));
 }
 
 ax::mojom::InvalidState WebAXObject::InvalidState() const {
@@ -519,7 +525,8 @@ WebAXObject WebAXObject::HitTest(const gfx::Point& point) const {
   if (IsDetached())
     return WebAXObject();
 
-  ScopedActionAnnotator annotater(private_.Get());
+  ScopedActionAnnotator annotater(private_.Get(),
+                                  ax::mojom::blink::Action::kHitTest);
   IntPoint contents_point =
       private_->DocumentFrameView()->SoonToBeRemovedUnscaledViewportToContents(
           IntPoint(point));
@@ -543,9 +550,9 @@ WebAXObject WebAXObject::HitTest(const gfx::Point& point) const {
   return WebAXObject();
 }
 
-WebRect WebAXObject::GetBoundsInFrameCoordinates() const {
+gfx::Rect WebAXObject::GetBoundsInFrameCoordinates() const {
   LayoutRect rect = private_->GetBoundsInFrameCoordinates();
-  return WebRect(EnclosingIntRect(rect));
+  return EnclosingIntRect(rect);
 }
 
 WebString WebAXObject::KeyboardShortcut() const {
@@ -584,35 +591,12 @@ WebString WebAXObject::Language() const {
   return private_->Language();
 }
 
-bool WebAXObject::ClearAccessibilityFocus() const {
+bool WebAXObject::PerformAction(const ui::AXActionData& action_data) const {
   if (IsDetached())
     return false;
 
-  ScopedActionAnnotator annotater(private_.Get());
-  return private_->InternalClearAccessibilityFocusAction();
-}
-
-bool WebAXObject::Click() const {
-  if (IsDetached())
-    return false;
-
-  return private_->RequestClickAction();
-}
-
-bool WebAXObject::Increment() const {
-  if (IsDetached())
-    return false;
-
-  ScopedActionAnnotator annotater(private_.Get());
-  return private_->RequestIncrementAction();
-}
-
-bool WebAXObject::Decrement() const {
-  if (IsDetached())
-    return false;
-
-  ScopedActionAnnotator annotater(private_.Get());
-  return private_->RequestDecrementAction();
+  ScopedActionAnnotator annotater(private_.Get(), action_data.action);
+  return private_->PerformAction(action_data);
 }
 
 WebAXObject WebAXObject::InPageLinkTarget() const {
@@ -726,19 +710,12 @@ void WebAXObject::Selection(bool& is_selection_backward,
   }
 }
 
-bool WebAXObject::SetAccessibilityFocus() const {
-  if (IsDetached())
-    return false;
-
-  ScopedActionAnnotator annotater(private_.Get());
-  return private_->InternalSetAccessibilityFocusAction();
-}
-
 bool WebAXObject::SetSelected(bool selected) const {
   if (IsDetached())
     return false;
 
-  ScopedActionAnnotator annotater(private_.Get());
+  ScopedActionAnnotator annotater(private_.Get(),
+                                  ax::mojom::blink::Action::kSetSelection);
   return private_->RequestSetSelectedAction(selected);
 }
 
@@ -749,7 +726,8 @@ bool WebAXObject::SetSelection(const WebAXObject& anchor_object,
   if (IsDetached() || anchor_object.IsDetached() || focus_object.IsDetached())
     return false;
 
-  ScopedActionAnnotator annotater(private_.Get());
+  ScopedActionAnnotator annotater(private_.Get(),
+                                  ax::mojom::blink::Action::kSetSelection);
   AXPosition ax_base, ax_extent;
   if (static_cast<const AXObject*>(anchor_object)->IsTextObject() ||
       static_cast<const AXObject*>(anchor_object)->IsNativeTextControl()) {
@@ -785,38 +763,6 @@ bool WebAXObject::SetSelection(const WebAXObject& anchor_object,
   return ax_selection.Select();
 }
 
-bool WebAXObject::Focus() const {
-  if (IsDetached())
-    return false;
-
-  ScopedActionAnnotator annotater(private_.Get());
-  return private_->RequestFocusAction();
-}
-
-bool WebAXObject::SetSequentialFocusNavigationStartingPoint() const {
-  if (IsDetached())
-    return false;
-
-  ScopedActionAnnotator annotater(private_.Get());
-  return private_->RequestSetSequentialFocusNavigationStartingPointAction();
-}
-
-bool WebAXObject::SetValue(WebString value) const {
-  if (IsDetached())
-    return false;
-
-  ScopedActionAnnotator annotater(private_.Get());
-  return private_->RequestSetValueAction(value);
-}
-
-bool WebAXObject::ShowContextMenu() const {
-  if (IsDetached())
-    return false;
-
-  ScopedActionAnnotator annotater(private_.Get());
-  return private_->RequestShowContextMenuAction();
-}
-
 WebString WebAXObject::StringValue() const {
   if (IsDetached())
     return WebString();
@@ -836,15 +782,6 @@ WebURL WebAXObject::Url() const {
     return WebURL();
 
   return private_->Url();
-}
-
-WebAXObject WebAXObject::ChooserPopup() const {
-  if (IsDetached())
-    return WebAXObject();
-  AXObject* target = private_->ChooserPopup();
-  if (!target || target->IsDetached())
-    return WebAXObject();
-  return WebAXObject(target);
 }
 
 WebString WebAXObject::GetName(ax::mojom::NameFrom& out_name_from,
@@ -1153,53 +1090,6 @@ WebAXObject WebAXObject::PreviousOnLine() const {
   return WebAXObject(private_.Get()->PreviousOnLine());
 }
 
-static ax::mojom::MarkerType ToAXMarkerType(
-    DocumentMarker::MarkerType marker_type) {
-  switch (marker_type) {
-    case DocumentMarker::kSpelling:
-      return ax::mojom::MarkerType::kSpelling;
-    case DocumentMarker::kGrammar:
-      return ax::mojom::MarkerType::kGrammar;
-    case DocumentMarker::kTextFragment:
-    case DocumentMarker::kTextMatch:
-      return ax::mojom::MarkerType::kTextMatch;
-    case DocumentMarker::kActiveSuggestion:
-      return ax::mojom::MarkerType::kActiveSuggestion;
-    case DocumentMarker::kSuggestion:
-      return ax::mojom::MarkerType::kSuggestion;
-    default:
-      return ax::mojom::MarkerType::kNone;
-  }
-}
-
-void WebAXObject::Markers(WebVector<ax::mojom::MarkerType>& types,
-                          WebVector<int>& starts,
-                          WebVector<int>& ends) const {
-  if (IsDetached())
-    return;
-
-  VectorOf<DocumentMarker::MarkerType> marker_types;
-  VectorOf<AXRange> marker_ranges;
-  private_->GetDocumentMarkers(&marker_types, &marker_ranges);
-  DCHECK_EQ(marker_types.size(), marker_ranges.size());
-
-  WebVector<ax::mojom::MarkerType> web_marker_types(marker_types.size());
-  WebVector<int> start_offsets(marker_ranges.size());
-  WebVector<int> end_offsets(marker_ranges.size());
-  for (wtf_size_t i = 0; i < marker_types.size(); ++i) {
-    web_marker_types[i] = ToAXMarkerType(marker_types[i]);
-    DCHECK(marker_ranges[i].IsValid());
-    DCHECK_EQ(marker_ranges[i].Start().ContainerObject(),
-              marker_ranges[i].End().ContainerObject());
-    start_offsets[i] = marker_ranges[i].Start().TextOffset();
-    end_offsets[i] = marker_ranges[i].End().TextOffset();
-  }
-
-  types.Swap(web_marker_types);
-  starts.Swap(start_offsets);
-  ends.Swap(end_offsets);
-}
-
 void WebAXObject::CharacterOffsets(WebVector<int>& offsets) const {
   if (IsDetached())
     return;
@@ -1317,19 +1207,21 @@ bool WebAXObject::ScrollToMakeVisible() const {
   if (IsDetached())
     return false;
 
-  ScopedActionAnnotator annotater(private_.Get());
+  ScopedActionAnnotator annotater(
+      private_.Get(), ax::mojom::blink::Action::kScrollToMakeVisible);
   return private_->RequestScrollToMakeVisibleAction();
 }
 
 bool WebAXObject::ScrollToMakeVisibleWithSubFocus(
-    const WebRect& subfocus,
+    const gfx::Rect& subfocus,
     ax::mojom::ScrollAlignment horizontal_scroll_alignment,
     ax::mojom::ScrollAlignment vertical_scroll_alignment,
     ax::mojom::ScrollBehavior scroll_behavior) const {
   if (IsDetached())
     return false;
 
-  ScopedActionAnnotator annotater(private_.Get());
+  ScopedActionAnnotator annotater(
+      private_.Get(), ax::mojom::blink::Action::kScrollToMakeVisible);
   auto horizontal_behavior =
       ToBlinkScrollAlignmentBehavior(horizontal_scroll_alignment);
   auto vertical_behavior =
@@ -1349,16 +1241,8 @@ bool WebAXObject::ScrollToMakeVisibleWithSubFocus(
   blink::mojom::blink::ScrollAlignment blink_vertical_scroll_alignment = {
       visible_vertical_behavior, vertical_behavior, vertical_behavior};
   return private_->RequestScrollToMakeVisibleWithSubFocusAction(
-      subfocus, blink_horizontal_scroll_alignment,
+      IntRect(subfocus), blink_horizontal_scroll_alignment,
       blink_vertical_scroll_alignment);
-}
-
-bool WebAXObject::ScrollToGlobalPoint(const gfx::Point& point) const {
-  if (IsDetached())
-    return false;
-
-  ScopedActionAnnotator annotater(private_.Get());
-  return private_->RequestScrollToGlobalPointAction(IntPoint(point));
 }
 
 void WebAXObject::Swap(WebAXObject& other) {
@@ -1380,9 +1264,6 @@ void WebAXObject::HandleAutofillStateChanged(
 }
 
 WebString WebAXObject::ToString(bool verbose) const {
-  if (IsDetached())
-    return WebString();
-
   return private_->ToString(verbose);
 }
 

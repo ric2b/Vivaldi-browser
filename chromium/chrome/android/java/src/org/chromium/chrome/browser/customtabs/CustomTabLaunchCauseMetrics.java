@@ -4,8 +4,8 @@
 
 package org.chromium.chrome.browser.customtabs;
 
+import org.chromium.chrome.browser.app.metrics.LaunchCauseMetrics;
 import org.chromium.chrome.browser.flags.ActivityType;
-import org.chromium.chrome.browser.metrics.LaunchCauseMetrics;
 
 /**
  * LaunchCauseMetrics for CustomTabActivity.
@@ -14,11 +14,12 @@ public class CustomTabLaunchCauseMetrics extends LaunchCauseMetrics {
     private final CustomTabActivity mActivity;
 
     public CustomTabLaunchCauseMetrics(CustomTabActivity activity) {
+        super(activity);
         mActivity = activity;
     }
 
     @Override
-    public @LaunchCause int computeLaunchCause() {
+    public @LaunchCause int computeIntentLaunchCause() {
         if (mActivity.getActivityType() == ActivityType.TRUSTED_WEB_ACTIVITY) {
             return LaunchCause.TWA;
         }

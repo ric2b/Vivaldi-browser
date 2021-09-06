@@ -14,6 +14,7 @@
 #include "base/containers/flat_set.h"
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "base/numerics/ranges.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/component_updater/soda_component_installer.h"
@@ -63,7 +64,18 @@ SodaInstallerImpl::~SodaInstallerImpl() {
   component_updater_observer_.RemoveAll();
 }
 
+base::FilePath SodaInstallerImpl::GetSodaBinaryPath() const {
+  DLOG(FATAL) << "GetSodaBinaryPath not supported on this platform";
+  return base::FilePath();
+}
+
+base::FilePath SodaInstallerImpl::GetLanguagePath() const {
+  DLOG(FATAL) << "GetLanguagePath not supported on this platform";
+  return base::FilePath();
+}
+
 void SodaInstallerImpl::InstallSoda(PrefService* prefs) {
+  soda_binary_installed_ = false;
   component_updater::RegisterSodaComponent(
       g_browser_process->component_updater(), prefs,
       g_browser_process->local_state(),
@@ -79,6 +91,7 @@ void SodaInstallerImpl::InstallSoda(PrefService* prefs) {
 }
 
 void SodaInstallerImpl::InstallLanguage(PrefService* prefs) {
+  language_installed_ = false;
   component_updater::RegisterSodaLanguageComponent(
       g_browser_process->component_updater(), prefs,
       g_browser_process->local_state(),
@@ -91,24 +104,15 @@ void SodaInstallerImpl::InstallLanguage(PrefService* prefs) {
   }
 }
 
-bool SodaInstallerImpl::IsSodaRegistered() {
-  if (!base::FeatureList::IsEnabled(media::kUseSodaForLiveCaption))
-    return true;
-  std::vector<std::string> component_ids =
-      g_browser_process->component_updater()->GetComponentIDs();
-  const bool has_soda = base::Contains(
-      component_ids,
-      component_updater::SodaComponentInstallerPolicy::GetExtensionId());
+bool SodaInstallerImpl::IsSodaInstalled() const {
+  DCHECK(base::FeatureList::IsEnabled(media::kUseSodaForLiveCaption));
+  return soda_binary_installed_ && language_installed_;
+}
 
-  base::flat_set<std::string> language_component_ids = component_updater::
-      SodaLanguagePackComponentInstallerPolicy::GetExtensionIds();
-  const bool has_language_pack =
-      std::any_of(language_component_ids.begin(), language_component_ids.end(),
-                  [&component_ids](const std::string& id) {
-                    return base::Contains(component_ids, id);
-                  });
-
-  return has_soda && has_language_pack;
+void SodaInstallerImpl::UninstallSoda(PrefService* global_prefs) {
+  // TODO(crbug.com/1055150): Refactor uninstallation code from elsewhere to
+  // here.
+  NOTREACHED();
 }
 
 void SodaInstallerImpl::OnEvent(Events event, const std::string& id) {
@@ -147,18 +151,19 @@ void SodaInstallerImpl::OnEvent(Events event, const std::string& id) {
 }
 
 void SodaInstallerImpl::OnSodaBinaryInstalled() {
-  has_soda_ = true;
-  if (has_language_pack_) {
+  soda_binary_installed_ = true;
+  if (language_installed_) {
     component_updater_observer_.RemoveAll();
     NotifyOnSodaInstalled();
   }
 }
 
 void SodaInstallerImpl::OnSodaLanguagePackInstalled() {
-  has_language_pack_ = true;
-  if (has_soda_) {
+  language_installed_ = true;
+  if (soda_binary_installed_) {
     component_updater_observer_.RemoveAll();
     NotifyOnSodaInstalled();
   }
 }
+
 }  // namespace speech

@@ -22,6 +22,8 @@
 #include "ash/assistant/ui/assistant_view_delegate.h"
 #include "ash/assistant/util/assistant_util.h"
 #include "ash/assistant/util/deep_link_util.h"
+#include "ash/constants/ash_features.h"
+#include "ash/constants/ash_pref_names.h"
 #include "ash/home_screen/home_screen_controller.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/public/cpp/app_list/app_list_client.h"
@@ -54,8 +56,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chromeos/constants/chromeos_features.h"
-#include "chromeos/constants/chromeos_pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -128,6 +128,14 @@ bool IsSuggestedContentEnabled() {
   PrefService* prefs =
       Shell::Get()->session_controller()->GetLastActiveUserPrefService();
   return prefs->GetBoolean(chromeos::prefs::kSuggestedContentEnabled);
+}
+
+int GetOffset(int offset, bool from_touchpad) {
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  if (from_touchpad)
+    return prefs->GetBoolean(prefs::kNaturalScroll) ? -offset : offset;
+  return prefs->GetBoolean(prefs::kMouseReverseScroll) ? -offset : offset;
 }
 
 // Gets the MRU window shown over the applist when in tablet mode.
@@ -333,6 +341,13 @@ void AppListControllerImpl::SetItemIcon(const std::string& id,
   AppListItem* item = model_->FindItem(id);
   if (item)
     item->SetIcon(AppListConfigType::kShared, icon);
+}
+
+void AppListControllerImpl::SetItemNotificationBadgeColor(const std::string& id,
+                                                          const SkColor color) {
+  AppListItem* item = model_->FindItem(id);
+  if (item)
+    item->SetNotificationBadgeColor(color);
 }
 
 void AppListControllerImpl::SetModelData(
@@ -620,8 +635,11 @@ void AppListControllerImpl::EndDragFromShelf(AppListViewState app_list_state) {
 }
 
 void AppListControllerImpl::ProcessMouseWheelEvent(
-    const ui::MouseWheelEvent& event) {
-  presenter_.ProcessMouseWheelOffset(event.location(), event.offset());
+    const ui::MouseWheelEvent& event,
+    bool from_touchpad) {
+  gfx::Vector2d offset(event.offset().x(),
+                       GetOffset(event.offset().y(), from_touchpad));
+  presenter_.ProcessMouseWheelOffset(event.location(), offset);
 }
 
 ShelfAction AppListControllerImpl::ToggleAppList(
@@ -1114,13 +1132,6 @@ void AppListControllerImpl::OpenSearchResult(const std::string& result_id,
   ResetHomeLauncherIfShown();
 }
 
-void AppListControllerImpl::LogResultLaunchHistogram(
-    SearchResultLaunchLocation launch_location,
-    int suggestion_index) {
-  RecordSearchLaunchIndexAndQueryLength(launch_location, GetLastQueryLength(),
-                                        suggestion_index);
-}
-
 void AppListControllerImpl::LogSearchAbandonHistogram() {
   RecordSearchAbandonWithQueryLengthHistogram(GetLastQueryLength());
 }
@@ -1293,11 +1304,6 @@ bool AppListControllerImpl::IsAssistantAllowedAndEnabled() const {
 }
 
 bool AppListControllerImpl::ShouldShowSuggestedContentInfo() const {
-  if (!base::FeatureList::IsEnabled(
-          chromeos::features::kSuggestedContentToggle)) {
-    return false;
-  }
-
   if (!IsSuggestedContentEnabled()) {
     // Don't show if user has interacted with the setting already.
     SetSuggestedContentInfoDismissed();

@@ -626,7 +626,7 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
     }
 
     @Override
-    public String getLastCommittedUrl() {
+    public GURL getLastCommittedUrl() {
         checkNotDestroyed();
         return WebContentsImplJni.get().getLastCommittedURL(
                 mNativeWebContentsAndroid, WebContentsImpl.this);
@@ -783,7 +783,7 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
     private static AccessibilitySnapshotNode createAccessibilitySnapshotNode(int parentRelativeLeft,
             int parentRelativeTop, int width, int height, boolean isRootNode, String text,
             int color, int bgcolor, float size, boolean bold, boolean italic, boolean underline,
-            boolean lineThrough, String className) {
+            boolean lineThrough, String className, String htmlTag) {
         AccessibilitySnapshotNode node = new AccessibilitySnapshotNode(text, className);
 
         // if size is smaller than 0, then style information does not exist.
@@ -791,6 +791,7 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
             node.setStyle(color, bgcolor, size, bold, italic, underline, lineThrough);
         }
         node.setLocationInfo(parentRelativeLeft, parentRelativeTop, width, height, isRootNode);
+        node.setHtmlInfo(htmlTag);
         return node;
     }
 
@@ -1110,7 +1111,7 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
         void selectWordAroundCaret(long nativeWebContentsAndroid, WebContentsImpl caller);
         void adjustSelectionByCharacterOffset(long nativeWebContentsAndroid, WebContentsImpl caller,
                 int startAdjust, int endAdjust, boolean showSelectionMenu);
-        String getLastCommittedURL(long nativeWebContentsAndroid, WebContentsImpl caller);
+        GURL getLastCommittedURL(long nativeWebContentsAndroid, WebContentsImpl caller);
         boolean isIncognito(long nativeWebContentsAndroid, WebContentsImpl caller);
         void resumeLoadingCreatedWebContents(long nativeWebContentsAndroid, WebContentsImpl caller);
         void evaluateJavaScript(long nativeWebContentsAndroid, WebContentsImpl caller,

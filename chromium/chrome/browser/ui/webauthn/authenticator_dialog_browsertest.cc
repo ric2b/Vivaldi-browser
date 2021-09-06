@@ -45,7 +45,8 @@ class AuthenticatorDialogTest : public DialogBrowserTest {
     model->set_cable_transport_info(/*cable_extension_provided=*/true,
                                     /*has_paired_phones=*/false,
                                     "fido://qrcode");
-    model->StartFlow(std::move(transport_availability), base::nullopt);
+    model->StartFlow(std::move(transport_availability), base::nullopt,
+                     /*is_conditional=*/false);
 
     // The dialog should immediately close as soon as it is displayed.
     if (name == "transports") {
@@ -211,7 +212,9 @@ class AuthenticatorDialogTest : public DialogBrowserTest {
           std::move(responses),
           base::BindOnce([](device::AuthenticatorGetAssertionResponse) {}));
     } else if (name == "request_attestation_permission") {
-      model->RequestAttestationPermission(base::DoNothing());
+      model->RequestAttestationPermission(false, base::DoNothing());
+    } else if (name == "request_enterprise_attestation_permission") {
+      model->RequestAttestationPermission(true, base::DoNothing());
     }
 
     ShowAuthenticatorRequestDialog(
@@ -375,5 +378,10 @@ IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_account_select) {
 
 IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest,
                        InvokeUi_request_attestation_permission) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest,
+                       InvokeUi_request_enterprise_attestation_permission) {
   ShowAndVerifyUi();
 }

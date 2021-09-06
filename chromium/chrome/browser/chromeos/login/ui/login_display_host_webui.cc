@@ -8,6 +8,8 @@
 #include <vector>
 
 #include "ash/accessibility/focus_ring_controller.h"
+#include "ash/components/audio/sounds.h"
+#include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/locale_update_controller.h"
 #include "ash/public/cpp/login_screen.h"
 #include "ash/public/cpp/login_screen_model.h"
@@ -28,12 +30,18 @@
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
+#include "chrome/browser/ash/accessibility/accessibility_manager.h"
+#include "chrome/browser/ash/app_mode/arc/arc_kiosk_app_manager.h"
+#include "chrome/browser/ash/app_mode/kiosk_app_types.h"
+#include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_manager.h"
+#include "chrome/browser/ash/settings/cros_settings.h"
+#include "chrome/browser/ash/system/device_disabling_manager.h"
+#include "chrome/browser/ash/system/input_device_settings.h"
+#include "chrome/browser/ash/system/timezone_resolver_manager.h"
+#include "chrome/browser/ash/system/timezone_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
-#include "chrome/browser/chromeos/app_mode/arc/arc_kiosk_app_manager.h"
-#include "chrome/browser/chromeos/app_mode/web_app/web_kiosk_app_manager.h"
 #include "chrome/browser/chromeos/base/locale_util.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chrome/browser/chromeos/first_run/drive_first_run_controller.h"
@@ -52,12 +60,6 @@
 #include "chrome/browser/chromeos/net/delay_network_call.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/enrollment_config.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chrome/browser/chromeos/system/device_disabling_manager.h"
-#include "chrome/browser/chromeos/system/input_device_settings.h"
-#include "chrome/browser/chromeos/system/timezone_resolver_manager.h"
-#include "chrome/browser/chromeos/system/timezone_util.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/ash_util.h"
@@ -75,9 +77,6 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/browser_resources.h"
-#include "chromeos/audio/chromeos_sounds.h"
-#include "chromeos/constants/chromeos_constants.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/session_manager/session_manager_client.h"
 #include "chromeos/login/login_state/login_state.h"
 #include "chromeos/settings/cros_settings_names.h"
@@ -120,6 +119,9 @@
 namespace chromeos {
 namespace {
 
+using ::ash::AudioDevice;
+using ::ash::AudioDeviceType;
+
 // Maximum delay for startup sound after 'loginPromptVisible' signal.
 const int kStartupSoundMaxDelayMs = 4000;
 
@@ -128,9 +130,6 @@ const char kLoginURL[] = "chrome://oobe/login";
 
 // URL which corresponds to the OOBE WebUI.
 const char kOobeURL[] = "chrome://oobe/oobe";
-
-// URL which corresponds to the user adding WebUI.
-const char kUserAddingURL[] = "chrome://oobe/user-adding";
 
 // URL which corresponds to the app launch splash WebUI.
 const char kAppLaunchSplashURL[] = "chrome://oobe/app-launch-splash";
@@ -148,18 +147,18 @@ const int kDefaultFadeTimeMs = 200;
 // animation is completed.
 class AnimationObserver : public ui::ImplicitAnimationObserver {
  public:
-  explicit AnimationObserver(const base::Closure& callback)
-      : callback_(callback) {}
+  explicit AnimationObserver(base::OnceClosure callback)
+      : callback_(std::move(callback)) {}
   ~AnimationObserver() override {}
 
  private:
   // ui::ImplicitAnimationObserver implementation:
   void OnImplicitAnimationsCompleted() override {
-    callback_.Run();
+    std::move(callback_).Run();
     delete this;
   }
 
-  base::Closure callback_;
+  base::OnceClosure callback_;
 
   DISALLOW_COPY_AND_ASSIGN(AnimationObserver);
 };
@@ -395,7 +394,7 @@ class CloseAfterCommit : public ui::CompositorObserver,
 
 // Returns true if we have default audio device.
 bool CanPlayStartupSound() {
-  chromeos::AudioDevice device;
+  AudioDevice device;
   bool found =
       chromeos::CrasAudioHandler::Get()->GetPrimaryActiveOutputDevice(&device);
   return found && device.stable_device_id_version &&
@@ -460,6 +459,7 @@ LoginDisplayHostWebUI::LoginDisplayHostWebUI()
 }
 
 LoginDisplayHostWebUI::~LoginDisplayHostWebUI() {
+  VLOG(4) << "~LoginDisplayWebUI";
   if (GetOobeUI())
     GetOobeUI()->signin_screen_handler()->SetDelegate(nullptr);
 
@@ -533,13 +533,6 @@ void LoginDisplayHostWebUI::OnFinalize() {
       // since sign in screen widget has to stay alive.
       ScheduleFadeOutAnimation(kDefaultFadeTimeMs);
       break;
-    case ANIMATION_ADD_USER:
-      // Defer the deletion of LoginDisplayHost instance until the user adding
-      // animation (which is done by UserSwitchAnimatorChromeOS) is finished.
-      // This is to guarantee OnUserSwitchAnimationFinished() is called before
-      // LoginDisplayHost deletes itself.
-      // See crbug.com/541864.
-      break;
   }
 }
 
@@ -601,48 +594,11 @@ WizardController* LoginDisplayHostWebUI::GetWizardController() {
 }
 
 void LoginDisplayHostWebUI::OnStartUserAdding() {
-  DisableKeyboardOverscroll();
-
-  restore_path_ = RESTORE_ADD_USER_INTO_SESSION;
-  finalize_animation_type_ = ANIMATION_ADD_USER;
-
-  // Observe the user switch animation and defer the deletion of itself only
-  // after the animation is finished.
-  ash::MultiUserWindowManager* window_manager =
-      MultiUserWindowManagerHelper::GetWindowManager();
-  // MultiUserWindowManagerHelper instance might be nullptr in a unit test.
-  if (window_manager)
-    window_manager->AddObserver(this);
-
-  VLOG(1) << "Login WebUI >> user adding";
-  if (!login_window_)
-    LoadURL(GURL(kUserAddingURL));
-  // We should emit this signal only at login screen (after reboot or sign out).
-  login_view_->set_should_emit_login_prompt_visible(false);
-
-  // Lock container can be transparent after lock screen animation.
-  aura::Window* lock_container = ash::Shell::GetContainer(
-      ash::Shell::GetPrimaryRootWindow(),
-      ash::kShellWindowId_LockScreenContainersContainer);
-  lock_container->layer()->SetOpacity(1.0);
-
-  CreateExistingUserController();
-
-  SetOobeProgressBarVisible(oobe_progress_bar_visible_ = false);
-  SetStatusAreaVisible(true);
-  existing_user_controller_->Init(
-      user_manager::UserManager::Get()->GetUsersAllowedForMultiProfile());
-  CHECK(login_display_);
-  GetOobeUI()->ShowSigninScreen(login_display_.get());
+  NOTREACHED();
 }
 
 void LoginDisplayHostWebUI::CancelUserAdding() {
-  // ANIMATION_ADD_USER observes UserSwitchAnimatorChromeOS to shutdown the
-  // login display host. However, the animation does not run when user adding is
-  // canceled. Changing to ANIMATION_NONE so that Finalize() shuts down the host
-  // immediately.
-  finalize_animation_type_ = ANIMATION_NONE;
-  Finalize(base::OnceClosure());
+  NOTREACHED();
 }
 
 void LoginDisplayHostWebUI::OnStartSignInScreen() {
@@ -706,6 +662,7 @@ void LoginDisplayHostWebUI::OnStartAppLaunch() {
 // LoginDisplayHostWebUI, public
 
 void LoginDisplayHostWebUI::OnBrowserCreated() {
+  VLOG(4) << "OnBrowserCreated";
   // Close lock window now so that the launched browser can receive focus.
   ResetLoginWindowAndView();
 }
@@ -868,8 +825,8 @@ void LoginDisplayHostWebUI::ScheduleFadeOutAnimation(int animation_speed_ms) {
   ui::Layer* layer = login_window_->GetLayer();
   ui::ScopedLayerAnimationSettings animation(layer->GetAnimator());
   animation.AddObserver(new AnimationObserver(
-      base::Bind(&LoginDisplayHostWebUI::ShutdownDisplayHost,
-                 weak_factory_.GetWeakPtr())));
+      base::BindOnce(&LoginDisplayHostWebUI::ShutdownDisplayHost,
+                     weak_factory_.GetWeakPtr())));
   animation.SetTransitionDuration(
       base::TimeDelta::FromMilliseconds(animation_speed_ms));
   layer->SetOpacity(0);
@@ -940,6 +897,7 @@ void LoginDisplayHostWebUI::InitLoginWindowAndView() {
 }
 
 void LoginDisplayHostWebUI::ResetLoginWindowAndView() {
+  VLOG(4) << "ResetLoginWindowAndView";
   // Notify any oobe dialog state observers (e.g. login shelf) that the UI is
   // hidden (so they can reset any cached OOBE dialog state.)
   ash::LoginScreen::Get()->GetModel()->NotifyOobeDialogState(
@@ -1098,7 +1056,7 @@ void LoginDisplayHostWebUI::PlayStartupSoundIfPossible() {
     return;
   }
   AccessibilityManager::Get()->PlayEarcon(Sound::kStartup,
-                                          PlaySoundOption::ALWAYS);
+                                          PlaySoundOption::kAlways);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

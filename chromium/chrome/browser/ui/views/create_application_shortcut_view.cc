@@ -22,6 +22,7 @@
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/grid_layout.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 
 #if defined(OS_WIN)
 #include "base/win/shortcut.h"
@@ -61,6 +62,7 @@ CreateChromeApplicationShortcutView::CreateChromeApplicationShortcutView(
     const extensions::Extension* app,
     base::OnceCallback<void(bool)> close_callback)
     : CreateChromeApplicationShortcutView(profile, std::move(close_callback)) {
+  SetModalType(ui::MODAL_TYPE_WINDOW);
   // Get shortcut and icon information; needed for creating the shortcut.
   web_app::GetShortcutInfoForApp(
       app, profile,
@@ -209,10 +211,6 @@ bool CreateChromeApplicationShortcutView::IsDialogButtonEnabled(
          (quick_launch_check_box_ && quick_launch_check_box_->GetChecked());
 }
 
-ui::ModalType CreateChromeApplicationShortcutView::GetModalType() const {
-  return ui::MODAL_TYPE_WINDOW;
-}
-
 base::string16 CreateChromeApplicationShortcutView::GetWindowTitle() const {
   return l10n_util::GetStringUTF16(IDS_CREATE_SHORTCUTS_TITLE);
 }
@@ -276,3 +274,6 @@ void CreateChromeApplicationShortcutView::OnAppInfoLoaded(
   // make sure the accept button gets enabled.
   DialogModelChanged();
 }
+
+BEGIN_METADATA(CreateChromeApplicationShortcutView, views::DialogDelegateView)
+END_METADATA

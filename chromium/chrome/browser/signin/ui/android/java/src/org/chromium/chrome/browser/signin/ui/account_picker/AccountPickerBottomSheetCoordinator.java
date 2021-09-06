@@ -37,14 +37,11 @@ public class AccountPickerBottomSheetCoordinator {
         public void onSheetClosed(@StateChangeReason int reason) {
             super.onSheetClosed(reason);
             if (reason == StateChangeReason.SWIPE) {
-                SigninMetricsUtils.logAccountConsistencyPromoAction(
-                        AccountConsistencyPromoAction.DISMISSED_SWIPE_DOWN);
+                logOnDismissMetrics(AccountConsistencyPromoAction.DISMISSED_SWIPE_DOWN);
             } else if (reason == StateChangeReason.BACK_PRESS) {
-                SigninMetricsUtils.logAccountConsistencyPromoAction(
-                        AccountConsistencyPromoAction.DISMISSED_BACK);
+                logOnDismissMetrics(AccountConsistencyPromoAction.DISMISSED_BACK);
             } else if (reason == StateChangeReason.TAP_SCRIM) {
-                SigninMetricsUtils.logAccountConsistencyPromoAction(
-                        AccountConsistencyPromoAction.DISMISSED_SCRIM);
+                logOnDismissMetrics(AccountConsistencyPromoAction.DISMISSED_SCRIM);
             }
         }
 
@@ -65,10 +62,12 @@ public class AccountPickerBottomSheetCoordinator {
     public AccountPickerBottomSheetCoordinator(Activity activity,
             BottomSheetController bottomSheetController,
             AccountPickerDelegate accountPickerDelegate, TabModel regularTabModel,
-            TabCreator incognitoTabCreator, HelpAndFeedbackLauncher helpAndFeedbackLauncher) {
+            TabCreator incognitoTabCreator, HelpAndFeedbackLauncher helpAndFeedbackLauncher,
+            boolean showIncognitoRow) {
         this(activity, bottomSheetController, accountPickerDelegate,
                 new IncognitoInterstitialDelegate(
-                        activity, regularTabModel, incognitoTabCreator, helpAndFeedbackLauncher));
+                        activity, regularTabModel, incognitoTabCreator, helpAndFeedbackLauncher),
+                showIncognitoRow);
     }
 
     /**
@@ -80,7 +79,7 @@ public class AccountPickerBottomSheetCoordinator {
     public AccountPickerBottomSheetCoordinator(Activity activity,
             BottomSheetController bottomSheetController,
             AccountPickerDelegate accountPickerDelegate,
-            IncognitoInterstitialDelegate incognitoInterstitialDelegate) {
+            IncognitoInterstitialDelegate incognitoInterstitialDelegate, boolean showIncognitoRow) {
         SigninPreferencesManager.getInstance().incrementAccountPickerBottomSheetShownCount();
         SigninMetricsUtils.logAccountConsistencyPromoAction(AccountConsistencyPromoAction.SHOWN);
         SigninMetricsUtils.logAccountConsistencyPromoShownCount(
@@ -91,13 +90,16 @@ public class AccountPickerBottomSheetCoordinator {
         mView = new AccountPickerBottomSheetView(activity, mAccountPickerBottomSheetMediator);
         mAccountPickerCoordinator = new AccountPickerCoordinator(mView.getAccountListView(),
                 mAccountPickerBottomSheetMediator, /* selectedAccountName= */ null,
-                /* showIncognitoRow= */ accountPickerDelegate.isIncognitoModeEnabled());
-        IncognitoInterstitialCoordinator incognitoInterstitialCoordinator =
-                new IncognitoInterstitialCoordinator(
-                        mView.getIncognitoInterstitialView(), incognitoInterstitialDelegate, () -> {
-                            SigninMetricsUtils.logAccountConsistencyPromoAction(
-                                    AccountConsistencyPromoAction.STARTED_INCOGNITO_SESSION);
-                        });
+                /* showIncognitoRow= */ showIncognitoRow);
+
+        if (showIncognitoRow) {
+            IncognitoInterstitialCoordinator incognitoInterstitialCoordinator =
+                    new IncognitoInterstitialCoordinator(mView.getIncognitoInterstitialView(),
+                            incognitoInterstitialDelegate, () -> {
+                                SigninMetricsUtils.logAccountConsistencyPromoAction(
+                                        AccountConsistencyPromoAction.STARTED_INCOGNITO_SESSION);
+                            });
+        }
         mBottomSheetController = bottomSheetController;
         PropertyModelChangeProcessor.create(mAccountPickerBottomSheetMediator.getModel(), mView,
                 AccountPickerBottomSheetViewBinder::bind);
@@ -118,7 +120,16 @@ public class AccountPickerBottomSheetCoordinator {
 
     @MainThread
     private void dismissBottomSheet() {
+        logOnDismissMetrics(AccountConsistencyPromoAction.DISMISSED_BUTTON);
         mBottomSheetController.hideContent(mView, true);
+    }
+
+    @MainThread
+    private void logOnDismissMetrics(@AccountConsistencyPromoAction int promoAction) {
+        SigninMetricsUtils.logAccountConsistencyPromoAction(promoAction);
+        SigninPreferencesManager.getInstance()
+                .incrementAccountPickerBottomSheetActiveDismissalCount();
+        SigninMetricsUtils.logWebSignin();
     }
 
     @VisibleForTesting

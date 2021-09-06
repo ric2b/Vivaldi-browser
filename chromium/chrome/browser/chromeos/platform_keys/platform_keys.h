@@ -45,7 +45,9 @@ enum class TokenId { kUser, kSystem };
 enum class Status {
   kSuccess,
   kErrorAlgorithmNotSupported,
+  kErrorAlgorithmNotPermittedByCertificate,
   kErrorCertificateNotFound,
+  kErrorCertificateInvalid,
   kErrorInputTooLong,
   kErrorGrantKeyPermissionForExtension,
   kErrorInternal,
@@ -76,8 +78,7 @@ std::string GetSubjectPublicKeyInfo(
 void IntersectCertificates(
     const net::CertificateList& certs1,
     const net::CertificateList& certs2,
-    const base::Callback<void(std::unique_ptr<net::CertificateList>)>&
-        callback);
+    base::OnceCallback<void(std::unique_ptr<net::CertificateList>)> callback);
 
 // The output for GetPublicKeyAndAlgorithm.
 struct GetPublicKeyAndAlgorithmOutput {
@@ -85,9 +86,9 @@ struct GetPublicKeyAndAlgorithmOutput {
   GetPublicKeyAndAlgorithmOutput(GetPublicKeyAndAlgorithmOutput&&);
   ~GetPublicKeyAndAlgorithmOutput();
 
-  std::string error;                // Only set on error.
-  std::vector<uint8_t> public_key;  // Only set on success.
-  base::DictionaryValue algorithm;  // Only set on success.
+  Status status = Status::kSuccess;
+  std::vector<uint8_t> public_key;  // Only set if status == kSuccess
+  base::DictionaryValue algorithm;  // Only set if status == kSuccess
 };
 
 // This is a convenient wrapper around GetPublicKey which also builds a

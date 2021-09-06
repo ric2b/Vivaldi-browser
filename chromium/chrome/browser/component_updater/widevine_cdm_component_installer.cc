@@ -197,7 +197,6 @@ class WidevineCdmComponentInstallerPolicy : public ComponentInstallerPolicy {
   void GetHash(std::vector<uint8_t>* hash) const override;
   std::string GetName() const override;
   update_client::InstallerAttributes GetInstallerAttributes() const override;
-  std::vector<std::string> GetMimeTypes() const override;
 
   // Updates CDM path if necessary.
   void UpdateCdmPath(const base::Version& cdm_version,
@@ -244,7 +243,7 @@ void WidevineCdmComponentInstallerPolicy::ComponentReady(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&WidevineCdmComponentInstallerPolicy::UpdateCdmPath,
                      base::Unretained(this), version, path,
-                     base::Passed(&manifest)));
+                     std::move(manifest)));
 }
 
 bool WidevineCdmComponentInstallerPolicy::VerifyInstallation(
@@ -293,11 +292,6 @@ std::string WidevineCdmComponentInstallerPolicy::GetName() const {
 update_client::InstallerAttributes
 WidevineCdmComponentInstallerPolicy::GetInstallerAttributes() const {
   return update_client::InstallerAttributes();
-}
-
-std::vector<std::string> WidevineCdmComponentInstallerPolicy::GetMimeTypes()
-    const {
-  return std::vector<std::string>();
 }
 
 void WidevineCdmComponentInstallerPolicy::UpdateCdmPath(
@@ -381,7 +375,7 @@ void WidevineCdmComponentInstallerPolicy::UpdateCdmPath(
 #if defined(OS_MAC) && defined(ARCH_CPU_ARM64)
                      launch_x86_64,
 #endif  // OS_MAC && ARCH_CPU_ARM64
-                     base::Passed(&manifest)));
+                     std::move(manifest)));
 #endif
 }
 

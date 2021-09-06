@@ -19,6 +19,11 @@
       "friendly_name": "Calendar, Mail & Feeds.",
       "description": "Enables Calendar, Mail & Feeds. Requires a restart of Vivaldi to be active.",
       "internal_value": true
+    },
+    "translate_page": {
+      "friendly_name": "Address bar button for page translation.",
+      "description": "Enables the button in the url field for enabling page translation. Requires a restart of Vivaldi to be active.",
+      "internal_value": false
     }
   }
 }

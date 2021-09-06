@@ -38,7 +38,6 @@
 #include "third_party/webrtc/api/video/video_frame.h"
 #include "third_party/webrtc/media/base/vp9_profile.h"
 #include "third_party/webrtc/modules/video_coding/codecs/h264/include/h264.h"
-#include "third_party/webrtc/rtc_base/bind.h"
 #include "third_party/webrtc/rtc_base/ref_count.h"
 #include "third_party/webrtc/rtc_base/ref_counted_object.h"
 #include "ui/gfx/color_space.h"
@@ -258,6 +257,8 @@ RTCVideoDecoderStreamAdapter::Create(
       kDefaultSize, media::EmptyExtraData(),
       media::EncryptionScheme::kUnencrypted);
 
+  config.set_is_rtc(true);
+
   // InitializeSync doesn't really initialize anything; it just posts the work
   // to the media thread.  If init fails, then we'll fall back on the first
   // decode after we notice.
@@ -280,6 +281,8 @@ RTCVideoDecoderStreamAdapter::RTCVideoDecoderStreamAdapter(
       config_(config),
       max_pending_buffer_count_(kAbsoluteMaxPendingBuffers) {
   DVLOG(1) << __func__;
+  decoder_info_.implementation_name = "unknown";
+  decoder_info_.is_hardware_accelerated = false;
   DETACH_FROM_SEQUENCE(decoding_sequence_checker_);
   weak_this_ = weak_this_factory_.GetWeakPtr();
 }
@@ -509,9 +512,10 @@ int32_t RTCVideoDecoderStreamAdapter::Release() {
                     : WEBRTC_VIDEO_CODEC_OK;
 }
 
-const char* RTCVideoDecoderStreamAdapter::ImplementationName() const {
+webrtc::VideoDecoder::DecoderInfo RTCVideoDecoderStreamAdapter::GetDecoderInfo()
+    const {
   base::AutoLock auto_lock(lock_);
-  return decoder_name_.c_str();
+  return decoder_info_;
 }
 
 void RTCVideoDecoderStreamAdapter::InitializeOnMediaThread(
@@ -607,23 +611,19 @@ void RTCVideoDecoderStreamAdapter::DecodeOnMediaThread(
 }
 
 void RTCVideoDecoderStreamAdapter::OnFrameReady(
-    media::VideoDecoderStream::ReadStatus status,
-    scoped_refptr<media::VideoFrame> frame) {
+    media::VideoDecoderStream::ReadResult result) {
   DVLOG(3) << __func__;
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
 
   pending_read_ = false;
 
-  switch (status) {
-    case media::VideoDecoderStream::ReadStatus::OK:
+  switch (result.code()) {
+    case media::StatusCode::kOk:
       break;
-    case media::VideoDecoderStream::ReadStatus::ABORTED:
-    case media::VideoDecoderStream::ReadStatus::DEMUXER_READ_ABORTED:
+    case media::StatusCode::kAborted:
       // We're doing a Reset(), so just ignore it and keep going.
       return;
-
-    case media::VideoDecoderStream::ReadStatus::DECODE_ERROR:
-
+    default:
       DVLOG(2) << "Entering permanent error state";
       UMA_HISTOGRAM_ENUMERATION("Media.RTCVideoDecoderError",
                                 media::VideoDecodeAccelerator::PLATFORM_FAILURE,
@@ -634,9 +634,10 @@ void RTCVideoDecoderStreamAdapter::OnFrameReady(
         pending_buffer_count_ = 0;
       }
       return;
-    default:
-      NOTREACHED();
   }
+
+  scoped_refptr<media::VideoFrame> frame = std::move(result).value();
+  DCHECK(frame);
 
   const base::TimeDelta timestamp = frame->timestamp();
   webrtc::VideoFrame rtc_frame =
@@ -777,7 +778,8 @@ void RTCVideoDecoderStreamAdapter::OnDecoderChanged(
   base::AutoLock auto_lock(lock_);
 
   if (decoder->IsPlatformDecoder()) {
-    decoder_name_ = "ExternalDecoder";
+    decoder_info_.implementation_name = "ExternalDecoder";
+    decoder_info_.is_hardware_accelerated = true;
     return;
   }
 
@@ -786,17 +788,18 @@ void RTCVideoDecoderStreamAdapter::OnDecoderChanged(
   switch (demuxer_stream_->video_decoder_config().codec()) {
     case media::VideoCodec::kCodecVP8:
     case media::VideoCodec::kCodecVP9:
-      decoder_name_ = "libvpx (DecoderStream)";
+      decoder_info_.implementation_name = "libvpx (DecoderStream)";
       break;
     case media::VideoCodec::kCodecAV1:
-      decoder_name_ = "libaom (DecoderStream)";
+      decoder_info_.implementation_name = "libaom (DecoderStream)";
       break;
     case media::VideoCodec::kCodecH264:
-      decoder_name_ = "FFmpeg (DecoderStream)";
+      decoder_info_.implementation_name = "FFmpeg (DecoderStream)";
       break;
     default:
-      decoder_name_ = "unknown";
+      decoder_info_.implementation_name = "unknown";
   }
+  decoder_info_.is_hardware_accelerated = false;
 }
 
 }  // namespace blink

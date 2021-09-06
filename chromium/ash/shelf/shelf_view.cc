@@ -53,7 +53,6 @@
 #include "base/numerics/ranges.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/timer.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "components/account_id/account_id.h"
 #include "components/services/app_service/public/cpp/app_registry_cache_wrapper.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
@@ -1033,6 +1032,7 @@ views::View* ShelfView::CreateViewForItem(const ShelfItem& item) {
       ShelfAppButton* button = new ShelfAppButton(
           this, shelf_button_delegate_ ? shelf_button_delegate_ : this);
       button->SetImage(item.image);
+      button->SetNotificationBadgeColor(item.notification_badge_color);
       button->ReflectItemStatus(item);
       view = button;
       break;
@@ -2121,6 +2121,7 @@ void ShelfView::ShelfItemChanged(int model_index, const ShelfItem& old_item) {
       ShelfAppButton* button = static_cast<ShelfAppButton*>(view);
       button->ReflectItemStatus(item);
       button->SetImage(item.image);
+      button->SetNotificationBadgeColor(item.notification_badge_color);
       button->SchedulePaint();
       break;
     }

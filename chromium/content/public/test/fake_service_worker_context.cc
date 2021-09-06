@@ -28,7 +28,7 @@ void FakeServiceWorkerContext::RemoveObserver(
 void FakeServiceWorkerContext::RegisterServiceWorker(
     const GURL& script_url,
     const blink::mojom::ServiceWorkerRegistrationOptions& options,
-    ResultCallback callback) {
+    StatusCodeCallback callback) {
   NOTREACHED();
 }
 void FakeServiceWorkerContext::UnregisterServiceWorker(
@@ -59,21 +59,12 @@ bool FakeServiceWorkerContext::MaybeHasRegistrationForOrigin(
     const url::Origin& origin) {
   return registered_origins_.find(origin) != registered_origins_.end();
 }
-void FakeServiceWorkerContext::GetInstalledRegistrationOrigins(
-    base::Optional<std::string> host_filter,
-    GetInstalledRegistrationOriginsCallback callback) {
-  NOTREACHED();
-}
 void FakeServiceWorkerContext::GetAllOriginsInfo(
     GetUsageInfoCallback callback) {
   NOTREACHED();
 }
 void FakeServiceWorkerContext::DeleteForOrigin(const url::Origin& origin,
                                                ResultCallback callback) {
-  NOTREACHED();
-}
-void FakeServiceWorkerContext::PerformStorageCleanup(
-    base::OnceClosure callback) {
   NOTREACHED();
 }
 void FakeServiceWorkerContext::CheckHasServiceWorker(
@@ -93,7 +84,7 @@ void FakeServiceWorkerContext::ClearAllServiceWorkersForTest(
 void FakeServiceWorkerContext::StartWorkerForScope(
     const GURL& scope,
     ServiceWorkerContext::StartWorkerCallback info_callback,
-    ServiceWorkerContext::StartWorkerFailureCallback failure_callback) {
+    ServiceWorkerContext::StatusCodeCallback failure_callback) {
   NOTREACHED();
 }
 void FakeServiceWorkerContext::StartServiceWorkerForNavigationHint(

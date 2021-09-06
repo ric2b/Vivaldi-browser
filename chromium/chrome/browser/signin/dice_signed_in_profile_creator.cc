@@ -128,8 +128,8 @@ TokensLoadedCallbackRunner::TokensLoadedCallbackRunner(
   shutdown_subscription_ =
       DiceSignedInProfileCreatorShutdownNotifierFactory::GetInstance()
           ->Get(profile)
-          ->Subscribe(base::Bind(&TokensLoadedCallbackRunner::OnShutdown,
-                                 base::Unretained(this)));
+          ->Subscribe(base::BindRepeating(
+              &TokensLoadedCallbackRunner::OnShutdown, base::Unretained(this)));
   scoped_identity_manager_observer_.Add(identity_manager_);
 }
 
@@ -143,6 +143,12 @@ DiceSignedInProfileCreator::DiceSignedInProfileCreator(
     : source_profile_(source_profile),
       account_id_(account_id),
       callback_(std::move(callback)) {
+  // Passing the sign-in token to an ephemeral Guest profile is part of the
+  // experiment to surface a Guest mode link in the DiceWebSigninIntercept
+  // and is only used to sign in to the web through account consistency and
+  // does NOT enable sync or any other browser level functionality.
+  // TODO(https://crbug.com/1125474): Revise the comment after ephemeral Guest
+  // profiles are finalized.
   if (use_guest_profile) {
     DCHECK(Profile::IsEphemeralGuestProfileEnabled());
     // Make sure the callback is not called synchronously.

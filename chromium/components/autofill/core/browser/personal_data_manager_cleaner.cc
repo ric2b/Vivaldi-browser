@@ -27,7 +27,7 @@ PersonalDataManagerCleaner::PersonalDataManagerCleaner(
       alternative_state_name_map_updater_(alternative_state_name_map_updater) {
   // Check if profile cleanup has already been performed this major version.
   is_autofill_profile_cleanup_pending_ =
-      pref_service_->GetInteger(prefs::kAutofillLastVersionDeduped) >=
+      pref_service_->GetInteger(prefs::kAutofillLastVersionDeduped) <
       CHROME_VERSION_MAJOR;
   DVLOG(1) << "Autofill profile cleanup "
            << (is_autofill_profile_cleanup_pending_ ? "needs to be"
@@ -38,10 +38,15 @@ PersonalDataManagerCleaner::PersonalDataManagerCleaner(
 PersonalDataManagerCleaner::~PersonalDataManagerCleaner() = default;
 
 void PersonalDataManagerCleaner::CleanupDataAndNotifyPersonalDataObservers() {
+  // The profile de-duplication is run once every major chrome version. If the
+  // profile de-duplication has not run for the |CHROME_VERSION_MAJOR| yet,
+  // |AlternativeStateNameMap| needs to be populated first. Otherwise,
+  // defer the insertion to when the observers are notified.
   if (!alternative_state_name_map_updater_
            ->is_alternative_state_name_map_populated() &&
       base::FeatureList::IsEnabled(
-          features::kAutofillUseAlternativeStateNameMap)) {
+          features::kAutofillUseAlternativeStateNameMap) &&
+      is_autofill_profile_cleanup_pending_) {
     alternative_state_name_map_updater_->PopulateAlternativeStateNameMap(
         base::BindOnce(&PersonalDataManagerCleaner::
                            CleanupDataAndNotifyPersonalDataObservers,
@@ -68,10 +73,15 @@ void PersonalDataManagerCleaner::CleanupDataAndNotifyPersonalDataObservers() {
 }
 
 void PersonalDataManagerCleaner::SyncStarted(syncer::ModelType model_type) {
+  // The profile de-duplication is run once every major chrome version. If the
+  // profile de-duplication has not run for the |CHROME_VERSION_MAJOR| yet,
+  // |AlternativeStateNameMap| needs to be populated first. Otherwise,
+  // defer the insertion to when the observers are notified.
   if (!alternative_state_name_map_updater_
            ->is_alternative_state_name_map_populated() &&
       base::FeatureList::IsEnabled(
-          features::kAutofillUseAlternativeStateNameMap)) {
+          features::kAutofillUseAlternativeStateNameMap) &&
+      is_autofill_profile_cleanup_pending_) {
     alternative_state_name_map_updater_->PopulateAlternativeStateNameMap(
         base::BindOnce(&PersonalDataManagerCleaner::SyncStarted,
                        weak_ptr_factory_.GetWeakPtr(), model_type));
@@ -143,10 +153,17 @@ void PersonalDataManagerCleaner::RemoveOrphanAutofillTableRows() {
 }
 
 bool PersonalDataManagerCleaner::ApplyDedupingRoutine() {
-  if (!is_autofill_profile_cleanup_pending_)
+  if (!base::FeatureList::IsEnabled(
+          features::kAutofillEnableProfileDeduplication)) {
     return false;
+  }
 
-  is_autofill_profile_cleanup_pending_ = false;
+  // Check if de-duplication has already been performed on this major version.
+  if (!is_autofill_profile_cleanup_pending_) {
+    DVLOG(1)
+        << "Autofill profile de-duplication already performed for this version";
+    return false;
+  }
 
   const std::vector<AutofillProfile*>& profiles =
       personal_data_manager_->GetProfiles();
@@ -154,14 +171,6 @@ bool PersonalDataManagerCleaner::ApplyDedupingRoutine() {
   // No need to de-duplicate if there are less than two profiles.
   if (profiles.size() < 2) {
     DVLOG(1) << "Autofill profile de-duplication not needed.";
-    return false;
-  }
-
-  // Check if de-duplication has already been performed this major version.
-  if (pref_service_->GetInteger(prefs::kAutofillLastVersionDeduped) >=
-      CHROME_VERSION_MAJOR) {
-    DVLOG(1)
-        << "Autofill profile de-duplication already performed for this version";
     return false;
   }
 
@@ -196,9 +205,11 @@ bool PersonalDataManagerCleaner::ApplyDedupingRoutine() {
 
   UpdateCardsBillingAddressReference(guids_merge_map);
 
+  is_autofill_profile_cleanup_pending_ = false;
   // Set the pref to the current major version.
   pref_service_->SetInteger(prefs::kAutofillLastVersionDeduped,
                             CHROME_VERSION_MAJOR);
+
   return true;
 }
 

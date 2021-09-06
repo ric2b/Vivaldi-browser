@@ -16,6 +16,7 @@ import android.view.MenuItem;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.widget.Toolbar.OnMenuItemClickListener;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -26,10 +27,10 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataTabsFragment;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
@@ -41,8 +42,10 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninManager.SignInStateObserver;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabCreator;
+import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarController;
@@ -54,6 +57,7 @@ import org.chromium.components.browser_ui.widget.selectable_list.SelectableListT
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate.SelectionObserver;
 import org.chromium.components.favicon.LargeIconBridge;
+import org.chromium.components.profile_metrics.BrowserProfileType;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.Clipboard;
 import org.chromium.ui.base.PageTransition;
@@ -101,6 +105,8 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
     private final RecyclerView mRecyclerView;
     private final SnackbarManager mSnackbarManager;
     private final PrefChangeRegistrar mPrefChangeRegistrar;
+    private final TabCreatorManager mTabCreatorManager;
+    private final Supplier<Tab> mTabSupplier;
     private LargeIconBridge mLargeIconBridge;
 
     private boolean mIsSearching;
@@ -113,16 +119,23 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
      *                           the main Chrome activity.
      * @param snackbarManager The {@link SnackbarManager} used to display snackbars.
      * @param isIncognito Whether the incognito tab model is currently selected.
+     * @param tabCreatorManager Allows creation of tabs in different models, null if the history UI
+     *                          will be shown in a separate activity.
+     * @param tabSupplier Supplies the current tab, null if the history UI will be shown in a
+     *                    separate activity.
      */
     @SuppressWarnings("unchecked") // mSelectableListLayout
     public HistoryManager(Activity activity, boolean isSeparateActivity,
-            SnackbarManager snackbarManager, boolean isIncognito) {
+            SnackbarManager snackbarManager, boolean isIncognito,
+            @Nullable TabCreatorManager tabCreatorManager, @Nullable Supplier<Tab> tabSupplier) {
         mShouldShowInfoHeader = SharedPreferencesManager.getInstance().readBoolean(
                 ChromePreferenceKeys.HISTORY_SHOW_HISTORY_INFO, true);
         mActivity = activity;
         mIsSeparateActivity = isSeparateActivity;
         mSnackbarManager = snackbarManager;
         mIsIncognito = isIncognito;
+        mTabCreatorManager = tabCreatorManager;
+        mTabSupplier = tabSupplier;
         mIsScrollToLoadDisabled = ChromeAccessibilityUtil.get().isAccessibilityEnabled()
                 || ChromeAccessibilityUtil.isHardwareKeyboardAttached(
                         mActivity.getResources().getConfiguration());
@@ -350,14 +363,18 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
             return;
         }
 
-        ChromeActivity activity = (ChromeActivity) mActivity;
+        assert mTabCreatorManager != null;
+        assert mTabSupplier != null;
+
+        Tab tab = mTabSupplier.get();
+        assert tab != null;
         if (createNewTab) {
-            TabCreator tabCreator = (isIncognito == null) ? activity.getCurrentTabCreator()
-                                                          : activity.getTabCreator(isIncognito);
-            tabCreator.createNewTab(new LoadUrlParams(url, PAGE_TRANSITION_TYPE),
-                    TabLaunchType.FROM_LINK, activity.getActivityTab());
+            TabCreator tabCreator =
+                    mTabCreatorManager.getTabCreator(isIncognito != null && isIncognito);
+            tabCreator.createNewTab(
+                    new LoadUrlParams(url, PAGE_TRANSITION_TYPE), TabLaunchType.FROM_LINK, tab);
         } else {
-            activity.getActivityTab().loadUrl(new LoadUrlParams(url, PAGE_TRANSITION_TYPE));
+            tab.loadUrl(new LoadUrlParams(url, PAGE_TRANSITION_TYPE));
         }
     }
 
@@ -405,6 +422,7 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
      */
     public void openClearBrowsingDataPreference() {
         recordUserAction("ClearBrowsingData");
+        recordClearBrowsingDataMetric();
         SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
         settingsLauncher.launchSettingsActivity(mActivity, ClearBrowsingDataTabsFragment.class);
     }
@@ -499,6 +517,14 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
             RecordHistogram.recordCustomCountHistogram("HistoryPage.ClickAgeInDaysSubset",
                     ageInDays, 1, UMA_MAX_SUBSET_BUCKET_VALUE, UMA_BUCKET_COUNT);
         }
+    }
+
+    private void recordClearBrowsingDataMetric() {
+        @BrowserProfileType
+        int type = mIsIncognito ? BrowserProfileType.INCOGNITO : BrowserProfileType.REGULAR;
+        RecordHistogram.recordEnumeratedHistogram(
+                METRICS_PREFIX + "ClearBrowsingData.PerProfileType", type,
+                BrowserProfileType.MAX_VALUE + 1);
     }
 
     /**

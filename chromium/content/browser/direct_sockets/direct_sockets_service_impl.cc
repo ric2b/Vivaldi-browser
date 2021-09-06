@@ -8,7 +8,11 @@
 
 #include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/optional.h"
+#include "build/build_config.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
@@ -20,11 +24,22 @@
 #include "services/network/public/cpp/resolve_host_client_base.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 
+#if defined(OS_WIN) || defined(OS_MAC)
+#include "base/enterprise_util.h"
+#elif BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chromeos/tpm/install_attributes.h"
+#endif
+
 namespace content {
 
 namespace {
 
+base::Optional<bool> g_is_enterprise_managed_for_testing;
+
 constexpr int32_t kMaxBufferSize = 32 * 1024 * 1024;
+
+constexpr char kPermissionDeniedHistogramName[] =
+    "DirectSockets.PermissionDeniedFailures";
 
 DirectSocketsServiceImpl::PermissionCallback&
 GetPermissionCallbackForTesting() {
@@ -56,6 +71,32 @@ base::Optional<net::IPEndPoint> GetLocalAddr(
 bool ResemblesMulticastDNSName(const std::string& hostname) {
   return base::EndsWith(hostname, ".local") ||
          base::EndsWith(hostname, ".local.");
+}
+
+bool ContainNonPubliclyRoutableAddress(const net::AddressList& addresses) {
+  DCHECK(!addresses.empty());
+  for (auto ip : addresses) {
+    if (!ip.address().IsPubliclyRoutable())
+      return true;
+  }
+  return false;
+}
+
+// TODO(crbug.com/1119662): Now only check for the device, maybe there are some
+// methods that can be applied to check for the user profile.
+bool IsEnterpriseManaged() {
+  // Return the value of the testing flag if it's set.
+  if (g_is_enterprise_managed_for_testing.has_value())
+    return g_is_enterprise_managed_for_testing.value();
+
+#if defined(OS_WIN) || defined(OS_MAC)
+  return base::IsMachineExternallyManaged();
+#elif BUILDFLAG(IS_CHROMEOS_ASH)
+  return chromeos::InstallAttributes::IsInitialized() &&
+         chromeos::InstallAttributes::Get()->IsEnterpriseManaged();
+#else
+  return false;
+#endif
 }
 
 }  // namespace
@@ -112,6 +153,10 @@ class DirectSocketsServiceImpl::ResolveHostAndOpenSocket final
     DCHECK(!receiver_.is_bound());
     DCHECK(!resolver_.is_bound());
 
+    if (net::IPAddress().AssignFromIPLiteral(*options_->remote_hostname)) {
+      is_raw_address_ = true;
+    }
+
     mojo::PendingRemote<network::mojom::HostResolver> pending_host_resolver;
     network_context_->CreateHostResolver(
         base::nullopt, pending_host_resolver.InitWithNewPipeAndPassReceiver());
@@ -120,8 +165,10 @@ class DirectSocketsServiceImpl::ResolveHostAndOpenSocket final
     network::mojom::ResolveHostParametersPtr parameters =
         network::mojom::ResolveHostParameters::New();
 #if BUILDFLAG(ENABLE_MDNS)
-    if (ResemblesMulticastDNSName(*options_->remote_hostname))
+    if (ResemblesMulticastDNSName(*options_->remote_hostname)) {
       parameters->source = net::HostResolverSource::MULTICAST_DNS;
+      is_mdns_name_ = true;
+    }
 #endif  // !BUILDFLAG(ENABLE_MDNS)
     resolver_->ResolveHost(
         net::HostPortPair(*options_->remote_hostname, options_->remote_port),
@@ -139,6 +186,14 @@ class DirectSocketsServiceImpl::ResolveHostAndOpenSocket final
       int result,
       const net::ResolveErrorInfo& resolve_error_info,
       const base::Optional<net::AddressList>& resolved_addresses) override {
+    // Reject hostnames that resolve to non-public exception unless a raw IP
+    // address or a *.local hostname is entered by the user.
+    if (!is_raw_address_ && !is_mdns_name_ && resolved_addresses &&
+        ContainNonPubliclyRoutableAddress(*resolved_addresses)) {
+      result = net::Error::ERR_NETWORK_ACCESS_DENIED;
+      base::UmaHistogramEnumeration(kPermissionDeniedHistogramName,
+                                    FailureType::kResolvingToNonPublic);
+    }
     protocol_ == ProtocolType::kTcp ? OpenTCPSocket(result, resolved_addresses)
                                     : OpenUDPSocket(result, resolved_addresses);
   }
@@ -203,6 +258,9 @@ class DirectSocketsServiceImpl::ResolveHostAndOpenSocket final
     }
     NOTIMPLEMENTED();
   }
+
+  bool is_mdns_name_ = false;
+  bool is_raw_address_ = false;
 
   const ProtocolType protocol_;
   network::mojom::NetworkContext* const network_context_;
@@ -275,6 +333,12 @@ void DirectSocketsServiceImpl::OpenUdpSocket(
 }
 
 // static
+void DirectSocketsServiceImpl::SetEnterpriseManagedForTesting(
+    bool enterprise_managed) {
+  g_is_enterprise_managed_for_testing = enterprise_managed;
+}
+
+// static
 void DirectSocketsServiceImpl::SetPermissionCallbackForTesting(
     PermissionCallback callback) {
   GetPermissionCallbackForTesting() = std::move(callback);
@@ -310,17 +374,41 @@ net::Error DirectSocketsServiceImpl::ValidateOptions(
   if (!frame_host_)
     return net::ERR_CONTEXT_SHUT_DOWN;
 
+  // TODO(crbug.com/1119600): Do not consume (or check) transient activation
+  // for reconnection attempts.
+  bool is_consumed =
+      static_cast<RenderFrameHostImpl*>(frame_host_)
+          ->frame_tree_node()
+          ->UpdateUserActivationState(
+              blink::mojom::UserActivationUpdateType::
+                  kConsumeTransientActivation,
+              blink::mojom::UserActivationNotificationType::kNone);
+  if (!is_consumed) {
+    base::UmaHistogramEnumeration(kPermissionDeniedHistogramName,
+                                  FailureType::kTransientActivation);
+    return net::ERR_NETWORK_ACCESS_DENIED;
+  }
+
   if (GetPermissionCallbackForTesting())
     return GetPermissionCallbackForTesting().Run(options);  // IN-TEST
 
   if (options.send_buffer_size < 0 || options.receive_buffer_size < 0)
     return net::ERR_INVALID_ARGUMENT;
 
-  // TODO(crbug.com/1119662): Check for enterprise software policies.
+  // By default, we will restrict use of the API when enterprise software
+  // policies are in effect.
+  if (IsEnterpriseManaged()) {
+    base::UmaHistogramEnumeration(kPermissionDeniedHistogramName,
+                                  FailureType::kEnterprisePolicy);
+    return net::ERR_NETWORK_ACCESS_DENIED;
+  }
+
   // TODO(crbug.com/1119659): Check permissions policy.
   // TODO(crbug.com/1119600): Implement rate limiting.
 
   if (options.remote_port == 443) {
+    base::UmaHistogramEnumeration(kPermissionDeniedHistogramName,
+                                  FailureType::kCORS);
     // TODO(crbug.com/1119601): Issue a CORS preflight request.
     return net::ERR_UNSAFE_PORT;
   }
@@ -328,8 +416,6 @@ net::Error DirectSocketsServiceImpl::ValidateOptions(
   // ValidateOptions() will need to become asynchronous:
   // TODO(crbug.com/1119597): Show connection dialog.
   // TODO(crbug.com/1119597): Use the hostname provided by the user.
-  // TODO(crbug.com/1119661): Reject hostnames that resolve to non-public
-  // addresses.
   if (!options.remote_hostname)
     return net::ERR_NAME_NOT_RESOLVED;
 

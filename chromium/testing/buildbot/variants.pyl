@@ -80,52 +80,52 @@
     ],
     'identifier': 'iPad Air 2 13.6'
   },
-  'SIM_IPAD_AIR_2_14_0': {
+  'SIM_IPAD_AIR_2_14_4': {
     'args': [
       '--platform',
       'iPad Air 2',
       '--version',
-      '14.0'
+      '14.4'
     ],
-    'identifier': 'iPad Air 2 14.0'
+    'identifier': 'iPad Air 2 14.4'
   },
-  'SIM_IPAD_AIR_2_14_3': {
+  'SIM_IPAD_AIR_2_14_4': {
     'args': [
       '--platform',
       'iPad Air 2',
       '--version',
-      '14.3'
+      '14.4'
     ],
-    'identifier': 'iPad Air 2 14.3'
+    'identifier': 'iPad Air 2 14.4'
   },
-  'SIM_IPAD_AIR_3RD_GEN_14_3': {
+  'SIM_IPAD_AIR_3RD_GEN_14_4': {
     'args': [
       '--platform',
       'iPad Air (3rd generation)',
       '--version',
-      '14.3'
+      '14.4'
     ],
-    'identifier': 'iPad Air (3rd generation) 14.3'
+    'identifier': 'iPad Air (3rd generation) 14.4'
   },
   # In Xcode 12, "iPad Pro (12.9-inch)" requires a generation suffix in
   # "platform" arg.
-  'SIM_IPAD_PRO_2ND_GEN_14_3': {
+  'SIM_IPAD_PRO_2ND_GEN_14_4': {
     'args': [
       '--platform',
       'iPad Pro (12.9-inch) (2nd generation)',
       '--version',
-      '14.3',
+      '14.4',
     ],
-    'identifier': 'iPad Pro (12.9-inch) (2nd generation) 14.3'
+    'identifier': 'iPad Pro (12.9-inch) (2nd generation) 14.4'
   },
-  'SIM_IPAD_6_GEN_14_3': {
+  'SIM_IPAD_6_GEN_14_4': {
     'args': [
       '--platform',
       'iPad (6th generation)',
       '--version',
-      '14.3',
+      '14.4',
     ],
-    'identifier': 'iPad (6th generation) 14.3'
+    'identifier': 'iPad (6th generation) 14.4'
   },
   'SIM_IPHONE_6S_12_4': {
     'args': [
@@ -145,23 +145,23 @@
     ],
     'identifier': 'iPhone 6s 13.6'
   },
-  'SIM_IPHONE_6S_14_0': {
+  'SIM_IPHONE_6S_14_4': {
     'args': [
       '--platform',
       'iPhone 6s',
       '--version',
-      '14.0',
+      '14.4',
     ],
-    'identifier': 'iPhone 6s 14.0'
+    'identifier': 'iPhone 6s 14.4'
   },
-  'SIM_IPHONE_6S_14_3': {
+  'SIM_IPHONE_6S_14_4': {
     'args': [
       '--platform',
       'iPhone 6s',
       '--version',
-      '14.3',
+      '14.4',
     ],
-    'identifier': 'iPhone 6s 14.3'
+    'identifier': 'iPhone 6s 14.4'
   },
   'SIM_IPHONE_6S_PLUS_13_6': {
     'args': [
@@ -181,23 +181,23 @@
     ],
     'identifier': 'iPhone 6s Plus 13.6'
   },
-  'SIM_IPHONE_6S_PLUS_14_0': {
+  'SIM_IPHONE_6S_PLUS_14_4': {
     'args': [
       '--platform',
       'iPhone 6s Plus',
       '--version',
-      '14.0',
+      '14.4',
     ],
-    'identifier': 'iPhone 6s Plus 14.0'
+    'identifier': 'iPhone 6s Plus 14.4'
   },
-  'SIM_IPHONE_6S_PLUS_14_3': {
+  'SIM_IPHONE_6S_PLUS_14_4': {
     'args': [
       '--platform',
       'iPhone 6s Plus',
       '--version',
-      '14.3',
+      '14.4',
     ],
-    'identifier': 'iPhone 6s Plus 14.3'
+    'identifier': 'iPhone 6s Plus 14.4'
   },
   'SIM_IPHONE_7_13_6': {
     'args': [
@@ -217,23 +217,23 @@
     ],
     'identifier': 'iPhone 7 13.6'
   },
-  'SIM_IPHONE_7_14_0': {
+  'SIM_IPHONE_7_14_4': {
     'args': [
       '--platform',
       'iPhone 7',
       '--version',
-      '14.0',
+      '14.4',
     ],
-    'identifier': 'iPhone 7 14.0'
+    'identifier': 'iPhone 7 14.4'
   },
-  'SIM_IPHONE_7_14_3': {
+  'SIM_IPHONE_7_14_4': {
     'args': [
       '--platform',
       'iPhone 7',
       '--version',
-      '14.3',
+      '14.4',
     ],
-    'identifier': 'iPhone 7 14.3'
+    'identifier': 'iPhone 7 14.4'
   },
   'SIM_IPHONE_SE_1ST_GEN_13_6': {
     'args': [
@@ -244,14 +244,14 @@
     ],
     'identifier': 'iPhone SE (1st generation) 13.6'
   },
-  'SIM_IPHONE_SE_1ST_GEN_14_0': {
+  'SIM_IPHONE_SE_1ST_GEN_14_4': {
     'args': [
       '--platform',
       'iPhone SE (1st generation)',
       '--version',
-      '14.0',
+      '14.4',
     ],
-    'identifier': 'iPhone SE (1st generation) 14.0'
+    'identifier': 'iPhone SE (1st generation) 14.4'
   },
   'SIM_IPHONE_X_12_4': {
     'args': [
@@ -298,17 +298,42 @@
     ],
     'identifier': 'iPhone X 14.0'
   },
-  'SIM_IPHONE_X_14_3': {
+  'SIM_IPHONE_X_14_4': {
     'args': [
       '--platform',
       'iPhone X',
       '--version',
-      '14.3',
+      '14.4',
     ],
-    'identifier': 'iPhone X 14.3'
+    'identifier': 'iPhone X 14.4'
   },
-  'WEBLAYER_IMPL_SKEW_TESTS_NTH_MILESTONE': {
+  'WEBLAYER_10_AND_M_IMPL_SKEW_TESTS_NTH_MILESTONE': {
     'args': [
+      '--webview-apk-path=apks/AOSP_SystemWebView.apk',
+      '--test-runner-outdir',
+      '.',
+      '--client-outdir',
+      '.',
+      '--implementation-outdir',
+      '../../weblayer_instrumentation_test_M89/out/Release',
+      '--test-expectations',
+      '../../weblayer/browser/android/javatests/skew/expectations.txt',
+      '--impl-version=89',
+    ],
+    'identifier': 'Implementation Library Skew Tests For 89.0.4389.70',
+    'swarming': {
+      'cipd_packages': [
+        {
+          'cipd_package': 'chromium/testing/weblayer-x86',
+          'location': 'weblayer_instrumentation_test_M89',
+          'revision': 'version:89.0.4389.70',
+        }
+      ],
+    },
+  },
+  'WEBLAYER_10_AND_M_IMPL_SKEW_TESTS_NTH_MINUS_ONE_MILESTONE': {
+    'args': [
+      '--webview-apk-path=apks/AOSP_SystemWebView.apk',
       '--test-runner-outdir',
       '.',
       '--client-outdir',
@@ -319,19 +344,20 @@
       '../../weblayer/browser/android/javatests/skew/expectations.txt',
       '--impl-version=88',
     ],
-    'identifier': 'Implementation Tests For 88.0.4324.90',
+    'identifier': 'Implementation Library Skew Tests For 88.0.4324.206',
     'swarming': {
       'cipd_packages': [
         {
           'cipd_package': 'chromium/testing/weblayer-x86',
           'location': 'weblayer_instrumentation_test_M88',
-          'revision': 'version:88.0.4324.90',
+          'revision': 'version:88.0.4324.206',
         }
       ],
     },
   },
-  'WEBLAYER_IMPL_SKEW_TESTS_NTH_MINUS_ONE_MILESTONE': {
+  'WEBLAYER_10_AND_M_IMPL_SKEW_TESTS_NTH_MINUS_TWO_MILESTONE': {
     'args': [
+      '--webview-apk-path=apks/AOSP_SystemWebView.apk',
       '--test-runner-outdir',
       '.',
       '--client-outdir',
@@ -342,42 +368,116 @@
       '../../weblayer/browser/android/javatests/skew/expectations.txt',
       '--impl-version=87',
     ],
-    'identifier': 'Implementation Tests For 87.0.4280.150',
+    'identifier': 'Implementation Tests For 87.0.4280.152',
     'swarming': {
       'cipd_packages': [
         {
           'cipd_package': 'chromium/testing/weblayer-x86',
           'location': 'weblayer_instrumentation_test_M87',
-          'revision': 'version:87.0.4280.150',
+          'revision': 'version:87.0.4280.152-pt2',
+        }
+      ],
+    },
+  },
+  'WEBLAYER_IMPL_SKEW_TESTS_NTH_MILESTONE': {
+    'args': [
+      '--webview-apk-path=apks/SystemWebView.apk',
+      '--test-runner-outdir',
+      '.',
+      '--client-outdir',
+      '.',
+      '--implementation-outdir',
+      '../../weblayer_instrumentation_test_M89/out/Release',
+      '--test-expectations',
+      '../../weblayer/browser/android/javatests/skew/expectations.txt',
+      '--impl-version=89',
+    ],
+    'identifier': 'Implementation Library Skew Tests For 89.0.4389.70',
+    'swarming': {
+      'cipd_packages': [
+        {
+          'cipd_package': 'chromium/testing/weblayer-x86',
+          'location': 'weblayer_instrumentation_test_M89',
+          'revision': 'version:89.0.4389.70',
+        }
+      ],
+    },
+  },
+  'WEBLAYER_IMPL_SKEW_TESTS_NTH_MINUS_ONE_MILESTONE': {
+    'args': [
+      '--webview-apk-path=apks/SystemWebView.apk',
+      '--test-runner-outdir',
+      '.',
+      '--client-outdir',
+      '.',
+      '--implementation-outdir',
+      '../../weblayer_instrumentation_test_M88/out/Release',
+      '--test-expectations',
+      '../../weblayer/browser/android/javatests/skew/expectations.txt',
+      '--impl-version=88',
+    ],
+    'identifier': 'Implementation Library Skew Tests For 88.0.4324.206',
+    'swarming': {
+      'cipd_packages': [
+        {
+          'cipd_package': 'chromium/testing/weblayer-x86',
+          'location': 'weblayer_instrumentation_test_M88',
+          'revision': 'version:88.0.4324.206',
         }
       ],
     },
   },
   'WEBLAYER_IMPL_SKEW_TESTS_NTH_MINUS_TWO_MILESTONE': {
     'args': [
+      '--webview-apk-path=apks/SystemWebView.apk',
       '--test-runner-outdir',
       '.',
       '--client-outdir',
       '.',
       '--implementation-outdir',
-      '../../weblayer_instrumentation_test_M86/out/Release',
+      '../../weblayer_instrumentation_test_M87/out/Release',
       '--test-expectations',
       '../../weblayer/browser/android/javatests/skew/expectations.txt',
-      '--impl-version=86',
+      '--impl-version=87',
     ],
-    'identifier': 'M86_Implementation_Library_Tests',
+    'identifier': 'Implementation Tests For 87.0.4280.152',
     'swarming': {
       'cipd_packages': [
         {
           'cipd_package': 'chromium/testing/weblayer-x86',
-          'location': 'weblayer_instrumentation_test_M86',
-          'revision': 'version:86.0.4240.99',
+          'location': 'weblayer_instrumentation_test_M87',
+          'revision': 'version:87.0.4280.152-pt2',
         }
       ],
     },
   },
   'WEBLAYER_CLIENT_SKEW_TESTS_NTH_MILESTONE': {
     'args': [
+      '--webview-apk-path=apks/SystemWebView.apk',
+      '--test-runner-outdir',
+      '.',
+      '--client-outdir',
+      '../../weblayer_instrumentation_test_M89/out/Release',
+      '--implementation-outdir',
+      '.',
+      '--test-expectations',
+      '../../weblayer/browser/android/javatests/skew/expectations.txt',
+      '--client-version=89',
+    ],
+    'identifier': 'Client Library Skew Tests For 89.0.4389.70',
+    'swarming': {
+      'cipd_packages': [
+        {
+          'cipd_package': 'chromium/testing/weblayer-x86',
+          'location': 'weblayer_instrumentation_test_M89',
+          'revision': 'version:89.0.4389.70',
+        }
+      ],
+    },
+  },
+  'WEBLAYER_CLIENT_SKEW_TESTS_NTH_MINUS_ONE_MILESTONE': {
+    'args': [
+      '--webview-apk-path=apks/SystemWebView.apk',
       '--test-runner-outdir',
       '.',
       '--client-outdir',
@@ -388,19 +488,20 @@
       '../../weblayer/browser/android/javatests/skew/expectations.txt',
       '--client-version=88',
     ],
-    'identifier': 'Client Tests For 88.0.4324.90',
+    'identifier': 'Client Library Skew Tests For 88.0.4324.206',
     'swarming': {
       'cipd_packages': [
         {
           'cipd_package': 'chromium/testing/weblayer-x86',
           'location': 'weblayer_instrumentation_test_M88',
-          'revision': 'version:88.0.4324.90',
+          'revision': 'version:88.0.4324.206',
         }
       ],
     },
   },
-  'WEBLAYER_CLIENT_SKEW_TESTS_NTH_MINUS_ONE_MILESTONE': {
+  'WEBLAYER_CLIENT_SKEW_TESTS_NTH_MINUS_TWO_MILESTONE': {
     'args': [
+      '--webview-apk-path=apks/SystemWebView.apk',
       '--test-runner-outdir',
       '.',
       '--client-outdir',
@@ -411,36 +512,13 @@
       '../../weblayer/browser/android/javatests/skew/expectations.txt',
       '--client-version=87',
     ],
-    'identifier': 'Client Tests For 87.0.4280.150',
+    'identifier': 'Client Tests For 87.0.4280.152',
     'swarming': {
       'cipd_packages': [
         {
           'cipd_package': 'chromium/testing/weblayer-x86',
           'location': 'weblayer_instrumentation_test_M87',
-          'revision': 'version:87.0.4280.150',
-        }
-      ],
-    },
-  },
-  'WEBLAYER_CLIENT_SKEW_TESTS_NTH_MINUS_TWO_MILESTONE': {
-    'args': [
-      '--test-runner-outdir',
-      '.',
-      '--client-outdir',
-      '../../weblayer_instrumentation_test_M86/out/Release',
-      '--implementation-outdir',
-      '.',
-      '--test-expectations',
-      '../../weblayer/browser/android/javatests/skew/expectations.txt',
-      '--client-version=86',
-    ],
-    'identifier': 'M86_Client_Library_Tests',
-    'swarming': {
-      'cipd_packages': [
-        {
-          'cipd_package': 'chromium/testing/weblayer-x86',
-          'location': 'weblayer_instrumentation_test_M86',
-          'revision': 'version:86.0.4240.99',
+          'revision': 'version:87.0.4280.152-pt2',
         }
       ],
     },
@@ -448,15 +526,14 @@
   'CROS_OCTOPUS_TOT': {
     'skylab': {
       'cros_board': 'octopus',
-      # Find a released OS version at go/goldeneye.
-      'cros_img': 'octopus-release/R89-13668.0.0',
+      'cros_img': 'octopus-release/R90-13812.0.0',
     },
     'identifier': 'OCTOPUS_TOT',
   },
   'CROS_OCTOPUS_TOT-1': {
     'skylab': {
       'cros_board': 'octopus',
-      'cros_img': 'octopus-release/R88-13597.30.0',
+      'cros_img': 'octopus-release/R89-13729.18.0',
     },
     'identifier': 'OCTOPUS_TOT-1',
   },

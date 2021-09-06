@@ -4,31 +4,40 @@
 
 #include "chrome/browser/ui/autofill/test/test_autofill_bubble_handler.h"
 
+#include "base/notreached.h"
+
 namespace autofill {
 
 TestAutofillBubbleHandler::TestAutofillBubbleHandler() = default;
 
 TestAutofillBubbleHandler::~TestAutofillBubbleHandler() = default;
 
-SaveCardBubbleView* TestAutofillBubbleHandler::ShowSaveCreditCardBubble(
+AutofillBubbleBase* TestAutofillBubbleHandler::ShowSaveCreditCardBubble(
     content::WebContents* web_contents,
     SaveCardBubbleController* controller,
     bool is_user_gesture) {
   if (!save_card_bubble_view_)
-    save_card_bubble_view_ = std::make_unique<TestSaveCardBubbleView>();
+    save_card_bubble_view_ = std::make_unique<TestAutofillBubble>();
   return save_card_bubble_view_.get();
 }
 
-LocalCardMigrationBubble*
-TestAutofillBubbleHandler::ShowLocalCardMigrationBubble(
+AutofillBubbleBase* TestAutofillBubbleHandler::ShowLocalCardMigrationBubble(
     content::WebContents* web_contents,
     LocalCardMigrationBubbleController* controller,
     bool is_user_gesture) {
   if (!local_card_migration_bubble_view_) {
-    local_card_migration_bubble_view_ =
-        std::make_unique<TestLocalCardMigrationBubbleView>();
+    local_card_migration_bubble_view_ = std::make_unique<TestAutofillBubble>();
   }
   return local_card_migration_bubble_view_.get();
+}
+
+AutofillBubbleBase* TestAutofillBubbleHandler::ShowOfferNotificationBubble(
+    content::WebContents* web_contents,
+    OfferNotificationBubbleController* controller,
+    bool is_user_gesture) {
+  if (!offer_notification_bubble_view_)
+    offer_notification_bubble_view_ = std::make_unique<TestAutofillBubble>();
+  return offer_notification_bubble_view_.get();
 }
 
 SaveUPIBubble* TestAutofillBubbleHandler::ShowSaveUPIBubble(
@@ -37,6 +46,15 @@ SaveUPIBubble* TestAutofillBubbleHandler::ShowSaveUPIBubble(
   if (!save_upi_bubble_)
     save_upi_bubble_ = std::make_unique<TestSaveUPIBubble>();
   return save_upi_bubble_.get();
+}
+
+AutofillBubbleBase* TestAutofillBubbleHandler::ShowSaveAddressProfileBubble(
+    content::WebContents* contents,
+    SaveAddressProfileBubbleController* controller,
+    bool is_user_gesture) {
+  if (!save_address_profile_bubble_view_)
+    save_address_profile_bubble_view_ = std::make_unique<TestAutofillBubble>();
+  return save_address_profile_bubble_view_.get();
 }
 
 void TestAutofillBubbleHandler::OnPasswordSaved() {}

@@ -57,8 +57,8 @@
 #include "url/origin.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/apps/icon_standardizer.h"
 #include "chrome/browser/chromeos/crostini/crostini_terminal.h"
-#include "chrome/browser/ui/app_list/icon_standardizer.h"
 #endif
 
 namespace {
@@ -109,6 +109,7 @@ constexpr gfx::Size HELP_DEFAULT_SIZE(960, 600);
 constexpr gfx::Size CAMERA_WINDOW_DEFAULT_SIZE(kChromeCameraAppDefaultWidth,
                                                kChromeCameraAppDefaultHeight +
                                                    32);
+constexpr gfx::Size ECHE_DEFAULT_SIZE(480, 640);
 }  // namespace
 
 // static
@@ -186,6 +187,7 @@ AppBrowserController::AppBrowserController(
       // capability.
       has_tab_strip_(
           system_app_type_ == SystemAppType::TERMINAL ||
+          system_app_type_ == SystemAppType::CROSH ||
           (base::FeatureList::IsEnabled(features::kDesktopPWAsTabStrip) &&
            HasAppId() &&
            WebAppProvider::Get(browser->profile())
@@ -389,6 +391,11 @@ gfx::Rect AppBrowserController::GetDefaultBounds() const {
         display::Screen::GetScreen()->GetDisplayForNewWindows().work_area();
     bounds.ClampToCenteredSize(CAMERA_WINDOW_DEFAULT_SIZE);
     return bounds;
+  } else if (system_app_type_ == SystemAppType::ECHE) {
+    gfx::Rect bounds =
+        display::Screen::GetScreen()->GetDisplayForNewWindows().work_area();
+    bounds.ClampToCenteredSize(ECHE_DEFAULT_SIZE);
+    return bounds;
   }
   return gfx::Rect();
 }
@@ -543,7 +550,7 @@ gfx::ImageSkia AppBrowserController::GetFallbackAppIcon() const {
   if (!page_icon.isNull()) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon))
-      return app_list::CreateStandardIconImage(page_icon);
+      return apps::CreateStandardIconImage(page_icon);
 #endif
     return page_icon;
   }

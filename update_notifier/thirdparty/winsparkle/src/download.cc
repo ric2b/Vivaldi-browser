@@ -53,7 +53,7 @@ void CloseInetHandle(HINTERNET& handle) {
 std::wstring MakeUserAgent() {
   std::wstring userAgent = GetConfig().app_name + L"/" +
                            GetConfig().app_version + L" WinSparkle/" +
-                           base::UTF8ToUTF16(WIN_SPARKLE_VERSION_STRING);
+                           base::UTF8ToWide(WIN_SPARKLE_VERSION_STRING);
 
 #ifdef _WIN64
   userAgent += L" (Win64)";

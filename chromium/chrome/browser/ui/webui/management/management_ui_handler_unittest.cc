@@ -35,6 +35,8 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/time/time.h"
+#include "chrome/browser/ash/settings/device_settings_test_helper.h"
+#include "chrome/browser/ash/settings/scoped_testing_cros_settings.h"
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
 #include "chrome/browser/chromeos/crostini/fake_crostini_features.h"
@@ -46,15 +48,11 @@
 #include "chrome/browser/chromeos/policy/status_uploader.h"
 #include "chrome/browser/chromeos/policy/system_log_uploader.h"
 #include "chrome/browser/chromeos/policy/user_cloud_policy_manager_chromeos.h"
-#include "chrome/browser/chromeos/settings/device_settings_service.h"
-#include "chrome/browser/chromeos/settings/device_settings_test_helper.h"
-#include "chrome/browser/chromeos/settings/scoped_testing_cros_settings.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "chromeos/cryptohome/async_method_caller.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/dbus/shill/shill_service_client.h"
@@ -155,8 +153,7 @@ class TestDeviceStatusCollector : public policy::DeviceStatusCollector {
 
   // empty methods that need to be implemented but are of no use for this
   // case.
-  void GetStatusAsync(
-      const policy::StatusCollectorCallback& callback) override {}
+  void GetStatusAsync(policy::StatusCollectorCallback callback) override {}
   void OnSubmittedSuccessfully() override {}
 
  private:
@@ -191,10 +188,6 @@ class TestManagementUIHandler : public ManagementUIHandler {
       : policy_service_(policy_service) {}
   ~TestManagementUIHandler() override = default;
 
-  void EnableCloudReportingExtension(bool enable) {
-    cloud_reporting_extension_exists_ = enable;
-  }
-
   void EnableUpdateRequiredEolInfo(bool enable) {
     update_required_eol_ = enable;
   }
@@ -215,13 +208,6 @@ class TestManagementUIHandler : public ManagementUIHandler {
 
   policy::PolicyService* GetPolicyService() const override {
     return policy_service_;
-  }
-
-  const extensions::Extension* GetEnabledExtension(
-      const std::string& extensionId) const override {
-    if (cloud_reporting_extension_exists_)
-      return extensions::ExtensionBuilder("dummy").SetID("id").Build().get();
-    return nullptr;
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -246,7 +232,6 @@ class TestManagementUIHandler : public ManagementUIHandler {
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
  private:
-  bool cloud_reporting_extension_exists_ = false;
   policy::PolicyService* policy_service_ = nullptr;
   bool update_required_eol_ = false;
   std::string device_domain = "devicedomain.com";
@@ -1069,28 +1054,11 @@ TEST_F(ManagementUIHandlerTests, HideProxyServerDisclosureForDirectProxy) {
 #endif
 
 TEST_F(ManagementUIHandlerTests, ExtensionReportingInfoNoPolicySetNoMessage) {
-  handler_.EnableCloudReportingExtension(false);
   auto reporting_info = handler_.GetExtensionReportingInfo();
   EXPECT_EQ(reporting_info.GetList().size(), 0u);
 }
 
-TEST_F(ManagementUIHandlerTests,
-       ExtensionReportingInfoCloudExtensionAddsDefaultPolicies) {
-  handler_.EnableCloudReportingExtension(true);
-
-  const std::set<std::string> expected_messages = {
-      kManagementExtensionReportMachineName, kManagementExtensionReportUsername,
-      kManagementExtensionReportVersion,
-      kManagementExtensionReportExtensionsPlugin,
-      kManagementExtensionReportSafeBrowsingWarnings};
-
-  ASSERT_PRED_FORMAT2(MessagesToBeEQ,
-                      handler_.GetExtensionReportingInfo().GetList(),
-                      expected_messages);
-}
-
 TEST_F(ManagementUIHandlerTests, CloudReportingPolicy) {
-  handler_.EnableCloudReportingExtension(false);
 
   policy::PolicyMap chrome_policies;
   const policy::PolicyNamespace chrome_policies_namespace =
@@ -1108,7 +1076,6 @@ TEST_F(ManagementUIHandlerTests, CloudReportingPolicy) {
                       handler_.GetExtensionReportingInfo().GetList(),
                       expected_messages);
 }
-
 TEST_F(ManagementUIHandlerTests, ExtensionReportingInfoPoliciesMerge) {
   policy::PolicyMap on_prem_reporting_extension_beta_policies;
   policy::PolicyMap on_prem_reporting_extension_stable_policies;
@@ -1123,8 +1090,6 @@ TEST_F(ManagementUIHandlerTests, ExtensionReportingInfoPoliciesMerge) {
                on_prem_reporting_extension_stable_policies);
 
   EnablePolicy(kPolicyKeyReportMachineIdData,
-               on_prem_reporting_extension_stable_policies);
-  EnablePolicy(kPolicyKeyReportSafeBrowsingData,
                on_prem_reporting_extension_stable_policies);
   EnablePolicy(kPolicyKeyReportSystemTelemetryData,
                on_prem_reporting_extension_stable_policies);
@@ -1147,20 +1112,18 @@ TEST_F(ManagementUIHandlerTests, ExtensionReportingInfoPoliciesMerge) {
   EXPECT_CALL(policy_service_,
               GetPolicies(on_prem_reporting_extension_beta_policy_namespace))
       .WillOnce(ReturnRef(on_prem_reporting_extension_beta_policies));
-  policy::PolicyMap empty_policy_map;
+  policy::PolicyMap chrome_policies;
   EXPECT_CALL(policy_service_,
               GetPolicies(policy::PolicyNamespace(policy::POLICY_DOMAIN_CHROME,
                                                   std::string())))
-      .WillOnce(ReturnRef(empty_policy_map));
-
-  handler_.EnableCloudReportingExtension(true);
+      .WillOnce(ReturnRef(chrome_policies));
+  SetPolicyValue(policy::key::kCloudReportingEnabled, true, chrome_policies);
 
   std::set<std::string> expected_messages = {
       kManagementExtensionReportMachineNameAddress,
       kManagementExtensionReportUsername,
       kManagementExtensionReportVersion,
       kManagementExtensionReportExtensionsPlugin,
-      kManagementExtensionReportSafeBrowsingWarnings,
       kManagementExtensionReportUserBrowsingData,
       kManagementExtensionReportPerfCrash};
 

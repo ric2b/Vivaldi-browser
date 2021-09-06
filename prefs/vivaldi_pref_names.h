@@ -33,6 +33,7 @@ extern const char kVivaldiLastTopSitesVacuumDate[];
 
 // Local state prefs go here.
 
+extern const char kVivaldiAutoUpdateStandalone[];
 extern const char kVivaldiUniqueUserId[];
 extern const char kVivaldiStatsNextDailyPing[];
 extern const char kVivaldiStatsNextWeeklyPing[];
@@ -40,6 +41,8 @@ extern const char kVivaldiStatsNextMonthlyPing[];
 extern const char kVivaldiStatsExtraPing[];
 extern const char kVivaldiStatsExtraPingTime[];
 extern const char kVivaldiProfileImagePath[];
+extern const char kVivaldiTranslateLanguageList[];
+extern const char kVivaldiTranslateLanguageListLastUpdate[];
 
 }  // namespace vivaldiprefs
 

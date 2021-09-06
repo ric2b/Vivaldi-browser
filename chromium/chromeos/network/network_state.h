@@ -23,6 +23,11 @@ namespace base {
 class Value;
 }
 
+// TODO(https://crbug.com/1164001): remove when moved to ash.
+namespace ash {
+class MobileActivatorTest;
+}
+
 namespace chromeos {
 
 // Simple class to provide network state information about a network service.
@@ -137,13 +142,13 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
 
   // Cellular property accessors
   const std::string& eid() const { return eid_; }
+  const std::string& iccid() const { return iccid_; }
   const std::string& network_technology() const { return network_technology_; }
   const std::string& activation_type() const { return activation_type_; }
   const std::string& activation_state() const { return activation_state_; }
   const std::string& payment_url() const { return payment_url_; }
   const std::string& payment_post_data() const { return payment_post_data_; }
   bool cellular_out_of_credits() const { return cellular_out_of_credits_; }
-  const std::string& tethering_state() const { return tethering_state_; }
 
   // VPN property accessors
   const VpnProviderInfo* vpn_provider() const { return vpn_provider_.get(); }
@@ -275,7 +280,9 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
   constexpr static const int kSignalStrengthChangeThreshold = 5;
 
  private:
-  friend class MobileActivatorTest;
+  // TODO(https://crbug.com/1164001): remove namespace declaration for ash
+  // when moved to ash.
+  friend class ::ash::MobileActivatorTest;
   friend class NetworkStateHandler;
 
   // Updates |name_| from the 'WiFi.HexSSID' entry in |properties|, which must
@@ -330,6 +337,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
 
   // Cellular properties, used for icons, Connect, and Activation.
   std::string eid_;
+  std::string iccid_;
   std::string network_technology_;
   std::string activation_type_;
   std::string activation_state_;
@@ -338,7 +346,6 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
   std::string payment_url_;
   std::string payment_post_data_;
   bool cellular_out_of_credits_ = false;
-  std::string tethering_state_;
 
   // VPN properties, used to construct the display name and to show the correct
   // configuration dialog. The id is the Extension ID or Arc package name for
@@ -376,5 +383,10 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
 };
 
 }  // namespace chromeos
+
+// TODO(https://crbug.com/1164001): remove when moved to ash.
+namespace ash {
+using ::chromeos::NetworkState;
+}
 
 #endif  // CHROMEOS_NETWORK_NETWORK_STATE_H_

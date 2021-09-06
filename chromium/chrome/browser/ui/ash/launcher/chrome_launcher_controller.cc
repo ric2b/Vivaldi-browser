@@ -8,6 +8,7 @@
 #include <set>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/app_types.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/multi_user_window_manager.h"
@@ -27,6 +28,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/icon_standardizer.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
@@ -39,7 +41,6 @@
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ui/app_list/app_service/app_service_app_icon_loader.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
-#include "chrome/browser/ui/app_list/icon_standardizer.h"
 #include "chrome/browser/ui/app_list/md_icon_normalizer.h"
 #include "chrome/browser/ui/apps/app_info_dialog.h"
 #include "chrome/browser/ui/ash/chrome_launcher_prefs.h"
@@ -78,7 +79,6 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/account_id/account_id.h"
 #include "components/arc/arc_prefs.h"
@@ -99,6 +99,7 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/display/types/display_constants.h"
+#include "ui/gfx/color_analysis.h"
 #include "ui/resources/grit/ui_resources.h"
 
 using extension_misc::kChromeAppId;
@@ -130,6 +131,32 @@ std::string GetCrostiniAppIdFromContents(content::WebContents* web_contents) {
       crostini::CrostiniAppIdFromAppName(browser->app_name());
   return app_id_opt.value_or("");
 }
+
+// Uses the icon image to calculate the light vibrant color to be used for
+// the notification indicator.
+base::Optional<SkColor> CalculateNotificationBadgeColor(gfx::ImageSkia image) {
+  const SkBitmap* source = image.bitmap();
+  if (!source || source->empty() || source->isNull())
+    return base::nullopt;
+
+  std::vector<color_utils::ColorProfile> color_profiles;
+  color_profiles.push_back(color_utils::ColorProfile(
+      color_utils::LumaRange::LIGHT, color_utils::SaturationRange::VIBRANT));
+
+  std::vector<color_utils::Swatch> best_swatches =
+      color_utils::CalculateProminentColorsOfBitmap(
+          *source, color_profiles, nullptr /* bitmap region */,
+          color_utils::ColorSwatchFilter());
+
+  // If the best swatch color is transparent, then
+  // CalculateProminentColorsOfBitmap() failed to find a suitable color.
+  if (best_swatches.empty() || best_swatches[0].color == SK_ColorTRANSPARENT)
+    return base::nullopt;
+
+  return best_swatches[0].color;
+}
+
+constexpr SkColor kDefaultIndicatorColor = SK_ColorWHITE;
 
 }  // namespace
 
@@ -453,6 +480,8 @@ void ChromeLauncherController::SetLauncherItemImage(
   if (const auto* item = GetItem(shelf_id)) {
     ash::ShelfItem new_item = *item;
     new_item.image = image;
+    new_item.notification_badge_color =
+        CalculateNotificationBadgeColorForApp(new_item.id.app_id, image);
     model_->Set(model_->ItemIndexByID(shelf_id), new_item);
   }
 }
@@ -837,6 +866,19 @@ void ChromeLauncherController::DoShowAppInfoFlow(Profile* profile,
   }
 }
 
+SkColor ChromeLauncherController::CalculateNotificationBadgeColorForApp(
+    const std::string& app_id,
+    const gfx::ImageSkia& icon) {
+  AppIdBadgeColor::const_iterator it = app_id_badge_color_map_.find(app_id);
+  if (it != app_id_badge_color_map_.end())
+    return it->second;
+
+  SkColor notification_color =
+      CalculateNotificationBadgeColor(icon).value_or(kDefaultIndicatorColor);
+  app_id_badge_color_map_[app_id] = notification_color;
+  return notification_color;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // LauncherAppUpdater::Delegate:
 
@@ -942,8 +984,10 @@ void ChromeLauncherController::OnAppImageUpdated(const std::string& app_id,
       continue;
     }
     item.image =
-        is_standard_icon ? image : app_list::CreateStandardIconImage(image);
+        is_standard_icon ? image : apps::CreateStandardIconImage(image);
     shelf_spinner_controller_->MaybeApplySpinningEffect(app_id, &item.image);
+    item.notification_badge_color =
+        CalculateNotificationBadgeColorForApp(app_id, image);
     model_->Set(index, item);
     // It's possible we're waiting on more than one item, so don't break.
   }
@@ -1258,15 +1302,20 @@ void ChromeLauncherController::CloseWindowedAppsFromRemovedExtension(
 }
 
 void ChromeLauncherController::AddAppUpdaterAndIconLoader(Profile* profile) {
-  latest_active_profile_ = profile;
+  latest_active_profile_ = ProfileManager::GetActiveUserProfile();
 
-  // Either add the profile to the list of known profiles and make it the active
-  // one for some functions of LauncherControllerHelper or create a new one.
-  if (!launcher_controller_helper_.get()) {
-    launcher_controller_helper_ =
-        std::make_unique<LauncherControllerHelper>(profile);
-  } else {
-    launcher_controller_helper_->set_profile(profile);
+  // For chrome restart, additional users are added during the system
+  // startup phase, but we should not run the switch user process.
+  if (profile == latest_active_profile_) {
+    // Either add the profile to the list of known profiles and make it the
+    // active one for some functions of LauncherControllerHelper or create a new
+    // one.
+    if (!launcher_controller_helper_.get()) {
+      launcher_controller_helper_ =
+          std::make_unique<LauncherControllerHelper>(profile);
+    } else {
+      launcher_controller_helper_->set_profile(profile);
+    }
   }
 
   if (!base::Contains(app_updaters_, profile)) {

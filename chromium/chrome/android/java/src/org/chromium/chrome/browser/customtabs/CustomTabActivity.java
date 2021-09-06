@@ -31,6 +31,7 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
+import org.chromium.chrome.browser.app.metrics.LaunchCauseMetrics;
 import org.chromium.chrome.browser.autofill_assistant.AutofillAssistantFacade;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider.CustomTabsUiType;
@@ -38,8 +39,9 @@ import org.chromium.chrome.browser.customtabs.content.CustomTabActivityNavigatio
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabProvider;
 import org.chromium.chrome.browser.customtabs.features.CustomTabNavigationBarController;
 import org.chromium.chrome.browser.firstrun.FirstRunSignInProcessor;
+import org.chromium.chrome.browser.flags.AllCachedFieldTrialParameters;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
-import org.chromium.chrome.browser.metrics.LaunchCauseMetrics;
 import org.chromium.chrome.browser.night_mode.NightModeStateProvider;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.page_info.ChromePageInfoControllerDelegate;
@@ -57,6 +59,12 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     private CustomTabsSessionToken mSession;
 
     private final CustomTabsConnection mConnection = CustomTabsConnection.getInstance();
+
+    /**
+     * Contains all the parameters of the EXPERIMENTS_FOR_AGSA feature.
+     */
+    public static final AllCachedFieldTrialParameters EXPERIMENTS_FOR_AGSA_PARAMS =
+            new AllCachedFieldTrialParameters(ChromeFeatureList.EXPERIMENTS_FOR_AGSA);
 
     private CustomTabActivityTabProvider.Observer mTabChangeObserver =
             new CustomTabActivityTabProvider.Observer() {
@@ -216,7 +224,8 @@ public class CustomTabActivity extends BaseCustomTabActivity {
                             this::getModalDialogManager,
                             /*offlinePageLoadUrlDelegate=*/
                             new OfflinePageUtils.TabOfflinePageLoadUrlDelegate(tab)),
-                    new ChromePermissionParamsListBuilderDelegate());
+                    new ChromePermissionParamsListBuilderDelegate(),
+                    PageInfoController.NO_HIGHLIGHTED_PERMISSION);
             return true;
         }
         return super.onMenuOrKeyboardAction(id, fromMenu);

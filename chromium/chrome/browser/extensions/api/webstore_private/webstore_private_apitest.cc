@@ -48,7 +48,7 @@
 // flag to #if defined(OS_CHROMEOS)
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
-#include "chrome/browser/supervised_user/logged_in_user_mixin.h"
+#include "chrome/browser/chromeos/login/test/logged_in_user_mixin.h"
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
@@ -60,7 +60,7 @@
 #include "extensions/common/extension_builder.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chromeos/constants/chromeos_switches.h"
+#include "ash/constants/ash_switches.h"
 #endif
 
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)

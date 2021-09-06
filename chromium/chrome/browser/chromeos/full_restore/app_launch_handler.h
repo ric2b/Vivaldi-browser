@@ -44,12 +44,15 @@ class AppLaunchHandler : public apps::AppRegistryCache::Observer {
 
   // Launches the browser, When the restore data is loaded, and the user chooses
   // to restore.
-  void LauncherBrowserWhenReady();
+  void LaunchBrowserWhenReady();
 
   // If the user preference sets always restore or the user selects 'Restore'
   // from the notification dialog, sets the restore flag |should_restore_| as
   // true to allow the restoration.
   void SetShouldRestore();
+
+  // Set force_launch_browser_ to launch browser for testing.
+  void SetForceLaunchBrowserForTesting();
 
  private:
   void OnGetRestoreData(
@@ -65,15 +68,20 @@ class AppLaunchHandler : public apps::AppRegistryCache::Observer {
 
   void LaunchApp(apps::mojom::AppType app_type, const std::string& app_id);
 
-  void LaunchWebAppOrExtension(
+  void LaunchSystemWebAppOrChromeApp(
       const std::string& app_id,
       const ::full_restore::RestoreData::LaunchList& launch_list);
+
+  void LaunchArcApp(const std::string& app_id,
+                    const ::full_restore::RestoreData::LaunchList& launch_list);
 
   Profile* profile_ = nullptr;
 
   bool should_restore_ = false;
 
   bool should_launch_browser_ = false;
+
+  bool force_launch_browser_ = false;
 
   std::unique_ptr<::full_restore::RestoreData> restore_data_;
 

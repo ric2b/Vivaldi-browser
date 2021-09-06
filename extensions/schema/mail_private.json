@@ -9,7 +9,7 @@
     },
     "functions": [
       {
-        "name": "getPaths",
+        "name": "getFilePaths",
         "type": "function",
         "description": "Returns array of file paths under a given directory.",
         "parameters": [
@@ -36,7 +36,7 @@
         ]
       },
       {
-        "name": "save",
+        "name": "writeTextToMessageFile",
         "type": "function",
         "description": "Saves a mail to disk. The root folder location is the profile directory of the current running instance /Mail",
         "parameters": [
@@ -72,7 +72,7 @@
         ]
       },
       {
-        "name": "saveBuffer",
+        "name": "writeBufferToMessageFile",
         "type": "function",
         "description": "Saves a mail to disk. The root folder location is the profile directory of the current running instance /Mail",
         "parameters": [
@@ -108,7 +108,7 @@
         ]
       },
       {
-        "name": "delete",
+        "name": "deleteMessageFile",
         "type": "function",
         "description": "Deletes a file. The root folder location is the profile directory of the current running instance /Mail",
         "parameters": [
@@ -139,7 +139,7 @@
         ]
       },
       {
-        "name": "read",
+        "name": "readFileToBuffer",
         "type": "function",
         "description": "Reads the contents of a file. Returns the content as arrayBuffer",
         "parameters": [
@@ -163,7 +163,7 @@
         ]
       },
       {
-        "name": "readM3Message",
+        "name": "readMessageFileToBuffer",
         "type": "function",
         "description": "Reads a mail. The root folder location is the profile directory of the current running instance /Mail",
         "parameters": [
@@ -195,7 +195,7 @@
         ]
       },
       {
-        "name": "readFile",
+        "name": "readFileToText",
         "type": "function",
         "description": "Reads a file. Returns the file content as text.",
         "parameters": [
@@ -219,7 +219,7 @@
         ]
       },
       {
-        "name": "getDataDirectory",
+        "name": "getFileDirectory",
         "type": "function",
         "description": "Returns the user mail data directory and verfies that the directory exists.",
         "parameters": [
@@ -243,7 +243,7 @@
         ]
       },
       {
-        "name": "createDataDirectory",
+        "name": "createFileDirectory",
         "type": "function",
         "description": "Creates the user mail data directory.",
         "parameters": [
@@ -251,42 +251,6 @@
             "name": "hashedAccountId",
             "type": "string",
             "description": "First 6 characters from the MD5 hash of the accountId. Appended to the end of the default mail data directory"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "type": "string"
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "name": "rename",
-        "type": "function",
-        "description": "Renames a file on disk. The root folder location is the profile directory of the current running instance /Mail",
-        "parameters": [
-          {
-            "name": "paths",
-            "type": "array",
-            "description": "String array that is used to create a folder structure, starting at user default profile /Mail The function returns error if empty",
-            "items": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "fileName",
-            "type": "string",
-            "description": "The file name to be renamed. With file ending"
-          },
-          {
-            "name": "newFileName",
-            "type": "string",
-            "description": "The new file name. With file ending"
           },
           {
             "type": "function",

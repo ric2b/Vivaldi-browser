@@ -12,6 +12,8 @@
 #include "ui/gfx/geometry/rect_f.h"
 
 class Browser;
+class ExtensionFunction;
+class Profile;
 
 namespace content {
 class BrowserContext;
@@ -72,5 +74,21 @@ void SetImagePathForProfilePath(const std::string& preferences_path,
                                 const std::string& profile_path);
 
 }  // namespace vivaldi
+
+namespace extensions {
+
+// Get a profile instance for the script that called the extension function.
+// Return null if the profile no longer exists. Use this function instead of
+// ExtensionFunction::browser_context() in asynchronous callbacks called after
+// ExtensionFunction::Run() returned as at that point browser_context() may
+// return a pointer to deleted memory. This happens if the function was called
+// from a private window and the user closed that window before the callback was
+// called.
+//
+// TODO(igor@vivaldi.com): After Chromium resolves crbug.com/1200440 consider if
+// this will still be necessary.
+Profile* GetFunctionCallerProfile(ExtensionFunction& fun);
+
+}  // namespace extensions
 
 #endif  // EXTENSIONS_TOOLS_VIVALDI_TOOLS_H_

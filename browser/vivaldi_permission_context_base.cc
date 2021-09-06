@@ -1,6 +1,7 @@
 // Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
 
 #include "components/permissions/permission_context_base.h"
+#include "chrome/browser/notifications/notification_permission_context.h"
 
 #include "app/vivaldi_apptools.h"
 #include "base/callback.h"
@@ -9,7 +10,34 @@
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
+#include "extensions/api/tabs/tabs_private_api.h"
 #endif
+
+void NotificationPermissionContext::UpdateTabContext(
+    const permissions::PermissionRequestID& id,
+    const GURL& requesting_frame,
+    bool allowed) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  content::WebContents* web_contents =
+      content::WebContents::FromRenderFrameHost(
+          content::RenderFrameHost::FromID(id.render_process_id(),
+                                           id.render_frame_id()));
+
+  if (web_contents) {
+    extensions::VivaldiPrivateTabObserver* private_tab =
+        extensions::VivaldiPrivateTabObserver::FromWebContents(web_contents);
+
+    ContentSetting content_setting =
+        allowed ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK;
+
+    if (private_tab) {
+      private_tab->OnPermissionAccessed(ContentSettingsType::NOTIFICATIONS,
+                                        requesting_frame.spec(),
+                                        content_setting);
+    }
+  }
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+}
 
 namespace permissions {
 

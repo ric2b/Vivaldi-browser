@@ -37,6 +37,7 @@ const char kDeletedPresetsKey[] = "deleted-presets";
 const char kSourceUrlKey[] = "source-url";
 const char kSourceFileKey[] = "source-file";
 const char kGroupKey[] = "group";
+const char kAllowAbpSnippets[] = "allow-abp-snippets";
 const char kRulesListChecksumKey[] = "rules-list-checksum";
 const char kLastUpdateKey[] = "last-upate";
 const char kNextFetchKey[] = "next-fetch";
@@ -56,7 +57,7 @@ const char kCountersKey[] = "counters";
 
 const char kPresetIdKey[] = "preset-id";
 
-const int kCurrentStorageVersion = 5;
+const int kCurrentStorageVersion = 6;
 
 const base::FilePath::CharType kSourcesFileName[] =
     FILE_PATH_LITERAL("AdBlockState");
@@ -112,6 +113,11 @@ void LoadSourcesList(base::Value& sources_list, RuleSources& rule_sources) {
       // The rules must either come form a file or a URL
       continue;
     }
+
+    base::Optional<bool> allow_abp_snippets =
+        source_value.FindBoolKey(kAllowAbpSnippets);
+    if (allow_abp_snippets && allow_abp_snippets.value())
+      rule_sources.back().allow_abp_snippets = true;
 
     std::string* rules_list_checksum =
         source_value.FindStringKey(kRulesListChecksumKey);
@@ -229,6 +235,11 @@ void LoadKnownSources(base::Value& sources_list,
       continue;
     }
 
+    base::Optional<bool> allow_abp_snippets =
+        source_value.FindBoolKey(kAllowAbpSnippets);
+    if (allow_abp_snippets && allow_abp_snippets.value())
+      known_sources.back().allow_abp_snippets = true;
+
     std::string* preset_id = source_value.FindStringKey(kPresetIdKey);
     if (preset_id)
       known_sources.back().preset_id = std::move(*preset_id);
@@ -325,8 +336,7 @@ void DoLoad(const base::FilePath& path,
 base::Value SerializeCounters(const std::map<std::string, int>& counters) {
   std::vector<std::pair<std::string, base::Value>> buffer;
   for (const auto& counter : counters) {
-    buffer.emplace_back(counter.first,
-                        counter.second);
+    buffer.emplace_back(counter.first, counter.second);
   }
   return base::Value(base::Value::DictStorage(std::move(buffer)));
 }
@@ -343,6 +353,7 @@ base::Value SerializeSourcesList(
       source_value.SetStringKey(kSourceFileKey,
                                 rule_source.source_file.AsUTF8Unsafe());
     source_value.SetIntKey(kGroupKey, static_cast<int>(rule_source.group));
+    source_value.SetBoolKey(kAllowAbpSnippets, rule_source.allow_abp_snippets);
     source_value.SetStringKey(kRulesListChecksumKey,
                               rule_source.rules_list_checksum);
     source_value.SetKey(kLastUpdateKey,
@@ -401,6 +412,7 @@ base::Value SerializeKnownSourcesList(const KnownRuleSources& rule_sources) {
       source_value.SetStringKey(kSourceFileKey,
                                 rule_source.source_file.AsUTF8Unsafe());
     source_value.SetIntKey(kGroupKey, static_cast<int>(rule_source.group));
+    source_value.SetBoolKey(kAllowAbpSnippets, rule_source.allow_abp_snippets);
     if (!rule_source.preset_id.empty())
       source_value.SetStringKey(kPresetIdKey, rule_source.preset_id);
     sources_list.Append(std::move(source_value));

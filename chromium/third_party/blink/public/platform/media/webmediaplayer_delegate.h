@@ -51,9 +51,6 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerDelegate {
     // discarding their decoders.
     virtual void OnIdleTimeout() = 0;
 
-    // Called when external controls are activated.
-    virtual void OnSetAudioSink(const std::string& sink_id) = 0;
-
     // Called to control audio ducking. Output volume should be set to
     // |player_volume| * |multiplier|. The range of |multiplier| is [0, 1],
     // where 1 indicates normal (non-ducked) playback.
@@ -101,11 +98,6 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerDelegate {
   // so that we can do the right thing with media that starts paused.
   virtual void DidPause(int player_id, bool reached_end_of_stream) = 0;
 
-  // Notify that the audio output sink has changed
-  virtual void DidAudioOutputSinkChange(
-      int delegate_id,
-      const std::string& hashed_device_id) = 0;
-
   // Notify that playback is stopped. This will drop wake locks and remove any
   // external controls.
   //
@@ -133,14 +125,6 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerDelegate {
   // Returns |true| if the player is stale; that is that OnIdleTimeout() was
   // called and returned |true|.
   virtual bool IsStale(int player_id) = 0;
-
-  // Notifies the delegate that the player has entered fullscreen. This does not
-  // differentiate native controls fullscreen and custom controls fullscreen.
-  // |fullscreen_video_status| is used by MediaWebContentsObserver to
-  // trigger automatically Picture-in-Picture for fullscreen videos.
-  virtual void SetIsEffectivelyFullscreen(
-      int player_id,
-      blink::WebFullscreenVideoStatus fullscreen_video_status) = 0;
 
  protected:
   WebMediaPlayerDelegate() = default;

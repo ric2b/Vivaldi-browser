@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/components/audio/cras_audio_handler.h"
 #include "base/values.h"
 #include "chrome/browser/policy/policy_test_utils.h"
-#include "chromeos/audio/cras_audio_handler.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/policy_constants.h"
@@ -14,7 +14,7 @@ namespace policy {
 
 namespace {
 
-class TestAudioObserver : public chromeos::CrasAudioHandler::AudioObserver {
+class TestAudioObserver : public ash::CrasAudioHandler::AudioObserver {
  public:
   TestAudioObserver() : output_mute_changed_count_(0) {}
   ~TestAudioObserver() override {}
@@ -25,7 +25,7 @@ class TestAudioObserver : public chromeos::CrasAudioHandler::AudioObserver {
   int output_mute_changed_count() const { return output_mute_changed_count_; }
 
  protected:
-  // chromeos::CrasAudioHandler::AudioObserver overrides.
+  // ash::CrasAudioHandler::AudioObserver overrides.
   void OnOutputMuteChanged(bool /* mute_on */) override {
     ++output_mute_changed_count_;
   }
@@ -38,7 +38,7 @@ class TestAudioObserver : public chromeos::CrasAudioHandler::AudioObserver {
 
 IN_PROC_BROWSER_TEST_F(PolicyTest, DisableAudioOutput) {
   // Set up the mock observer.
-  chromeos::CrasAudioHandler* audio_handler = chromeos::CrasAudioHandler::Get();
+  auto* audio_handler = ash::CrasAudioHandler::Get();
   std::unique_ptr<TestAudioObserver> test_observer(new TestAudioObserver);
   audio_handler->AddAudioObserver(test_observer.get());
 

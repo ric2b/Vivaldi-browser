@@ -22,7 +22,6 @@ goog.require('PhoneticData');
 goog.require('Spannable');
 goog.require('TextLog');
 goog.require('TtsCategory');
-goog.require('UserAnnotationHandler');
 goog.require('ValueSelectionSpan');
 goog.require('ValueSpan');
 goog.require('constants');
@@ -51,10 +50,14 @@ const StateType = chrome.automation.StateType;
  * $ prefix: used to substitute either an attribute or a specialized value from
  *     an AutomationNode. Specialized values include role and state.
  *     For example, $value $role $enabled
- * @ prefix: used to substitute a message. Note the ability to specify params to
- *     the message.  For example, '@tag_html' '@selected_index($text_sel_start,
+ *
+ * Note: (@) means @ to avoid Closure mistaking it for an annotation.
+ *
+ * (@) prefix: used to substitute a message. Note the ability to specify params
+ * to the message.  For example, '@tag_html' '@selected_index($text_sel_start,
  *     $text_sel_end').
- * @@ prefix: similar to @, used to substitute a message, but also pulls the
+ *
+ * (@@) prefix: similar to @, used to substitute a message, but also pulls the
  *     localized string through goog.i18n.MessageFormat to support locale
  *     aware plural handling.  The first argument should be a number which will
  *     be passed as a COUNT named parameter to MessageFormat.
@@ -756,12 +759,10 @@ Output = class {
             options.annotation.push(new Output.SelectionSpan(0, 0));
           }
 
-          const nameOrAnnotation =
-              UserAnnotationHandler.getAnnotationForNode(node) || node.name;
           if (localStorage['languageSwitching'] === 'true') {
-            this.assignLocaleAndAppend_(nameOrAnnotation, node, buff, options);
+            this.assignLocaleAndAppend_(node.name, node, buff, options);
           } else {
-            this.append_(buff, nameOrAnnotation || '', options);
+            this.append_(buff, node.name || '', options);
           }
 
           ruleStr.writeTokenWithValue(token, node.name);
@@ -1873,6 +1874,9 @@ Output = class {
     }
     if (node.autoComplete === 'inline' || node.autoComplete === 'both') {
       ret.push({msgId: 'hint_autocomplete_inline'});
+    }
+    if (node.customActions && node.customActions.length > 0) {
+      ret.push({msgId: 'hint_action'});
     }
     if (node.accessKey) {
       ret.push({text: Msgs.getMsg('access_key', [node.accessKey])});

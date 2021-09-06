@@ -12,7 +12,7 @@
 #include "util/build_config.h"
 
 #if defined(OS_WIN)
-#include <windows.h>
+#include "base/win/windows_types.h"
 #elif defined(OS_MACOSX)
 #include <dispatch/dispatch.h>
 #elif defined(OS_POSIX)

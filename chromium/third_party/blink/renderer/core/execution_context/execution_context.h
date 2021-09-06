@@ -44,7 +44,6 @@
 #include "third_party/blink/public/mojom/feature_policy/policy_disposition.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/v8_cache_options.mojom-blink.h"
-#include "third_party/blink/public/platform/mojo_binding_context.h"
 #include "third_party/blink/public/platform/web_url_loader.h"
 #include "third_party/blink/renderer/bindings/core/v8/sanitize_script_errors.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -57,6 +56,7 @@
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/console_logger.h"
 #include "third_party/blink/renderer/platform/loader/fetch/https_state.h"
+#include "third_party/blink/renderer/platform/mojo/mojo_binding_context.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -122,7 +122,6 @@ enum ReferrerPolicySource { kPolicySourceHttpHeader, kPolicySourceMetaTag };
 // by an extension developer, but these share an ExecutionContext (the window)
 // in common.
 class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
-                                     public ContextLifecycleNotifier,
                                      public MojoBindingContext,
                                      public ConsoleLogger,
                                      public UseCounter,
@@ -357,10 +356,8 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   }
   network::mojom::IPAddressSpace AddressSpace() const { return address_space_; }
 
-  void AddContextLifecycleObserver(ContextLifecycleObserver*) override;
-  void RemoveContextLifecycleObserver(ContextLifecycleObserver*) override;
   HeapObserverSet<ContextLifecycleObserver>& ContextLifecycleObserverSet() {
-    return context_lifecycle_observer_set_;
+    return ContextLifecycleNotifier::observers();
   }
   unsigned ContextLifecycleStateObserverCountForTesting() const;
 
@@ -403,6 +400,12 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
     return nullptr;
   }
 
+  bool has_filed_shared_array_buffer_creation_issue() const {
+    return has_filed_shared_array_buffer_creation_issue_;
+  }
+
+  void FileSharedArrayBufferCreationIssue();
+
  protected:
   explicit ExecutionContext(v8::Isolate* isolate, Agent*);
   ExecutionContext(const ExecutionContext&) = delete;
@@ -441,14 +444,13 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   bool is_in_back_forward_cache_ = false;
 
   bool has_filed_shared_array_buffer_transfer_issue_ = false;
+  bool has_filed_shared_array_buffer_creation_issue_ = false;
 
   Member<PublicURLManager> public_url_manager_;
 
   const Member<ContentSecurityPolicyDelegate> csp_delegate_;
 
   DOMTimerCoordinator timers_;
-
-  HeapObserverSet<ContextLifecycleObserver> context_lifecycle_observer_set_;
 
   // Counter that keeps track of how many window interaction calls are allowed
   // for this ExecutionContext. Callers are expected to call

@@ -85,7 +85,6 @@
     <message name="IDS_VIV_NO_TITLE" desc="A menu is missing a name">
         (no title)
     </message>
-
     <message name="IDS_VIV_BOOKMARK_BAR_OPEN_CURRENT_TAB" desc="Open in existing tab">
         Open
     </message>
@@ -109,6 +108,9 @@
     </message>
     <message name="IDS_VIV_BOOKMARK_BAR_NEW_FOLDER" desc="Make a new folder">
         New Folder
+    </message>
+    <message name="IDS_VIV_BOOKMARK_BAR_NEW_SEPARATOR" desc="Make a new separator">
+        New Separator
     </message>
     <message name="IDS_VIV_BOOKMARK_BAR_EDIT" desc="Modify an existing bookmark/folder">
         Edit

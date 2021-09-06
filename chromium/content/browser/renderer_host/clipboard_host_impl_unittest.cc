@@ -29,7 +29,8 @@ class ClipboardHostImplNoRFH : public ClipboardHostImpl {
  public:
   ClipboardHostImplNoRFH(
       mojo::PendingReceiver<blink::mojom::ClipboardHost> receiver)
-      : ClipboardHostImpl(/*render_frame_host=*/nullptr, std::move(receiver)) {}
+      : ClipboardHostImpl(/*render_frame_host=*/nullptr),
+        receiver_(this, std::move(receiver)) {}
 
   void StartIsPasteContentAllowedRequest(
       uint64_t seqno,
@@ -45,6 +46,8 @@ class ClipboardHostImplNoRFH : public ClipboardHostImpl {
   using ClipboardHostImpl::is_paste_allowed_requests_for_testing;
   using ClipboardHostImpl::kIsPasteContentAllowedRequestTooOld;
   using ClipboardHostImpl::PerformPasteIfContentAllowed;
+
+  mojo::Receiver<blink::mojom::ClipboardHost> receiver_;
 };
 
 }  // namespace
@@ -95,31 +98,6 @@ TEST_F(ClipboardHostImplTest, SimpleImage) {
 
   SkBitmap actual = ui::clipboard_test_util::ReadImage(system_clipboard());
   EXPECT_TRUE(gfx::BitmapsAreEqual(bitmap, actual));
-}
-
-TEST_F(ClipboardHostImplTest, ReentrancyInSyncCall) {
-  // Due to the nature of this test, it's somewhat racy. On some platforms
-  // (currently Linux), reading the clipboard requires running a nested message
-  // loop. During that time, it's possible to send a bad message that causes the
-  // message pipe to be closed. Make sure ClipboardHostImpl doesn't UaF |this|
-  // after exiting the nested message loop.
-
-  // ReadText() is a sync method, so normally, one wouldn't call this method
-  // directly. These are not normal times though...
-  mojo_clipboard()->ReadText(ui::ClipboardBuffer::kCopyPaste,
-                             base::DoNothing());
-
-  // Now purposely write a raw message which (hopefully) won't deserialize to
-  // anything valid. The receiver side should still be in the midst of
-  // dispatching ReadText() when Mojo attempts to deserialize this message,
-  // which should cause a validation failure that signals a connection error.
-  base::RunLoop run_loop;
-  mojo::WriteMessageRaw(mojo_clipboard().internal_state()->handle(), "moo", 3,
-                        nullptr, 0, MOJO_WRITE_MESSAGE_FLAG_NONE);
-  mojo_clipboard().set_disconnect_handler(run_loop.QuitClosure());
-  run_loop.Run();
-
-  EXPECT_FALSE(mojo_clipboard().is_connected());
 }
 
 TEST_F(ClipboardHostImplTest, IsPasteContentAllowedRequest_AddCallback) {

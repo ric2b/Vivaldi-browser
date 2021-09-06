@@ -41,7 +41,6 @@ import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.chrome.features.start_surface.StartSurface;
-import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.ScrollDirection;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.SwipeHandler;
 import org.chromium.components.embedder_support.util.UrlUtilities;
@@ -134,17 +133,15 @@ public class LayoutManagerChrome extends LayoutManagerImpl
 
         if (createOverviewLayout) {
             if (startSurface != null) {
-                assert TabUiFeatureUtilities.isGridTabSwitcherEnabled()
-                        || StartSurfaceConfiguration.isStartSurfaceStackTabSwitcherEnabled();
+                assert TabUiFeatureUtilities.isGridTabSwitcherEnabled();
                 TabManagementDelegate tabManagementDelegate =
                         TabManagementModuleProvider.getDelegate();
                 assert tabManagementDelegate != null;
 
                 final ObservableSupplier<? extends BrowserControlsStateProvider>
                         browserControlsSupplier = mHost.getBrowserControlsManagerSupplier();
-                mOverviewLayout = tabManagementDelegate.createStartSurfaceLayout(context, this,
-                        renderHost, startSurface,
-                        (ObservableSupplier<BrowserControlsStateProvider>) browserControlsSupplier);
+                mOverviewLayout = tabManagementDelegate.createStartSurfaceLayout(
+                        context, this, renderHost, startSurface);
             } else {
                 mCreateOverviewLayout = true;
             }
@@ -339,7 +336,8 @@ public class LayoutManagerChrome extends LayoutManagerImpl
 
     @Override
     protected boolean shouldDelayHideAnimation(Layout layoutBeingHidden) {
-        return mEnableAnimations && layoutBeingHidden == mOverviewLayout && mCreatingNtp;
+        return mEnableAnimations && layoutBeingHidden == mOverviewLayout && mCreatingNtp
+                && !TabUiFeatureUtilities.isGridTabSwitcherEnabled();
     }
 
     @Override

@@ -56,7 +56,7 @@ void MultiStoreFormFetcher::Fetch() {
     account_password_store->GetLogins(form_digest_, this);
 #if !defined(OS_IOS) && !defined(OS_ANDROID)
     // The desktop bubble needs this information.
-    account_password_store->GetMatchingCompromisedCredentials(
+    account_password_store->GetMatchingInsecureCredentials(
         form_digest_.signon_realm, this);
 #endif
   }
@@ -162,12 +162,12 @@ void MultiStoreFormFetcher::ProcessMigratedForms(
   AggregatePasswordStoreResults(std::move(forms));
 }
 
-void MultiStoreFormFetcher::OnGetCompromisedCredentials(
-    std::vector<CompromisedCredentials> compromised_credentials) {
+void MultiStoreFormFetcher::OnGetInsecureCredentials(
+    std::vector<InsecureCredential> insecure_credentials) {
   // Both the profile and account store has been queried. Therefore, append the
   // received credentials to the existing ones.
-  base::ranges::move(compromised_credentials,
-                     std::back_inserter(compromised_credentials_));
+  base::ranges::move(insecure_credentials,
+                     std::back_inserter(insecure_credentials_));
 }
 
 void MultiStoreFormFetcher::SplitResults(

@@ -44,6 +44,7 @@
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/flex_layout.h"
+#include "ui/views/metadata/metadata_header_macros.h"
 #include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/metadata/type_conversion.h"
 #include "ui/views/view_class_properties.h"
@@ -56,6 +57,7 @@ namespace {
 
 class OmniboxRemoveSuggestionButton : public views::ImageButton {
  public:
+  METADATA_HEADER(OmniboxRemoveSuggestionButton);
   explicit OmniboxRemoveSuggestionButton(PressedCallback callback)
       : ImageButton(std::move(callback)) {
     views::ConfigureVectorImageButton(this);
@@ -72,6 +74,9 @@ class OmniboxRemoveSuggestionButton : public views::ImageButton {
   }
 };
 
+BEGIN_METADATA(OmniboxRemoveSuggestionButton, views::ImageButton)
+END_METADATA
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -79,6 +84,8 @@ class OmniboxRemoveSuggestionButton : public views::ImageButton {
 
 class OmniboxResultSelectionIndicator : public views::View {
  public:
+  METADATA_HEADER(OmniboxResultSelectionIndicator);
+
   static constexpr int kStrokeThickness = 3;
 
   explicit OmniboxResultSelectionIndicator(OmniboxResultView* result_view)
@@ -127,6 +134,10 @@ class OmniboxResultSelectionIndicator : public views::View {
     return path;
   }
 };
+
+BEGIN_METADATA(OmniboxResultSelectionIndicator, views::View)
+END_METADATA
+
 ////////////////////////////////////////////////////////////////////////////////
 // OmniboxResultView, public:
 
@@ -417,15 +428,17 @@ bool OmniboxResultView::GetMatchSelected() const {
              OmniboxPopupModel::FOCUSED_BUTTON_HEADER;
 }
 
-views::Button* OmniboxResultView::GetSecondaryButton() {
-  if (suggestion_tab_switch_button_->GetVisible())
-    return suggestion_tab_switch_button_;
-
-  if (remove_suggestion_button_->GetVisible())
+views::Button* OmniboxResultView::GetActiveAuxiliaryButtonForAccessibility() {
+  if (popup_contents_view_->model()->selected_line_state() ==
+      OmniboxPopupModel::FOCUSED_BUTTON_REMOVE_SUGGESTION) {
     return remove_suggestion_button_;
+  }
 
   if (OmniboxFieldTrial::IsSuggestionButtonRowEnabled()) {
     return button_row_->GetActiveButton();
+  } else if (popup_contents_view_->model()->selected_line_state() ==
+             OmniboxPopupModel::FOCUSED_BUTTON_TAB_SWITCH) {
+    return suggestion_tab_switch_button_;
   }
 
   return nullptr;
@@ -480,7 +493,7 @@ bool OmniboxResultView::OnMouseDragged(const ui::MouseEvent& event) {
                                    &point_in_child_coords);
         if (suggestion_tab_switch_button_->HitTestPoint(
                 point_in_child_coords)) {
-          SetMouseHandler(suggestion_tab_switch_button_);
+          SetMouseAndGestureHandler(suggestion_tab_switch_button_);
           return false;
         }
       }
@@ -493,7 +506,7 @@ bool OmniboxResultView::OnMouseDragged(const ui::MouseEvent& event) {
   // When the drag leaves the bounds of this view, cancel the hover state and
   // pass control to the popup view.
   UpdateHoverState();
-  SetMouseHandler(popup_contents_view_);
+  SetMouseAndGestureHandler(popup_contents_view_);
   return false;
 }
 

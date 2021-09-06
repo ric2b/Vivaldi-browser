@@ -31,6 +31,8 @@
 <translation id="2486841023299517366">Dýr 4</translation>
 <translation id="2612127540243995147">Tilbúið til uppsetningar. Vivaldi mun nú lokast og endurræsast.</translation>
 <translation id="2613387515621326337">Sýna uppfærsluvefsíðu</translation>
+<translation id="2647368062414805334">Því miður eru Edge stillingarnar þínar ekki aðgengilegar þegar sá vafri er í gangi. Til þess að flytja inn stillingarnar þínar í Vivaldi þarftu að vista vinnuna þína og loka öllum Edge gluggum. Ýttu svo á halda áfram.</translation>
+<translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Dýr 3</translation>
 <translation id="2873951654529031587">Rusl</translation>
 <translation id="292258461174562431">Skrímsli 4</translation>
@@ -61,6 +63,7 @@
 <translation id="3732157130969736834">Bókamerkja hlekk</translation>
 <translation id="3732388226447288666">Dýr 2</translation>
 <translation id="3732439195215136813">Dýr 5</translation>
+<translation id="3795800845758778870">Því miður þá eru Brave stillingarnar ekki aðgengilegar þegar sá vafri er í gangi. Til þess að flytja inn stillingarnar í Vivaldi þarftu að vista vinnuna þína og loka öllum Brave gluggum. Smelltu svo á áfram.</translation>
 <translation id="3832132597516774400">Landslag 5</translation>
 <translation id="3914946330804881301">Flutt inn úr Óperu</translation>
 <translation id="3921292902397893431">Skrímsli 8</translation>
@@ -115,6 +118,8 @@
 <translation id="6551219277044048123">&amp;Gera að leitarvél…</translation>
 <translation id="6630781781151951863">Landslag 18</translation>
 <translation id="6635049669875534328">Um uppfærsluna:</translation>
+<translation id="6693585104974197539">Veldu Edge notendamöppu til að flytja inn</translation>
+<translation id="6726279523566323394">Veldu Brave notendamöppu til að flytja inn</translation>
 <translation id="6804831687363620480">Því miður eru Óperu 15+ stillingarnar þínar ekki aðgengilegar á meðan Ópera er í gangi. Til þess að flytja inn stillingarnar þínar í Vivaldi vistaðu vinnuna þína og lokaðu öllum Óperu gluggum. Ýttu síðan á Halda áfram.</translation>
 <translation id="6892812721183419409">Opna hlekk sem <ph name="USER" /></translation>
 <translation id="6896758677409633944">Afrita</translation>
@@ -160,5 +165,6 @@
 <translation id="912022491595344261">Opna mynd sem <ph name="USER" /></translation>
 <translation id="9157539936604258187">Opna hlekk</translation>
 <translation id="9169060351863393881">Ópera 12.x</translation>
+<translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Landslag 16</translation>
 </translationbundle>

@@ -13,8 +13,11 @@
 #include "base/optional.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
-#include "chrome/browser/chromeos/account_manager/account_manager_migrator.h"
-#include "chrome/browser/chromeos/account_manager/account_manager_util.h"
+#include "chrome/browser/account_manager_facade_factory.h"
+#include "chrome/browser/ash/account_manager/account_manager_migrator.h"
+#include "chrome/browser/ash/account_manager/account_manager_util.h"
+#include "chrome/browser/ash/login/demo_mode/demo_session.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/arc/arc_optin_uma.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/auth/arc_background_auth_code_fetcher.h"
@@ -22,8 +25,6 @@
 #include "chrome/browser/chromeos/arc/policy/arc_policy_util.h"
 #include "chrome/browser/chromeos/arc/session/arc_provisioning_result.h"
 #include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
-#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -155,29 +156,29 @@ bool IsPrimaryOrDeviceLocalAccount(
 }
 
 void TriggerAccountManagerMigrationsIfRequired(Profile* profile) {
-  if (!chromeos::IsAccountManagerAvailable(profile))
+  if (!ash::IsAccountManagerAvailable(profile))
     return;
 
-  chromeos::AccountManagerMigrator* const migrator =
-      chromeos::AccountManagerMigratorFactory::GetForBrowserContext(profile);
+  ash::AccountManagerMigrator* const migrator =
+      ash::AccountManagerMigratorFactory::GetForBrowserContext(profile);
   if (!migrator) {
     // Migrator can be null for ephemeral and kiosk sessions. Ignore those cases
     // since there are no accounts to be migrated in that case.
     return;
   }
-  const base::Optional<chromeos::AccountMigrationRunner::MigrationResult>
+  const base::Optional<ash::AccountMigrationRunner::MigrationResult>
       last_migration_run_result = migrator->GetLastMigrationRunResult();
 
   if (!last_migration_run_result)
     return;
 
   if (last_migration_run_result->final_status !=
-      chromeos::AccountMigrationRunner::Status::kFailure) {
+      ash::AccountMigrationRunner::Status::kFailure) {
     return;
   }
 
   if (last_migration_run_result->failed_step_id !=
-      chromeos::AccountManagerMigrator::kArcAccountsMigrationId) {
+      ash::AccountManagerMigrator::kArcAccountsMigrationId) {
     // Migrations failed but not because of ARC. ARC should not try to re-run
     // migrations in this case.
     return;
@@ -504,29 +505,31 @@ void ArcAuthService::FetchPrimaryAccountInfo(
 
 void ArcAuthService::IsAccountManagerAvailable(
     IsAccountManagerAvailableCallback callback) {
-  std::move(callback).Run(chromeos::IsAccountManagerAvailable(profile_));
+  std::move(callback).Run(ash::IsAccountManagerAvailable(profile_));
 }
 
 void ArcAuthService::HandleAddAccountRequest() {
-  DCHECK(chromeos::IsAccountManagerAvailable(profile_));
+  DCHECK(ash::IsAccountManagerAvailable(profile_));
 
-  chromeos::InlineLoginDialogChromeOS::ShowDeprecated(
-      ::account_manager::AccountManagerFacade::AccountAdditionSource::kArc);
+  ::GetAccountManagerFacade(profile_->GetPath().value())
+      ->ShowAddAccountDialog(
+          account_manager::AccountManagerFacade::AccountAdditionSource::kArc);
 }
 
 void ArcAuthService::HandleRemoveAccountRequest(const std::string& email) {
-  DCHECK(chromeos::IsAccountManagerAvailable(profile_));
+  DCHECK(ash::IsAccountManagerAvailable(profile_));
 
   chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
       profile_, chromeos::settings::mojom::kMyAccountsSubpagePath);
 }
 
 void ArcAuthService::HandleUpdateCredentialsRequest(const std::string& email) {
-  DCHECK(chromeos::IsAccountManagerAvailable(profile_));
+  DCHECK(ash::IsAccountManagerAvailable(profile_));
 
-  chromeos::InlineLoginDialogChromeOS::ShowDeprecated(
-      email,
-      ::account_manager::AccountManagerFacade::AccountAdditionSource::kArc);
+  ::GetAccountManagerFacade(profile_->GetPath().value())
+      ->ShowReauthAccountDialog(
+          account_manager::AccountManagerFacade::AccountAdditionSource::kArc,
+          email);
 }
 
 void ArcAuthService::OnRefreshTokenUpdatedForAccount(
@@ -535,20 +538,12 @@ void ArcAuthService::OnRefreshTokenUpdatedForAccount(
   // proper Profile independent entity once we have that.
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (!chromeos::IsAccountManagerAvailable(profile_))
+  if (!ash::IsAccountManagerAvailable(profile_))
     return;
 
   // Ignore the update if ARC has not been provisioned yet.
   if (!arc::IsArcProvisioned(profile_))
     return;
-
-  // For child device accounts do not allow the propagation of secondary
-  // accounts from Chrome OS Account Manager to ARC unless experimental feature
-  // is enabled.
-  if (!arc::IsSecondaryAccountForChildEnabled() && profile_->IsChild() &&
-      !IsPrimaryGaiaAccount(account_info.gaia)) {
-    return;
-  }
 
   if (identity_manager_->HasAccountWithRefreshTokenInPersistentErrorState(
           account_info.account_id)) {
@@ -571,7 +566,7 @@ void ArcAuthService::OnExtendedAccountInfoRemoved(
     const AccountInfo& account_info) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (!chromeos::IsAccountManagerAvailable(profile_))
+  if (!ash::IsAccountManagerAvailable(profile_))
     return;
 
   DCHECK(!IsPrimaryGaiaAccount(account_info.gaia));
@@ -801,7 +796,7 @@ ArcAuthService::CreateArcBackgroundAuthCodeFetcher(
 }
 
 void ArcAuthService::TriggerAccountsPushToArc(bool filter_primary_account) {
-  if (!chromeos::IsAccountManagerAvailable(profile_))
+  if (!ash::IsAccountManagerAvailable(profile_))
     return;
 
   const std::vector<CoreAccountInfo> accounts =

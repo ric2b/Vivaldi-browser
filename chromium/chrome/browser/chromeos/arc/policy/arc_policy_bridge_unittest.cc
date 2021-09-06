@@ -12,20 +12,27 @@
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/values.h"
+#include "chrome/browser/chromeos/arc/enterprise/arc_data_snapshotd_delegate.h"
 #include "chrome/browser/chromeos/arc/enterprise/cert_store/cert_store_service.h"
 #include "chrome/browser/chromeos/arc/policy/arc_policy_bridge.h"
+#include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/test/test_arc_session_manager.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/policy/developer_tools_policy_handler.h"
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/upstart/fake_upstart_client.h"
 #include "components/arc/arc_features.h"
 #include "components/arc/arc_prefs.h"
+#include "components/arc/enterprise/arc_data_snapshotd_manager.h"
 #include "components/arc/session/arc_bridge_service.h"
+#include "components/arc/session/arc_session_runner.h"
 #include "components/arc/test/connection_holder_util.h"
+#include "components/arc/test/fake_arc_session.h"
 #include "components/arc/test/fake_policy_instance.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -173,13 +180,13 @@ void ExpectString(std::unique_ptr<CheckedBoolean> was_run,
   was_run->set_value(true);
 }
 
-void ExpectStringWithClosure(base::Closure quit_closure,
+void ExpectStringWithClosure(base::OnceClosure quit_closure,
                              std::unique_ptr<CheckedBoolean> was_run,
                              const std::string& expected,
                              const std::string& received) {
   EXPECT_EQ(expected, received);
   was_run->set_value(true);
-  quit_closure.Run();
+  std::move(quit_closure).Run();
 }
 
 arc::ArcPolicyBridge::GetPoliciesCallback PolicyStringCallback(
@@ -189,10 +196,10 @@ arc::ArcPolicyBridge::GetPoliciesCallback PolicyStringCallback(
 }
 
 arc::ArcPolicyBridge::ReportComplianceCallback PolicyComplianceCallback(
-    base::Closure quit_closure,
+    base::OnceClosure quit_closure,
     const std::string& expected) {
   auto was_run = std::make_unique<CheckedBoolean>();
-  return base::BindOnce(&ExpectStringWithClosure, quit_closure,
+  return base::BindOnce(&ExpectStringWithClosure, std::move(quit_closure),
                         std::move(was_run), expected);
 }
 
@@ -669,10 +676,6 @@ TEST_F(ArcPolicyBridgeTest, VpnConfigAllowedTest) {
 }
 
 TEST_F(ArcPolicyBridgeTest, ManualChildUserPoliciesSet) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      /* enabled_features */ {arc::kEnableSecondaryAccountsForChild},
-      /* disabled_features */ {});
   // Mark profile as supervised user.
   profile()->SetSupervisedUserId(::supervised_users::kChildAccountSUID);
   EXPECT_TRUE(profile()->IsChild());
@@ -706,6 +709,68 @@ TEST_F(ArcPolicyBridgeTest, ManualChildUserPoliciesSet) {
        ",\"guid\":\"", instance_guid(), "\",",
        kSupervisedUserPlayStoreModePolicySetting, "}"});
   GetPoliciesAndVerifyResult(expected_policy_result);
+}
+
+// Test that required and force-installed apps get disabled during ARC data
+// snapshot update.
+TEST_F(ArcPolicyBridgeTest, DisableAppsInSnapshot) {
+  constexpr char kDisabledApplicationsPolicyFormat[] =
+      "\"applications\":["
+      "{"
+      "\"disabled\":%s,"
+      "\"installType\":\"REQUIRED\","
+      "\"packageName\":\"com.android.vending\""
+      "},"
+      "{"
+      "\"disabled\":%s,"
+      "\"installType\":\"FORCE_INSTALLED\","
+      "\"packageName\":\"com.force.installed\""
+      "},"
+      "{"
+      "\"disabled\":%s,"
+      "\"installType\":\"OPTIONAL\","
+      "\"packageName\":\"com.optional\""
+      "}],"
+      "\"defaultPermissionPolicy\":\"GRANT\"";
+
+  constexpr char kFalse[] = "false";
+  constexpr char kTrue[] = "true";
+
+  chromeos::DBusThreadManager::Initialize();
+
+  auto upstart_client = std::make_unique<chromeos::FakeUpstartClient>();
+  arc::prefs::RegisterLocalStatePrefs(
+      profile()->GetTestingPrefService()->registry());
+  auto arc_session_manager =
+      CreateTestArcSessionManager(std::make_unique<ArcSessionRunner>(
+          base::BindRepeating(FakeArcSession::Create)));
+
+  auto manager = std::make_unique<arc::data_snapshotd::ArcDataSnapshotdManager>(
+      profile()->GetTestingPrefService(),
+      std::make_unique<arc::data_snapshotd::ArcDataSnapshotdDelegate>(),
+      base::DoNothing());
+  EXPECT_TRUE(arc::data_snapshotd::ArcDataSnapshotdManager::Get());
+  manager->set_state_for_testing(
+      arc::data_snapshotd::ArcDataSnapshotdManager::State::kMgsLaunched);
+  EXPECT_TRUE(manager->IsSnapshotInProgress());
+  policy_map().Set(policy::key::kArcPolicy, policy::POLICY_LEVEL_MANDATORY,
+                   policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
+                   base::Value(base::StrCat(
+                       {"{",
+                        base::StringPrintf(kDisabledApplicationsPolicyFormat,
+                                           kFalse, kFalse, kFalse),
+                        "}"})),
+                   nullptr);
+  GetPoliciesAndVerifyResult(base::StrCat(
+      {"{\"apkCacheEnabled\":true,",
+       base::StringPrintf(kDisabledApplicationsPolicyFormat, kTrue, kTrue,
+                          kFalse),
+       ",\"guid\":\"", instance_guid(), "\",\"resetAndroidIdEnabled\":true}"}));
+
+  manager.reset();
+  upstart_client.reset();
+  arc_session_manager.reset();
+  chromeos::DBusThreadManager::Shutdown();
 }
 
 TEST_P(ArcPolicyBridgeAffiliatedTest, ApkCacheEnabledTest) {

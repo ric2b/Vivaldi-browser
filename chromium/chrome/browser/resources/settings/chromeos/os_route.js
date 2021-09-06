@@ -81,7 +81,7 @@ cr.define('settings', function() {
       r.SMART_LOCK = createSubpage(
           r.MULTIDEVICE_FEATURES, mojom.SMART_LOCK_SUBPAGE_PATH,
           Subpage.kSmartLock);
-      if (loadTimeData.getBoolean('nearbySharingFeatureFlag')) {
+      if (loadTimeData.getBoolean('isNearbyShareSupported')) {
         r.NEARBY_SHARE = createSubpage(
             r.MULTIDEVICE, mojom.NEARBY_SHARE_SUBPAGE_PATH,
             Subpage.kNearbyShare);
@@ -163,6 +163,8 @@ cr.define('settings', function() {
       r.CHANGE_PICTURE = createSubpage(
           r.PERSONALIZATION, mojom.CHANGE_PICTURE_SUBPAGE_PATH,
           Subpage.kChangePicture);
+      r.WALLPAPER = createSubpage(
+          r.PERSONALIZATION, mojom.WALLPAPER_SUBPAGE_PATH, Subpage.kWallpaper);
       r.AMBIENT_MODE = createSubpage(
           r.PERSONALIZATION, mojom.AMBIENT_MODE_SUBPAGE_PATH,
           Subpage.kAmbientMode);
@@ -207,7 +209,7 @@ cr.define('settings', function() {
     if (loadTimeData.valueExists('showCrostini') &&
         loadTimeData.getBoolean('showCrostini')) {
       r.CROSTINI = createSection(
-          r.BASIC, mojom.CROSTINI_SECTION_PATH, Section.kCrostini);
+          r.ADVANCED, mojom.CROSTINI_SECTION_PATH, Section.kCrostini);
       r.CROSTINI_DETAILS = createSubpage(
           r.CROSTINI, mojom.CROSTINI_DETAILS_SUBPAGE_PATH,
           Subpage.kCrostiniDetails);

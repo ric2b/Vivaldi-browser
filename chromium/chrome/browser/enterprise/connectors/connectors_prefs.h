@@ -9,6 +9,9 @@ class PrefRegistrySimple;
 
 namespace enterprise_connectors {
 
+// Pref that maps to the "SendDownloadToCloudEnterpriseConnector" policy.
+extern const char kSendDownloadToCloudPref[];
+
 // Pref that maps to the "OnFileAttachedEnterpriseConnector" policy.
 extern const char kOnFileAttachedPref[];
 
@@ -20,6 +23,9 @@ extern const char kOnBulkDataEntryPref[];
 
 // Pref that maps to the "OnSecurityEventEnterpriseConnector" policy.
 extern const char kOnSecurityEventPref[];
+
+// Pref that maps to the "ContextAwareAccessSignalsAllowlistPref" policy.
+extern const char kContextAwareAccessSignalsAllowlistPref[];
 
 // Prefs that map to the scope of each policy using a
 // EnterpriseConnectorsPolicyHandler.

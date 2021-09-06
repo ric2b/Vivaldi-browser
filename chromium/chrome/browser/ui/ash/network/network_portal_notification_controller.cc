@@ -18,9 +18,9 @@
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
 #include "chrome/app/vector_icons/vector_icons.h"
-#include "chrome/browser/chromeos/mobile/mobile_activator.h"
+#include "chrome/browser/ash/mobile/mobile_activator.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/net/network_portal_web_dialog.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/notifications/notification_handler.h"
 #include "chrome/browser/notifications/system_notification_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -29,7 +29,6 @@
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_type_pattern.h"
 #include "components/captive_portal/core/captive_portal_detector.h"
@@ -97,6 +96,8 @@ void NetworkPortalNotificationControllerDelegate::Click(
     if (!profile)
       return;
     chrome::ScopedTabbedBrowserDisplayer displayer(profile);
+    if (!displayer.browser())
+      return;
     GURL url(captive_portal::CaptivePortalDetector::kDefaultURL);
     ShowSingletonTab(displayer.browser(), url);
   }
@@ -148,7 +149,7 @@ void NetworkPortalNotificationController::OnPortalDetectionCompleted(
   }
 
   // Don't do anything if we're currently activating the device.
-  if (MobileActivator::GetInstance()->RunningActivation())
+  if (ash::MobileActivator::GetInstance()->RunningActivation())
     return;
 
   // Don't do anything if notification for |network| already was

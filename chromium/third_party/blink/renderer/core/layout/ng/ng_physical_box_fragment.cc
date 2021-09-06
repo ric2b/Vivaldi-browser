@@ -375,6 +375,62 @@ NGPhysicalBoxFragment::CloneAsHiddenForPaint() const {
   return builder.ToBoxFragment();
 }
 
+const LayoutBox* NGPhysicalBoxFragment::OwnerLayoutBox() const {
+  const LayoutBox* owner_box =
+      DynamicTo<LayoutBox>(GetSelfOrContainerLayoutObject());
+  DCHECK(owner_box);
+  if (UNLIKELY(IsColumnBox())) {
+    owner_box = To<LayoutBox>(owner_box->SlowFirstChild());
+    DCHECK(owner_box && owner_box->IsLayoutFlowThread());
+  }
+  // Check |this| and the |LayoutBox| that produced it are in sync.
+  DCHECK(owner_box->PhysicalFragments().Contains(*this));
+  DCHECK_EQ(IsFirstForNode(), this == owner_box->GetPhysicalFragment(0));
+  return owner_box;
+}
+
+LayoutBox* NGPhysicalBoxFragment::MutableOwnerLayoutBox() const {
+  return const_cast<LayoutBox*>(OwnerLayoutBox());
+}
+
+PhysicalOffset NGPhysicalBoxFragment::OffsetFromOwnerLayoutBox() const {
+  // This function uses |FragmentData|, so must be |kPrePaintClean|.
+  DCHECK_GE(GetDocument().Lifecycle().GetState(),
+            DocumentLifecycle::kPrePaintClean);
+
+  const LayoutBox* owner_box = OwnerLayoutBox();
+  DCHECK(owner_box);
+  DCHECK(owner_box->PhysicalFragments().Contains(*this));
+  if (owner_box->PhysicalFragmentCount() <= 1)
+    return PhysicalOffset();
+
+  // When LTR, compute the offset from the first fragment. The first fragment is
+  // at the left top of the |LayoutBox| regardless of the writing mode.
+  const auto* containing_block = owner_box->ContainingBlock();
+  const ComputedStyle& containing_block_style = containing_block->StyleRef();
+  if (IsLtr(containing_block_style.Direction())) {
+    DCHECK_EQ(IsFirstForNode(), this == owner_box->GetPhysicalFragment(0));
+    if (IsFirstForNode())
+      return PhysicalOffset();
+
+    const FragmentData* fragment_data =
+        owner_box->FragmentDataFromPhysicalFragment(*this);
+    DCHECK(fragment_data);
+    const FragmentData& first_fragment_data = owner_box->FirstFragment();
+    // All |FragmentData| for an NG block fragmented |LayoutObject| should be in
+    // the same transform node that their |PaintOffset()| are in the same
+    // coordinate system.
+    return fragment_data->PaintOffset() - first_fragment_data.PaintOffset();
+  }
+
+  // When RTL, compute the offset from the last fragment.
+  const FragmentData* fragment_data =
+      owner_box->FragmentDataFromPhysicalFragment(*this);
+  DCHECK(fragment_data);
+  const FragmentData& last_fragment_data = fragment_data->LastFragment();
+  return fragment_data->PaintOffset() - last_fragment_data.PaintOffset();
+}
+
 const NGPhysicalBoxFragment* NGPhysicalBoxFragment::PostLayout() const {
   const auto* layout_object = GetSelfOrContainerLayoutObject();
   if (UNLIKELY(!layout_object)) {
@@ -1099,23 +1155,21 @@ void NGPhysicalBoxFragment::CheckIntegrity() const {
   if (layout_object_ && layout_object_->ChildPaintBlockedByDisplayLock())
     return;
 
-  if (RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled()) {
-    if (RuntimeEnabledFeatures::LayoutNGBlockFragmentationEnabled()) {
-      if (has_line_boxes)
-        DCHECK(HasItems());
-    } else {
-      DCHECK_EQ(HasItems(), has_line_boxes);
-    }
+  if (RuntimeEnabledFeatures::LayoutNGBlockFragmentationEnabled()) {
+    if (has_line_boxes)
+      DCHECK(HasItems());
+  } else {
+    DCHECK_EQ(HasItems(), has_line_boxes);
+  }
 
-    if (has_line_boxes) {
-      DCHECK(!has_inlines);
-      DCHECK(!has_inflow_blocks);
-      // The following objects should be in the items, not in the tree. One
-      // exception is that floats may occur as regular fragments in the tree
-      // after a fragmentainer break.
-      DCHECK(!has_floats || !IsFirstForNode());
-      DCHECK(!has_list_markers);
-    }
+  if (has_line_boxes) {
+    DCHECK(!has_inlines);
+    DCHECK(!has_inflow_blocks);
+    // The following objects should be in the items, not in the tree. One
+    // exception is that floats may occur as regular fragments in the tree
+    // after a fragmentainer break.
+    DCHECK(!has_floats || !IsFirstForNode());
+    DCHECK(!has_list_markers);
   }
 }
 #endif

@@ -236,6 +236,10 @@ std::string VivVideoDecoder::GetDisplayName() const {
   return "VivVideoDecoder";
 }
 
+VideoDecoderType VivVideoDecoder::GetDecoderType() const {
+  return VideoDecoderType::kDecrypting;
+}
+
 void VivVideoDecoder::Output(void* source_frame_refcon,
                               OSStatus status,
                               CVImageBufferRef image_buffer) {

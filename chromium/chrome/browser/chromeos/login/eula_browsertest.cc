@@ -16,6 +16,7 @@
 #include "base/task/post_task.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "chrome/browser/ash/settings/stats_reporting_controller.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/test/dialog_window_waiter.h"
 #include "chrome/browser/chromeos/login/test/fake_eula_mixin.h"
@@ -26,14 +27,12 @@
 #include "chrome/browser/chromeos/login/test/webview_content_extractor.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
-#include "chrome/browser/chromeos/settings/stats_reporting_controller.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/chromeos/login/eula_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "chrome/test/base/interactive_test_utils.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/cryptohome/fake_cryptohome_client.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/metrics/metrics_pref_names.h"
@@ -350,7 +349,13 @@ IN_PROC_BROWSER_TEST_F(EulaTest, LearnMore) {
 }
 
 // Tests that "Additional ToS" dialog could be opened and closed.
-IN_PROC_BROWSER_TEST_F(EulaTest, AdditionalToS) {
+// TODO(crbug.com/1175244): Flaky on linux-chromeos-rel.
+#ifdef NDEBUG
+#define MAYBE_AdditionalToS DISABLED_AdditionalToS
+#else
+#define MAYBE_AdditionalToS AdditionalToS
+#endif
+IN_PROC_BROWSER_TEST_F(EulaTest, MAYBE_AdditionalToS) {
   base::HistogramTester histogram_tester;
   ShowEulaScreen();
 

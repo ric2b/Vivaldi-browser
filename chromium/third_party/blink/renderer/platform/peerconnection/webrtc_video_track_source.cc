@@ -64,10 +64,10 @@ gfx::Rect ScaleRectangle(const gfx::Rect& input_rect,
 }
 
 webrtc::VideoRotation GetFrameRotation(const media::VideoFrame* frame) {
-  if (!frame->metadata().rotation) {
+  if (!frame->metadata().transformation) {
     return webrtc::kVideoRotation_0;
   }
-  switch (*frame->metadata().rotation) {
+  switch (frame->metadata().transformation->rotation) {
     case media::VIDEO_ROTATION_0:
       return webrtc::kVideoRotation_0;
     case media::VIDEO_ROTATION_90:
@@ -88,9 +88,11 @@ namespace blink {
 WebRtcVideoTrackSource::WebRtcVideoTrackSource(
     bool is_screencast,
     absl::optional<bool> needs_denoising,
-    media::VideoCaptureFeedbackCB callback)
+    media::VideoCaptureFeedbackCB callback,
+    media::GpuVideoAcceleratorFactories* gpu_factories)
     : AdaptedVideoTrackSource(/*required_alignment=*/1),
-      scaled_frame_pool_(new WebRtcVideoFrameAdapter::BufferPoolOwner()),
+      adapter_resources_(
+          new WebRtcVideoFrameAdapter::SharedResources(gpu_factories)),
       is_screencast_(is_screencast),
       needs_denoising_(needs_denoising),
       callback_(callback) {
@@ -141,12 +143,7 @@ void WebRtcVideoTrackSource::OnFrameCaptured(
     scoped_refptr<media::VideoFrame> frame) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   TRACE_EVENT0("media", "WebRtcVideoSource::OnFrameCaptured");
-  if (!(frame->IsMappable() && (frame->format() == media::PIXEL_FORMAT_I420 ||
-                                frame->format() == media::PIXEL_FORMAT_I420A ||
-                                frame->format() == media::PIXEL_FORMAT_NV12)) &&
-      !(frame->storage_type() ==
-        media::VideoFrame::STORAGE_GPU_MEMORY_BUFFER) &&
-      !frame->HasTextures()) {
+  if (!WebRtcVideoFrameAdapter::IsFrameAdaptable(frame.get())) {
     // Since connecting sources and sinks do not check the format, we need to
     // just ignore formats that we can not handle.
     LOG(ERROR) << "We cannot send frame with storage type: "
@@ -320,7 +317,7 @@ void WebRtcVideoTrackSource::DeliverFrame(
       webrtc::VideoFrame::Builder()
           .set_video_frame_buffer(
               new rtc::RefCountedObject<WebRtcVideoFrameAdapter>(
-                  frame, scaled_frame_pool_))
+                  frame, adapter_resources_))
           .set_rotation(GetFrameRotation(frame.get()))
           .set_timestamp_us(timestamp_us);
   if (update_rect) {

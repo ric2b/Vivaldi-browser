@@ -9,6 +9,7 @@
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "browser/stats_reporter.h"
+#include "browser/translate/vivaldi_translate_client.h"
 #include "calendar/calendar_service_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -124,6 +125,7 @@ void VivaldiBrowserMainExtraParts::
 
 #if !defined(OS_ANDROID)
   vivaldi::LazyLoadServiceFactory::GetInstance();
+  VivaldiTranslateClient::LoadTranslationScript();
 #endif
 }
 
@@ -135,9 +137,26 @@ void VivaldiBrowserMainExtraParts::PostProfileInit() {
   content::WebUIControllerFactory::RegisterFactory(
       vivaldi::VivaldiWebUIControllerFactory::GetInstance());
 
+  Profile* profile =
+      g_browser_process->profile_manager()->GetActiveUserProfile();
+
+  translate_language_list_ =
+      std::make_unique<translate::VivaldiTranslateLanguageList>(profile);
+
 #if !defined(OS_ANDROID)
-  vivaldi::CommandLineAppendSwitchNoDup(base::CommandLine::ForCurrentProcess(),
+  base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
+  vivaldi::CommandLineAppendSwitchNoDup(cmd_line,
                                         switches::kSavePageAsMHTML);
+
+  if (cmd_line.HasSwitch(switches::kAppId)) {
+    std::string extension_app_id =
+        cmd_line.GetSwitchValueASCII(switches::kAppId);
+    if (vivaldi::IsVivaldiApp(extension_app_id)) {
+      // --app-id with our appId breaks a lot of stuff, so
+      // catch it early and remove it.
+      cmd_line.RemoveSwitch(switches::kAppId);
+    }
+  }
 
   // Sanetize contentsettings visible in our web-ui.
   std::list<ContentSettingsType> ui_exposed_settings = {
@@ -150,9 +169,6 @@ void VivaldiBrowserMainExtraParts::PostProfileInit() {
       ContentSettingsType::POPUPS,
       ContentSettingsType::SENSORS,
       ContentSettingsType::SOUND};
-
-  Profile* profile =
-      g_browser_process->profile_manager()->GetActiveUserProfile();
 
   HostContentSettingsMap* content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(profile);
@@ -179,5 +195,11 @@ void VivaldiBrowserMainExtraParts::PostProfileInit() {
                                                      default_setting);
     }
   }
+#endif  // OS_ANDROID
+}
+
+void VivaldiBrowserMainExtraParts::PostMainMessageLoopRun() {
+#if !defined(OS_ANDROID)
+  extensions::AutoUpdateAPI::Shutdown();
 #endif  // OS_ANDROID
 }

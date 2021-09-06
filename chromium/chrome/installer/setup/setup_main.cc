@@ -35,7 +35,6 @@
 #include "base/process/process.h"
 #include "base/process/process_metrics.h"
 #include "base/stl_util.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -103,13 +102,6 @@
 #include "installer/util/vivaldi_install_constants.h"
 #include "installer/util/vivaldi_setup_util.h"
 
-#if !defined(OFFICIAL_BUILD)
-namespace installer {
-// Path to use for all following setup.exe invocations.
-extern base::FilePath* vivaldi_debug_subprocesses_exe;
-}  // namespace installer
-#endif
-
 using installer::InitialPreferences;
 using installer::InstallationState;
 using installer::InstallerState;
@@ -124,12 +116,12 @@ const wchar_t kMsiProductIdPrefix[] = L"EnterpriseProduct";
 
 // Overwrite an existing DisplayVersion as written by the MSI installer
 // with the real version number of Chrome.
-LONG OverwriteDisplayVersion(const base::string16& path,
-                             const base::string16& value,
+LONG OverwriteDisplayVersion(const std::wstring& path,
+                             const std::wstring& value,
                              REGSAM wowkey) {
   base::win::RegKey key;
   LONG result = 0;
-  base::string16 existing;
+  std::wstring existing;
   if ((result = key.Open(HKEY_LOCAL_MACHINE, path.c_str(),
                          KEY_QUERY_VALUE | KEY_SET_VALUE | wowkey)) !=
       ERROR_SUCCESS) {
@@ -154,11 +146,11 @@ LONG OverwriteDisplayVersion(const base::string16& path,
   return ERROR_SUCCESS;
 }
 
-LONG OverwriteDisplayVersions(const base::string16& product,
-                              const base::string16& value) {
+LONG OverwriteDisplayVersions(const std::wstring& product,
+                              const std::wstring& value) {
   // The version is held in two places.  First change it in the MSI Installer
   // registry entry.  It is held under a "squashed guid" key.
-  base::string16 reg_path = base::StringPrintf(
+  std::wstring reg_path = base::StringPrintf(
       L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\"
       L"%ls\\Products\\%ls\\InstallProperties",
       kSystemPrincipalSid, InstallUtil::GuidToSquid(product).c_str());
@@ -250,20 +242,20 @@ std::unique_ptr<installer::ArchivePatchHelper> CreateChromeArchiveHelper(
 //
 // This format is strange and its provenance is shrouded in mystery but it has
 // the data we need, so use it.
-base::string16 FindMsiProductId(const InstallerState& installer_state) {
+std::wstring FindMsiProductId(const InstallerState& installer_state) {
   HKEY reg_root = installer_state.root_key();
 
   base::win::RegistryValueIterator value_iter(
       reg_root, install_static::GetClientStateKeyPath().c_str(),
       KEY_WOW64_32KEY);
   for (; value_iter.Valid(); ++value_iter) {
-    base::string16 value_name(value_iter.Name());
+    std::wstring value_name(value_iter.Name());
     if (base::StartsWith(value_name, kMsiProductIdPrefix,
                          base::CompareCase::INSENSITIVE_ASCII)) {
       return value_name.substr(base::size(kMsiProductIdPrefix) - 1);
     }
   }
-  return base::string16();
+  return std::wstring();
 }
 
 // Workhorse for producing an uncompressed archive (chrome.7z) given a
@@ -468,7 +460,7 @@ installer::InstallStatus RenameChromeExecutables(
   // Add work items to delete Chrome's "opv", "cpv", and "cmd" values.
   // TODO(grt): Clean this up; https://crbug.com/577816.
   HKEY reg_root = installer_state->root_key();
-  const base::string16 clients_key = install_static::GetClientsKeyPath();
+  const std::wstring clients_key = install_static::GetClientsKeyPath();
 
   install_list->AddDeleteRegValueWorkItem(reg_root, clients_key,
                                           KEY_WOW64_32KEY,
@@ -713,9 +705,9 @@ installer::InstallStatus InstallProducts(InstallationState& original_state,
   return install_status;
 }
 
-installer::InstallStatus ShowEulaDialog(const base::string16& inner_frame) {
+installer::InstallStatus ShowEulaDialog(const std::wstring& inner_frame) {
   VLOG(1) << "About to show EULA";
-  base::string16 eula_path = installer::GetLocalizedEulaResource();
+  std::wstring eula_path = installer::GetLocalizedEulaResource();
   if (eula_path.empty()) {
     LOG(ERROR) << "No EULA path available";
     return installer::EULA_REJECTED;
@@ -762,8 +754,8 @@ installer::InstallStatus RegisterDevChrome(
     static const wchar_t kPleaseUninstallYourChromeMessage[] =
         L"You already have a full-installation (non-dev) of %1ls, please "
         L"uninstall it first using Add/Remove Programs in the control panel.";
-    base::string16 name(InstallUtil::GetDisplayName());
-    base::string16 message(
+    std::wstring name(InstallUtil::GetDisplayName());
+    std::wstring message(
         base::StringPrintf(kPleaseUninstallYourChromeMessage, name.c_str()));
 
     LOG(ERROR) << "Aborting operation: another installation of " << name
@@ -880,7 +872,7 @@ bool HandleNonInstallCmdLineOptions(installer::ModifyParams& modify_params,
   } else if (cmd_line.HasSwitch(installer::switches::kShowEula)) {
     // Check if we need to show the EULA. If it is passed as a command line
     // then the dialog is shown and regardless of the outcome setup exits here.
-    base::string16 inner_frame =
+    std::wstring inner_frame =
         cmd_line.GetSwitchValueNative(installer::switches::kShowEula);
     *exit_code = ShowEulaDialog(inner_frame);
 
@@ -926,13 +918,13 @@ bool HandleNonInstallCmdLineOptions(installer::ModifyParams& modify_params,
     DCHECK(IsUserAnAdmin());
     base::FilePath chrome_exe(cmd_line.GetSwitchValuePath(
         installer::switches::kRegisterChromeBrowser));
-    base::string16 suffix;
+    std::wstring suffix;
     if (cmd_line.HasSwitch(installer::switches::kRegisterChromeBrowserSuffix)) {
       suffix = cmd_line.GetSwitchValueNative(
           installer::switches::kRegisterChromeBrowserSuffix);
     }
     if (cmd_line.HasSwitch(installer::switches::kRegisterURLProtocol)) {
-      base::string16 protocol = cmd_line.GetSwitchValueNative(
+      std::wstring protocol = cmd_line.GetSwitchValueNative(
           installer::switches::kRegisterURLProtocol);
       // ShellUtil::RegisterChromeForProtocol performs all registration
       // done by ShellUtil::RegisterChromeBrowser, as well as registering
@@ -968,7 +960,7 @@ bool HandleNonInstallCmdLineOptions(installer::ModifyParams& modify_params,
     // Here we delete Chrome browser registration. This option should only
     // be used when setup.exe is launched with admin rights. We do not
     // make any user specific changes in this option.
-    base::string16 suffix;
+    std::wstring suffix;
     if (cmd_line.HasSwitch(installer::switches::kRegisterChromeBrowserSuffix)) {
       suffix = cmd_line.GetSwitchValueNative(
           installer::switches::kRegisterChromeBrowserSuffix);
@@ -1027,16 +1019,16 @@ bool HandleNonInstallCmdLineOptions(installer::ModifyParams& modify_params,
                                  : installer::REENABLE_UPDATES_FAILED;
   } else if (cmd_line.HasSwitch(
                  installer::switches::kSetDisplayVersionProduct)) {
-    const base::string16 registry_product(cmd_line.GetSwitchValueNative(
+    const std::wstring registry_product(cmd_line.GetSwitchValueNative(
         installer::switches::kSetDisplayVersionProduct));
-    const base::string16 registry_value(cmd_line.GetSwitchValueNative(
+    const std::wstring registry_value(cmd_line.GetSwitchValueNative(
         installer::switches::kSetDisplayVersionValue));
     *exit_code = OverwriteDisplayVersions(registry_product, registry_value);
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   } else if (cmd_line.HasSwitch(installer::switches::kStoreDMToken)) {
     // Write the specified token to the registry, overwriting any already
     // existing value.
-    base::string16 token_switch_value =
+    std::wstring token_switch_value =
         cmd_line.GetSwitchValueNative(installer::switches::kStoreDMToken);
     base::Optional<std::string> token;
     if (!(token = installer::DecodeDMTokenSwitchValue(token_switch_value)) ||
@@ -1183,7 +1175,7 @@ InstallStatus InstallProductsHelper(InstallationState& original_state,
           (product_state->version().CompareTo(*installer_version) > 0)) {
         LOG(ERROR) << "Higher version of Vivaldi is already installed.";
         // NOTE(jarle@vivaldi): If standalone we allow downgrading.
-        if (!installer_state.is_vivaldi_standalone()) {
+        if (!vivaldi::IsInstallStandalone()) {
           // clang-format off
         int message_id = IDS_INSTALL_HIGHER_VERSION_BASE;
         proceed_with_installation = false;
@@ -1212,7 +1204,7 @@ InstallStatus InstallProductsHelper(InstallationState& original_state,
 
       int install_msg_base = IDS_INSTALL_FAILED_BASE;
       base::FilePath chrome_exe;
-      base::string16 quoted_chrome_exe;
+      std::wstring quoted_chrome_exe;
       if (install_status == SAME_VERSION_REPAIR_FAILED) {
         install_msg_base = IDS_SAME_VERSION_REPAIR_FAILED_BASE;
       } else if (install_status != INSTALL_FAILED) {
@@ -1255,7 +1247,7 @@ InstallStatus InstallProductsHelper(InstallationState& original_state,
           LaunchChromeBrowser(installer_state.target_path());
       } else if ((install_status == NEW_VERSION_UPDATED) ||
                  (install_status == IN_USE_UPDATED)) {
-        DCHECK_NE(chrome_exe.value(), base::string16());
+        DCHECK_NE(chrome_exe.value(), std::wstring());
         RemoveChromeLegacyRegistryKeys(chrome_exe);
       }
         // clang-format on
@@ -1290,10 +1282,10 @@ InstallStatus InstallProductsHelper(InstallationState& original_state,
       // the DisplayVersion.  In other runs, such as those done by the auto-
       // update action, we set the value immediately.
       // Get the app's MSI Product-ID from an entry in ClientState.
-      base::string16 app_guid = FindMsiProductId(installer_state);
+      std::wstring app_guid = FindMsiProductId(installer_state);
       if (!app_guid.empty()) {
         OverwriteDisplayVersions(
-            app_guid, base::UTF8ToUTF16(installer_version->GetString()));
+            app_guid, base::UTF8ToWide(installer_version->GetString()));
       }
     }
     // Return the path to the directory containing the newly installed
@@ -1460,12 +1452,12 @@ int WINAPI wWinMain(HINSTANCE instance,
   base::FilePath setup_exe;
   base::PathService::Get(base::FILE_EXE, &setup_exe);
 #if !defined(OFFICIAL_BUILD)
-  if (cmd_line.HasSwitch(vivaldi::constants::kVivaldiDebugCopyExe)) {
+  if (cmd_line.HasSwitch(vivaldi::constants::kVivaldiDebugTargetExe)) {
     // Install setup.exe from the switch value, but use the current exe for
     // all subprocesses.
-    installer::vivaldi_debug_subprocesses_exe = new base::FilePath(setup_exe);
+    vivaldi::debug_subprocesses_exe = new base::FilePath(setup_exe);
     setup_exe =
-        cmd_line.GetSwitchValuePath(vivaldi::constants::kVivaldiDebugCopyExe);
+        cmd_line.GetSwitchValuePath(vivaldi::constants::kVivaldiDebugTargetExe);
   }
 #endif
 

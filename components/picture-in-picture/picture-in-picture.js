@@ -96,7 +96,7 @@ var PIP = {
     if (video && video.readyState > 1) {
       const rect = video.getBoundingClientRect();
       const left = rect.left + rect.width -
-          (rect.width / 2) + window.scrollX - (kButtonWidth / 2);
+        (rect.width / 2) + window.scrollX - (kButtonWidth / 2);
       const top = rect.top + window.scrollY;
       // Position our button container to overlap the hovered video element.
       this.containerElm_.style = `left: ${left}px; top: ${top}px;`;
@@ -145,7 +145,8 @@ var PIP = {
     try {
       // 'seekto' is new for Chromium 81, try/catch here just to be safe.
       navigator.mediaSession.setActionHandler('seekto', null);
-    } catch(error) {
+    } catch (error) {
+      // do nothing
     }
   },
 
@@ -156,7 +157,8 @@ var PIP = {
       // 'seekto' is new for Chromium 81, try/catch here just to be safe.
       navigator.mediaSession.setActionHandler('seekto',
           this.handleSeekTo.bind(this, video));
-    } catch(error) {
+    } catch (error) {
+      // do nothing
     }
   },
 

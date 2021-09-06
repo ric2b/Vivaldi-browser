@@ -49,8 +49,8 @@
 #include "components/history/core/browser/visit_delegate.h"
 #include "components/history/core/browser/web_history_service.h"
 #include "components/history/core/common/thumbnail_score.h"
+#include "components/sync/model/proxy_model_type_controller_delegate.h"
 #include "components/sync/model/sync_error_factory.h"
-#include "components/sync/model_impl/proxy_model_type_controller_delegate.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/page_transition_types.h"
 
@@ -937,7 +937,7 @@ void HistoryService::Cleanup() {
 bool HistoryService::Init(
     bool no_db,
     const HistoryDatabaseParams& history_database_params) {
-  TRACE_EVENT0("browser,startup", "HistoryService::Init")
+  TRACE_EVENT0("browser,startup", "HistoryService::Init");
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Unit tests can inject |backend_task_runner_| before this is called.

@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "build/build_config.h"
@@ -21,6 +20,7 @@
 #include "media/base/video_codecs.h"
 #include "media/base/video_color_space.h"
 #include "media/base/video_encoder.h"
+#include "media/base/video_util.h"
 #include "media/video/gpu_video_accelerator_factories.h"
 #include "media/video/video_encode_accelerator_adapter.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom-blink.h"
@@ -48,12 +48,6 @@
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
-#include "third_party/skia/include/core/SkImage.h"
-#include "third_party/skia/include/core/SkRefCnt.h"
-#include "third_party/skia/include/core/SkSurface.h"
-#include "third_party/skia/include/core/SkYUVAPixmaps.h"
-#include "third_party/skia/include/gpu/GrDirectContext.h"
-#include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 
 #if BUILDFLAG(ENABLE_OPENH264)
 #include "media/video/openh264_video_encoder.h"
@@ -62,6 +56,16 @@
 #if BUILDFLAG(ENABLE_LIBVPX)
 #include "media/video/vpx_video_encoder.h"
 #endif
+
+namespace WTF {
+
+template <>
+struct CrossThreadCopier<media::Status>
+    : public CrossThreadCopierPassThrough<media::Status> {
+  STATIC_ONLY(CrossThreadCopier);
+};
+
+}  // namespace WTF
 
 namespace blink {
 
@@ -138,42 +142,6 @@ std::unique_ptr<media::VideoEncoder> CreateOpenH264VideoEncoder() {
 #endif  // BUILDFLAG(ENABLE_OPENH264)
 }
 
-std::pair<SkColorType, GrGLenum> GetSkiaAndGlColorTypesForPlane(
-    media::VideoPixelFormat format,
-    size_t plane) {
-  // TODO(eugene): There is some strange channel switch during RGB readback.
-  // When frame's pixel format matches GL and Skia color types we get reversed
-  // channels. But why?
-  switch (format) {
-    case media::PIXEL_FORMAT_NV12:
-      if (plane == media::VideoFrame::kUVPlane)
-        return {kR8G8_unorm_SkColorType, GL_RG8_EXT};
-      if (plane == media::VideoFrame::kYPlane)
-        return {kAlpha_8_SkColorType, GL_R8_EXT};
-      break;
-    case media::PIXEL_FORMAT_XBGR:
-      if (plane == media::VideoFrame::kARGBPlane)
-        return {kRGBA_8888_SkColorType, GL_RGBA8_OES};
-      break;
-    case media::PIXEL_FORMAT_ABGR:
-      if (plane == media::VideoFrame::kARGBPlane)
-        return {kRGBA_8888_SkColorType, GL_RGBA8_OES};
-      break;
-    case media::PIXEL_FORMAT_XRGB:
-      if (plane == media::VideoFrame::kARGBPlane)
-        return {kBGRA_8888_SkColorType, GL_BGRA8_EXT};
-      break;
-    case media::PIXEL_FORMAT_ARGB:
-      if (plane == media::VideoFrame::kARGBPlane)
-        return {kBGRA_8888_SkColorType, GL_BGRA8_EXT};
-      break;
-    default:
-      break;
-  }
-  NOTREACHED();
-  return {kUnknown_SkColorType, 0};
-}
-
 }  // namespace
 
 // static
@@ -185,8 +153,9 @@ const char* VideoEncoderTraits::GetNameForDevTools() {
 VideoEncoder* VideoEncoder::Create(ScriptState* script_state,
                                    const VideoEncoderInit* init,
                                    ExceptionState& exception_state) {
-  return MakeGarbageCollected<VideoEncoder>(script_state, init,
-                                            exception_state);
+  auto* result =
+      MakeGarbageCollected<VideoEncoder>(script_state, init, exception_state);
+  return exception_state.HadException() ? nullptr : result;
 }
 
 VideoEncoder::VideoEncoder(ScriptState* script_state,
@@ -226,18 +195,10 @@ VideoEncoder::ParsedConfig* VideoEncoder::ParseConfig(
     parsed->options.bitrate = config->bitrate();
 
   // The IDL defines a default value of "allow".
-  DCHECK(config->hasAcceleration());
+  DCHECK(config->hasHardwareAcceleration());
 
-  std::string preference = IDLEnumAsString(config->acceleration()).Utf8();
-  if (preference == "allow") {
-    parsed->acc_pref = AccelerationPreference::kAllow;
-  } else if (preference == "require") {
-    parsed->acc_pref = AccelerationPreference::kRequire;
-  } else if (preference == "deny") {
-    parsed->acc_pref = AccelerationPreference::kDeny;
-  } else {
-    NOTREACHED();
-  }
+  parsed->hw_pref = StringToHardwarePreference(
+      IDLEnumAsString(config->hardwareAcceleration()));
 
   bool is_codec_ambiguous = true;
   parsed->codec = media::kUnknownVideoCodec;
@@ -323,8 +284,8 @@ void VideoEncoder::UpdateEncoderLog(std::string encoder_name,
   // TODO(https://crbug.com/1139089) : Add encoder properties.
   media::MediaLog* log = logger_->log();
 
-  log->SetProperty<media::MediaLogProperty::kVideoDecoderName>(encoder_name);
-  log->SetProperty<media::MediaLogProperty::kIsPlatformVideoDecoder>(
+  log->SetProperty<media::MediaLogProperty::kVideoEncoderName>(encoder_name);
+  log->SetProperty<media::MediaLogProperty::kIsPlatformVideoEncoder>(
       is_hw_accelerated);
 }
 
@@ -350,11 +311,11 @@ void VideoEncoder::CreateAndInitializeEncoderOnEncoderSupportKnown(
     return;
   }
 
-  auto output_cb = WTF::BindRepeating(
+  auto output_cb = ConvertToBaseRepeatingCallback(CrossThreadBindRepeating(
       &VideoEncoder::CallOutputCallback, WrapCrossThreadWeakPersistent(this),
       // We can't use |active_config_| from |this| because it can change by
       // the time the callback is executed.
-      WrapCrossThreadPersistent(active_config_.Get()), reset_count_);
+      WrapCrossThreadPersistent(active_config_.Get()), reset_count_));
 
   auto done_callback = [](VideoEncoder* self, Request* req,
                           media::Status status) {
@@ -374,8 +335,9 @@ void VideoEncoder::CreateAndInitializeEncoderOnEncoderSupportKnown(
 
   media_encoder_->Initialize(
       active_config_->profile, active_config_->options, std::move(output_cb),
-      WTF::Bind(done_callback, WrapCrossThreadWeakPersistent(this),
-                WrapCrossThreadPersistent(request)));
+      ConvertToBaseOnceCallback(CrossThreadBindOnce(
+          done_callback, WrapCrossThreadWeakPersistent(this),
+          WrapCrossThreadPersistent(request))));
 }
 
 std::unique_ptr<media::VideoEncoder> VideoEncoder::CreateMediaVideoEncoder(
@@ -383,22 +345,22 @@ std::unique_ptr<media::VideoEncoder> VideoEncoder::CreateMediaVideoEncoder(
     media::GpuVideoAcceleratorFactories* gpu_factories) {
   // TODO(https://crbug.com/1119636): Implement / call a proper method for
   // detecting support of encoder configs.
-  switch (config.acc_pref) {
-    case AccelerationPreference::kRequire: {
+  switch (config.hw_pref) {
+    case HardwarePreference::kRequire: {
       auto result = CreateAcceleratedVideoEncoder(
           config.profile, config.options, gpu_factories);
       if (result)
         UpdateEncoderLog("AcceleratedVideoEncoder", true);
       return result;
     }
-    case AccelerationPreference::kAllow:
+    case HardwarePreference::kAllow:
       if (auto result = CreateAcceleratedVideoEncoder(
               config.profile, config.options, gpu_factories)) {
         UpdateEncoderLog("AcceleratedVideoEncoder", true);
         return result;
       }
       FALLTHROUGH;
-    case AccelerationPreference::kDeny: {
+    case HardwarePreference::kDeny: {
       std::unique_ptr<media::VideoEncoder> result;
       switch (config.codec) {
         case media::kCodecVP8:
@@ -432,7 +394,7 @@ bool VideoEncoder::CanReconfigure(ParsedConfig& original_config,
          original_config.profile == new_config.profile &&
          original_config.level == new_config.level &&
          original_config.color_space == new_config.color_space &&
-         original_config.acc_pref == new_config.acc_pref;
+         original_config.hw_pref == new_config.hw_pref;
 }
 
 void VideoEncoder::ProcessEncode(Request* request) {
@@ -456,26 +418,51 @@ void VideoEncoder::ProcessEncode(Request* request) {
 
   scoped_refptr<media::VideoFrame> frame = request->frame->frame();
 
+  // Currently underlying encoders can't handle frame backed by textures,
+  // so let's readback pixel data to CPU memory.
   if (frame->HasTextures() && !frame->HasGpuMemoryBuffer()) {
-    frame = ReadbackTextureBackedFrameToMemory(std::move(frame));
+    scoped_refptr<viz::RasterContextProvider> raster_provider;
+    auto wrapper = SharedGpuContext::ContextProviderWrapper();
+    if (wrapper && wrapper->ContextProvider())
+      raster_provider = wrapper->ContextProvider()->RasterContextProvider();
+    if (raster_provider) {
+      auto* ri = raster_provider->RasterInterface();
+      auto* gr_context = raster_provider->GrContext();
+
+      frame = ReadbackTextureBackedFrameToMemorySync(*frame, ri, gr_context,
+                                                     &readback_frame_pool_);
+    } else {
+      frame.reset();
+    }
+
     if (!frame) {
       auto status = media::Status(media::StatusCode::kEncoderFailedEncode,
                                   "Can't readback frame textures.");
       auto task_runner = Thread::Current()->GetTaskRunner();
       task_runner->PostTask(
-          FROM_HERE, WTF::Bind(done_callback, WrapWeakPersistent(this),
-                               WrapPersistent(request), std::move(status)));
+          FROM_HERE,
+          ConvertToBaseOnceCallback(CrossThreadBindOnce(
+              done_callback, WrapCrossThreadWeakPersistent(this),
+              WrapCrossThreadPersistent(request), std::move(status))));
       return;
     }
+  }
+
+  // Currently underlying encoders can't handle alpha channel, so let's
+  // wrap a frame with an alpha channel into a frame without it.
+  // For example such frames can come from 2D canvas context with alpha = true.
+  if (frame->storage_type() == media::VideoFrame::STORAGE_OWNED_MEMORY &&
+      frame->format() == media::PIXEL_FORMAT_I420A) {
+    frame = media::WrapAsI420VideoFrame(std::move(frame));
   }
 
   bool keyframe = request->encodeOpts->hasKeyFrameNonNull() &&
                   request->encodeOpts->keyFrameNonNull();
   --requested_encodes_;
-  media_encoder_->Encode(
-      frame, keyframe,
-      WTF::Bind(done_callback, WrapCrossThreadWeakPersistent(this),
-                WrapCrossThreadPersistent(request)));
+  media_encoder_->Encode(frame, keyframe,
+                         ConvertToBaseOnceCallback(CrossThreadBindOnce(
+                             done_callback, WrapCrossThreadWeakPersistent(this),
+                             WrapCrossThreadPersistent(request))));
 
   // We passed a copy of frame() above, so this should be safe to close here.
   request->frame->close();
@@ -493,10 +480,12 @@ void VideoEncoder::OnReceivedGpuFactories(
 
   // Delay create the hw encoder until HW encoder support is known, so that
   // GetVideoEncodeAcceleratorSupportedProfiles() can give a reliable answer.
-  auto on_encoder_support_known_cb = WTF::Bind(
-      &VideoEncoder::CreateAndInitializeEncoderOnEncoderSupportKnown,
-      WrapCrossThreadWeakPersistent(this), WrapCrossThreadPersistent(request),
-      CrossThreadUnretained(gpu_factories));
+  auto on_encoder_support_known_cb =
+      ConvertToBaseOnceCallback(CrossThreadBindOnce(
+          &VideoEncoder::CreateAndInitializeEncoderOnEncoderSupportKnown,
+          WrapCrossThreadWeakPersistent(this),
+          WrapCrossThreadPersistent(request),
+          CrossThreadUnretained(gpu_factories)));
   gpu_factories->NotifyEncoderSupportKnown(
       std::move(on_encoder_support_known_cb));
 }
@@ -509,7 +498,7 @@ void VideoEncoder::ProcessConfigure(Request* request) {
 
   stall_request_processing_ = true;
 
-  if (active_config_->acc_pref == AccelerationPreference::kDeny) {
+  if (active_config_->hw_pref == HardwarePreference::kDeny) {
     CreateAndInitializeEncoderWithoutAcceleration(request);
     return;
   }
@@ -569,17 +558,20 @@ void VideoEncoder::ProcessReconfigure(Request* request) {
       return;
     }
 
-    auto output_cb = WTF::BindRepeating(
-        &VideoEncoder::CallOutputCallback, WrapCrossThreadWeakPersistent(self),
-        // We can't use |active_config_| from |this| because it can change by
-        // the time the callback is executed.
-        WrapCrossThreadPersistent(self->active_config_.Get()),
-        self->reset_count_);
+    auto output_cb =
+        ConvertToBaseRepeatingCallback(WTF::CrossThreadBindRepeating(
+            &VideoEncoder::CallOutputCallback,
+            WrapCrossThreadWeakPersistent(self),
+            // We can't use |active_config_| from |this| because it can change
+            // by the time the callback is executed.
+            WrapCrossThreadPersistent(self->active_config_.Get()),
+            self->reset_count_));
 
     self->media_encoder_->ChangeOptions(
         self->active_config_->options, std::move(output_cb),
-        WTF::Bind(reconf_callback, WrapCrossThreadWeakPersistent(self),
-                  WrapCrossThreadPersistent(req)));
+        ConvertToBaseOnceCallback(CrossThreadBindOnce(
+            reconf_callback, WrapCrossThreadWeakPersistent(self),
+            WrapCrossThreadPersistent(req))));
   };
 
   stall_request_processing_ = true;
@@ -617,9 +609,9 @@ void VideoEncoder::ProcessFlush(Request* request) {
   };
 
   stall_request_processing_ = true;
-  media_encoder_->Flush(WTF::Bind(done_callback,
-                                  WrapCrossThreadWeakPersistent(this),
-                                  WrapCrossThreadPersistent(request)));
+  media_encoder_->Flush(ConvertToBaseOnceCallback(
+      CrossThreadBindOnce(done_callback, WrapCrossThreadWeakPersistent(this),
+                          WrapCrossThreadPersistent(request))));
 }
 
 void VideoEncoder::CallOutputCallback(
@@ -656,112 +648,6 @@ void VideoEncoder::CallOutputCallback(
   }
   ScriptState::Scope scope(script_state_);
   output_callback_->InvokeAndReportException(nullptr, chunk, decoder_config);
-}
-
-// This function reads pixel data from textures associated with |txt_frame|
-// and creates a new CPU memory backed frame. It's needed because
-// existing video encoders can't handle texture backed frames.
-//
-// TODO(crbug.com/1162530): Remove this code from blink::VideoEncoder, combine
-// with media::ConvertAndScaleFrame and put into a new class
-// media:FrameSizeAndFormatConverter.
-scoped_refptr<media::VideoFrame>
-VideoEncoder::ReadbackTextureBackedFrameToMemory(
-    scoped_refptr<media::VideoFrame> txt_frame) {
-  DCHECK(txt_frame);
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  if (txt_frame->NumTextures() > 2 || txt_frame->NumTextures() < 1) {
-    DLOG(ERROR) << "Readback is not possible for this frame: "
-                << txt_frame->AsHumanReadableString();
-    return nullptr;
-  }
-
-  media::VideoPixelFormat result_format = txt_frame->format();
-  if (txt_frame->NumTextures() == 1 &&
-      result_format == media::PIXEL_FORMAT_NV12) {
-    // Even though |txt_frame| format is NV12 and it is NV12 in GPU memory,
-    // the texture is a RGB view that is produced by a shader on the fly.
-    // So we currently we currently can only read it back as RGB.
-    result_format = media::PIXEL_FORMAT_ARGB;
-  }
-
-  scoped_refptr<viz::RasterContextProvider> raster_provider;
-  auto wrapper = SharedGpuContext::ContextProviderWrapper();
-  if (wrapper && wrapper->ContextProvider())
-    raster_provider = wrapper->ContextProvider()->RasterContextProvider();
-  if (!raster_provider)
-    return nullptr;
-
-  auto* ri = raster_provider->RasterInterface();
-  auto* gr_context = raster_provider->GrContext();
-
-  scoped_refptr<media::VideoFrame> result = readback_frame_pool_.CreateFrame(
-      result_format, txt_frame->coded_size(), txt_frame->visible_rect(),
-      txt_frame->natural_size(), txt_frame->timestamp());
-  result->set_color_space(txt_frame->ColorSpace());
-  result->metadata().MergeMetadataFrom(txt_frame->metadata());
-
-  size_t planes = media::VideoFrame::NumPlanes(result->format());
-  for (size_t plane = 0; plane < planes; plane++) {
-    const gpu::MailboxHolder& holder = txt_frame->mailbox_holder(plane);
-    if (holder.mailbox.IsZero())
-      return nullptr;
-    ri->WaitSyncTokenCHROMIUM(holder.sync_token.GetConstData());
-
-    int width = media::VideoFrame::Columns(plane, result->format(),
-                                           result->coded_size().width());
-    int height = result->rows(plane);
-
-    auto texture_id = ri->CreateAndConsumeForGpuRaster(holder.mailbox);
-    if (holder.mailbox.IsSharedImage()) {
-      ri->BeginSharedImageAccessDirectCHROMIUM(
-          texture_id, GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM);
-    }
-
-    auto cleanup_fn = [](GLuint texture_id, bool shared,
-                         gpu::raster::RasterInterface* ri) {
-      if (shared)
-        ri->EndSharedImageAccessDirectCHROMIUM(texture_id);
-      ri->DeleteGpuRasterTexture(texture_id);
-    };
-    base::ScopedClosureRunner cleanup(base::BindOnce(
-        cleanup_fn, texture_id, holder.mailbox.IsSharedImage(), ri));
-
-    GrGLenum texture_format;
-    SkColorType sk_color_type;
-    std::tie(sk_color_type, texture_format) =
-        GetSkiaAndGlColorTypesForPlane(result->format(), plane);
-    GrGLTextureInfo gl_texture_info;
-    gl_texture_info.fID = texture_id;
-    gl_texture_info.fTarget = holder.texture_target;
-    gl_texture_info.fFormat = texture_format;
-
-    GrBackendTexture texture(width, height, GrMipMapped::kNo, gl_texture_info);
-    auto image = SkImage::MakeFromTexture(
-        gr_context, texture, kTopLeft_GrSurfaceOrigin, sk_color_type,
-        kOpaque_SkAlphaType, nullptr /* colorSpace */);
-
-    if (!image) {
-      DLOG(ERROR) << "Can't create SkImage from texture!"
-                  << " plane:" << plane;
-      return nullptr;
-    }
-
-    SkImageInfo info =
-        SkImageInfo::Make(width, height, sk_color_type, kOpaque_SkAlphaType);
-    SkPixmap pixmap(info, result->data(plane), result->row_bytes(plane));
-    if (!image->readPixels(gr_context, pixmap, 0, 0,
-                           SkImage::kDisallow_CachingHint)) {
-      DLOG(ERROR) << "Plane readback failed."
-                  << " plane:" << plane << " width: " << width
-                  << " height: " << height
-                  << " minRowBytes: " << info.minRowBytes();
-      return nullptr;
-    }
-  }
-
-  return result;
 }
 
 }  // namespace blink

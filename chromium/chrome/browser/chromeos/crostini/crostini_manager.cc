@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "ash/constants/ash_features.h"
 #include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -44,7 +45,6 @@
 #include "chrome/browser/chromeos/guest_os/guest_os_share_path.h"
 #include "chrome/browser/chromeos/guest_os/guest_os_stability_monitor.h"
 #include "chrome/browser/chromeos/policy/powerwash_requirements_checker.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/scheduler_configuration_manager.h"
 #include "chrome/browser/chromeos/usb/cros_usb_detector.h"
 #include "chrome/browser/profiles/profile.h"
@@ -52,7 +52,6 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/anomaly_detector_client.h"
 #include "chromeos/dbus/concierge_client.h"
 #include "chromeos/dbus/cros_disks_client.h"
@@ -439,7 +438,8 @@ class CrostiniManager::CrostiniRestarter
     StartStage(mojom::InstallerState::kInstallImageLoader);
     crostini_manager_->InstallTermina(
         base::BindOnce(&CrostiniRestarter::LoadComponentFinished,
-                       weak_ptr_factory_.GetWeakPtr()));
+                       weak_ptr_factory_.GetWeakPtr()),
+        is_initial_install_);
   }
 
   base::OneShotTimer stage_timeout_timer_;
@@ -759,7 +759,7 @@ class CrostiniManager::CrostiniRestarter
     base::FilePath mount_path = base::FilePath(mount_info.mount_path);
     storage::ExternalMountPoints::GetSystemInstance()->RegisterFileSystem(
         file_manager::util::GetCrostiniMountPointName(profile_),
-        storage::kFileSystemTypeNativeLocal, storage::FileSystemMountOption(),
+        storage::kFileSystemTypeLocal, storage::FileSystemMountOption(),
         mount_path);
 
     // VolumeManager is null in unittest.
@@ -1160,31 +1160,34 @@ void CrostiniManager::MaybeUpdateCrostiniAfterChecks() {
         CrostiniUpgradeAvailableNotification::Show(profile_, base::DoNothing());
   }
   // TODO(crbug/953544) Remove this once we have transitioned completely to DLC
-  InstallTermina(base::DoNothing());
+  InstallTermina(base::DoNothing(), /*is_initial_install=*/false);
 }
 
-void CrostiniManager::InstallTermina(CrostiniResultCallback callback) {
+void CrostiniManager::InstallTermina(CrostiniResultCallback callback,
+                                     bool is_initial_install) {
   if (install_termina_never_completes_) {
     return;
   }
-  termina_installer_.Install(base::BindOnce(
-      [](CrostiniResultCallback callback,
-         TerminaInstaller::InstallResult result) {
-        CrostiniResult res;
-        if (result == TerminaInstaller::InstallResult::Success) {
-          res = CrostiniResult::SUCCESS;
-        } else if (result == TerminaInstaller::InstallResult::Offline) {
-          res = CrostiniResult::OFFLINE_WHEN_UPGRADE_REQUIRED;
-        } else if (result == TerminaInstaller::InstallResult::Failure) {
-          res = CrostiniResult::LOAD_COMPONENT_FAILED;
-        } else {
-          CHECK(false)
-              << "Got unexpected value of TerminaInstaller::InstallResult";
-          res = CrostiniResult::LOAD_COMPONENT_FAILED;
-        }
-        std::move(callback).Run(res);
-      },
-      std::move(callback)));
+  termina_installer_.Install(
+      base::BindOnce(
+          [](CrostiniResultCallback callback,
+             TerminaInstaller::InstallResult result) {
+            CrostiniResult res;
+            if (result == TerminaInstaller::InstallResult::Success) {
+              res = CrostiniResult::SUCCESS;
+            } else if (result == TerminaInstaller::InstallResult::Offline) {
+              res = CrostiniResult::OFFLINE_WHEN_UPGRADE_REQUIRED;
+            } else if (result == TerminaInstaller::InstallResult::Failure) {
+              res = CrostiniResult::LOAD_COMPONENT_FAILED;
+            } else {
+              CHECK(false)
+                  << "Got unexpected value of TerminaInstaller::InstallResult";
+              res = CrostiniResult::LOAD_COMPONENT_FAILED;
+            }
+            std::move(callback).Run(res);
+          },
+          std::move(callback)),
+      is_initial_install);
 }
 
 void CrostiniManager::UninstallTermina(BoolCallback callback) {
@@ -2058,10 +2061,6 @@ void CrostiniManager::RemoveContainerShutdownObserver(
   container_shutdown_observers_.RemoveObserver(observer);
 }
 
-void CrostiniManager::OnDBusShuttingDownForTesting() {
-  RemoveDBusObservers();
-}
-
 void CrostiniManager::AddFileWatch(const ContainerId& container_id,
                                    const base::FilePath& path,
                                    BoolCallback callback) {
@@ -2621,9 +2620,9 @@ void CrostiniManager::OnContainerStarted(
   if (signal.vm_name() == kCrostiniDefaultVmName) {
     AddShutdownContainerCallback(
         container_id,
-        base::Bind(&CrostiniManager::DeallocateForwardedPortsCallback,
-                   weak_ptr_factory_.GetWeakPtr(), std::move(profile_),
-                   ContainerId(signal.vm_name(), signal.container_name())));
+        base::BindOnce(&CrostiniManager::DeallocateForwardedPortsCallback,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(profile_),
+                       ContainerId(signal.vm_name(), signal.container_name())));
     if (signal.container_name() == kCrostiniDefaultContainerName) {
       for (auto& observer : container_started_observers_) {
         observer.OnContainerStarted(container_id);

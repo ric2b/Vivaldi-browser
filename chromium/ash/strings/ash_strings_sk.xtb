@@ -11,6 +11,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="1037492556044956303">Pridali ste zariadenie <ph name="DEVICE_NAME" /></translation>
 <translation id="1047017786576569492">čiastočná</translation>
 <translation id="1047773237499189053">K dispozícii je nová funkcia. Viac sa dozviete pomocou šípky nahor.</translation>
+<translation id="1052916631016577720">Naskenovanie položky</translation>
 <translation id="1056775291175587022">Žiadne siete</translation>
 <translation id="1059194134494239015"><ph name="DISPLAY_NAME" />: <ph name="RESOLUTION" /></translation>
 <translation id="108486256082349153">Mobilné zariadenie: <ph name="ADDRESS" /></translation>
@@ -24,6 +25,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="1165712434476988950">Uplatnenie aktualizácie vyžaduje reštartovanie zariadenia.</translation>
 <translation id="1175572348579024023">Posúvanie</translation>
 <translation id="1178581264944972037">Pozastaviť</translation>
+<translation id="1181037720776840403">Odstrániť</translation>
 <translation id="118532027333893379">Klepnutím na ľubovoľné miesto nasnímate celú obrazovku</translation>
 <translation id="1190609913194133056">Centrum upozornení</translation>
 <translation id="1195412055398077112">presah obsahu</translation>
@@ -147,6 +149,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="2220572644011485463">PIN alebo heslo</translation>
 <translation id="2222338659135520253">Vyžaduje sa prihlásenie</translation>
 <translation id="2222841058024245321">7. plocha</translation>
+<translation id="2224075387478458881">Nahrávanie obrazovky nie je povolené, keď je viditeľný chránený obsah</translation>
 <translation id="225680501294068881">Hľadajú sa zariadenia...</translation>
 <translation id="2268130516524549846">Rozhranie Bluetooth je deaktivované</translation>
 <translation id="2268813581635650749">Odhlásiť všetkých</translation>
@@ -239,7 +242,6 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="3038571455154067151">Ak sa chcete prihlásiť, zadajte prístupový kód rodiča Family Link</translation>
 <translation id="3039939407102840004">Úroveň batérie dotykového pera: <ph name="PERCENTAGE" />.</translation>
 <translation id="3045488863354895414">Dobré popoludnie,</translation>
-<translation id="3051128274746680507">Váš profil kontrolovaného používateľa bude čoskoro odstránený. Ak chcete získať ďalšie informácie, prihláste sa.</translation>
 <translation id="3055162170959710888">Toto zariadenie si dnes používal(a) <ph name="USED_TIME" /></translation>
 <translation id="3077734595579995578">shift</translation>
 <translation id="3081696990447829002">Rozbaliť ponuku</translation>
@@ -252,13 +254,11 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
 <translation id="3126069444801937830">Reštartovaním vykonáte aktualizáciu</translation>
 <translation id="3139942575505304791">1. plocha</translation>
-<translation id="3147157020428159854">Nahrávanie obrazovky bolo zastavené</translation>
 <translation id="315116470104423982">Mobilné dátové prenosy</translation>
 <translation id="3151786313568798007">Orientácia</translation>
 <translation id="3153444934357957346">V rámci viacnásobného prihlásenia môžete mať maximálne nasledujúci počet účtov: <ph name="MULTI_PROFILE_USER_LIMIT" />.</translation>
 <translation id="3154351730702813399">Správca zariadenia môže sledovať vašu aktivitu prehliadania.</translation>
 <translation id="3181441307743005334">Reštart môže chvíľu trvať</translation>
-<translation id="3190230207529484457">Keď je viditeľný chránený obsah, snímanie obrazovky je zakázané</translation>
 <translation id="3202010236269062730">{NUM_DEVICES,plural, =1{Pripojené k zariadeniu}few{Pripojené k # zariadeniam}many{Connected to # devices}other{Pripojené k # zariadeniam}}</translation>
 <translation id="320207200541803018">Nastaviť časovač</translation>
 <translation id="3203405173652969239">Ovládanie prepínačmi je aktivované</translation>
@@ -267,7 +267,6 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="3226991577105957773">a ďalšie (<ph name="COUNT" />)</translation>
 <translation id="3236488194889173876">Nie je k dispozícii žiadna mobilná sieť</translation>
 <translation id="3249513730522716925">Okno <ph name="WINDOW_TITLE" /> bolo presunuté z plochy <ph name="ACTIVE_DESK" /> na plochu <ph name="TARGET_DESK" /></translation>
-<translation id="3252068179161473151"><ph name="WIRELESS_PROVIDER" />, sila signálu: <ph name="SIGNAL_STRENGTH" /> %.</translation>
 <translation id="3255483164551725916">Čo dokážeš?</translation>
 <translation id="3269597722229482060">Kliknúť pravým tlačidlom</translation>
 <translation id="3289674678944039601">Nabíja sa cez adaptér</translation>
@@ -306,6 +305,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="3571734092741541777">Nastaviť</translation>
 <translation id="3573179567135747900">Zmeniť späť na miestne nastavenie „<ph name="FROM_LOCALE" />“ (vyžaduje sa reštart)</translation>
 <translation id="3576141592585647168">Zmena časového pásma</translation>
+<translation id="3593039967545720377">Do histórie schránky môžete prejsť po zobrazení schránky stlačením klávesovej skratky <ph name="SHORTCUT_KEY_NAME" /> + V. Začnite skopírovaním položky.</translation>
 <translation id="3593646411856133110">Otvorené aplikácie zobrazíte potiahnutím nahor a pridržaním</translation>
 <translation id="3595596368722241419">Batéria je nabitá</translation>
 <translation id="3604801046548457007">Bola vytvorená plocha <ph name="DESK_TITILE" /></translation>
@@ -349,6 +349,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="3901991538546252627">Pripája sa k sieti <ph name="NAME" /></translation>
 <translation id="3943857333388298514">Prilepiť</translation>
 <translation id="394485226368336402">Nastavenia zvuku</translation>
+<translation id="3945319193631853098">Klepnutím dokončite nastavovanie</translation>
 <translation id="3945867833895287237">Pripája sa k hotspotu…</translation>
 <translation id="3962859241508114581">Predchádzajúca stopa</translation>
 <translation id="3969043077941541451">Vypnuté</translation>
@@ -393,10 +394,12 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4321776623976362024">Stlačili ste klávesovú skratku pre vysoký kontrast. Chcete ho zapnúť?</translation>
 <translation id="4331809312908958774">OS Chrome</translation>
+<translation id="4333628967105022692">Prehliadač Lacros nie je podporovaný, keď je prihlásených viacero používateľov.</translation>
 <translation id="4338109981321384717">Lupa</translation>
 <translation id="4351433414020964307">Asistent sa načítava...</translation>
 <translation id="4356930093361201197">režim s vysokým kontrastom</translation>
 <translation id="4371348193907997655">Nastavenia prenosu</translation>
+<translation id="4378479437904450384"><ph name="WIRELESS_PROVIDER" />, sila signálu: <ph name="SIGNAL_STRENGTH" /> %.</translation>
 <translation id="4378551569595875038">Pripája sa...</translation>
 <translation id="4379531060876907730">Toto sú vaše nástroje pre dotykové pero</translation>
 <translation id="4389184120735010762">Stlačili ste klávesovú skratku ukotvenej lupy. Chcete ju zapnúť?</translation>
@@ -404,6 +407,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="4421231901400348175">Ovládanie obrazovky sa prostredníctvom Vzdialenej pomoci zdieľa s používateľom <ph name="HELPER_NAME" />.</translation>
 <translation id="4424159417645388645">5. plocha</translation>
 <translation id="4430019312045809116">Hlasitosť</translation>
+<translation id="4449692009715125625">{NUM_NOTIFICATIONS,plural, =1{1 dôležité upozornenie}few{# dôležité upozornenia}many{# important notifications}other{# dôležitých upozornení}}</translation>
 <translation id="4450893287417543264">Nabudúce nezobrazovať</translation>
 <translation id="445864333228800152">Dobrý večer,</translation>
 <translation id="4458688154122353284">Zastaviť nahrávanie obrazovky</translation>
@@ -475,6 +479,10 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="4961318399572185831">Prenášanie obrazovky</translation>
 <translation id="4969092041573468113"><ph name="HOURS" /> h <ph name="MINUTES" /> min <ph name="SECONDS" /> s</translation>
 <translation id="4975771730019223894">Označenie aplikácie odznakom</translation>
+<translation id="4977493774330778463"><ph name="NUM_IMPORTANT_NOTIFICATION" />:
+        <ph name="NOTIFICATION_1" />,
+        <ph name="NOTIFICATION_2" />,
+        <ph name="NUM_OTHER_NOTIFICATION" /></translation>
 <translation id="5003993274120026347">Ďalšia veta</translation>
 <translation id="5030687792513154421">Čas vypršal</translation>
 <translation id="5033299697334913360">Kliknutím na ľubovoľné miesto nahráte celú obrazovku</translation>
@@ -488,6 +496,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="5168181903108465623">Dostupné zariadenia na prenos</translation>
 <translation id="5170568018924773124">Zobraziť v priečinku</translation>
 <translation id="5176318573511391780">Nahrať časť obrazovky</translation>
+<translation id="5206057955438543357">{NUM_NOTIFICATIONS,plural, =1{1 ďalšie upozornenie}few{# ďalšie upozornenia}many{# other notifications}other{# ďalších upozornení}}</translation>
 <translation id="5207949376430453814">Zvýrazniť textový kurzor</translation>
 <translation id="5208059991603368177">Zapnutý</translation>
 <translation id="5222676887888702881">Odhlásiť sa</translation>
@@ -556,6 +565,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="5825969630400862129">Nastavenia pripojených zariadení</translation>
 <translation id="5837036133683224804">Zastaviť prenos obsahu <ph name="ROUTE_TITLE" /> do zariadenia <ph name="RECEIVER_NAME" /></translation>
 <translation id="5860033963881614850">Vypnuté</translation>
+<translation id="5860491529813859533">Zapnúť</translation>
 <translation id="5876666360658629066">Zadajte kód rodiča</translation>
 <translation id="5881540930187678962">Nastavte si Telefónne centrum neskôr</translation>
 <translation id="5895138241574237353">Reštartovať</translation>
@@ -587,6 +597,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="6043212731627905357">Tento monitor nie je kompatibilný s vaším zariadením <ph name="DEVICE_TYPE" /> (monitor nie je podporovaný).</translation>
 <translation id="6043994281159824495">Odhlásiť sa</translation>
 <translation id="6047696787498798094">Keď prepnete na iného používateľa, zdieľanie obrazovky sa ukončí. Chcete pokračovať?</translation>
+<translation id="6050368268239407309">Nástroje na prezentáciu</translation>
 <translation id="6054305421211936131">Prihlásiť sa pomocou inteligentnej karty</translation>
 <translation id="6059276912018042191">Nedávne karty Chromu</translation>
 <translation id="6062360702481658777">Odhlásenie prebehne automaticky o <ph name="LOGOUT_TIME_LEFT" />.</translation>
@@ -597,10 +608,10 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="612734058257491180">Asistent Google nie je k dispozícii v relácii hosťa.</translation>
 <translation id="6137566720514957455">Otvoriť dialógové okno na odstránenie účtu <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="615957422585914272">Zobraziť klávesnicu na obrazovke</translation>
-<translation id="6164005077879661055">Všetky súbory a miestne údaje spojené s týmto kontrolovaným používateľom budú po jeho odstránení natrvalo odstránené. Správca bude môcť naďalej zobraziť navštívené webové stránky a nastavenia tohto používateľa na adrese <ph name="MANAGEMENT_URL" />.</translation>
 <translation id="6165508094623778733">Ďalšie informácie</translation>
 <translation id="6179832488876878285">Tu si môžete pripnúť dôležité súbory. Začnite otvorením aplikácie Súbory.</translation>
 <translation id="622484624075952240">Dole</translation>
+<translation id="6231419273573514727">Výkonnosť periférie môže byť obmedzená</translation>
 <translation id="6236290670123303279">Spravovať nastavenia</translation>
 <translation id="6237231532760393653">1X</translation>
 <translation id="6254629735336163724">Uzamknuté vodorovne</translation>
@@ -617,6 +628,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="6376931439017688372">Rozhranie Bluetooth je zapnuté</translation>
 <translation id="6381109794406942707">Ak chcete odomknúť zariadenie, zadajte PIN.</translation>
 <translation id="639644700271529076">CAPS LOCK je vypnutý</translation>
+<translation id="6396835948284782440">Ukončite pridržaním tlačidla [Esc].</translation>
 <translation id="6406704438230478924">altgr</translation>
 <translation id="6424520630891723617"><ph name="SECURITY_STATUS" />, sila signálu <ph name="SIGNAL_STRENGTH" /></translation>
 <translation id="642644398083277086">Vymazanie všetkých upozornení</translation>
@@ -661,6 +673,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="6715542151869432661">Nenašli sa žiadne mobilné zariadenia.</translation>
 <translation id="6723839937902243910">Napájanie</translation>
 <translation id="6727969043791803658">Pripojené, <ph name="BATTERY_PERCENTAGE" /> % batérie</translation>
+<translation id="6732800389263199929">+<ph name="COUNT" /></translation>
 <translation id="6751052314767925245">Presadzuje váš správca</translation>
 <translation id="6751826523481687655">Trasovanie výkonnosti je zapnuté</translation>
 <translation id="6752912906630585008">Plocha <ph name="REMOVED_DESK" /> bola odstránená a zlúčená s plochou <ph name="RECEIVE_DESK" /></translation>
@@ -672,6 +685,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="6818242057446442178">Dozadu o slovo</translation>
 <translation id="6820676911989879663">Urobte si prestávku.</translation>
 <translation id="6850010208275816200">Aktuálna aplikácia je spustená v režime celej obrazovky. Ak vás požiada o heslo, najprv ukončite režim celej obrazovky.</translation>
+<translation id="6852052252232534364">Aktivovať kliknutím</translation>
 <translation id="6857725247182211756"><ph name="SECONDS" /> s</translation>
 <translation id="6857811139397017780">Aktivovať zariadenie <ph name="NETWORKSERVICE" /></translation>
 <translation id="685782768769951078">{NUM_DIGITS,plural, =1{Zostáva jedna číslica}few{Zostávajú # číslice}many{# digits remaining}other{Zostáva # číslic}}</translation>
@@ -695,6 +709,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="7029814467594812963">Ukončiť reláciu</translation>
 <translation id="703425375924687388"><ph name="QUERY_NAME" />, Asistent Google</translation>
 <translation id="7042322267639375032">Zbaliť stavovú oblasť</translation>
+<translation id="7055910611768509537">Dotykové pero nebolo použité viac ako týždeň</translation>
 <translation id="7066646422045619941">Táto sieť je zakázaná správcom.</translation>
 <translation id="7067196344162293536">Automatické otáčanie</translation>
 <translation id="7068360136237591149">Otvoriť súbory</translation>
@@ -720,6 +735,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="7346909386216857016">Dobre</translation>
 <translation id="7348093485538360975">Klávesnica na obrazovke</translation>
 <translation id="735745346212279324">Sieť VPN je odpojená</translation>
+<translation id="7360036564632145207">Zmenou ochrany prístupu k údajom pre nastavenie periférií môžete optimalizovať výkonnosť</translation>
 <translation id="7371404428569700291">Okno nahrávania</translation>
 <translation id="7377169924702866686">Kláves Caps Lock je zapnutý.</translation>
 <translation id="7378203170292176219">Presunutím vyberte oblasť, ktorú chcete nahrať</translation>
@@ -728,11 +744,13 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="7392563512730092880">Túto funkciu môžete kedykoľvek nastaviť neskôr v sekcii Nastavenia.</translation>
 <translation id="7398254312354928459">Prepnuté sieťové pripojenie</translation>
 <translation id="7405710164030118432">Ak chcete toto zariadenie odomknúť, zadajte prístupový kód rodiča Family Link</translation>
+<translation id="7406608787870898861">Dokončite nastavovanie mobilnej siete</translation>
 <translation id="741244894080940828">prevod</translation>
 <translation id="7413851974711031813">Zatvorte stlačením klávesa Escape</translation>
 <translation id="742594950370306541">Fotoaparát sa používa.</translation>
 <translation id="742608627846767349">Dobré ráno,</translation>
 <translation id="743058460480092004">Fotoaparát a mikrofón sa používajú.</translation>
+<translation id="7434543979546293336">Označené ako kľúčová myšlienka</translation>
 <translation id="7452560014878697800">Nejaká aplikácia používa fotoaparát</translation>
 <translation id="7456049842111127849">Režim snímania, predvolené nastavenie je <ph name="SOURCE" /> <ph name="TYPE" />.</translation>
 <translation id="7461924472993315131">Pripnúť</translation>
@@ -757,7 +775,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="7607002721634913082">Pozastavené</translation>
 <translation id="7618774594543487847">Neutrálny</translation>
 <translation id="7624117708979618027"><ph name="TEMPERATURE_F" />° F</translation>
-<translation id="7633755430369750696">Zobraziť nastavenia zdieľania nablízku</translation>
+<translation id="7633755430369750696">Zobraziť nastavenia Zdieľania nablízku</translation>
 <translation id="7641938616688887143">Nahrať</translation>
 <translation id="7642647758716480637">Otvoriť nastavenia siete <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" /></translation>
 <translation id="7645176681409127223"><ph name="USER_NAME" /> (vlastník)</translation>
@@ -776,6 +794,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="7780159184141939021">Otáčanie obrazovky</translation>
 <translation id="7796353162336583443">Klepnite na tlačidlo dotykového pera na poličke a vytvorte poznámku, snímku obrazovky, použite Asistenta Google, laserové ukazovadlo alebo lupu.</translation>
 <translation id="7798302898096527229">Ak to chcete zrušiť, stlačte kláves Hľadať alebo Shift.</translation>
+<translation id="7807966291075028781">Z bezpečnostných dôvodov nie je periféria v režime pre hostí podporovaná</translation>
 <translation id="7814236020522506259"><ph name="HOUR" /> a <ph name="MINUTE" /></translation>
 <translation id="7829386189513694949">Silný signál</translation>
 <translation id="7837740436429729974">Čas vypršal</translation>
@@ -844,6 +863,7 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="8345019317483336363">Bolo vybrané okno <ph name="WINDOW_TITLE" /></translation>
 <translation id="8351131234907093545">Vytvoriť poznámku</translation>
 <translation id="8371779926711439835">Dopredu o písmeno</translation>
+<translation id="8371991222807690464">V režime pre hostí môže byť výkonnosť periférie obmedzená</translation>
 <translation id="8375916635258623388">Toto zariadenie <ph name="DEVICE_NAME" /> a váš telefón sa automaticky pripoja</translation>
 <translation id="8380784334203145311">Dobrú noc,</translation>
 <translation id="8388750414311082622">Posledná plocha sa nedá odstrániť.</translation>
@@ -946,8 +966,10 @@ Na začiatok môžete vyskúšať niektoré z týchto vecí.</translation>
 <translation id="9091626656156419976">Obrazovka <ph name="DISPLAY_NAME" /> bola odstránená</translation>
 <translation id="9098969848082897657">Vypnutie zvuku telefónu</translation>
 <translation id="9099154003160514616">K dispozícii je aktualizácia prehliadača Lacros</translation>
+<translation id="9105450214093926548">Prihlásenie druhého používateľa nie je podporované, keď je spustený prehliadač Lacros. Použite radšej druhý profil v prehliadači Lacros alebo Lacros zavrite a skúste to znova.</translation>
+<translation id="9133335900048457298">Nie je možné nahrať chránený obsah</translation>
 <translation id="9151726767154816831">Aktualizáciu uskutočníte reštartovaním a použitím funkcie Powerwash</translation>
-<translation id="9166331175924255663">Prepnúť vysokú viditeľnosť zdieľania nablízku</translation>
+<translation id="9166331175924255663">Prepnúť vysokú viditeľnosť Zdieľania nablízku</translation>
 <translation id="9168436347345867845">Neskôr</translation>
 <translation id="9179259655489829027">Táto funkcia vám umožní rýchly prístup k ľubovoľnému prihlásenému používateľovi bez hesla. Používajte ju iba s dôveryhodnými účtami.</translation>
 <translation id="9183456764293710005">Lupa na celú obrazovku</translation>

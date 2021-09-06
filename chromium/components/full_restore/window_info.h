@@ -23,11 +23,16 @@ struct COMPONENT_EXPORT(FULL_RESTORE) WindowInfo {
 
   aura::Window* window;
 
-  // Index in MruWindowTracker to restore window stack.
+  // Index in MruWindowTracker to restore window stack. A larger index
+  // indicates a more recently used window. The index is also opposite of the
+  // window index in the MruWindowTracker at save time.
   base::Optional<int32_t> activation_index;
 
   // Virtual desk id.
   base::Optional<int32_t> desk_id;
+
+  // Whether the |window| is visible on all workspaces.
+  base::Optional<bool> visible_on_all_workspaces;
 
   // The restored bounds in screen coordinates. Empty if the window is not
   // snapped/maximized/minimized.
@@ -38,6 +43,11 @@ struct COMPONENT_EXPORT(FULL_RESTORE) WindowInfo {
 
   // Window state, minimized, maximized, inactive, etc.
   base::Optional<chromeos::WindowStateType> window_state_type;
+
+  // Display id to launch an app.
+  base::Optional<int64_t> display_id;
+
+  std::string ToString() const;
 };
 
 }  // namespace full_restore

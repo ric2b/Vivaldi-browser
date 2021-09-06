@@ -204,15 +204,18 @@ PageHandler::PageHandler(EmulationHandler* emulation_handler,
       browser_handler_(browser_handler) {
   bool create_video_consumer = true;
 #ifdef OS_ANDROID
+  constexpr auto kScreencastPixelFormat = media::PIXEL_FORMAT_I420;
   // Video capture doesn't work on Android WebView. Use CopyFromSurface instead.
   if (!CompositorImpl::IsInitialized())
     create_video_consumer = false;
+#else
+  constexpr auto kScreencastPixelFormat = media::PIXEL_FORMAT_ARGB;
 #endif
   if (create_video_consumer) {
     video_consumer_ = std::make_unique<DevToolsVideoConsumer>(
         base::BindRepeating(&PageHandler::OnFrameFromVideoConsumer,
                             weak_factory_.GetWeakPtr()));
-    video_consumer_->SetFormat(media::PIXEL_FORMAT_ARGB,
+    video_consumer_->SetFormat(kScreencastPixelFormat,
                                gfx::ColorSpace::CreateREC709());
   }
   DCHECK(emulation_handler_);
@@ -504,8 +507,12 @@ void PageHandler::Navigate(const std::string& url,
   params.referrer = Referrer(GURL(referrer.fromMaybe("")), policy);
   params.transition_type = type;
   params.frame_tree_node_id = frame_tree_node->frame_tree_node_id();
-  frame_tree_node->navigator().GetController()->LoadURLWithParams(params);
-
+  // Handler may be destroyed while navigating if the session
+  // gets disconnected as a result of access checks.
+  base::WeakPtr<PageHandler> weak_self = weak_factory_.GetWeakPtr();
+  frame_tree_node->navigator().controller().LoadURLWithParams(params);
+  if (!weak_self)
+    return;
   base::UnguessableToken frame_token = frame_tree_node->devtools_frame_token();
   auto navigate_callback = navigate_callbacks_.find(frame_token);
   if (navigate_callback != navigate_callbacks_.end()) {
@@ -825,8 +832,7 @@ void PageHandler::CaptureScreenshot(
     } else {
       requested_image_size = emulated_view_size;
     }
-    double scale = emulation_enabled ? original_params.device_scale_factor
-                                     : widget_host_device_scale_factor;
+    double scale = widget_host_device_scale_factor * dpfactor;
     if (clip.isJust())
       scale *= clip.fromJust()->GetScale();
     requested_image_size = gfx::ScaleToRoundedSize(requested_image_size, scale);

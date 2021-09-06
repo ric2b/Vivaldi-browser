@@ -51,9 +51,6 @@ class ToolbarLayer : public Layer {
 
   void SetOpacity(float opacity);
 
-  // Vivaldi
-  void ShouldPositionToolbar(bool should_position);
-
  protected:
   explicit ToolbarLayer(ui::ResourceManager* resource_manager);
   ~ToolbarLayer() override;
@@ -70,9 +67,6 @@ class ToolbarLayer : public Layer {
   scoped_refptr<cc::SolidColorLayer> progress_bar_layer_;
   scoped_refptr<cc::SolidColorLayer> progress_bar_background_layer_;
   scoped_refptr<cc::SolidColorLayer> debug_layer_;
-
-  // Vivaldi
-  bool should_position_toolbar_;
 
   DISALLOW_COPY_AND_ASSIGN(ToolbarLayer);
 };

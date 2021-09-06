@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <map>
 #include <utility>
 #include <vector>
 
@@ -440,7 +441,8 @@ class TabRestoreServiceImpl::PersistenceDelegate
   // closed tabs. This creates entries, adds them to staging_entries_, and
   // invokes LoadState.
   void OnGotLastSessionCommands(
-      std::vector<std::unique_ptr<SessionCommand>> commands);
+      std::vector<std::unique_ptr<SessionCommand>> commands,
+      bool read_error);
 
   // Populates |loaded_entries| with Entries from |commands|.
   void CreateEntriesFromCommands(
@@ -457,7 +459,8 @@ class TabRestoreServiceImpl::PersistenceDelegate
   // and invokes LoadStateChanged. |ignored_active_window| is ignored because we
   // don't need to restore activation.
   void OnGotPreviousSession(std::vector<std::unique_ptr<SessionWindow>> windows,
-                            SessionID ignored_active_window);
+                            SessionID ignored_active_window,
+                            bool error_reading);
 
   // Converts a SessionWindow into a Window, returning true on success. We use 0
   // as the timestamp here since we do not know when the window/tab was closed.
@@ -511,13 +514,7 @@ TabRestoreServiceImpl::PersistenceDelegate::PersistenceDelegate(
       tab_restore_service_helper_(nullptr),
       entries_to_write_(0),
       entries_written_(0),
-      load_state_(NOT_LOADED) {
-  // A pending_reset must be scheduled for the first write, otherwise the
-  // commands are dropped.
-  // TODO(https://crbug.com/648266): If use_marker is true, pending_reset should
-  // be the default. Make pending_reset the default and remove this.
-  command_storage_manager_->set_pending_reset(true);
-}
+      load_state_(NOT_LOADED) {}
 
 TabRestoreServiceImpl::PersistenceDelegate::~PersistenceDelegate() = default;
 
@@ -875,7 +872,8 @@ int TabRestoreServiceImpl::PersistenceDelegate::
 }
 
 void TabRestoreServiceImpl::PersistenceDelegate::OnGotLastSessionCommands(
-    std::vector<std::unique_ptr<SessionCommand>> commands) {
+    std::vector<std::unique_ptr<SessionCommand>> commands,
+    bool read_error) {
   std::vector<std::unique_ptr<TabRestoreService::Entry>> entries;
   CreateEntriesFromCommands(commands, &entries);
   // Closed tabs always go to the end.
@@ -1149,7 +1147,8 @@ void TabRestoreServiceImpl::PersistenceDelegate::ValidateAndDeleteEmptyEntries(
 
 void TabRestoreServiceImpl::PersistenceDelegate::OnGotPreviousSession(
     std::vector<std::unique_ptr<SessionWindow>> windows,
-    SessionID ignored_active_window) {
+    SessionID ignored_active_window,
+    bool error_reading) {
   std::vector<std::unique_ptr<Entry>> entries;
   CreateEntriesFromWindows(&windows, &entries);
   // Previous session tabs go first.
@@ -1163,25 +1162,46 @@ void TabRestoreServiceImpl::PersistenceDelegate::OnGotPreviousSession(
 bool TabRestoreServiceImpl::PersistenceDelegate::ConvertSessionWindowToWindow(
     SessionWindow* session_window,
     Window* window) {
+  // The group visual datas must be stored in both |window| and each
+  // grouped tab.
+  std::map<tab_groups::TabGroupId, tab_groups::TabGroupVisualData>
+      group_visual_datas;
+  for (size_t i = 0; i < session_window->tab_groups.size(); ++i) {
+    auto group_id = session_window->tab_groups[i]->id;
+    group_visual_datas[group_id] = session_window->tab_groups[i]->visual_data;
+  }
+
   for (size_t i = 0; i < session_window->tabs.size(); ++i) {
     window->ext_data = session_window->ext_data;
-    if (!session_window->tabs[i]->navigations.empty()) {
-      window->tabs.push_back(std::make_unique<Tab>());
-      Tab& tab = *window->tabs.back();
-      tab.pinned = session_window->tabs[i]->pinned;
-      tab.navigations.swap(session_window->tabs[i]->navigations);
-      tab.current_navigation_index =
-          session_window->tabs[i]->current_navigation_index;
-      tab.extension_app_id = session_window->tabs[i]->extension_app_id;
-      tab.timestamp = base::Time();
-      tab.ext_data = session_window->tabs[i]->ext_data;
-      tab.page_action_overrides =
-          session_window->tabs[i]->page_action_overrides;
+    if (session_window->tabs[i]->navigations.empty())
+      continue;
+
+    window->tabs.push_back(std::make_unique<Tab>());
+    Tab& tab = *window->tabs.back();
+
+    auto group_id = session_window->tabs[i]->group;
+    if (group_id.has_value()) {
+      tab.group = group_id;
+      tab.group_visual_data = group_visual_datas[group_id.value()];
     }
+
+    tab.pinned = session_window->tabs[i]->pinned;
+    tab.navigations.swap(session_window->tabs[i]->navigations);
+    tab.current_navigation_index =
+        session_window->tabs[i]->current_navigation_index;
+    tab.extension_app_id = session_window->tabs[i]->extension_app_id;
+    tab.timestamp = base::Time();
+
+    // Vivaldi
+    tab.ext_data = session_window->tabs[i]->ext_data;
+    tab.page_action_overrides =
+        session_window->tabs[i]->page_action_overrides;
   }
+
   if (window->tabs.empty())
     return false;
 
+  window->tab_groups = std::move(group_visual_datas);
   window->selected_tab_index =
       std::min(session_window->selected_tab_index,
                static_cast<int>(window->tabs.size() - 1));

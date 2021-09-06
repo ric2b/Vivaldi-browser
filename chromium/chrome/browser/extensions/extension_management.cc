@@ -44,10 +44,13 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #else
 #include "components/enterprise/browser/reporting/common_pref_names.h"
 #endif
+
+#include "app/vivaldi_apptools.h"
+#include "extensions/vivaldi_standard_management_policy_provider.h"
 
 namespace extensions {
 
@@ -89,6 +92,10 @@ ExtensionManagement::ExtensionManagement(Profile* profile)
           NOTIFIED_FROM_MANAGEMENT_INITIAL_CREATION_FORCED,
       InstallStageTracker::InstallCreationStage::
           NOTIFIED_FROM_MANAGEMENT_INITIAL_CREATION_NOT_FORCED);
+  if (vivaldi::IsVivaldiRunning()) {
+    providers_.push_back(
+        std::make_unique<VivaldiStandardManagementPolicyProvider>(this));
+  } else
   providers_.push_back(
       std::make_unique<StandardManagementPolicyProvider>(this));
   providers_.push_back(

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ui/accessibility/platform/inspect/ax_tree_formatter_base.h"
+#include "content/browser/accessibility/accessibility_tree_formatter_android.h"
 
 #include <string>
 
@@ -29,12 +29,14 @@ const char* const BOOL_ATTRIBUTES[] = {
     "checkable",
     "checked",
     "clickable",
+    "collapsed",
     "collection",
     "collection_item",
     "content_invalid",
     "disabled",
     "dismissable",
     "editable_text",
+    "expanded",
     "focusable",
     "focused",
     "has_character_locations",
@@ -76,57 +78,19 @@ const char* const INT_ATTRIBUTES[] = {
     "text_change_added_count",
     "text_change_removed_count",
 };
+
+const char* const ACTION_ATTRIBUTES[] = {
+    "action_scroll_forward",
+    "action_scroll_backward",
+    "action_scroll_up",
+    "action_scroll_down",
+    "action_scroll_left",
+    "action_scroll_right",
+    "action_expand",
+    "action_collapse",
+};
 // clang-format on
 }  // namespace
-
-class AccessibilityTreeFormatterAndroid : public ui::AXTreeFormatterBase {
- public:
-  AccessibilityTreeFormatterAndroid();
-  ~AccessibilityTreeFormatterAndroid() override;
-
-  base::Value BuildTree(ui::AXPlatformNodeDelegate* root) const override;
-  base::Value BuildTreeForWindow(gfx::AcceleratedWidget widget) const override;
-  base::Value BuildTreeForSelector(
-      const AXTreeSelector& selector) const override;
-
- protected:
-  void AddDefaultFilters(
-      std::vector<AXPropertyFilter>* property_filters) override;
-
- private:
-  void RecursiveBuildTree(const BrowserAccessibility& node,
-                          base::DictionaryValue* dict) const;
-
-  void AddProperties(const BrowserAccessibility& node,
-                     base::DictionaryValue* dict) const;
-
-  std::string ProcessTreeForOutput(
-      const base::DictionaryValue& node) const override;
-};
-
-// TODO(crbug.com/1133330): move implementation into
-// content/public/ax_inspect_factory.cc when AccessibilityTreeFormatterAndroid
-// is relocated under ui/accessibility/platform
-
-// static
-std::unique_ptr<ui::AXTreeFormatter>
-AXInspectFactory::CreatePlatformFormatter() {
-  return AXInspectFactory::CreateFormatter(kAndroid);
-}
-
-// static
-std::unique_ptr<ui::AXTreeFormatter> AXInspectFactory::CreateFormatter(
-    AXInspectFactory::Type type) {
-  switch (type) {
-    case kAndroid:
-      return std::make_unique<AccessibilityTreeFormatterAndroid>();
-    case kBlink:
-      return std::make_unique<AccessibilityTreeFormatterBlink>();
-    default:
-      NOTREACHED() << "Unsupported formatter type " << type;
-  }
-  return nullptr;
-}
 
 AccessibilityTreeFormatterAndroid::AccessibilityTreeFormatterAndroid() {}
 
@@ -198,11 +162,13 @@ void AccessibilityTreeFormatterAndroid::AddProperties(
   dict->SetBoolean("checkable", android_node->IsCheckable());
   dict->SetBoolean("checked", android_node->IsChecked());
   dict->SetBoolean("clickable", android_node->IsClickable());
+  dict->SetBoolean("collapsed", android_node->IsCollapsed());
   dict->SetBoolean("collection", android_node->IsCollection());
   dict->SetBoolean("collection_item", android_node->IsCollectionItem());
   dict->SetBoolean("disabled", !android_node->IsEnabled());
   dict->SetBoolean("dismissable", android_node->IsDismissable());
   dict->SetBoolean("editable_text", android_node->IsTextField());
+  dict->SetBoolean("expanded", android_node->IsExpanded());
   dict->SetBoolean("focusable", android_node->IsFocusable());
   dict->SetBoolean("focused", android_node->IsFocused());
   dict->SetBoolean("has_character_locations",
@@ -254,6 +220,8 @@ void AccessibilityTreeFormatterAndroid::AddProperties(
   dict->SetBoolean("action_scroll_down", android_node->CanScrollDown());
   dict->SetBoolean("action_scroll_left", android_node->CanScrollLeft());
   dict->SetBoolean("action_scroll_right", android_node->CanScrollRight());
+  dict->SetBoolean("action_expand", android_node->IsCollapsed());
+  dict->SetBoolean("action_collapse", android_node->IsExpanded());
 }
 
 std::string AccessibilityTreeFormatterAndroid::ProcessTreeForOutput(
@@ -303,6 +271,15 @@ std::string AccessibilityTreeFormatterAndroid::ProcessTreeForOutput(
     if (!dict.GetInteger(attribute_name, &value) || value == 0)
       continue;
     WriteAttribute(true, StringPrintf("%s=%d", attribute_name, value), &line);
+  }
+
+  for (unsigned i = 0; i < base::size(ACTION_ATTRIBUTES); i++) {
+    const char* attribute_name = ACTION_ATTRIBUTES[i];
+    bool value;
+    if (dict.GetBoolean(attribute_name, &value) && value) {
+      WriteAttribute(false /* Exclude actions by default */, attribute_name,
+                     &line);
+    }
   }
 
   return line;

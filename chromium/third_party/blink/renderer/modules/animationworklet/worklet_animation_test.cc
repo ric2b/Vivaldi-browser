@@ -106,7 +106,9 @@ class WorkletAnimationTest : public RenderingTest {
 
   void SimulateFrame(double milliseconds) {
     base::TimeTicks tick =
-        GetDocument().Timeline().ZeroTime() + ToTimeDelta(milliseconds);
+        base::TimeTicks() +
+        GetDocument().Timeline().CalculateZeroTime().since_origin() +
+        ToTimeDelta(milliseconds);
     GetDocument().GetAnimationClock().UpdateTime(tick);
     GetDocument().GetWorkletAnimationController().UpdateAnimationStates();
     GetDocument().GetWorkletAnimationController().UpdateAnimationTimings(
@@ -129,6 +131,15 @@ TEST_F(WorkletAnimationTest, WorkletAnimationInElementAnimations) {
   worklet_animation_->cancel();
   EXPECT_EQ(0u,
             element_->EnsureElementAnimations().GetWorkletAnimations().size());
+}
+
+// Regression test for crbug.com/1136120, pass if there is no crash.
+TEST_F(WorkletAnimationTest, SetCurrentTimeInfNotCrash) {
+  base::Optional<base::TimeDelta> seek_time =
+      base::TimeDelta::FromString("inf");
+  worklet_animation_->SetPlayState(Animation::kRunning);
+  GetDocument().GetAnimationClock().UpdateTime(base::TimeTicks::Max());
+  worklet_animation_->SetCurrentTime(seek_time);
 }
 
 TEST_F(WorkletAnimationTest, StyleHasCurrentAnimation) {

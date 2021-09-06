@@ -14,7 +14,7 @@ import androidx.annotation.Nullable;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.browser.signin.services.ProfileDataCache;
 import org.chromium.chrome.browser.signin.services.SigninMetricsUtils;
-import org.chromium.chrome.browser.signin.ui.R;
+import org.chromium.chrome.browser.signin.services.SigninPreferencesManager;
 import org.chromium.chrome.browser.signin.ui.account_picker.AccountPickerBottomSheetProperties.ViewState;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
@@ -50,14 +50,10 @@ class AccountPickerBottomSheetMediator implements AccountPickerCoordinator.Liste
     AccountPickerBottomSheetMediator(Context context, AccountPickerDelegate accountPickerDelegate,
             Runnable dismissBottomSheetRunnable) {
         mAccountPickerDelegate = accountPickerDelegate;
-        mProfileDataCache = new ProfileDataCache(
-                context, context.getResources().getDimensionPixelSize(R.dimen.user_picture_size));
+        mProfileDataCache = ProfileDataCache.createWithDefaultImageSizeAndNoBadge(context);
 
-        OnClickListener onDismissClicked = v -> {
-            SigninMetricsUtils.logAccountConsistencyPromoAction(
-                    AccountConsistencyPromoAction.DISMISSED_BUTTON);
-            dismissBottomSheetRunnable.run();
-        };
+        OnClickListener onDismissClicked = v -> dismissBottomSheetRunnable.run();
+
         mModel = AccountPickerBottomSheetProperties.createModel(
                 this::onSelectedAccountClicked, this::onContinueAsClicked, onDismissClicked);
         mProfileDataCache.addObserver(mProfileDataSourceObserver);
@@ -233,6 +229,7 @@ class AccountPickerBottomSheetMediator implements AccountPickerCoordinator.Liste
             SigninMetricsUtils.logAccountConsistencyPromoAction(
                     AccountConsistencyPromoAction.SIGNED_IN_WITH_NON_DEFAULT_ACCOUNT);
         }
+        SigninPreferencesManager.getInstance().clearAccountPickerBottomSheetActiveDismissalCount();
         new AsyncTask<String>() {
             @Override
             protected String doInBackground() {

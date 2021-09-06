@@ -38,4 +38,8 @@ std::string PassThroughAudioDecoder::GetDisplayName() const {
   return "PassThroughAudioDecoder";
 }
 
+AudioDecoderType PassThroughAudioDecoder::GetDecoderType() const {
+  return AudioDecoderType::kDecrypting;
+}
+
 }  // namespace media

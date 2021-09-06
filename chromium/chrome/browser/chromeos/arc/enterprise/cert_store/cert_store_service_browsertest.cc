@@ -6,11 +6,13 @@
 #include <string>
 #include <vector>
 
+#include "ash/constants/ash_switches.h"
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/arc/enterprise/cert_store/cert_store_service.h"
 #include "chrome/browser/chromeos/arc/keymaster/arc_keymaster_bridge.h"
 #include "chrome/browser/chromeos/arc/session/arc_service_launcher.h"
@@ -21,7 +23,6 @@
 #include "chrome/browser/chromeos/platform_keys/platform_keys.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys_service_factory.h"
 #include "chrome/browser/chromeos/policy/user_policy_test_helper.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/net/nss_context.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -30,7 +31,6 @@
 #include "chrome/services/keymaster/public/mojom/cert_store.mojom.h"
 #include "chrome/test/base/mixin_based_in_process_browser_test.h"
 #include "chrome/test/base/testing_profile.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/network/network_cert_loader.h"
 #include "components/arc/arc_prefs.h"
 #include "components/arc/arc_util.h"
@@ -351,17 +351,17 @@ class CertStoreServiceTest : public MixinBasedInProcessBrowserTest {
   void OnKeyRegisteredForCorporateUsage(
       std::unique_ptr<chromeos::platform_keys::ExtensionKeyPermissionsService>
           extension_key_permissions_service,
-      const base::Closure& done_callback,
+      base::OnceClosure done_callback,
       chromeos::platform_keys::Status status) {
     ASSERT_EQ(status, chromeos::platform_keys::Status::kSuccess);
-    done_callback.Run();
+    std::move(done_callback).Run();
   }
 
   // Register only client_cert1_ for corporate usage to test that
   // client_cert2_ is not allowed.
   void GotPermissionsForExtension(
       CERTCertificate* cert,
-      const base::Closure& done_callback,
+      base::OnceClosure done_callback,
       std::unique_ptr<chromeos::platform_keys::ExtensionKeyPermissionsService>
           extension_key_permissions_service) {
     auto* extension_key_permissions_service_unowned =
@@ -374,11 +374,11 @@ class CertStoreServiceTest : public MixinBasedInProcessBrowserTest {
         base::BindOnce(&CertStoreServiceTest::OnKeyRegisteredForCorporateUsage,
                        base::Unretained(this),
                        std::move(extension_key_permissions_service),
-                       done_callback));
+                       std::move(done_callback)));
   }
 
   void SetUpTestClientCerts(const std::vector<std::string>& key_file_names,
-                            const base::Closure& done_callback,
+                            base::OnceClosure done_callback,
                             net::NSSCertDatabase* cert_db) {
     for (const auto& file_name : key_file_names) {
       base::ScopedAllowBlockingForTesting allow_io;
@@ -391,31 +391,31 @@ class CertStoreServiceTest : public MixinBasedInProcessBrowserTest {
               net::X509Certificate::FORMAT_AUTO);
       EXPECT_EQ(1U, certs.size());
       if (certs.size() != 1U) {
-        done_callback.Run();
+        std::move(done_callback).Run();
         return;
       }
 
       client_certs_.emplace_back(
           net::x509_util::DupCERTCertificate(certs[0].get()));
     }
-    done_callback.Run();
+    std::move(done_callback).Run();
   }
 
-  void ImportTestClientCerts(const base::Closure& done_callback,
+  void ImportTestClientCerts(base::OnceClosure done_callback,
                              net::NSSCertDatabase* cert_db) {
     for (const auto& cert : client_certs_) {
       // Import user certificate properly how it's done in PlatfromKeys.
       cert_db->ImportUserCert(cert.get());
     }
-    done_callback.Run();
+    std::move(done_callback).Run();
   }
 
   void DeleteCertAndKey(CERTCertificate* cert,
-                        const base::Closure& done_callback,
+                        base::OnceClosure done_callback,
                         net::NSSCertDatabase* cert_db) {
     base::ScopedAllowBlockingForTesting allow_io;
     EXPECT_TRUE(cert_db->DeleteCertAndKey(cert));
-    done_callback.Run();
+    std::move(done_callback).Run();
   }
 
   std::unique_ptr<policy::UserPolicyTestHelper> policy_helper_;

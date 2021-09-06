@@ -4,37 +4,37 @@
 
 #include "chrome/browser/chromeos/login/ui/login_display_host_common.h"
 
+#include "ash/constants/ash_features.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/feature_list.h"
+#include "chrome/browser/ash/app_mode/kiosk_app_types.h"
+#include "chrome/browser/ash/login/app_mode/kiosk_launch_controller.h"
+#include "chrome/browser/ash/login/demo_mode/demo_app_launcher.h"
+#include "chrome/browser/ash/login/screens/encryption_migration_screen.h"
+#include "chrome/browser/ash/login/screens/gaia_screen.h"
+#include "chrome/browser/ash/login/screens/pin_setup_screen.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
+#include "chrome/browser/ash/system/device_disabling_manager.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/chromeos/app_mode/kiosk_app_types.h"
 #include "chrome/browser/chromeos/language_preferences.h"
-#include "chrome/browser/chromeos/login/app_mode/kiosk_launch_controller.h"
-#include "chrome/browser/chromeos/login/demo_mode/demo_app_launcher.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/lock_screen_utils.h"
-#include "chrome/browser/chromeos/login/screens/encryption_migration_screen.h"
-#include "chrome/browser/chromeos/login/screens/gaia_screen.h"
-#include "chrome/browser/chromeos/login/screens/pin_setup_screen.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/ui/login_feedback.h"
 #include "chrome/browser/chromeos/login/ui/webui_accelerator_mapping.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/chromeos/system/device_disabling_manager.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/webui/chromeos/diagnostics_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/internet_detail_dialog.h"
-#include "chrome/browser/ui/webui/chromeos/login/discover/discover_manager.h"
-#include "chrome/browser/ui/webui/chromeos/login/discover/modules/discover_module_pin_setup.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/locale_switch_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/supervision_transition_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/user_creation_screen_handler.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "content/public/browser/notification_service.h"
 #include "extensions/common/features/feature_session_type.h"
@@ -132,6 +132,7 @@ void LoginDisplayHostCommon::BeforeSessionStart() {
 }
 
 void LoginDisplayHostCommon::Finalize(base::OnceClosure completion_callback) {
+  VLOG(4) << "Finalize";
   // If finalize is called twice the LoginDisplayHost instance will be deleted
   // multiple times.
   CHECK(!is_finalizing_);
@@ -341,6 +342,18 @@ bool LoginDisplayHostCommon::HandleAccelerator(
                        weak_factory_.GetWeakPtr()));
     return true;
   }
+
+  if (action == ash::LoginAcceleratorAction::kLaunchDiagnostics &&
+      base::FeatureList::IsEnabled(chromeos::features::kDiagnosticsApp)) {
+    // Don't handle this action if device is disabled.
+    if (system::DeviceDisablingManager::
+            IsDeviceDisabledDuringNormalOperation()) {
+      return false;
+    }
+    chromeos::DiagnosticsDialog::ShowDialog();
+    return true;
+  }
+
   if (WizardController::default_controller() &&
       WizardController::default_controller()->is_initialized()) {
     if (WizardController::default_controller()->HandleAccelerator(action))
@@ -368,9 +381,8 @@ void LoginDisplayHostCommon::SetAuthSessionForOnboarding(
     const UserContext& user_context) {
   if (PinSetupScreen::ShouldSkipBecauseOfPolicy())
     return;
-  chromeos::DiscoverManager::Get()
-      ->GetModule<chromeos::DiscoverModulePinSetup>()
-      ->SetPrimaryUserPassword(user_context.GetPasswordKey()->GetSecret());
+  WizardController::default_controller()->SetAuthSessionForOnboarding(
+      user_context);
 }
 
 void LoginDisplayHostCommon::StartEncryptionMigration(
@@ -391,6 +403,7 @@ void LoginDisplayHostCommon::StartEncryptionMigration(
 }
 
 void LoginDisplayHostCommon::OnBrowserAdded(Browser* browser) {
+  VLOG(4) << "OnBrowserAdded " << session_starting_;
   // Browsers created before session start (windows opened by extensions, for
   // example) are ignored.
   if (session_starting_) {

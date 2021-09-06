@@ -25,6 +25,7 @@ import org.junit.Assert;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
 
+import org.chromium.base.IntentUtils;
 import org.chromium.base.Promise;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.R;
@@ -116,8 +117,8 @@ public class SyncTestRule extends ChromeTabbedActivityTestRule {
         public Promise<PendingIntent> createKeyRetrievalIntent(CoreAccountInfo accountInfo) {
             Context context = InstrumentationRegistry.getContext();
             Intent intent = new Intent(context, DummyKeyRetrievalActivity.class);
-            return Promise.fulfilled(
-                    PendingIntent.getActivity(context, 0 /* requestCode */, intent, 0 /* flags */));
+            return Promise.fulfilled(PendingIntent.getActivity(context, 0 /* requestCode */, intent,
+                    IntentUtils.getPendingIntentMutabilityFlag(false)));
         }
 
         @Override
@@ -207,7 +208,7 @@ public class SyncTestRule extends ChromeTabbedActivityTestRule {
                 mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync(mProfileSyncService);
         // Enable UKM when enabling sync as it is done by the sync confirmation UI.
         enableUKM();
-        SyncTestUtil.waitForSyncActive();
+        SyncTestUtil.waitForSyncFeatureActive();
         SyncTestUtil.triggerSyncAndWaitForCompletion();
         return accountInfo;
     }
@@ -240,7 +241,7 @@ public class SyncTestRule extends ChromeTabbedActivityTestRule {
 
     public void startSyncAndWait() {
         startSync();
-        SyncTestUtil.waitForSyncActive();
+        SyncTestUtil.waitForSyncFeatureActive();
     }
 
     public void stopSync() {
@@ -253,7 +254,7 @@ public class SyncTestRule extends ChromeTabbedActivityTestRule {
         SigninTestUtil.signinAndEnableSync(accountInfo, mProfileSyncService);
         // Enable UKM when enabling sync as it is done by the sync confirmation UI.
         enableUKM();
-        SyncTestUtil.waitForSyncActive();
+        SyncTestUtil.waitForSyncFeatureActive();
         SyncTestUtil.triggerSyncAndWaitForCompletion();
     }
 

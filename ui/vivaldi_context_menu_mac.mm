@@ -137,6 +137,15 @@ void VivaldiContextMenuMac::SetIcon(const gfx::Image& icon, int id) {
   item.image = icon.ToNSImage();
 }
 
+void VivaldiContextMenuMac::SetParentView(gfx::NativeView parent_view) {
+  parent_view_ = parent_view.GetNativeNSView();
+}
+
 NSView* VivaldiContextMenuMac::GetActiveNativeView() {
-  return web_contents_->GetNativeView().GetNativeNSView();
+  // parent_view_ is set for document context menus.
+  if (parent_view_) {
+    return parent_view_;
+  } else {
+    return web_contents_->GetNativeView().GetNativeNSView();
+  }
 }

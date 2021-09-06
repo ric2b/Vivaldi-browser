@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_ACCESSIBILITY_SODA_INSTALLER_H_
 #define CHROME_BROWSER_ACCESSIBILITY_SODA_INSTALLER_H_
 
+#include "base/files/file_path.h"
 #include "base/observer_list.h"
 
 class PrefService;
@@ -38,6 +39,16 @@ class SodaInstaller {
   // instance.
   static SodaInstaller* GetInstance();
 
+  // Gets the directory path of the installed SODA lib bundle, or an empty path
+  // if not installed. Currently Chrome OS only, returns empty path on other
+  // platforms.
+  virtual base::FilePath GetSodaBinaryPath() const = 0;
+
+  // Gets the directory path of the installed SODA language bundle, or an empty
+  // path if not installed. Currently Chrome OS only, returns empty path on
+  // other platforms.
+  virtual base::FilePath GetLanguagePath() const = 0;
+
   // Installs the SODA binary. Called by CaptionController when the
   // kLiveCaptionEnabled preference changes. PrefService is passed to share
   // Live Captions preferences: whether it is enabled, which language to
@@ -51,8 +62,14 @@ class SodaInstaller {
   // should be.
   virtual void InstallLanguage(PrefService* prefs) = 0;
 
-  // Returns whether or not SODA is already registered on this device.
-  virtual bool IsSodaRegistered() = 0;
+  // Returns whether or not SODA is installed on this device. Will return a
+  // stale value until InstallSoda() and InstallLanguage() have run and
+  // asynchronously returned an answer.
+  virtual bool IsSodaInstalled() const = 0;
+
+  // Uninstalls SODA and associated language model(s). On some platforms, disc
+  // space may not be freed immediately.
+  virtual void UninstallSoda(PrefService* global_prefs) = 0;
 
   // Adds an observer to the observer list.
   void AddObserver(Observer* observer);
@@ -74,6 +91,8 @@ class SodaInstaller {
   void NotifyOnSodaProgress(int progress);
 
   base::ObserverList<Observer> observers_;
+  bool soda_binary_installed_ = false;
+  bool language_installed_ = false;
 };
 
 }  // namespace speech

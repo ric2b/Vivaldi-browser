@@ -16,6 +16,7 @@
 #include "services/network/public/mojom/url_loader_factory.mojom-shared.h"
 #include "services/network/public/mojom/web_client_hints_types.mojom-shared.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-shared.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-shared.h"
@@ -79,6 +80,8 @@ struct BLINK_EXPORT WebNavigationInfo {
 
   // Whether the frame had a transient user activation
   // at the time this request was issued.
+  // TODO(mustaq): Combine this with had_transient_user_activation, or make it
+  // less confusing which of the two we should use in various scenarios.
   bool has_transient_user_activation = false;
 
   // The load type. See WebFrameLoadType.
@@ -167,7 +170,12 @@ struct BLINK_EXPORT WebNavigationInfo {
   FramePolicy frame_policy;
 
   // The frame token of the initiator Frame.
-  base::Optional<base::UnguessableToken> initiator_frame_token;
+  base::Optional<LocalFrameToken> initiator_frame_token;
+
+  // A handle for keeping the initiator RenderFrameHost's PolicyContainerHost
+  // alive until we create the NavigationRequest.
+  CrossVariantMojoRemote<mojom::PolicyContainerHostKeepAliveHandleInterfaceBase>
+      initiator_policy_container_keep_alive_handle;
 };
 
 // This structure holds all information provided by the embedder that is
@@ -187,13 +195,13 @@ struct BLINK_EXPORT WebNavigationParams {
       const WebNavigationInfo&);
 
   // Shortcut for loading html with "text/html" mime type and "UTF8" encoding.
-  static std::unique_ptr<WebNavigationParams> CreateWithHTMLString(
+  static std::unique_ptr<WebNavigationParams> CreateWithHTMLStringForTesting(
       base::span<const char> html,
       const WebURL& base_url);
 
 #if INSIDE_BLINK
   // Shortcut for loading html with "text/html" mime type and "UTF8" encoding.
-  static std::unique_ptr<WebNavigationParams> CreateWithHTMLBuffer(
+  static std::unique_ptr<WebNavigationParams> CreateWithHTMLBufferForTesting(
       scoped_refptr<SharedBuffer> buffer,
       const KURL& base_url);
 #endif
@@ -315,7 +323,7 @@ struct BLINK_EXPORT WebNavigationParams {
   bool was_discarded = false;
   // Whether this navigation had a transient user activation
   // when inititated.
-  bool had_transient_activation = false;
+  bool had_transient_user_activation = false;
   // Whether this navigation has a sticky user activation flag.
   bool is_user_activated = false;
   // Whether the navigation should be allowed to invoke a text fragment anchor.
@@ -324,6 +332,8 @@ struct BLINK_EXPORT WebNavigationParams {
   bool has_text_fragment_token = false;
   // Whether this navigation was browser initiated.
   bool is_browser_initiated = false;
+  // Whether this navigation was for prerendering.
+  bool is_prerendering = false;
   // Whether the document should be able to access local file:// resources.
   bool grant_load_local_resources = false;
   // The previews state which should be used for this navigation.

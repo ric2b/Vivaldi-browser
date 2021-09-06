@@ -8,7 +8,6 @@
 
 #include "chromeos/assistant/internal/test_support/fake_assistant_manager.h"
 #include "chromeos/assistant/internal/test_support/fake_assistant_manager_internal.h"
-#include "chromeos/services/assistant//public/cpp/migration/fake_platform_api.h"
 #include "chromeos/services/assistant/public/cpp/migration/audio_input_host.h"
 
 namespace chromeos {
@@ -24,7 +23,6 @@ class FakeAudioInputHost : public AudioInputHost {
   ~FakeAudioInputHost() override = default;
 
   // AudioInputHost implementation:
-  void Initialize(AudioInputImpl* audio_input) override {}
   void SetMicState(bool mic_open) override {}
   void OnHotwordEnabled(bool enable) override {}
   void OnConversationTurnStarted() override {}
@@ -44,15 +42,10 @@ FakeAssistantManagerServiceDelegate::~FakeAssistantManagerServiceDelegate() =
     default;
 
 std::unique_ptr<AudioInputHost>
-FakeAssistantManagerServiceDelegate::CreateAudioInputHost() {
+FakeAssistantManagerServiceDelegate::CreateAudioInputHost(
+    mojo::PendingRemote<chromeos::libassistant::mojom::AudioInputController>
+        pending_remote) {
   return std::make_unique<FakeAudioInputHost>();
-}
-
-std::unique_ptr<CrosPlatformApi>
-FakeAssistantManagerServiceDelegate::CreatePlatformApi(
-    AssistantMediaSession* media_session,
-    scoped_refptr<base::SingleThreadTaskRunner> background_thread_task_runner) {
-  return std::make_unique<FakePlatformApi>();
 }
 
 std::unique_ptr<assistant_client::AssistantManager>
@@ -88,6 +81,11 @@ FakeAssistantManager* FakeAssistantManagerServiceDelegate::assistant_manager() {
   // instead.
   DCHECK(pending_assistant_manager_);
   return pending_assistant_manager_.get();
+}
+
+FakeAssistantManagerInternal*
+FakeAssistantManagerServiceDelegate::assistant_manager_internal() {
+  return &assistant_manager()->assistant_manager_internal();
 }
 
 }  // namespace assistant

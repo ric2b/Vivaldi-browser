@@ -415,10 +415,22 @@ inline bool ShouldBreakShapingAfterBox(const NGInlineItem& item,
 }
 
 inline bool NeedsShaping(const NGInlineItem& item) {
-  return item.Type() == NGInlineItem::kText && !item.TextShapeResult() &&
-         // Text item with length==0 exists to maintain LayoutObject states such
-         // as ClearNeedsLayout, but not needed to shape.
-         item.Length();
+  if (item.Type() != NGInlineItem::kText)
+    return false;
+  // Text item with length==0 exists to maintain LayoutObject states such as
+  // ClearNeedsLayout, but not needed to shape.
+  if (!item.Length())
+    return false;
+  const ShapeResult* shape_result = item.TextShapeResult();
+  if (!shape_result)
+    return true;
+  // |StartOffset| is usually safe-to-break, but it is not when we shape across
+  // elements and split the |ShapeResult|. Such |ShapeResult| is not safe to
+  // reuse.
+  DCHECK_EQ(item.StartOffset(), shape_result->StartIndex());
+  if (!shape_result->IsStartSafeToBreak())
+    return true;
+  return false;
 }
 
 // Determine if reshape is needed for ::first-line style.
@@ -861,7 +873,8 @@ const NGInlineNodeData& NGInlineNode::EnsureData() const {
 }
 
 const NGOffsetMapping* NGInlineNode::ComputeOffsetMappingIfNeeded() const {
-  DCHECK(!GetLayoutBlockFlow()->GetDocument().NeedsLayoutTreeUpdate());
+  DCHECK(!GetLayoutBlockFlow()->GetDocument().NeedsLayoutTreeUpdate() ||
+         GetLayoutBlockFlow()->IsLayoutNGObjectForCanvasFormattedText());
 
   NGInlineNodeData* data = MutableData();
   if (!data->offset_mapping) {
@@ -876,7 +889,8 @@ const NGOffsetMapping* NGInlineNode::ComputeOffsetMappingIfNeeded() const {
 void NGInlineNode::ComputeOffsetMapping(LayoutBlockFlow* layout_block_flow,
                                         NGInlineNodeData* data) {
   DCHECK(!data->offset_mapping);
-  DCHECK(!layout_block_flow->GetDocument().NeedsLayoutTreeUpdate());
+  DCHECK(!layout_block_flow->GetDocument().NeedsLayoutTreeUpdate() ||
+         layout_block_flow->IsLayoutNGObjectForCanvasFormattedText());
 
   // TODO(xiaochengh): ComputeOffsetMappingIfNeeded() discards the
   // NGInlineItems and text content built by |builder|, because they are
@@ -897,7 +911,6 @@ void NGInlineNode::ComputeOffsetMapping(LayoutBlockFlow* layout_block_flow,
     data->text_content = builder.ToString();
   } else {
     DCHECK(layout_block_flow->IsLayoutNGMixin());
-    DCHECK_EQ(data->text_content, builder.ToString());
   }
 
   // TODO(xiaochengh): This doesn't compute offset mapping correctly when
@@ -1764,7 +1777,7 @@ MinMaxSizesResult NGInlineNode::ComputeMinMaxSizes(
   // Negative text-indent can make min > max. Ensure min is the minimum size.
   sizes.min_size = std::min(sizes.min_size, sizes.max_size);
 
-  return {sizes, depends_on_percentage_block_size};
+  return MinMaxSizesResult(sizes, depends_on_percentage_block_size);
 }
 
 bool NGInlineNode::UseFirstLineStyle() const {
@@ -1788,6 +1801,10 @@ bool NGInlineNode::ShouldReportLetterSpacingUseCounterForTesting(
     const LayoutBlockFlow* block_flow) {
   return ShouldReportLetterSpacingUseCounter(layout_object, first_line,
                                              block_flow);
+}
+
+bool NGInlineNode::NeedsShapingForTesting(const NGInlineItem& item) {
+  return NeedsShaping(item);
 }
 
 String NGInlineNode::ToString() const {

@@ -15,6 +15,7 @@
 
 namespace apps_util {
 
+extern const char kIntentActionMain[];
 extern const char kIntentActionView[];
 extern const char kIntentActionSend[];
 extern const char kIntentActionSendMultiple[];
@@ -44,8 +45,10 @@ apps::mojom::IntentPtr CreateShareIntentFromDriveFile(
     const GURL& drive_share_url,
     bool is_directory);
 
-// Create an intent struct from URL.
-apps::mojom::IntentPtr CreateShareIntentFromText(const std::string& share_text);
+// Create an intent struct from share text and title.
+apps::mojom::IntentPtr CreateShareIntentFromText(
+    const std::string& share_text,
+    const std::string& share_title);
 
 // Return true if |value| matches with the |condition_value|, based on the
 // pattern match type in the |condition_value|.

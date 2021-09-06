@@ -79,6 +79,7 @@ for m in re.findall(r"(.*node_modules[/\\]((@[^/\\]+)?[^@][^/\\]+))", maindeps):
     "BSD-2-Clause",
     "BSD-3-Clause",
     "BSD",
+    "0BSD",
     "CC0-1.0",
     "Creative Commons Attribution 2.5 License",
     "ISC",

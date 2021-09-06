@@ -26,6 +26,8 @@
 #include "content/public/common/javascript_dialog_type.h"
 #include "media/mojo/mojom/media_player.mojom.h"
 #include "media/mojo/services/media_metrics_provider.h"
+#include "mojo/public/cpp/bindings/pending_associated_receiver.h"
+#include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
@@ -173,8 +175,11 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
 
   // A context menu should be shown, to be built using the context information
   // provided in the supplied params.
-  virtual void ShowContextMenu(RenderFrameHost* render_frame_host,
-                               const ContextMenuParams& params) {}
+  virtual void ShowContextMenu(
+      RenderFrameHost* render_frame_host,
+      mojo::PendingAssociatedRemote<blink::mojom::ContextMenuClient>
+          context_menu_client,
+      const ContextMenuParams& params) {}
 
   // A JavaScript alert, confirmation or prompt dialog should be shown.
   virtual void RunJavaScriptDialog(RenderFrameHost* render_frame_host,
@@ -192,13 +197,6 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual void UpdateFaviconURL(
       RenderFrameHost* source,
       std::vector<blink::mojom::FaviconURLPtr> candidates) {}
-
-  // The pending page load was canceled, so the address bar should be updated.
-  virtual void DidCancelLoading() {}
-
-  // Another page accessed the top-level initial empty document, which means it
-  // is no longer safe to display a pending URL without risking a URL spoof.
-  virtual void DidAccessInitialDocument() {}
 
   // The frame changed its window.name property.
   virtual void DidChangeName(RenderFrameHost* render_frame_host,
@@ -225,10 +223,6 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // level frame.
   virtual void DocumentOnLoadCompleted(RenderFrameHost* render_frame_host) {}
 
-  // The state for the page changed and should be updated in session history.
-  virtual void UpdateStateForFrame(RenderFrameHost* render_frame_host,
-                                   const blink::PageState& page_state) {}
-
   // The page's title was changed and should be updated. Only called for the
   // top-level frame.
   virtual void UpdateTitle(RenderFrameHost* render_frame_host,
@@ -247,7 +241,8 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // associated MediaWebContentsObserver, and binds |receiver| to it.
   virtual void CreateMediaPlayerHostForRenderFrameHost(
       RenderFrameHost* frame_host,
-      mojo::PendingReceiver<media::mojom::MediaPlayerHost> receiver) {}
+      mojo::PendingAssociatedReceiver<media::mojom::MediaPlayerHost> receiver) {
+  }
 
   // The render frame has requested access to media devices listed in
   // |request|, and the client should grant or deny that permission by
@@ -420,14 +415,9 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
                                  const gfx::Rect& initial_rect,
                                  bool user_gesture) {}
 
-  // Notified that mixed content was displayed or ran.
-  virtual void DidDisplayInsecureContent() {}
-  virtual void DidContainInsecureFormAction() {}
   // The main frame document element is ready. This happens when the document
   // has finished parsing.
   virtual void DocumentAvailableInMainFrame() {}
-  virtual void DidRunInsecureContent(const GURL& security_origin,
-                                     const GURL& target_url) {}
 
   // Reports that passive mixed content was found at the specified url.
   virtual void PassiveInsecureContentFound(const GURL& resource_url) {}
@@ -436,11 +426,6 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual bool ShouldAllowRunningInsecureContent(bool allowed_per_prefs,
                                                  const url::Origin& origin,
                                                  const GURL& resource_url);
-
-  // Notifies that content with certificate errors will be committed in a
-  // subframe.
-  virtual void RecordActiveContentWithCertificateErrors(
-      RenderFrameHostImpl* render_frame_host) {}
 
   // Opens a new view-source tab for the last committed document in |frame|.
   virtual void ViewSource(RenderFrameHostImpl* frame) {}
@@ -455,8 +440,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual bool IsBeingDestroyed();
 
   // Notified that the render frame started loading a subresource.
-  virtual void SubresourceResponseStarted(const GURL& url,
-                                          net::CertStatus cert_status) {}
+  virtual void SubresourceResponseStarted() {}
 
   // Notified that the render finished loading a subresource for the frame
   // associated with |render_frame_host|.
@@ -522,9 +506,6 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual RenderFrameHostImpl* GetMainFrameForInnerDelegate(
       FrameTreeNode* frame_tree_node);
 
-  // Determine if the frame is of a low priority.
-  virtual bool IsFrameLowPriority(RenderFrameHost* render_frame_host);
-
   // Registers a new URL handler for the given protocol.
   virtual void RegisterProtocolHandler(RenderFrameHostImpl* host,
                                        const std::string& scheme,
@@ -537,11 +518,9 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
                                          const GURL& url,
                                          bool user_gesture) {}
 
-  // Go to the session history entry at the given offset (ie, -1 will return the
-  // "back" item).
-  virtual void OnGoToEntryAtOffset(RenderFrameHostImpl* source,
-                                   int32_t offset,
-                                   bool has_user_gesture) {}
+  // Returns true if the delegate allows to go to the session history entry at
+  // the given offset (ie, -1 will return the "back" item).
+  virtual bool IsAllowedToGoToEntryAtOffset(int32_t offset);
 
   virtual media::MediaMetricsProvider::RecordAggregateWatchTimeCallback
   GetRecordAggregateWatchTimeCallback();

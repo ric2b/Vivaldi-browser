@@ -38,7 +38,7 @@ class PreviewModeClient : public PDFEngine::Client {
   void Invalidate(const gfx::Rect& rect) override;
   void DidScroll(const gfx::Vector2d& offset) override;
   void ScrollToX(int x_in_screen_coords) override;
-  void ScrollToY(int y_in_screen_coords, bool compensate_for_toolbar) override;
+  void ScrollToY(int y_in_screen_coords) override;
   void ScrollBy(const gfx::Vector2d& scroll_delta) override;
   void ScrollToPage(int page) override;
   void NavigateTo(const std::string& url,
@@ -67,15 +67,13 @@ class PreviewModeClient : public PDFEngine::Client {
   std::vector<SearchStringResult> SearchString(const base::char16* string,
                                                const base::char16* term,
                                                bool case_sensitive) override;
-  void DocumentLoadComplete(
-      const PDFEngine::DocumentFeatures& document_features) override;
+  void DocumentLoadComplete() override;
   void DocumentLoadFailed() override;
   pp::Instance* GetPluginInstance() override;
   void DocumentHasUnsupportedFeature(const std::string& feature) override;
   void FormTextFieldFocusChange(bool in_focus) override;
   bool IsPrintPreview() override;
-  float GetToolbarHeightInScreenCoords() override;
-  uint32_t GetBackgroundColor() override;
+  SkColor GetBackgroundColor() override;
   void SetSelectedText(const std::string& selected_text) override;
   void SetLinkUnderCursor(const std::string& link_under_cursor) override;
   bool IsValidLink(const std::string& url) override;

@@ -173,8 +173,10 @@ void SessionCrashedBubble::ShowIfNotOffTheRecordProfile(Browser* browser) {
     return;
 
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (browser->profile()->IsOffTheRecord())
+  if (browser->profile()->IsOffTheRecord() ||
+      browser->profile()->IsEphemeralGuestProfile()) {
     return;
+  }
 
   // Observes possible browser removal before Show is called.
   auto browser_observer =

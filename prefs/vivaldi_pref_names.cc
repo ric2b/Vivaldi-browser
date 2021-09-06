@@ -35,6 +35,7 @@ const char kVivaldiLastTopSitesVacuumDate[] =
     "vivaldi.last_topsites_vacuum_date";
 
 // Local state prefs go here
+const char kVivaldiAutoUpdateStandalone[] = "vivaldi.autoupdate.standalone";
 const char kVivaldiUniqueUserId[] = "vivaldi.unique_user_id";
 const char kVivaldiStatsNextDailyPing[] = "vivaldi.stats.next_daily_ping";
 const char kVivaldiStatsNextWeeklyPing[] = "vivaldi.stats.next_weekly_ping";
@@ -42,6 +43,8 @@ const char kVivaldiStatsNextMonthlyPing[] = "vivaldi.stats.next_monthly_ping";
 const char kVivaldiStatsExtraPing[] = "vivaldi.stats.extra_ping";
 const char kVivaldiStatsExtraPingTime[] = "vivaldi.stats.extra_ping_time";
 const char kVivaldiProfileImagePath[] = "vivaldi.profile_image_path";
+const char kVivaldiTranslateLanguageList[] = "vivaldi.translate.language_list";
+const char kVivaldiTranslateLanguageListLastUpdate[] = "vivaldi.translate.language_list_last_update";
 
 // Enable native window decoration
 const char kOldVivaldiUseNativeWindowDecoration[] =

@@ -8,17 +8,21 @@
 #include <tuple>
 
 #include "base/bind.h"
+#include "base/debug/crash_logging.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/media/audible_metrics.h"
 #include "content/browser/media/audio_stream_monitor.h"
 #include "content/browser/media/media_devices_util.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/media/media_player_delegate_messages.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "ipc/ipc_message_macros.h"
+#include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/device/public/mojom/wake_lock_context.mojom.h"
 #include "services/media_session/public/cpp/media_position.h"
@@ -45,8 +49,7 @@ static void SuspendAllMediaPlayersInRenderFrame(
 
 static void OnAudioOutputDeviceIdTranslated(
     base::WeakPtr<MediaWebContentsObserver> observer,
-    RenderFrameHost* render_frame_host,
-    int delegate_id,
+    const MediaPlayerId& player_id,
     const base::Optional<std::string>& raw_device_id) {
   if (!raw_device_id)
     return;
@@ -54,8 +57,7 @@ static void OnAudioOutputDeviceIdTranslated(
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(&MediaWebContentsObserver::OnReceivedTranslatedDeviceId,
-                     std::move(observer), render_frame_host, delegate_id,
-                     raw_device_id.value()));
+                     std::move(observer), player_id, raw_device_id.value()));
 }
 
 }  // anonymous namespace
@@ -252,27 +254,6 @@ MediaWebContentsObserver::GetFullscreenVideoMediaPlayerId() const {
   return fullscreen_player_;
 }
 
-bool MediaWebContentsObserver::OnMessageReceived(
-    const IPC::Message& msg,
-    RenderFrameHost* render_frame_host) {
-  bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(MediaWebContentsObserver, msg,
-                                   render_frame_host)
-    IPC_MESSAGE_HANDLER(MediaPlayerDelegateHostMsg_OnMediaPaused, OnMediaPaused)
-    IPC_MESSAGE_HANDLER(MediaPlayerDelegateHostMsg_OnMediaMetadataChanged,
-                        OnMediaMetadataChanged)
-    IPC_MESSAGE_HANDLER(MediaPlayerDelegateHostMsg_OnMediaPlaying,
-                        OnMediaPlaying)
-    IPC_MESSAGE_HANDLER(
-        MediaPlayerDelegateHostMsg_OnMediaEffectivelyFullscreenChanged,
-        OnMediaEffectivelyFullscreenChanged)
-    IPC_MESSAGE_HANDLER(MediaPlayerDelegateHostMsg_OnAudioOutputSinkChanged,
-                        OnAudioOutputSinkChanged);
-    IPC_MESSAGE_UNHANDLED(handled = false)
-  IPC_END_MESSAGE_MAP()
-  return handled;
-}
-
 void MediaWebContentsObserver::MediaPictureInPictureChanged(
     bool is_picture_in_picture) {
   session_controllers_manager_->PictureInPictureStateChanged(
@@ -312,12 +293,12 @@ MediaWebContentsObserver::MediaPlayerHostImpl::MediaPlayerHostImpl(
 MediaWebContentsObserver::MediaPlayerHostImpl::~MediaPlayerHostImpl() = default;
 
 void MediaWebContentsObserver::MediaPlayerHostImpl::BindMediaPlayerHostReceiver(
-    mojo::PendingReceiver<media::mojom::MediaPlayerHost> receiver) {
+    mojo::PendingAssociatedReceiver<media::mojom::MediaPlayerHost> receiver) {
   receivers_.Add(this, std::move(receiver));
 }
 
 void MediaWebContentsObserver::MediaPlayerHostImpl::OnMediaPlayerAdded(
-    mojo::PendingRemote<media::mojom::MediaPlayer> media_player,
+    mojo::PendingAssociatedRemote<media::mojom::MediaPlayer> media_player,
     int32_t player_id) {
   media_web_contents_observer_->OnMediaPlayerAdded(
       std::move(media_player), MediaPlayerId(render_frame_host_, player_id));
@@ -333,12 +314,13 @@ MediaWebContentsObserver::MediaPlayerObserverHostImpl::
 MediaWebContentsObserver::MediaPlayerObserverHostImpl::
     ~MediaPlayerObserverHostImpl() = default;
 
-mojo::PendingRemote<media::mojom::MediaPlayerObserver>
+mojo::PendingAssociatedRemote<media::mojom::MediaPlayerObserver>
 MediaWebContentsObserver::MediaPlayerObserverHostImpl::
     BindMediaPlayerObserverReceiverAndPassRemote() {
   media_player_observer_receiver_.reset();
-  mojo::PendingRemote<media::mojom::MediaPlayerObserver> pending_remote =
-      media_player_observer_receiver_.BindNewPipeAndPassRemote();
+  mojo::PendingAssociatedRemote<media::mojom::MediaPlayerObserver>
+      pending_remote =
+          media_player_observer_receiver_.BindNewEndpointAndPassRemote();
 
   // |media_web_contents_observer_| outlives MediaPlayerHostImpl, so it's safe
   // to use base::Unretained().
@@ -356,10 +338,25 @@ void MediaWebContentsObserver::MediaPlayerObserverHostImpl::
 }
 
 void MediaWebContentsObserver::MediaPlayerObserverHostImpl::
+    OnMediaMetadataChanged(bool has_audio,
+                           bool has_video,
+                           media::MediaContentType media_content_type) {
+  media_web_contents_observer_->OnMediaMetadataChanged(
+      media_player_id_, has_audio, has_video, media_content_type);
+}
+
+void MediaWebContentsObserver::MediaPlayerObserverHostImpl::
     OnMediaPositionStateChanged(
         const media_session::MediaPosition& media_position) {
   media_web_contents_observer_->session_controllers_manager()
       ->OnMediaPositionStateChanged(media_player_id_, media_position);
+}
+
+void MediaWebContentsObserver::MediaPlayerObserverHostImpl::
+    OnMediaEffectivelyFullscreenChanged(
+        blink::WebFullscreenVideoStatus status) {
+  media_web_contents_observer_->OnMediaEffectivelyFullscreenChanged(
+      media_player_id_, status);
 }
 
 void MediaWebContentsObserver::MediaPlayerObserverHostImpl::OnMediaSizeChanged(
@@ -372,6 +369,12 @@ void MediaWebContentsObserver::MediaPlayerObserverHostImpl::
     OnPictureInPictureAvailabilityChanged(bool available) {
   media_web_contents_observer_->session_controllers_manager()
       ->OnPictureInPictureAvailabilityChanged(media_player_id_, available);
+}
+
+void MediaWebContentsObserver::MediaPlayerObserverHostImpl::
+    OnAudioOutputSinkChanged(const std::string& hashed_device_id) {
+  media_web_contents_observer_->session_controllers_manager()
+      ->OnAudioOutputSinkChanged(media_player_id_, hashed_device_id);
 }
 
 void MediaWebContentsObserver::MediaPlayerObserverHostImpl::
@@ -391,33 +394,48 @@ void MediaWebContentsObserver::MediaPlayerObserverHostImpl::OnSeek() {
       media_player_id_);
 }
 
+void MediaWebContentsObserver::MediaPlayerObserverHostImpl::OnMediaPlaying() {
+  PlayerInfo* player_info =
+      media_web_contents_observer_->GetPlayerInfo(media_player_id_);
+  if (!player_info)
+    return;
+
+  if (!media_web_contents_observer_->session_controllers_manager()->RequestPlay(
+          media_player_id_)) {
+    // Return early to avoid spamming WebContents with playing/stopped
+    // notifications.  If RequestPlay() fails, media session will send a pause
+    // signal right away.
+    return;
+  }
+
+  if (!player_info->is_playing())
+    player_info->SetIsPlaying();
+}
+
+void MediaWebContentsObserver::MediaPlayerObserverHostImpl::OnMediaPaused(
+    bool stream_ended) {
+  PlayerInfo* player_info =
+      media_web_contents_observer_->GetPlayerInfo(media_player_id_);
+  if (!player_info || !player_info->is_playing())
+    return;
+
+  player_info->SetIsStopped(stream_ended);
+
+  media_web_contents_observer_->session_controllers_manager()->OnPause(
+      media_player_id_, stream_ended);
+}
+
 MediaWebContentsObserver::PlayerInfo* MediaWebContentsObserver::GetPlayerInfo(
     const MediaPlayerId& id) const {
   const auto it = player_info_map_.find(id);
   return it != player_info_map_.end() ? it->second.get() : nullptr;
 }
 
-void MediaWebContentsObserver::OnMediaPaused(RenderFrameHost* render_frame_host,
-                                             int delegate_id,
-                                             bool reached_end_of_stream) {
-  const MediaPlayerId player_id(render_frame_host, delegate_id);
-  PlayerInfo* player_info = GetPlayerInfo(player_id);
-  if (!player_info || !player_info->is_playing())
-    return;
-
-  player_info->SetIsStopped(reached_end_of_stream);
-
-  session_controllers_manager_->OnPause(player_id, reached_end_of_stream);
-}
-
 void MediaWebContentsObserver::OnMediaMetadataChanged(
-    RenderFrameHost* render_frame_host,
-    int delegate_id,
+    const MediaPlayerId& player_id,
     bool has_audio,
     bool has_video,
     media::MediaContentType media_content_type) {
-  const MediaPlayerId player_id(render_frame_host, delegate_id);
-
   PlayerInfo* player_info = GetPlayerInfo(player_id);
   if (!player_info) {
     PlayerInfoMap::iterator it;
@@ -433,44 +451,21 @@ void MediaWebContentsObserver::OnMediaMetadataChanged(
                                            media_content_type);
 }
 
-void MediaWebContentsObserver::OnMediaPlaying(
-    RenderFrameHost* render_frame_host,
-    int delegate_id) {
-  const MediaPlayerId player_id(render_frame_host, delegate_id);
-
-  PlayerInfo* player_info = GetPlayerInfo(player_id);
-  if (!player_info)
-    return;
-
-  if (!session_controllers_manager_->RequestPlay(player_id)) {
-    // Return early to avoid spamming WebContents with playing/stopped
-    // notifications.  If RequestPlay() fails, media session will send a pause
-    // signal right away.
-    return;
-  }
-
-  if (!player_info->is_playing())
-    player_info->SetIsPlaying();
-}
-
 void MediaWebContentsObserver::OnMediaEffectivelyFullscreenChanged(
-    RenderFrameHost* render_frame_host,
-    int delegate_id,
+    const MediaPlayerId& player_id,
     blink::WebFullscreenVideoStatus fullscreen_status) {
-  const MediaPlayerId id(render_frame_host, delegate_id);
-
   switch (fullscreen_status) {
     case blink::WebFullscreenVideoStatus::kFullscreenAndPictureInPictureEnabled:
-      fullscreen_player_ = id;
+      fullscreen_player_ = player_id;
       picture_in_picture_allowed_in_fullscreen_ = true;
       break;
     case blink::WebFullscreenVideoStatus::
         kFullscreenAndPictureInPictureDisabled:
-      fullscreen_player_ = id;
+      fullscreen_player_ = player_id;
       picture_in_picture_allowed_in_fullscreen_ = false;
       break;
     case blink::WebFullscreenVideoStatus::kNotEffectivelyFullscreen:
-      if (!fullscreen_player_ || *fullscreen_player_ != id)
+      if (!fullscreen_player_ || *fullscreen_player_ != player_id)
         return;
 
       picture_in_picture_allowed_in_fullscreen_.reset();
@@ -485,12 +480,11 @@ void MediaWebContentsObserver::OnMediaEffectivelyFullscreenChanged(
 }
 
 void MediaWebContentsObserver::OnAudioOutputSinkChanged(
-    RenderFrameHost* render_frame_host,
-    int delegate_id,
+    const MediaPlayerId& player_id,
     std::string hashed_device_id) {
   auto salt_and_origin = content::GetMediaDeviceSaltAndOrigin(
-      render_frame_host->GetProcess()->GetID(),
-      render_frame_host->GetRoutingID());
+      player_id.render_frame_host->GetProcess()->GetID(),
+      player_id.render_frame_host->GetRoutingID());
 
   auto callback_on_io_thread = base::BindOnce(
       [](const std::string& salt, const url::Origin& origin,
@@ -505,19 +499,17 @@ void MediaWebContentsObserver::OnAudioOutputSinkChanged(
       salt_and_origin.device_id_salt, std::move(salt_and_origin.origin),
       hashed_device_id,
       base::BindOnce(&OnAudioOutputDeviceIdTranslated,
-                     weak_ptr_factory_.GetWeakPtr(), render_frame_host,
-                     delegate_id));
+                     weak_ptr_factory_.GetWeakPtr(), player_id));
 
   content::GetIOThreadTaskRunner({})->PostTask(
       FROM_HERE, std::move(callback_on_io_thread));
 }
 
 void MediaWebContentsObserver::OnReceivedTranslatedDeviceId(
-    RenderFrameHost* render_frame_host,
-    int delegate_id,
+    const MediaPlayerId& player_id,
     const std::string& raw_device_id) {
-  session_controllers_manager_->OnAudioOutputSinkChanged(
-      MediaPlayerId(render_frame_host, delegate_id), raw_device_id);
+  session_controllers_manager_->OnAudioOutputSinkChanged(player_id,
+                                                         raw_device_id);
 }
 
 media::mojom::MediaPlayer* MediaWebContentsObserver::GetMediaPlayerRemote(
@@ -569,7 +561,8 @@ WebContentsImpl* MediaWebContentsObserver::web_contents_impl() const {
 
 void MediaWebContentsObserver::BindMediaPlayerHost(
     RenderFrameHost* host,
-    mojo::PendingReceiver<media::mojom::MediaPlayerHost> player_receiver) {
+    mojo::PendingAssociatedReceiver<media::mojom::MediaPlayerHost>
+        player_receiver) {
   if (!media_player_hosts_.contains(host)) {
     media_player_hosts_[host] =
         std::make_unique<MediaPlayerHostImpl>(host, this);
@@ -580,14 +573,19 @@ void MediaWebContentsObserver::BindMediaPlayerHost(
 }
 
 void MediaWebContentsObserver::OnMediaPlayerAdded(
-    mojo::PendingRemote<media::mojom::MediaPlayer> player_remote,
+    mojo::PendingAssociatedRemote<media::mojom::MediaPlayer> player_remote,
     MediaPlayerId player_id) {
-  if (!media_player_remotes_.contains(player_id)) {
-    media_player_remotes_[player_id] =
-        mojo::Remote<media::mojom::MediaPlayer>();
+  if (media_player_remotes_.contains(player_id)) {
+    // Original remote associated with |player_id| will be overridden. If the
+    // original player is still alive, this will break our ability to control
+    // it from the browser process. We don't know that the original player is
+    // actually still alive.
+    // TODO(https://crbug.com/1172882): Determine the root cause of duplication
+    // and/or refactor to make ID purely a browser-side concept.
+    LOG(ERROR) << __func__ << " Duplicate media player id ("
+               << player_id.delegate_id << ")";
   }
 
-  media_player_remotes_[player_id].reset();
   media_player_remotes_[player_id].Bind(std::move(player_remote));
   media_player_remotes_[player_id].set_disconnect_handler(base::BindOnce(
       [](MediaWebContentsObserver* observer, const MediaPlayerId& player_id) {

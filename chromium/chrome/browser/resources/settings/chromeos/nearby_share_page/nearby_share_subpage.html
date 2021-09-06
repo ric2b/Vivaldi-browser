@@ -8,6 +8,7 @@
 <link rel="import" href="../../prefs/prefs_behavior.html">
 <link rel="import" href="../../router.html">
 <link rel="import" href="../../settings_shared_css.html">
+<link rel="import" href="../../shared/nearby_contact_manager.html">
 <link rel="import" href="../../shared/nearby_share_settings_behavior.html">
 <link rel="import" href="../deep_linking_behavior.html">
 <link rel="import" href="../os_route.html">
@@ -49,10 +50,6 @@
 
       .separator {
         margin: 0;
-      }
-
-      #highVisibilityHelpIcon {
-        margin-inline-end: var(--cr-section-padding);
       }
 
       #highVisibilityContainer cr-toggle {
@@ -98,6 +95,7 @@
         </div>
       </div>
       <cr-button id="editDeviceNameButton" on-click="onDeviceNameTap_"
+          disabled="[[!prefs.nearby_sharing.enabled.value]]"
           aria-description="[[getEditNameButtonAriaDescription_(
               settings.deviceName)]]"
           deep-link-focus-id$="[[Setting.kNearbyShareDeviceName]]">
@@ -119,6 +117,7 @@
         </div>
       </div>
       <cr-button id="editVisibilityButton" on-click="onVisibilityTap_"
+          disabled="[[!prefs.nearby_sharing.enabled.value]]"
           aria-description="[[getVisibilityDescription_(settings.visibility)]]"
           deep-link-focus-id$="[[Setting.kNearbyShareDeviceVisibility]]">
         $i18n{nearbyShareEditVisibility}
@@ -138,21 +137,11 @@
           </settings-localized-link>
         </div>
       </div>
-      <iron-icon tabindex="0" id="highVisibilityHelpIcon"
-          icon="cr:help-outline"
-          aria-labelledby="highVisibilityTitle tooltip">
-      </iron-icon>
-      <paper-tooltip id="tooltip"
-          for="highVisibilityHelpIcon"
-          position="bottom"
-          aria-hidden="true"
-          fit-to-visible-bounds>
-        $i18n{nearbyShareHighVisibilityTooltip}
-      </paper-tooltip>
       <div class="separator"></div>
       <cr-toggle
           id="highVisibilityToggle"
           checked="{{inHighVisibility_}}"
+          disabled="[[!prefs.nearby_sharing.enabled.value]]"
           aria-labelledby="highVisibilityTitle"
           aria-describedby="highVisibilitySubtitle"
           on-change="onInHighVisibilityToggledByUser_">
@@ -172,13 +161,14 @@
     <div class="settings-box two-line">
       <div class="start">
         <div aria-hidden="true">
-          [[getDataUsageLabel_(prefs.nearby_sharing.data_usage.value)]]
+          $i18n{nearbyShareDataUsageDialogTitle}
         </div>
         <div aria-hidden="true" class="secondary">
-          [[getDataUsageSubLabel_(prefs.nearby_sharing.data_usage.value)]]
+          [[getDataUsageLabel_(prefs.nearby_sharing.data_usage.value)]]
         </div>
       </div>
       <cr-button id="editDataUsageButton" on-click="onDataUsageTap_"
+          disabled="[[!prefs.nearby_sharing.enabled.value]]"
           aria-description="[[getEditDataUsageButtonAriaDescription_(
               prefs.nearby_sharing.data_usage.value)]]"
           deep-link-focus-id$="[[Setting.kNearbyShareDataUsage]]">

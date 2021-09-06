@@ -179,17 +179,6 @@ TEST_F(CartServiceTest, TestHideStatusChange) {
   ASSERT_FALSE(service_->IsHidden());
 }
 
-// Verifies the remove status is flipped by removing and restoring.
-TEST_F(CartServiceTest, TestRemoveStatusChange) {
-  ASSERT_FALSE(service_->IsRemoved());
-
-  service_->Remove();
-  ASSERT_TRUE(service_->IsRemoved());
-
-  service_->RestoreRemoved();
-  ASSERT_FALSE(service_->IsRemoved());
-}
-
 // Tests adding one cart to the service.
 TEST_F(CartServiceTest, TestAddCart) {
   CartDB* cart_db_ = service_->GetDB();
@@ -657,7 +646,7 @@ TEST_F(CartServiceTest, TestDomainToCartURLMapping) {
   EXPECT_EQ("https://www.amazon.com/gp/cart/view.html",
             getDomainCartURL("amazon.com"));
 
-  EXPECT_EQ("https://cart.payments.ebay.com/", getDomainCartURL("ebay.com"));
+  EXPECT_EQ("https://cart.ebay.com/", getDomainCartURL("ebay.com"));
 
   EXPECT_EQ("", getDomainCartURL("example.com"));
 }

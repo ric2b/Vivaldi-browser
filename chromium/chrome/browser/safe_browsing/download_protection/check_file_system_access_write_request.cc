@@ -40,9 +40,10 @@ CheckFileSystemAccessWriteRequest::CheckFileSystemAccessWriteRequest(
           std::move(callback),
           service,
           std::move(database_manager),
-          std::make_unique<DownloadRequestMaker>(binary_feature_extractor,
-                                                 service,
-                                                 *item)),
+          DownloadRequestMaker::CreateFromFileSystemAccess(
+              binary_feature_extractor,
+              service,
+              *item)),
       item_(std::move(item)),
       referrer_chain_data_(service->IdentifyReferrerChain(*item_)) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -119,11 +120,11 @@ void CheckFileSystemAccessWriteRequest::NotifyRequestFinished(
   weakptr_factory_.InvalidateWeakPtrs();
 }
 
-bool CheckFileSystemAccessWriteRequest::IsWhitelistedByPolicy() const {
+bool CheckFileSystemAccessWriteRequest::IsAllowlistedByPolicy() const {
   Profile* profile = Profile::FromBrowserContext(item_->browser_context);
   if (!profile)
     return false;
-  return IsURLWhitelistedByPolicy(item_->frame_url, *profile->GetPrefs());
+  return IsURLAllowlistedByPolicy(item_->frame_url, *profile->GetPrefs());
 }
 
 }  // namespace safe_browsing

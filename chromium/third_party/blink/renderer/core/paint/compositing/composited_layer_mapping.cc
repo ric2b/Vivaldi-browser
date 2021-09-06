@@ -1582,15 +1582,12 @@ void CompositedLayerMapping::DoPaintTask(
 
 // TODO(eseckler): Make recording distance configurable, e.g. for use in
 // headless, where we would like to record an exact area.
-// Note however that the minimum value for this constant is the size of a
-// raster tile. This is because the raster system is not able to raster a
-// tile that is not completely covered by a display list. If the constant
-// were less than the size of a tile, then a tile which partially overlaps
-// the screen may not be rastered.
 static const int kPixelDistanceToRecord = 4000;
 
 IntRect CompositedLayerMapping::RecomputeInterestRect(
     const GraphicsLayer* graphics_layer) const {
+  DCHECK(!RuntimeEnabledFeatures::CullRectUpdateEnabled());
+
   IntRect graphics_layer_bounds(IntPoint(), IntSize(graphics_layer->Size()));
 
   FloatClipRect mapping_rect((FloatRect(graphics_layer_bounds)));
@@ -1601,38 +1598,26 @@ IntRect CompositedLayerMapping::RecomputeInterestRect(
   while (root_view->GetFrame()->OwnerLayoutObject())
     root_view = root_view->GetFrame()->OwnerLayoutObject()->View();
 
-  auto root_view_contents_state =
-      root_view->FirstFragment().ContentsProperties();
-  auto root_view_border_box_state =
-      root_view->FirstFragment().LocalBorderBoxProperties();
+  auto root_view_state = root_view->FirstFragment().LocalBorderBoxProperties();
 
   // 1. Move into local transform space.
   mapping_rect.MoveBy(FloatPoint(graphics_layer->GetOffsetFromTransformNode()));
-  // 2. Map into contents space of the root LayoutView.
-  GeometryMapper::LocalToAncestorVisualRect(
-      source_state, root_view_contents_state, mapping_rect);
+  // 2. Map into visible space of the root LayoutView.
+  GeometryMapper::LocalToAncestorVisualRect(source_state, root_view_state,
+                                            mapping_rect);
 
   FloatRect visible_content_rect(EnclosingIntRect(mapping_rect.Rect()));
-
-  // 3. Move into local border box transform space of the root LayoutView.
-  // Note that the overflow clip has *not* been applied.
-  GeometryMapper::SourceToDestinationRect(
-      root_view_contents_state.Transform(),
-      root_view_border_box_state.Transform(), visible_content_rect);
-
-  // 4. Apply overflow clip, or adjusted version if necessary.
-  root_view->GetFrameView()->ClipPaintRect(&visible_content_rect);
 
   FloatRect local_interest_rect;
   // If the visible content rect is empty, then it makes no sense to map it back
   // since there is nothing to map.
   if (!visible_content_rect.IsEmpty()) {
     local_interest_rect = visible_content_rect;
-    // 5. Map the visible content rect from root view space to local graphics
+    // 3. Map the visible content rect from root view space to local graphics
     // layer space.
-    GeometryMapper::SourceToDestinationRect(
-        root_view_border_box_state.Transform(), source_state.Transform(),
-        local_interest_rect);
+    GeometryMapper::SourceToDestinationRect(root_view_state.Transform(),
+                                            source_state.Transform(),
+                                            local_interest_rect);
     local_interest_rect.MoveBy(
         -FloatPoint(graphics_layer->GetOffsetFromTransformNode()));
 
@@ -1708,6 +1693,8 @@ bool CompositedLayerMapping::InterestRectChangedEnoughToRepaint(
     const IntRect& previous_interest_rect,
     const IntRect& new_interest_rect,
     const IntSize& layer_size) {
+  DCHECK(!RuntimeEnabledFeatures::CullRectUpdateEnabled());
+
   if (previous_interest_rect.IsEmpty() && new_interest_rect.IsEmpty())
     return false;
 
@@ -1745,6 +1732,8 @@ bool CompositedLayerMapping::InterestRectChangedEnoughToRepaint(
 IntRect CompositedLayerMapping::ComputeInterestRect(
     const GraphicsLayer* graphics_layer,
     const IntRect& previous_interest_rect) const {
+  DCHECK(!RuntimeEnabledFeatures::CullRectUpdateEnabled());
+
   // Use the previous interest rect if it covers the whole layer.
   IntRect whole_layer_rect =
       IntRect(IntPoint(), IntSize(graphics_layer->Size()));
@@ -1764,6 +1753,22 @@ IntRect CompositedLayerMapping::ComputeInterestRect(
                                          IntSize(graphics_layer->Size())))
     return new_interest_rect;
   return previous_interest_rect;
+}
+
+IntRect CompositedLayerMapping::PaintableRegion(
+    const GraphicsLayer* graphics_layer) const {
+  DCHECK(RuntimeEnabledFeatures::CullRectUpdateEnabled());
+  const auto& fragment = OwningLayer().GetLayoutObject().FirstFragment();
+  CullRect cull_rect = graphics_layer == scrolling_contents_layer_.get() ||
+                               (graphics_layer == foreground_layer_.get() &&
+                                scrolling_contents_layer_)
+                           ? fragment.GetContentsCullRect()
+                           : fragment.GetCullRect();
+  IntRect layer_rect(IntPoint(), IntSize(graphics_layer->Size()));
+  if (cull_rect.IsInfinite())
+    return layer_rect;
+  cull_rect.MoveBy(-graphics_layer->GetOffsetFromTransformNode());
+  return Intersection(cull_rect.Rect(), layer_rect);
 }
 
 LayoutSize CompositedLayerMapping::SubpixelAccumulation() const {
@@ -1826,7 +1831,11 @@ void CompositedLayerMapping::PaintContents(
     const GraphicsLayer* graphics_layer,
     GraphicsContext& context,
     GraphicsLayerPaintingPhase graphics_layer_painting_phase,
-    const IntRect& interest_rect) const {
+    const IntRect& interest_rect_arg) const {
+  IntRect interest_rect = RuntimeEnabledFeatures::CullRectUpdateEnabled()
+                              ? PaintableRegion(graphics_layer)
+                              : interest_rect_arg;
+
   FramePaintTiming frame_paint_timing(context, GetLayoutObject().GetFrame());
 
   // https://code.google.com/p/chromium/issues/detail?id=343772

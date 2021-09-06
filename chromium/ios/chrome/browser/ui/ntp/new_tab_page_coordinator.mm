@@ -7,9 +7,11 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#include "components/feed/core/shared_prefs/pref_names.h"
 #import "components/pref_registry/pref_registry_syncable.h"
 #import "components/prefs/ios/pref_observer_bridge.h"
 #import "components/prefs/pref_change_registrar.h"
+#import "components/prefs/pref_service.h"
 #import "components/search_engines/default_search_manager.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/main/browser.h"
@@ -36,6 +38,7 @@
 #import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_view_controller.h"
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_controller.h"
+#import "ios/chrome/browser/ui/settings/utils/pref_backed_boolean.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/voice/voice_search_availability.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
@@ -50,7 +53,8 @@
 #error "This file requires ARC support."
 #endif
 
-@interface NewTabPageCoordinator () <NewTabPageCommands,
+@interface NewTabPageCoordinator () <BooleanObserver,
+                                     NewTabPageCommands,
                                      NewTabPageContentDelegate,
                                      OverscrollActionsControllerDelegate,
                                      PrefObserverDelegate,
@@ -115,6 +119,18 @@
 // TODO(crbug.com/1114792): Update this comment when the NTP refactors launches.
 @property(nonatomic, strong) UIViewController* containedViewController;
 
+// PrefService used by this Coordinator.
+@property(nonatomic, assign) PrefService* prefService;
+
+// Whether the feed is enabled or not. If enabled the feed can been expanded or
+// collapsed (see discoverFeedExpanded), if disabled nothing feed related will
+// be shown in the NTP.
+@property(nonatomic, assign) BOOL discoverFeedEnabled;
+
+// Whether the feed is expanded or collapsed. Collapsed
+// means the feed header is shown, but not any of the feed content.
+@property(nonatomic, strong) PrefBackedBoolean* discoverFeedExpanded;
+
 @end
 
 @implementation NewTabPageCoordinator
@@ -126,17 +142,23 @@
   if (self) {
     self.containerViewController = [[UIViewController alloc] init];
 
-    PrefService* prefService =
+    _prefService =
         ChromeBrowserState::FromBrowserState(browser->GetBrowserState())
             ->GetPrefs();
     _prefChangeRegistrar = std::make_unique<PrefChangeRegistrar>();
-    _prefChangeRegistrar->Init(prefService);
+    _prefChangeRegistrar->Init(_prefService);
     _prefObserverBridge.reset(new PrefObserverBridge(self));
     _prefObserverBridge->ObserveChangesForPreference(
         prefs::kArticlesForYouEnabled, _prefChangeRegistrar.get());
     _prefObserverBridge->ObserveChangesForPreference(
         DefaultSearchManager::kDefaultSearchProviderDataPrefName,
         _prefChangeRegistrar.get());
+    if (IsRefactoredNTP()) {
+      _discoverFeedExpanded = [[PrefBackedBoolean alloc]
+          initWithPrefService:_prefService
+                     prefName:feed::prefs::kArticlesListVisible];
+      [_discoverFeedExpanded setObserver:self];
+    }
   }
   return self;
 }
@@ -160,6 +182,9 @@
   }
 
   DCHECK(!self.contentSuggestionsCoordinator);
+
+  self.discoverFeedEnabled =
+      self.prefService->GetBoolean(prefs::kArticlesForYouEnabled);
 
   self.authService = AuthenticationServiceFactory::GetForBrowserState(
       self.browser->GetBrowserState());
@@ -218,6 +243,9 @@
         self.discoverFeedWrapperViewController;
     self.ntpViewController.overscrollDelegate = self;
     self.ntpViewController.ntpContentDelegate = self;
+    self.ntpViewController.identityDiscButton =
+        [self.contentSuggestionsCoordinator
+                .headerController identityDiscButton];
 
     self.ntpViewController.headerController =
         self.contentSuggestionsCoordinator.headerController;
@@ -255,6 +283,11 @@
 - (void)stop {
   if (!self.started)
     return;
+  // Unfocus omnibox, to prevent it from lingering when it should be dismissed
+  // (for example, when navigating away or when changing feed visibility).
+  id<OmniboxCommands> omniboxCommandHandler =
+      HandlerForProtocol(self.browser->GetCommandDispatcher(), OmniboxCommands);
+  [omniboxCommandHandler cancelOmniboxEdit];
   self.viewPresented = NO;
   [self updateVisible];
   [self.contentSuggestionsCoordinator stop];
@@ -264,7 +297,16 @@
   self.contentSuggestionsCoordinator = nil;
   self.incognitoViewController = nil;
   self.ntpViewController = nil;
+  if (IsRefactoredNTP()) {
+    ios::GetChromeBrowserProvider()
+        ->GetDiscoverFeedProvider()
+        ->RemoveFeedViewController(
+            self.discoverFeedWrapperViewController.discoverFeed);
+  }
   self.discoverFeedWrapperViewController = nil;
+
+  [self.ntpMediator shutdown];
+  self.ntpMediator = nil;
 
   [self.containedViewController willMoveToParentViewController:nil];
   [self.containedViewController.view removeFromSuperview];
@@ -314,6 +356,17 @@
   [self.contentSuggestionsCoordinator dismissModals];
 }
 
+- (void)stopScrolling {
+  if (!self.contentSuggestionsCoordinator) {
+    return;
+  }
+  if ([self isNTPRefactoredAndFeedVisible]) {
+    [self.ntpViewController stopScrolling];
+  } else {
+    [self.contentSuggestionsCoordinator stopScrolling];
+  }
+}
+
 - (UIEdgeInsets)contentInset {
   return [self.contentSuggestionsCoordinator contentInset];
 }
@@ -360,10 +413,6 @@
   [self updateVisible];
 }
 
-- (void)handleDeviceRotation {
-  [self.ntpViewController handleDeviceRotation];
-}
-
 #pragma mark - NewTabPageCommands
 
 - (void)updateDiscoverFeedVisibility {
@@ -379,7 +428,7 @@
   if ([self isNTPRefactoredAndFeedVisible]) {
     [self.containedViewController.view setNeedsLayout];
     [self.containedViewController.view layoutIfNeeded];
-    [self.ntpViewController updateLayoutForContentSuggestions];
+    [self.ntpViewController updateContentSuggestionForCurrentLayout];
   }
 }
 
@@ -396,6 +445,13 @@
     transitionedToActivationLevel:(SceneActivationLevel)level {
   self.sceneInForeground = level >= SceneActivationLevelForegroundInactive;
   [self updateVisible];
+}
+
+#pragma mark - BooleanObserver
+
+- (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
+  DCHECK(IsRefactoredNTP());
+  [self updateDiscoverFeedVisibility];
 }
 
 #pragma mark - OverscrollActionsControllerDelegate
@@ -489,11 +545,8 @@
 
 // YES if we're using the refactored NTP and the Discover Feed is visible.
 - (BOOL)isNTPRefactoredAndFeedVisible {
-  // Make sure we call this only if self.contentSuggestionsCoordinator has been
-  // started.
-  DCHECK(self.contentSuggestionsCoordinator.started);
-  return IsRefactoredNTP() &&
-         [self.contentSuggestionsCoordinator isDiscoverFeedVisible];
+  return IsRefactoredNTP() && [self.discoverFeedExpanded value] &&
+         self.discoverFeedEnabled;
 }
 
 @end

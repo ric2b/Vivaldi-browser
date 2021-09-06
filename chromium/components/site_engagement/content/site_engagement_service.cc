@@ -17,11 +17,13 @@
 #include "base/time/clock.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "components/browsing_data/core/browsing_data_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/permissions/permissions_client.h"
+#include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/site_engagement/content/engagement_type.h"
 #include "components/site_engagement/content/site_engagement_metrics.h"
@@ -162,8 +164,15 @@ bool IsEngagementNavigation(ui::PageTransition transition) {
 const char SiteEngagementService::kEngagementParams[] = "SiteEngagement";
 
 // static
+void SiteEngagementService::RegisterProfilePrefs(PrefRegistrySimple* registry) {
+  registry->RegisterInt64Pref(prefs::kSiteEngagementLastUpdateTime, 0,
+                              PrefRegistry::LOSSY_PREF);
+}
+
+// static
 SiteEngagementService* SiteEngagementService::Get(
     content::BrowserContext* context) {
+  DCHECK(g_service_provider);
   return g_service_provider->GetSiteEngagementService(context);
 }
 
@@ -405,6 +414,8 @@ void SiteEngagementService::AfterStartupTask() {
 
 void SiteEngagementService::CleanupEngagementScores(
     bool update_last_engagement_time) const {
+  TRACE_EVENT0("navigation", "SiteEngagementService::CleanupEngagementScores");
+
   // We want to rebase last engagement times relative to MaxDecaysPerScore
   // periods of decay in the past.
   base::Time now = clock_->Now();
@@ -515,6 +526,7 @@ void SiteEngagementService::MaybeRecordMetrics() {
 
 void SiteEngagementService::RecordMetrics(
     std::vector<mojom::SiteEngagementDetails> details) {
+  TRACE_EVENT0("navigation", "SiteEngagementService::RecordMetrics");
   std::sort(details.begin(), details.end(),
             [](const mojom::SiteEngagementDetails& lhs,
                const mojom::SiteEngagementDetails& rhs) {

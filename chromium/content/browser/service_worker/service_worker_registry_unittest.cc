@@ -510,9 +510,10 @@ class ServiceWorkerRegistryTest : public testing::Test {
     base::RunLoop loop;
     storage_control()->GetPurgeableResourceIdsForTest(
         base::BindLambdaForTesting(
-            [&](ServiceWorkerDatabase::Status status,
+            [&](storage::mojom::ServiceWorkerDatabaseStatus status,
                 const std::vector<int64_t>& resource_ids) {
-              EXPECT_EQ(status, ServiceWorkerDatabase::Status::kOk);
+              EXPECT_EQ(status,
+                        storage::mojom::ServiceWorkerDatabaseStatus::kOk);
               ids = resource_ids;
               loop.Quit();
             }));
@@ -524,9 +525,9 @@ class ServiceWorkerRegistryTest : public testing::Test {
     std::vector<int64_t> ids;
     base::RunLoop loop;
     storage_control()->GetPurgingResourceIdsForTest(base::BindLambdaForTesting(
-        [&](ServiceWorkerDatabase::Status status,
+        [&](storage::mojom::ServiceWorkerDatabaseStatus status,
             const std::vector<int64_t>& resource_ids) {
-          EXPECT_EQ(status, ServiceWorkerDatabase::Status::kOk);
+          EXPECT_EQ(status, storage::mojom::ServiceWorkerDatabaseStatus::kOk);
           ids = resource_ids;
           loop.Quit();
         }));
@@ -541,7 +542,8 @@ class ServiceWorkerRegistryTest : public testing::Test {
     storage_control()->StoreRegistration(
         std::move(registration_data), std::move(resources),
         base::BindLambdaForTesting(
-            [&](storage::mojom::ServiceWorkerDatabaseStatus status) {
+            [&](storage::mojom::ServiceWorkerDatabaseStatus status,
+                uint64_t /*deleted_resources_size*/) {
               ASSERT_EQ(storage::mojom::ServiceWorkerDatabaseStatus::kOk,
                         status);
               loop.Quit();
@@ -1241,7 +1243,7 @@ TEST_F(ServiceWorkerRegistryTest, StoragePolicyChange) {
 
   ASSERT_EQ(StoreRegistration(registration, registration->waiting_version()),
             blink::ServiceWorkerStatusCode::kOk);
-  EXPECT_FALSE(registry()->ShouldPurgeOnShutdown(kOrigin));
+  EXPECT_FALSE(registry()->ShouldPurgeOnShutdownForTesting(kOrigin));
 
   {
     // Update storage policy to mark the origin should be purged on shutdown.
@@ -1250,7 +1252,7 @@ TEST_F(ServiceWorkerRegistryTest, StoragePolicyChange) {
     base::RunLoop().RunUntilIdle();
   }
 
-  EXPECT_TRUE(registry()->ShouldPurgeOnShutdown(kOrigin));
+  EXPECT_TRUE(registry()->ShouldPurgeOnShutdownForTesting(kOrigin));
 }
 
 // Tests that callbacks of storage operations are always called even when the
@@ -1816,7 +1818,7 @@ TEST_F(ServiceWorkerRegistryTest, RetryInflightCalls_ApplyPolicyUpdates) {
 
   ASSERT_EQ(StoreRegistration(registration, registration->waiting_version()),
             blink::ServiceWorkerStatusCode::kOk);
-  EXPECT_FALSE(registry()->ShouldPurgeOnShutdown(kOrigin));
+  EXPECT_FALSE(registry()->ShouldPurgeOnShutdownForTesting(kOrigin));
 
   // Update storage policy to mark the origin should be purged on shutdown.
   special_storage_policy()->AddSessionOnly(kOrigin.GetURL());
@@ -1828,7 +1830,129 @@ TEST_F(ServiceWorkerRegistryTest, RetryInflightCalls_ApplyPolicyUpdates) {
   // All Mojo calls must be done at this point.
   EXPECT_EQ(inflight_call_count(), 0U);
 
-  EXPECT_TRUE(registry()->ShouldPurgeOnShutdown(kOrigin));
+  EXPECT_TRUE(registry()->ShouldPurgeOnShutdownForTesting(kOrigin));
+}
+
+// Regression test for https://crbug.com/1165784.
+// Tests that callbacks of ServiceWorkerRegistry are always called. Calls
+// ServiceWorkerRegistry methods and destroys the instance immediately by
+// simulating restarts.
+TEST_F(ServiceWorkerRegistryTest, DestroyRegistryDuringInflightCall) {
+  {
+    base::RunLoop loop;
+    registry()->GetRegisteredOrigins(base::BindLambdaForTesting(
+        [&](const std::vector<url::Origin>& origins) {
+          EXPECT_TRUE(origins.empty());
+          loop.Quit();
+        }));
+    SimulateRestart();
+    loop.Run();
+  }
+
+  {
+    base::RunLoop loop;
+    registry()->GetStorageUsageForOrigin(
+        url::Origin::Create(GURL("https://example.com/")),
+        base::BindLambdaForTesting(
+            [&](blink::ServiceWorkerStatusCode status, int64_t usage) {
+              EXPECT_EQ(status, blink::ServiceWorkerStatusCode::kErrorFailed);
+              loop.Quit();
+            }));
+    SimulateRestart();
+    loop.Run();
+  }
+
+  {
+    base::RunLoop loop;
+    registry()->PerformStorageCleanup(loop.QuitClosure());
+    SimulateRestart();
+    loop.Run();
+  }
+}
+
+TEST_F(ServiceWorkerRegistryTest,
+       DestroyRegistryDuringInflightCall_StoreUserData) {
+  base::RunLoop loop;
+  registry()->StoreUserData(
+      /*registration_id=*/1, url::Origin::Create(GURL("https://example.com/")),
+      {{"key", "value"}},
+      base::BindLambdaForTesting([&](blink::ServiceWorkerStatusCode status) {
+        EXPECT_EQ(status, blink::ServiceWorkerStatusCode::kErrorFailed);
+        loop.Quit();
+      }));
+  SimulateRestart();
+  loop.Run();
+}
+
+TEST_F(ServiceWorkerRegistryTest,
+       DestroyRegistryDuringInflightCall_ClearUserData) {
+  base::RunLoop loop;
+  registry()->ClearUserData(
+      /*registration_id=*/1, {{"key"}},
+      base::BindLambdaForTesting([&](blink::ServiceWorkerStatusCode status) {
+        EXPECT_EQ(status, blink::ServiceWorkerStatusCode::kErrorFailed);
+        loop.Quit();
+      }));
+  SimulateRestart();
+  loop.Run();
+}
+
+TEST_F(ServiceWorkerRegistryTest,
+       DestroyRegistryDuringInflightCall_ClearUserDataByKeyPrefixes) {
+  base::RunLoop loop;
+  registry()->ClearUserDataByKeyPrefixes(
+      /*registration_id=*/1, {{"prefix"}},
+      base::BindLambdaForTesting([&](blink::ServiceWorkerStatusCode status) {
+        EXPECT_EQ(status, blink::ServiceWorkerStatusCode::kErrorFailed);
+        loop.Quit();
+      }));
+  SimulateRestart();
+  loop.Run();
+}
+
+TEST_F(
+    ServiceWorkerRegistryTest,
+    DestroyRegistryDuringInflightCall_ClearUserDataForAllRegistrationsByKeyPrefix) {
+  base::RunLoop loop;
+  registry()->ClearUserDataForAllRegistrationsByKeyPrefix(
+      "prefix",
+      base::BindLambdaForTesting([&](blink::ServiceWorkerStatusCode status) {
+        EXPECT_EQ(status, blink::ServiceWorkerStatusCode::kErrorFailed);
+        loop.Quit();
+      }));
+  SimulateRestart();
+  loop.Run();
+}
+
+TEST_F(ServiceWorkerRegistryTest,
+       DestroyRegistryDuringInflightCall_GetUserDataForAllRegistrations) {
+  base::RunLoop loop;
+  registry()->GetUserDataForAllRegistrations(
+      "key",
+      base::BindLambdaForTesting(
+          [&](const std::vector<std::pair<int64_t, std::string>>& user_data,
+              blink::ServiceWorkerStatusCode status) {
+            EXPECT_EQ(status, blink::ServiceWorkerStatusCode::kErrorFailed);
+            loop.Quit();
+          }));
+  SimulateRestart();
+  loop.Run();
+}
+
+TEST_F(
+    ServiceWorkerRegistryTest,
+    DestroyRegistryDuringInflightCall_GetUserDataForAllRegistrationsByKeyPrefix) {
+  base::RunLoop loop;
+  registry()->GetUserDataForAllRegistrationsByKeyPrefix(
+      "prefix",
+      base::BindLambdaForTesting(
+          [&](const std::vector<std::pair<int64_t, std::string>>& user_data,
+              blink::ServiceWorkerStatusCode status) {
+            EXPECT_EQ(status, blink::ServiceWorkerStatusCode::kErrorFailed);
+            loop.Quit();
+          }));
+  SimulateRestart();
+  loop.Run();
 }
 
 class ServiceWorkerRegistryOriginTrialsTest : public ServiceWorkerRegistryTest {
@@ -2034,9 +2158,10 @@ class ServiceWorkerRegistryResourceTest : public ServiceWorkerRegistryTest {
     base::RunLoop loop;
     storage_control()->GetUncommittedResourceIdsForTest(
         base::BindLambdaForTesting(
-            [&](ServiceWorkerDatabase::Status status,
+            [&](storage::mojom::ServiceWorkerDatabaseStatus status,
                 const std::vector<int64_t>& resource_ids) {
-              EXPECT_EQ(status, ServiceWorkerDatabase::Status::kOk);
+              EXPECT_EQ(status,
+                        storage::mojom::ServiceWorkerDatabaseStatus::kOk);
               ids = resource_ids;
               loop.Quit();
             }));

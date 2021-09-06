@@ -55,9 +55,17 @@ LayoutUnit ComputeUndistributableTableSpace(
     const NGTableTypes::Columns& column_constraints,
     LayoutUnit inline_table_border_padding,
     LayoutUnit inline_border_spacing) {
-  unsigned inline_space_count = 2 + (column_constraints.data.size() > 1
-                                         ? column_constraints.data.size() - 1
-                                         : 0);
+  unsigned inline_space_count = 2;
+  bool is_first_column = true;
+  for (const NGTableTypes::Column& column : column_constraints.data) {
+    if (!column.is_mergeable) {
+      if (is_first_column)
+        is_first_column = false;
+      else
+        inline_space_count++;
+    }
+  }
+
   return inline_table_border_padding +
          inline_space_count * inline_border_spacing;
 }
@@ -106,7 +114,7 @@ LayoutUnit ComputeAssignableTableInlineSize(
   const MinMaxSizes grid_min_max =
       NGTableAlgorithmHelpers::ComputeGridInlineMinMax(
           table, column_constraints, undistributable_space, is_fixed_layout,
-          /* allow_column_percentages */ true,
+          /* is_layout_pass */ true,
           /* skip_collapsed_columns */ false);
 
   // Standard: "used width of the table".
@@ -146,7 +154,13 @@ void ComputeLocationsFromColumns(
     *has_collapsed_columns =
         *has_collapsed_columns || column_constraint.is_collapsed;
     column_location.offset = column_offset;
-    if (shrink_collapsed && column_constraint.is_collapsed) {
+    if (column_constraints.data[i].is_mergeable &&
+        (column_sizes[i] == kIndefiniteSize ||
+         column_sizes[i] == LayoutUnit())) {
+      // Empty mergeable columns are treated as collapsed.
+      column_location.size = LayoutUnit();
+      column_location.is_collapsed = true;
+    } else if (shrink_collapsed && column_constraint.is_collapsed) {
       column_location.is_collapsed = true;
       column_location.size = LayoutUnit();
     } else {
@@ -237,19 +251,15 @@ class ColumnGeometriesBuilder {
                 wtf_size_t span) {
     wtf_size_t end_column_index = start_column_index + span - 1;
     DCHECK_LE(end_column_index, column_locations.size() - 1);
-    LayoutUnit column_width = column_locations[end_column_index].offset +
-                              column_locations[end_column_index].size -
-                              column_locations[start_column_index].offset;
-    col.GetLayoutBox()->SetLogicalWidth(column_width);
+    LayoutUnit column_inline_size = column_locations[end_column_index].offset +
+                                    column_locations[end_column_index].size -
+                                    column_locations[start_column_index].offset;
+    col.GetLayoutBox()->SetLogicalWidth(column_inline_size);
     col.GetLayoutBox()->SetLogicalHeight(table_grid_block_size);
-    for (unsigned i = 0; i < span; ++i) {
-      wtf_size_t current_column_index = start_column_index + i;
-      column_geometries.emplace_back(
-          current_column_index, /* span */ 1,
-          column_locations[current_column_index].offset -
-              border_spacing.inline_size,
-          column_locations[current_column_index].size, col);
-    }
+    column_geometries.emplace_back(start_column_index, span,
+                                   column_locations[start_column_index].offset -
+                                       border_spacing.inline_size,
+                                   column_inline_size, col);
   }
 
   void EnterColgroup(const NGLayoutInputNode& colgroup,
@@ -261,28 +271,16 @@ class ColumnGeometriesBuilder {
                      bool has_children) {
     if (span == 0)
       return;
-    if (has_children) {
-      wtf_size_t last_column_index = start_column_index + span - 1;
-      LayoutUnit colgroup_size = column_locations[last_column_index].offset +
-                                 column_locations[last_column_index].size -
-                                 column_locations[start_column_index].offset;
-      colgroup.GetLayoutBox()->SetLogicalWidth(colgroup_size);
-      colgroup.GetLayoutBox()->SetLogicalHeight(table_grid_block_size);
-      column_geometries.emplace_back(
-          start_column_index, span,
-          column_locations[start_column_index].offset -
-              border_spacing.inline_size,
-          colgroup_size, colgroup);
-    } else {
-      for (unsigned i = 0; i < span; ++i) {
-        wtf_size_t current_column_index = start_column_index + i;
-        column_geometries.emplace_back(
-            current_column_index, /* span */ 1,
-            column_locations[current_column_index].offset -
-                border_spacing.inline_size,
-            column_locations[current_column_index].size, colgroup);
-      }
-    }
+    wtf_size_t last_column_index = start_column_index + span - 1;
+    LayoutUnit colgroup_size = column_locations[last_column_index].offset +
+                               column_locations[last_column_index].size -
+                               column_locations[start_column_index].offset;
+    colgroup.GetLayoutBox()->SetLogicalWidth(colgroup_size);
+    colgroup.GetLayoutBox()->SetLogicalHeight(table_grid_block_size);
+    column_geometries.emplace_back(start_column_index, span,
+                                   column_locations[start_column_index].offset -
+                                       border_spacing.inline_size,
+                                   colgroup_size, colgroup);
   }
 
   void Sort() {
@@ -384,8 +382,9 @@ LayoutUnit NGTableLayoutAlgorithm::ComputeTableInlineSize(
   ComputeLocationsFromColumns(
       *column_constraints, column_sizes, border_spacing.inline_size,
       /* collapse_columns */ true, &column_locations, &has_collapsed_columns);
-  return ComputeTableSizeFromColumns(column_locations, table_border_padding,
-                                     border_spacing);
+  return std::max(ComputeTableSizeFromColumns(
+                      column_locations, table_border_padding, border_spacing),
+                  caption_constraint.min_size);
 }
 
 scoped_refptr<const NGLayoutResult> NGTableLayoutAlgorithm::Layout() {
@@ -470,16 +469,25 @@ scoped_refptr<const NGLayoutResult> NGTableLayoutAlgorithm::Layout() {
         /* shrink_collapsed */ true, &column_locations, &has_collapsed_columns);
   }
 #if DCHECK_IS_ON()
-  LayoutUnit table_inline_size;
-  if (has_collapsed_columns) {
-    table_inline_size = ComputeTableSizeFromColumns(
-        column_locations, border_padding, border_spacing);
-    table_inline_size =
-        std::max(table_inline_size, caption_constraint.min_size);
+  if (!has_collapsed_columns) {
+    // Colums define table whose inline size equals InitialFragmentGeometry.
+    DCHECK_EQ(table_inline_size_before_collapse,
+              container_builder_.InlineSize());
+  } else if (ConstraintSpace().IsFixedInlineSize()) {
+    // Collapsed columns + fixed inline size: columns define table whose
+    // inline size is less or equal InitialFragmentGeometry.
+    LayoutUnit table_inline_size =
+        std::max(ComputeTableSizeFromColumns(column_locations, border_padding,
+                                             border_spacing),
+                 caption_constraint.min_size);
+    DCHECK_LE(table_inline_size, container_builder_.InlineSize());
   } else {
-    table_inline_size = table_inline_size_before_collapse;
+    LayoutUnit table_inline_size =
+        std::max(ComputeTableSizeFromColumns(column_locations, border_padding,
+                                             border_spacing),
+                 caption_constraint.min_size);
+    DCHECK_EQ(table_inline_size, container_builder_.InlineSize());
   }
-  DCHECK_EQ(table_inline_size, container_builder_.InlineSize());
 #endif
 
   return GenerateFragment(container_builder_.InlineSize(),
@@ -515,16 +523,17 @@ MinMaxSizesResult NGTableLayoutAlgorithm::ComputeMinMaxSizes(
   const MinMaxSizes grid_min_max =
       NGTableAlgorithmHelpers::ComputeGridInlineMinMax(
           Node(), *column_constraints, undistributable_space, is_fixed_layout,
-          /* allow_column_percentages */ false,
-          /* skip_collapsed_columns */ true);
+          /* is_layout_pass */ false,
+          /* skip_collapsed_columns */ false);
 
   MinMaxSizes min_max{
       std::max(grid_min_max.min_size, caption_constraint.min_size),
       std::max(grid_min_max.max_size, caption_constraint.min_size)};
 
-  if (is_fixed_layout && Style().LogicalWidth().IsPercentOrCalc())
+  if (is_fixed_layout && Style().LogicalWidth().IsPercentOrCalc() &&
+      Node().AllowsInfiniteMaxInlineSize()) {
     min_max.max_size = NGTableTypes::kTableMaxInlineSize;
-
+  }
   DCHECK_LE(min_max.min_size, min_max.max_size);
   return MinMaxSizesResult{min_max,
                            /* depends_on_percentage_block_size */ false};
@@ -549,11 +558,12 @@ void NGTableLayoutAlgorithm::ComputeRows(
   const bool is_table_block_size_specified = !Style().LogicalHeight().IsAuto();
   LayoutUnit total_table_block_size;
   wtf_size_t section_index = 0;
-  for (const NGBlockNode& section : grouped_children) {
+  for (auto it = grouped_children.begin(); it != grouped_children.end(); ++it) {
     NGTableAlgorithmUtils::ComputeSectionMinimumRowBlockSizes(
-        section, table_grid_inline_size, is_table_block_size_specified,
+        *it, table_grid_inline_size, is_table_block_size_specified,
         column_locations, table_borders, border_spacing.block_size,
-        section_index++, sections, rows, cell_block_constraints);
+        section_index++, it.TreatAsTBody(), sections, rows,
+        cell_block_constraints);
     total_table_block_size += sections->back().block_size;
   }
 
@@ -561,14 +571,13 @@ void NGTableLayoutAlgorithm::ComputeRows(
   // sections/rows into this space. Pass a definite intrinsic block-size into
   // |ComputeBlockSizeForFragment| to force it to resolve.
   const LayoutUnit intrinsic_block_size =
-      BlockLengthUnresolvable(ConstraintSpace(), Style().LogicalMinHeight(),
-                              LengthResolvePhase::kLayout)
+      BlockLengthUnresolvable(ConstraintSpace(), Style().LogicalMinHeight())
           ? kIndefiniteSize
           : table_border_padding.BlockSum();
 
   const LayoutUnit css_table_block_size = ComputeBlockSizeForFragment(
       ConstraintSpace(), Style(), table_border_padding, intrinsic_block_size,
-      table_grid_inline_size,
+      table_grid_inline_size, Node().ShouldBeConsideredAsReplaced(),
       /* available_block_size_adjustment */ captions_block_size);
 
   // In quirks mode, empty tables ignore any specified block-size.
@@ -633,6 +642,7 @@ void NGTableLayoutAlgorithm::ComputeTableSpecificFragmentData(
       fragment_borders_geometry->columns.push_back(column.offset +
                                                    grid_inline_start);
     }
+    DCHECK_NE(column_locations.size(), 0u);
     fragment_borders_geometry->columns.push_back(
         column_locations.back().offset + column_locations.back().size +
         grid_inline_start);
@@ -738,10 +748,10 @@ scoped_refptr<const NGLayoutResult> NGTableLayoutAlgorithm::GenerateFragment(
 
   // Section setup.
   const LayoutUnit section_available_inline_size =
-      table_inline_size - border_padding.InlineSum() -
-      border_spacing.inline_size * 2;
+      (table_inline_size - border_padding.InlineSum() -
+       border_spacing.inline_size * 2)
+          .ClampNegativeToZero();
 
-  DCHECK_GE(section_available_inline_size, LayoutUnit());
   auto CreateSectionConstraintSpace = [&table_writing_direction,
                                        &section_available_inline_size,
                                        &constraint_space_data,

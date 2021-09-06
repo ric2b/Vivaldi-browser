@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/core/workers/threaded_worklet_messaging_proxy.h"
 
+#include <utility>
+
 #include "base/single_thread_task_runner.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/mojom/script/script_type.mojom-blink.h"
@@ -62,7 +64,7 @@ void ThreadedWorkletMessagingProxy::Initialize(
           window->UserAgent(),
           window->GetFrame()->Client()->UserAgentMetadata(),
           window->GetFrame()->Client()->CreateWorkerFetchContext(),
-          csp->Headers(), window->GetReferrerPolicy(),
+          mojo::Clone(csp->GetParsedPolicies()), window->GetReferrerPolicy(),
           window->GetSecurityOrigin(), window->IsSecureContext(),
           window->GetHttpsState(), worker_clients,
           window->GetFrame()->Client()->CreateWorkerContentSettingsClient(),
@@ -99,7 +101,7 @@ void ThreadedWorkletMessagingProxy::FetchAndInvokeScript(
       CrossThreadBindOnce(
           &ThreadedWorkletObjectProxy::FetchAndInvokeScript,
           CrossThreadUnretained(worklet_object_proxy_.get()), module_url_record,
-          credentials_mode, WTF::Passed(outside_settings_object.CopyData()),
+          credentials_mode, outside_settings_object.CopyData(),
           WrapCrossThreadPersistent(&outside_resource_timing_notifier),
           std::move(outside_settings_task_runner),
           WrapCrossThreadPersistent(pending_tasks),

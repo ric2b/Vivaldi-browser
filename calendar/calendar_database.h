@@ -47,8 +47,7 @@ class CalendarDatabase : public EventDatabase,
                          public InviteTable,
                          public AccountTable {
  public:
-  CalendarDatabase() {}
-
+  CalendarDatabase();
   ~CalendarDatabase() override;
 
   // Call before Init() to set the error callback to be used for the

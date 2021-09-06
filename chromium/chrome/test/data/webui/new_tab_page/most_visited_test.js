@@ -367,6 +367,12 @@ suite('NewTabPageMostVisitedTest', () => {
 
       inputUrl.value = '';
       assertTrue(saveButton.disabled);
+
+      inputUrl.value = 'url';
+      assertFalse(saveButton.disabled);
+
+      inputUrl.value = '                                \n\n\n        ';
+      assertTrue(saveButton.disabled);
     });
 
     test('cancel closes dialog', () => {
@@ -826,13 +832,13 @@ suite('NewTabPageMostVisitedTest', () => {
     assertEquals('https://a/', newSecond.href);
   });
 
-  test('most visited tiles are not draggable', async () => {
+  test('most visited tiles cannot be reordered', async () => {
     await addTiles(2, /* customLinksEnabled= */ false);
     const [first, second] = queryTiles();
     assertEquals('https://a/', first.href);
-    assertFalse(first.draggable);
+    assertTrue(first.draggable);
     assertEquals('https://b/', second.href);
-    assertFalse(second.draggable);
+    assertTrue(second.draggable);
 
     const firstRect = first.getBoundingClientRect();
     const secondRect = second.getBoundingClientRect();

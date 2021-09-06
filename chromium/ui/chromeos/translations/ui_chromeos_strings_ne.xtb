@@ -36,6 +36,7 @@
 <translation id="1358735829858566124">फाइलवा डाइरेक्टरी प्रयोगयोग्य छैन।</translation>
 <translation id="1363028406613469049">ट्रयाक</translation>
 <translation id="1378727793141957596">Google ड्राइभ मा स्वागत छ!</translation>
+<translation id="1379911846207762492">तपाईं इन्टरनेट नभएका बेला प्रयोग गर्ने प्रयोजनका लागि फाइलहरू अफलाइन उपलब्ध गराउन सक्नुहुन्छ।</translation>
 <translation id="1383876407941801731">खोज्नुहोस्</translation>
 <translation id="1395262318152388157">सिक स्लाइडर</translation>
 <translation id="1404323374378969387">नर्वेली</translation>
@@ -76,6 +77,7 @@
 <translation id="1807938677607439181">सबै फाइलहरू</translation>
 <translation id="1810764548349082891">कुनै पूर्वावलोकन उपलब्ध छैन</translation>
 <translation id="1812302367230252929">अम्हारिक लिपि रूपान्तरण</translation>
+<translation id="1813278315230285598">सेवाहरू</translation>
 <translation id="1815861158988915678"><ph name="BEGIN_BOLD" />होसियार:<ph name="END_BOLD" />  यी फाइलहरू अस्थायी हुन् र डिस्कमा ठाउँ खालि गर्न स्वचालित रूपमा हटाइन सकिन्छन्। <ph name="BEGIN_LINK" />थप जान्नुहोस्<ph name="END_LINK" /></translation>
 <translation id="1829129547161959350">पेन्गुइन</translation>
 <translation id="183183971458492120">जानकारी लोड गर्दै...</translation>
@@ -90,8 +92,8 @@
 <translation id="1933345018156373194">सार्न सकिएन, अनपेक्षित त्रुटि: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1936717151811561466">समाप्त गर्नुहोस्</translation>
 <translation id="1942765061641586207">छविको रिजोल्युसन</translation>
-<translation id="1943097386230153518">नयाँ सेवा स्थापना गर्नुहोस्</translation>
 <translation id="1972984168337863910">फाइलका प्रतिक्रियाका प्यानलहरू विस्तृत गर्नुहोस्</translation>
+<translation id="1984456723671657197">यो प्रकारको फाइल प्रयोग गर्न मिल्दैन। Chrome OS मा फाइल खोल्ने तरिकाबारे <ph name="BEGIN_LINK_HELP" />थप जान्नुहोस्<ph name="END_LINK_HELP" />।</translation>
 <translation id="1995337122023280937">फाइल रहेको स्थानमा जानुहोस्</translation>
 <translation id="2001796770603320721">ड्राइभमा व्यवस्थित गर्नुहोस्</translation>
 <translation id="2009067268969781306">ड्राइभ फर्म्याट गर्नुले यसमा भण्डार गरिएका सम्पूर्ण डेटा मेट्ने छ। यो कार्य उल्टाउन सकिँदैन।</translation>
@@ -101,7 +103,7 @@
 <translation id="2046702855113914483">रामेन</translation>
 <translation id="2070909990982335904">विन्दुबाट सुरु हुने नामहरू प्रणालीको लागि आरक्षित छन्। कृपया अर्को नाम छान्नुहोस्।</translation>
 <translation id="2079545284768500474">अन्डू गर्नुहोस्</translation>
-<translation id="2084108471225856927">यन्त्रका सेटिङहरू</translation>
+<translation id="2084108471225856927">डिभाइसका सेटिङहरू</translation>
 <translation id="2085470240340828803">"<ph name="FILENAME" />" नाम गरेको फाइल पहिले नै विद्यमान छ। तपाईं के गर्न चाहनुहुन्छ?</translation>
 <translation id="2121825465123208577">पुनःआकार मिलाउनुहोस्</translation>
 <translation id="2125607626296734455">खमेर</translation>
@@ -142,7 +144,6 @@
 <translation id="255937426064304553">यु.एस. अन्तर्राष्ट्रिय</translation>
 <translation id="2562685439590298522">कागजातहरू</translation>
 <translation id="2563185590376525700">भ्यागुतो</translation>
-<translation id="2572501073504669105">तपाईं इन्टरनेट नभएका बेला प्रयोग गर्ने प्रयोजनका लागि फाइलहरू अफलाइन उपलब्ध गराउन सक्नुहुन्छ।</translation>
 <translation id="2578394532502990878">तमिल फोनेटिक</translation>
 <translation id="2579959351793446050">ओडिया</translation>
 <translation id="2614589611416690597"><ph name="VIDEO_TYPE" /> भिडियो</translation>
@@ -186,6 +187,7 @@
 <translation id="299638574917407533">फ्रान्सेली (क्यानाडा)</translation>
 <translation id="3003633581067744647">थम्बनेल दृश्यमा बदल्नुहोस्‌</translation>
 <translation id="3007214526293698309">अनुपात सही गर्नुहोस्</translation>
+<translation id="3029114385395636667">डकुमेन्ट, पाना तथा स्लाइडहरू अफलाइन हेर्न तथा प्रयोग गर्नका निम्ति 'Google कागजात अफलाइन' अन गर्नुहोस्।</translation>
 <translation id="303198083543495566">भूगोल</translation>
 <translation id="3047197340186497470">चिनियाँ दायी</translation>
 <translation id="3057861065630527966">तपाईँको तस्बिर र भिडियोहरू जगेडा गर्नुहोस्</translation>
@@ -224,6 +226,7 @@
 <translation id="3466147780910026086">तपाईँको मिडिया यन्त्र स्क्यान गरिँदै...</translation>
 <translation id="3468522857997926824"><ph name="FILE_COUNT" /> तस्बिरहरू <ph name="BEGIN_LINK" />Google ड्राइभ<ph name="END_LINK" /> मा जगेडा गरियो</translation>
 <translation id="3475447146579922140">Google स्प्रेडसिट</translation>
+<translation id="3479552764303398839">अहिले होइन</translation>
 <translation id="3486821258960016770">मङ्गोलियाली</translation>
 <translation id="3495304270784461826"><ph name="COUNT" /> त्रुटिहरू।</translation>
 <translation id="3522708245912499433">पोर्टुगिज</translation>
@@ -233,6 +236,7 @@
 <translation id="3553048479571901246"><ph name="APP_NAME" /> मार्फत फाइलहरू खोल्न सर्वप्रथम ती फाइलहरू कपी गरेर 'Windows फाइलहरू' फोल्डरमा पेस्ट गर्नुहोस्।</translation>
 <translation id="3556731189587832921">अङ्ग्रेजी (सं. रा. अमेरिकी) अन्तर्राष्ट्रिय PC किबोर्ड</translation>
 <translation id="357479282490346887">लिथुएनियन</translation>
+<translation id="3592251141500063301"><ph name="FILE_NAME" /> इन्टरनेट नभएका बेला प्रयोग गर्ने प्रयोजनका लागि डाउनलोड गर्न सकिएन</translation>
 <translation id="3603385196401704894">क्यानाडाली फ्रान्सेली</translation>
 <translation id="3606220979431771195">टर्किस-एफ</translation>
 <translation id="3616113530831147358">अडियो</translation>
@@ -279,6 +283,7 @@
 <translation id="4124935795427217608">एक सिङे घोडा</translation>
 <translation id="4158739975813877944">प्ले सूची खोल्नुहोस्</translation>
 <translation id="4159731583141908892"><ph name="FILE_NAME" /> सारियो।</translation>
+<translation id="4186579485882418952">अफलाइन चलाउने सुविधा अन गर्नुहोस्</translation>
 <translation id="4193154014135846272">Google कागजात</translation>
 <translation id="4197674956721858839">जिप चयन</translation>
 <translation id="4202378258276439759">स्पेनी (ल्याटिन अमेरिका)</translation>
@@ -327,7 +332,6 @@
 <translation id="4706042980341760088">तमिल टाइपराइटर किबोर्ड</translation>
 <translation id="4711094779914110278">टर्किश</translation>
 <translation id="4712283082407695269">"<ph name="PATH" />" खोलिँदै</translation>
-<translation id="4713544552769165154">यो फाइल Macintosh सफ्टवेयर प्रयोग गरिरहेका कम्प्युटरको लागि तयार गरिएको हो। यो Chrome OS चलाउने तपाईंको यन्त्रसँग मिल्दोजुल्दो छैन। कृपया उपयुक्त प्रतिस्थापन एप्लिकेसनको लागि <ph name="BEGIN_LINK" />Chrome वेब भण्डार<ph name="END_LINK" /> खोज्नुहोस्।<ph name="BEGIN_LINK_HELP" />थप जान्नुहोस्<ph name="END_LINK_HELP" /></translation>
 <translation id="4724850507808590449"><ph name="FILE_COUNT" /> तस्बिरहरू जगेडा गरियो</translation>
 <translation id="4725511304875193254">कोर्गी</translation>
 <translation id="4732760563705710320">माफ गर्नुहोस्, यो भिडियो तपाइँको कास्ट यन्त्रद्वारा समर्थन गरिएको छैन।</translation>
@@ -460,8 +464,6 @@
 <translation id="5833610766403489739">यो फाइल कतै अलमलिएको छ। कृपया तपाईंको डाउनलोड स्थान सेटिङ जाँच्नुहोस् र पुन: प्रयास गर्नुहोस्।</translation>
 <translation id="5838451609423551646">चयनबाट सबै प्रविष्टिहरू हटाइए।</translation>
 <translation id="5838825566232597749">US Workman अन्तर्राष्ट्रिय</translation>
-<translation id="5850516540536751549">यो फाइल प्रकार समर्थित छैन। यो फाइल प्रकारलाई खोल्न सक्ने एप फेला पार्नको लागि कृपया <ph name="BEGIN_LINK" />Chrome वेब स्टोर<ph name="END_LINK" /> को भ्रमण गर्नुहोस्।
-    <ph name="BEGIN_LINK_HELP" />थप जान्नुहोस्<ph name="END_LINK_HELP" /></translation>
 <translation id="5851063901794976166">यहाँ हेर्ने कुरा केही छैन ...</translation>
 <translation id="5911887972742538906">तपाईंको Linux एप स्थापना गर्ने क्रममा त्रुटि भयो।</translation>
 <translation id="5912396950572065471">ढाँचा</translation>
@@ -580,7 +582,7 @@
 <translation id="7180611975245234373">ताजा गर्नुहोस्</translation>
 <translation id="7189874332498648577"><ph name="NUMBER_OF_GB" /> जि.बि.</translation>
 <translation id="7191454237977785534">यसको रूपमा फाइल बचत गर्नुहोस्</translation>
-<translation id="7238097264433196391">यन्त्रको नाम</translation>
+<translation id="7238097264433196391">डिभाइसको नाम</translation>
 <translation id="7248671827512403053">एप</translation>
 <translation id="7268659760406822741">उपलब्ध सेवाहरू</translation>
 <translation id="7283041136720745563">तपाईंको Google ड्राइभको कोटा पर्याप्त ठुलो छैन।</translation>
@@ -650,7 +652,6 @@
 <translation id="7839804798877833423">यी फाइलहरू ल्याउने क्रममा लगभग <ph name="FILE_SIZE" /> को मोबाइल लगत प्रयोग गर्छ।</translation>
 <translation id="7846076177841592234">चयन रद्द गर्नुहोस्</translation>
 <translation id="7853966320808728790">फ्रान्सेली BÉPO</translation>
-<translation id="7864662577698025113">नयाँ सेवा थप्नुहोस्</translation>
 <translation id="7868774406711971383">पोलिस</translation>
 <translation id="7873831373602885875"><ph name="FOLDER_NAME" /> मा सुरक्षित गर्न सकिँदैन। सबै सम्पादनहरू डाउनलोडहरू नामक फोल्डरमा रहेको <ph name="DOWNLOADS_FOLDER" /> मा सुरक्षित हुने छन्।</translation>
 <translation id="7874321682039004450">फिलिपिनी</translation>
@@ -660,18 +661,18 @@
 <translation id="7925686952655276919">समक्रमणको लागि मोबाइल डाटा प्रयोग नगर्नुहोस्</translation>
 <translation id="7928710562641958568">यन्त्र निकाल्नुहोस्</translation>
 <translation id="7943385054491506837">युएस कोलमाक</translation>
-<translation id="7953739707111622108">यो यन्त्र खोलिन सकिँदैन किनभने त्यसको फाइलप्रणाली पहिचान गर्न सकिएन।</translation>
+<translation id="7953739707111622108">यो डिभाइस खोलिन सकिँदैन किनभने त्यसको फाइलप्रणाली पहिचान गर्न सकिएन।</translation>
 <translation id="7969525169268594403">स्लोभेनियन</translation>
 <translation id="7972920761225148017">फ्रान्सेली (स्विजरल्यान्ड)</translation>
 <translation id="7980421588063892270">अङ्ग्रेजी (सं. रा. अमेरिकी) कोलमाक किबोर्ड</translation>
 <translation id="7982283708762922719">उचाइ</translation>
+<translation id="79907182588096956">यो फाइल Windows सफ्टवेयर प्रयोग गर्ने PC का लागि डिजाइन गरिएको हो। यो फाइल Chrome OS प्रयोग गर्ने तपाईंको यन्त्रसँग कम्प्याटिबल छैन। Chrome OS मा फाइल खोल्ने तरिकाबारे <ph name="BEGIN_LINK_HELP" />थप जान्नुहोस्<ph name="END_LINK_HELP" />।</translation>
 <translation id="8008366997883261463">ज्याक रसल टेरियर</translation>
 <translation id="8028993641010258682">आकार</translation>
 <translation id="803771048473350947">फाइल</translation>
 <translation id="8038111231936746805">(पूर्वनिर्धारित)</translation>
 <translation id="8042602468072383151"><ph name="AUDIO_TYPE" /> अडियो</translation>
 <translation id="8045462269890919536">रोमेनियन</translation>
-<translation id="8052887694493382350">यो फाइल Windows सफ्टवेयर प्रयोग गर्ने PC का लागि डिजाइन गरिएको हो। यो फाइल Chrome OS प्रयोग गर्ने तपाईंको यन्त्रसँग मिल्दो छैन। <ph name="BEGIN_LINK_HELP" />थप जान्नुहोस्<ph name="END_LINK_HELP" /></translation>
 <translation id="8066773524873206594">सबै सम्पादनहरू <ph name="DOWNLOADS_FOLDER" /> मा सुरक्षित हुने छन्।</translation>
 <translation id="8079530767338315840">दोहोर्याउनुहोस्</translation>
 <translation id="8106045200081704138">मसँग साझा गरिएको</translation>
@@ -745,6 +746,7 @@
 <translation id="8900820606136623064">हङ्गेरियन</translation>
 <translation id="8919081441417203123">ड्यानिस</translation>
 <translation id="8965697826696209160">त्यहाँ उपयुक्त ठाउँ छैन।</translation>
+<translation id="8970501467542182729">यो फाइल Macintosh सफ्टवेयर प्रयोग गर्ने कम्प्युटरका लागि तयार पारिएको हो। यो फाइल Chrome OS प्रयोग गर्ने तपाईंको यन्त्रसँग कम्प्याटिबल छैन। Chrome OS मा फाइल खोल्ने तरिकाबारे <ph name="BEGIN_LINK_HELP" />थप जान्नुहोस्<ph name="END_LINK_HELP" />।</translation>
 <translation id="8997962250644902079">चिनियाँ (परम्परागत) पिनयिन</translation>
 <translation id="9017798300203431059">रसियन फोनेटिक</translation>
 <translation id="9034924485347205037">Linux का फाइलहरू</translation>

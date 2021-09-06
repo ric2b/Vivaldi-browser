@@ -95,7 +95,7 @@ void ShowCertificateViewer(content::WebContents* web_contents,
                            gfx::NativeWindow parent,
                            net::X509Certificate* cert) {
   CertificateViewerDialog* dialog = new CertificateViewerDialog;
-  dialog->Show(parent ? parent->GetHost()->GetAcceleratedWidget() : nullptr, cert,
+  dialog->Show(parent->GetHost()->GetAcceleratedWidget(), cert,
                base::BindRepeating(
                    &base::DeletePointer<CertificateViewerDialog>, dialog));
 }

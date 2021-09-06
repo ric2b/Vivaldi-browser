@@ -154,6 +154,32 @@ class TweenTester : public ui::LayerAnimationObserver {
   DISALLOW_COPY_AND_ASSIGN(TweenTester);
 };
 
+// Class which tracks if a given widget has been closed.
+class TestClosedWidgetObserver : public views::WidgetObserver {
+ public:
+  explicit TestClosedWidgetObserver(views::Widget* widget) {
+    DCHECK(widget);
+    observation_.Observe(widget);
+  }
+  TestClosedWidgetObserver(const TestClosedWidgetObserver&) = delete;
+  TestClosedWidgetObserver& operator=(const TestClosedWidgetObserver&) = delete;
+  ~TestClosedWidgetObserver() override = default;
+
+  // views::WidgetObserver:
+  void OnWidgetClosing(views::Widget* widget) override {
+    DCHECK(!widget_closed_);
+    widget_closed_ = true;
+  }
+
+  bool widget_closed() const { return widget_closed_; }
+
+ private:
+  bool widget_closed_ = false;
+
+  base::ScopedObservation<views::Widget, views::WidgetObserver> observation_{
+      this};
+};
+
 }  // namespace
 
 class OverviewSessionTest : public AshTestBase {
@@ -489,6 +515,23 @@ TEST_F(OverviewSessionTest, ActivateMinimized) {
   EXPECT_TRUE(window->IsVisible());
   EXPECT_EQ(1.f, window->layer()->GetTargetOpacity());
   EXPECT_EQ(WindowStateType::kNormal, window_state->GetStateType());
+}
+
+// A window can be minimized when losing a focus upon entering overview.
+// If such window was active, it will be unminimized when exiting overview.
+// b/163551595.
+TEST_F(OverviewSessionTest, MinimizeDuringOverview) {
+  std::unique_ptr<aura::Window> window(CreateTestWindow());
+
+  ToggleOverview();
+  WindowState* window_state = WindowState::Get(window.get());
+  WMEvent minimize_event(WM_EVENT_MINIMIZE);
+  window_state->OnWMEvent(&minimize_event);
+  EXPECT_FALSE(window->IsVisible());
+  EXPECT_EQ(0.f, window->layer()->GetTargetOpacity());
+  EXPECT_EQ(WindowStateType::kMinimized,
+            WindowState::Get(window.get())->GetStateType());
+  ToggleOverview();
 }
 
 // Tests that the ordering of windows is stable across different overview
@@ -3212,6 +3255,24 @@ TEST_F(OverviewSessionTest, RemoveTransientNoCrash) {
   ToggleOverview();
   wm::RemoveTransientChild(parent.get(), child.get());
   ToggleOverview();
+}
+
+// Tests that closing the overview item closes the entire transient tree.
+TEST_F(OverviewSessionTest, ClosingTransientTree) {
+  auto widget = CreateTestWidget();
+  aura::Window* window = widget->GetNativeWindow();
+  auto child_widget = CreateTestWidget();
+  ::wm::AddTransientChild(window, child_widget->GetNativeWindow());
+
+  TestClosedWidgetObserver widget_observer(widget.get());
+  TestClosedWidgetObserver child_widget_observer(child_widget.get());
+
+  ToggleOverview();
+  OverviewItem* item = GetOverviewItemForWindow(window);
+  item->CloseWindow();
+
+  EXPECT_TRUE(widget_observer.widget_closed());
+  EXPECT_TRUE(child_widget_observer.widget_closed());
 }
 
 class TabletModeOverviewSessionTest : public OverviewSessionTest {

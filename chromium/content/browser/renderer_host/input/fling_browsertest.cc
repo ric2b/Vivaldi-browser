@@ -76,8 +76,11 @@ class BrowserSideFlingBrowserTest : public ContentBrowserTest {
 
  protected:
   RenderWidgetHostImpl* GetWidgetHost() {
-    return RenderWidgetHostImpl::From(
-        shell()->web_contents()->GetRenderViewHost()->GetWidget());
+    return RenderWidgetHostImpl::From(shell()
+                                          ->web_contents()
+                                          ->GetMainFrame()
+                                          ->GetRenderViewHost()
+                                          ->GetWidget());
   }
 
   void SynchronizeThreads() {
@@ -487,7 +490,7 @@ IN_PROC_BROWSER_TEST_F(BrowserSideFlingBrowserTest,
   auto input_msg_watcher = std::make_unique<InputMsgWatcher>(
       GetWidgetHost(), blink::WebInputEvent::Type::kGestureScrollEnd);
   SyntheticSmoothScrollGestureParams params;
-  params.gesture_source_type = SyntheticGestureParams::TOUCH_INPUT;
+  params.gesture_source_type = content::mojom::GestureSourceType::kTouchInput;
   const gfx::PointF location_in_widget(10, 10);
   const gfx::PointF location_in_root =
       child_view_->TransformPointToRootCoordSpaceF(location_in_widget);

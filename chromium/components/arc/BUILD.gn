@@ -41,7 +41,6 @@ static_library("arc") {
     "intent_helper/control_camera_app_delegate.h",
     "intent_helper/custom_tab.cc",
     "intent_helper/custom_tab.h",
-    "intent_helper/factory_reset_delegate.h",
     "intent_helper/intent_constants.cc",
     "intent_helper/intent_constants.h",
     "intent_helper/intent_filter.cc",
@@ -73,6 +72,8 @@ static_library("arc") {
     "property/arc_property_bridge.h",
     "rotation_lock/arc_rotation_lock_bridge.cc",
     "rotation_lock/arc_rotation_lock_bridge.h",
+    "sensor/arc_iio_sensor_bridge.cc",
+    "sensor/arc_iio_sensor_bridge.h",
     "sensor/arc_sensor_bridge.cc",
     "sensor/arc_sensor_bridge.h",
     "storage_manager/arc_storage_manager.cc",
@@ -96,11 +97,12 @@ static_library("arc") {
 
   deps = [
     "//ash:ash",
+    "//ash/components/audio",
+    "//ash/constants",
     "//ash/keyboard/ui",
     "//ash/public/cpp",
     "//base",
-    "//chromeos/audio",
-    "//chromeos/constants",
+    "//chromeos/components/sensors:sensors",
     "//chromeos/cryptohome",
     "//chromeos/dbus",
     "//chromeos/dbus/cryptohome",
@@ -201,9 +203,9 @@ static_library("arc_base_utils") {
 
   public_deps = [ ":arc_features" ]
   deps = [
+    "//ash/constants",
     "//ash/public/cpp",
     "//base",
-    "//chromeos/constants",
     "//chromeos/dbus:concierge_proto",
     "//chromeos/dbus:dbus",
     "//chromeos/dbus/session_manager",
@@ -233,8 +235,6 @@ static_library("arc_base") {
     "session/arc_container_client_adapter.h",
     "session/arc_data_remover.cc",
     "session/arc_data_remover.h",
-    "session/arc_property_util.cc",
-    "session/arc_property_util.h",
     "session/arc_session.cc",
     "session/arc_session.h",
     "session/arc_session_impl.cc",
@@ -252,10 +252,12 @@ static_library("arc_base") {
   ]
 
   deps = [
+    "//ash/constants",
     "//ash/public/cpp",
     "//ash/public/cpp/external_arc",
     "//base",
-    "//chromeos/constants",
+    "//chromeos/components/sensors:buildflags",
+    "//chromeos/components/sensors/mojom",
     "//chromeos/cryptohome",
     "//chromeos/dbus:common",
     "//chromeos/dbus:concierge_proto",
@@ -340,8 +342,6 @@ static_library("arc_test_support") {
     "test/fake_bluetooth_instance.h",
     "test/fake_clipboard_instance.cc",
     "test/fake_clipboard_instance.h",
-    "test/fake_cros_config.cc",
-    "test/fake_cros_config.h",
     "test/fake_file_system_instance.cc",
     "test/fake_file_system_instance.h",
     "test/fake_intent_helper_instance.cc",
@@ -352,6 +352,8 @@ static_library("arc_test_support") {
     "test/fake_policy_instance.h",
     "test/fake_power_instance.cc",
     "test/fake_power_instance.h",
+    "test/fake_snapshot_reboot_notification.cc",
+    "test/fake_snapshot_reboot_notification.h",
     "test/fake_timer_instance.cc",
     "test/fake_timer_instance.h",
     "test/fake_wake_lock_instance.cc",
@@ -396,6 +398,7 @@ source_set("unit_tests") {
     "enterprise/arc_data_snapshotd_bridge_unittest.cc",
     "enterprise/arc_data_snapshotd_manager_unittest.cc",
     "enterprise/snapshot_hours_policy_service_unittest.cc",
+    "enterprise/snapshot_reboot_controller_unittest.cc",
     "enterprise/snapshot_session_controller_unittest.cc",
     "ime/arc_ime_service_unittest.cc",
     "ime/key_event_result_receiver_unittest.cc",
@@ -413,7 +416,6 @@ source_set("unit_tests") {
     "property/arc_property_bridge_unittest.cc",
     "session/arc_container_client_adapter_unittest.cc",
     "session/arc_data_remover_unittest.cc",
-    "session/arc_property_util_unittest.cc",
     "session/arc_session_impl_unittest.cc",
     "session/arc_session_runner_unittest.cc",
     "session/arc_vm_client_adapter_unittest.cc",
@@ -425,13 +427,13 @@ source_set("unit_tests") {
 
   deps = [
     ":arc_test_support",
+    "//ash/constants",
     "//ash/keyboard/ui",
     "//ash/public/cpp",
     "//base",
     "//base/test:test_support",
     "//base/util/timer",
     "//chromeos",
-    "//chromeos/constants",
     "//chromeos/cryptohome:test_support",
     "//chromeos/dbus:test_support",
     "//chromeos/dbus/permission_broker",
@@ -471,14 +473,5 @@ source_set("unit_tests") {
     "//ui/views",
     "//ui/views:test_support",
     "//url:url",
-  ]
-}
-
-fuzzer_test("arc_property_util_expand_property_contents_fuzzer") {
-  sources = [ "session/arc_property_util_expand_property_contents_fuzzer.cc" ]
-  deps = [
-    ":arc",
-    ":arc_test_support",
-    "//base",
   ]
 }

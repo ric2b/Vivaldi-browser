@@ -69,8 +69,6 @@ class URLSchemesRegistry final {
         service_worker_schemes({"http", "https"}),
         fetch_api_schemes({"http", "https"}),
         allowed_in_referrer_schemes({"http", "https"}) {
-    for (auto& scheme : url::GetNoAccessSchemes())
-      schemes_with_unique_origins.insert(scheme.c_str());
     for (auto& scheme : url::GetCorsEnabledSchemes())
       cors_enabled_schemes.insert(scheme.c_str());
     for (auto& scheme : url::GetCSPBypassingSchemes()) {
@@ -91,7 +89,6 @@ class URLSchemesRegistry final {
   //   Particularly, Strings inside them shouldn't be copied, as it modifies
   //   reference counts of StringImpls (IsolatedCopy() should be taken instead).
   URLSchemesSet display_isolated_url_schemes;
-  URLSchemesSet schemes_with_unique_origins;
   URLSchemesSet empty_document_schemes;
   URLSchemesSet schemes_forbidden_from_domain_relaxation;
   URLSchemesSet not_allowing_javascript_urls_schemes;
@@ -129,13 +126,6 @@ URLSchemesRegistry& GetMutableURLSchemesRegistry() {
 }
 
 }  // namespace
-
-bool SchemeRegistry::ShouldTreatURLSchemeAsNoAccess(const String& scheme) {
-  DCHECK_EQ(scheme, scheme.LowerASCII());
-  if (scheme.IsEmpty())
-    return false;
-  return GetURLSchemesRegistry().schemes_with_unique_origins.Contains(scheme);
-}
 
 void SchemeRegistry::RegisterURLSchemeAsDisplayIsolated(const String& scheme) {
   DCHECK_EQ(scheme, scheme.LowerASCII());
@@ -290,16 +280,6 @@ bool SchemeRegistry::ShouldTreatURLSchemeAsSupportingFetchAPI(
   if (scheme.IsEmpty())
     return false;
   return GetURLSchemesRegistry().fetch_api_schemes.Contains(scheme);
-}
-
-// https://fetch.spec.whatwg.org/#fetch-scheme
-bool SchemeRegistry::IsFetchScheme(const String& scheme) {
-  DCHECK_EQ(scheme, scheme.LowerASCII());
-  // "A fetch scheme is a scheme that is "about", "blob", "data", "file",
-  // "filesystem", or a network scheme." [spec text]
-  return scheme == "about" || scheme == "blob" || scheme == "data" ||
-         scheme == "file" || scheme == "filesystem" || scheme == "ftp" ||
-         scheme == "http" || scheme == "https";
 }
 
 // https://url.spec.whatwg.org/#special-scheme

@@ -7,16 +7,18 @@
 <translation id="17513872634828108">Avatud kaardid</translation>
 <translation id="1829244130665387512">Otsi leheküljelt</translation>
 <translation id="2038563949887743358">Lülita saitide arvutiversiooni taotlemine sisse</translation>
+<translation id="2306442503286132111">Järjehoidja salvestatud kausta „<ph name="FOLDER_NAME" />”</translation>
 <translation id="2433507940547922241">Välimus</translation>
 <translation id="2501278716633472235">Mine tagasi</translation>
 <translation id="2633278372998075009">Privaatsed kaardid</translation>
 <translation id="3076631378407175873">Autoriõigus <ph name="YEAR" /> Vivaldi Technologies AS. Kõik õigused kaitstud.</translation>
 <translation id="3234355010754616171">Uus privaatne kaart</translation>
+<translation id="3377025655491224618">Privaatne kaart</translation>
 <translation id="3518985090088779359">Olen nõus – jätka</translation>
 <translation id="3700829948786686853">Tere tulemast Vivaldit kasutama</translation>
 <translation id="3719826155360621982">Koduleht</translation>
 <translation id="385051799172605136">Tagasi</translation>
-<translation id="4121750346708795461">Seda rakendust kasutades nõustud Vivaldi <ph name="BEGIN_LINK1" />teenusetingimuste<ph name="END_LINK1" /> ja <ph name="BEGIN_LINK2" />privaatsuspõhimõtetega<ph name="END_LINK2" />.</translation>
+<translation id="4121750346708795461">Seda rakendust kasutades nõustud Vivaldi <ph name="BEGIN_LINK1" />litsentsilepingu<ph name="END_LINK1" /> ja <ph name="BEGIN_LINK2" />privaatsuspõhimõtetega<ph name="END_LINK2" />.</translation>
 <translation id="4243710787042215766">Ava privaatsel kaardil</translation>
 <translation id="4526803704855831732">Privaatsed kaardid</translation>
 <translation id="4759238208242260848">Allalaadimised</translation>
@@ -30,14 +32,16 @@
 <translation id="5840488417521835756">Võimaldab veebisaitide sisu kohta lisateavet saada ilma lehelt lahkumata. Puute peale otsimise funktsioon on saadaval vaid siis, kui Vivaldi vaikimisi otsingumootor on Google. Funktsioon saadab sõna ja seda ümbritseva konteksti Google'i otsingule, saades vastu definitsioone, pilte, otsingutulemusi jm.
 
 Otsimiseks puuduta pikalt mõnd sõna. Otsingu täpsustamiseks libista paneel täiesti üles ja puuduta otsingukasti.</translation>
+<translation id="6150320133806434356">Järjehoidja lisatud</translation>
 <translation id="6336451774241870485">Uus privaatne kaart</translation>
 <translation id="6593061639179217415">Saidi arvutiversioon</translation>
 <translation id="6610147964972079463">Sulge privaatsed kaardid</translation>
 <translation id="706339621163631076">Brauseri privaatsuspõhimõtted</translation>
+<translation id="732145680195464316">Järjehoidja salvestatud <ph name="PRODUCT_NAME" />s</translation>
 <translation id="7427132068601343474">Teave Vivaldi kohta</translation>
 <translation id="7465104139234185284">Sulge kõik privaatsed kaardid</translation>
 <translation id="7519434535192513364">Puute peale otsimise funktsioon on saadaval vaid siis, kui Vivaldi vaikimisi otsingumootor on Google. Funktsioon saadab valitud sõna ja praeguse lehe kontekstina Google'i otsingule. <ph name="BEGIN_LINK" />Seadetes<ph name="END_LINK" /> saab selle taas välja lülitada.</translation>
-<translation id="804786196054284061">Teenusetingimused</translation>
+<translation id="804786196054284061">Tarkvara litsentsileping</translation>
 <translation id="85991616550051997">Mine kodulehele</translation>
 <translation id="8820817407110198400">Järjehoidjad</translation>
 <translation id="9063523880881406963">Lülita saitide arvutiversiooni taotlemine välja</translation>

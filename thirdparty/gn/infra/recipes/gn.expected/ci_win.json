@@ -45,20 +45,6 @@
   },
   {
     "cmd": [
-      "git",
-      "rev-parse",
-      "HEAD"
-    ],
-    "cwd": "[START_DIR]\\gn",
-    "infra_step": true,
-    "name": "git.rev-parse",
-    "stdout": "/path/to/tmp/",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@1@@@"
-    ]
-  },
-  {
-    "cmd": [
       "cipd.bat",
       "ensure",
       "-root",
@@ -149,7 +135,7 @@
   },
   {
     "cmd": [],
-    "name": "debug.windows-amd64",
+    "name": "debug.build",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
@@ -170,7 +156,7 @@
         "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
       ]
     },
-    "name": "debug.windows-amd64.generate",
+    "name": "debug.build.generate",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
     ]
@@ -190,7 +176,7 @@
         "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
       ]
     },
-    "name": "debug.windows-amd64.build",
+    "name": "debug.build.ninja",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
     ]
@@ -199,7 +185,6 @@
     "cmd": [
       "[START_DIR]\\gn\\out\\gn_unittests"
     ],
-    "cwd": "[START_DIR]\\gn",
     "env": {
       "VSINSTALLDIR": "[CACHE]\\windows_sdk"
     },
@@ -208,9 +193,9 @@
         "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
       ]
     },
-    "name": "debug.windows-amd64.test",
+    "name": "debug.test",
     "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@2@@@"
+      "@@@STEP_NEST_LEVEL@1@@@"
     ]
   },
   {
@@ -219,7 +204,7 @@
   },
   {
     "cmd": [],
-    "name": "release.windows-amd64",
+    "name": "release.build",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
@@ -241,7 +226,7 @@
         "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
       ]
     },
-    "name": "release.windows-amd64.generate",
+    "name": "release.build.generate",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
     ]
@@ -261,7 +246,7 @@
         "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
       ]
     },
-    "name": "release.windows-amd64.build",
+    "name": "release.build.ninja",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
     ]
@@ -270,7 +255,6 @@
     "cmd": [
       "[START_DIR]\\gn\\out\\gn_unittests"
     ],
-    "cwd": "[START_DIR]\\gn",
     "env": {
       "VSINSTALLDIR": "[CACHE]\\windows_sdk"
     },
@@ -279,50 +263,9 @@
         "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
       ]
     },
-    "name": "release.windows-amd64.test",
+    "name": "release.test",
     "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@2@@@"
-    ]
-  },
-  {
-    "cmd": [],
-    "name": "release.windows-amd64.upload",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@2@@@"
-    ]
-  },
-  {
-    "cmd": [
-      "cipd.bat",
-      "pkg-build",
-      "-pkg-def",
-      "{\"data\": [{\"file\": \"gn.exe\"}, {\"version_file\": \".versions/gn.exe.cipd_version\"}], \"install_mode\": \"copy\", \"package\": \"gn/gn/windows-amd64\", \"root\": \"[START_DIR]\\\\gn\\\\out\"}",
-      "-out",
-      "[CLEANUP]\\gn.cipd",
-      "-hash-algo",
-      "sha256",
-      "-json-output",
-      "/path/to/tmp/json"
-    ],
-    "cwd": "[START_DIR]\\gn",
-    "env": {
-      "VSINSTALLDIR": "[CACHE]\\windows_sdk"
-    },
-    "env_prefixes": {
-      "PATH": [
-        "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
-      ]
-    },
-    "name": "release.windows-amd64.upload.build gn/gn/windows-amd64",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@3@@@",
-      "@@@STEP_LOG_LINE@json.output@{@@@",
-      "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
-      "@@@STEP_LOG_LINE@json.output@    \"instance_id\": \"40-chars-fake-of-the-package-instance_id\", @@@",
-      "@@@STEP_LOG_LINE@json.output@    \"package\": \"gn/gn/windows-amd64\"@@@",
-      "@@@STEP_LOG_LINE@json.output@  }@@@",
-      "@@@STEP_LOG_LINE@json.output@}@@@",
-      "@@@STEP_LOG_END@json.output@@@"
+      "@@@STEP_NEST_LEVEL@1@@@"
     ]
   },
   {
@@ -334,6 +277,30 @@
       "mspdbsrv.exe"
     ],
     "name": "taskkill mspdbsrv"
+  },
+  {
+    "cmd": [
+      "cipd.bat",
+      "pkg-build",
+      "-pkg-def",
+      "{\"data\": [{\"file\": \"gn.exe\"}, {\"version_file\": \".versions/gn.exe.cipd_version\"}], \"install_mode\": \"copy\", \"package\": \"gn/gn/${platform}\", \"root\": \"[START_DIR]\\\\gn\\\\out\"}",
+      "-out",
+      "[CLEANUP]\\gn.cipd",
+      "-hash-algo",
+      "sha256",
+      "-json-output",
+      "/path/to/tmp/json"
+    ],
+    "name": "build gn/gn/${platform}",
+    "~followup_annotations": [
+      "@@@STEP_LOG_LINE@json.output@{@@@",
+      "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
+      "@@@STEP_LOG_LINE@json.output@    \"instance_id\": \"40-chars-fake-of-the-package-instance_id\", @@@",
+      "@@@STEP_LOG_LINE@json.output@    \"package\": \"gn/gn/resolved-platform\"@@@",
+      "@@@STEP_LOG_LINE@json.output@  }@@@",
+      "@@@STEP_LOG_LINE@json.output@}@@@",
+      "@@@STEP_LOG_END@json.output@@@"
+    ]
   },
   {
     "jsonResult": null,

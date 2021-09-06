@@ -21,7 +21,6 @@
 /** @const */ var SCREEN_OOBE_KIOSK_ENABLE = 'kiosk-enable';
 /** @const */ var SCREEN_PACKAGED_LICENSE = 'packaged-license';
 /** @const */ var SCREEN_GAIA_SIGNIN = 'gaia-signin';
-/** @const */ var SCREEN_ACCOUNT_PICKER = 'account-picker';
 /** @const */ var SCREEN_ERROR_MESSAGE = 'error-message';
 /** @const */ var SCREEN_PASSWORD_CHANGED = 'gaia-password-changed';
 /** @const */ var SCREEN_APP_LAUNCH_SPLASH = 'app-launch-splash';
@@ -51,17 +50,6 @@
 /** @const */ var ACCELERATOR_APP_LAUNCH_NETWORK_CONFIG =
     'app_launch_network_config';
 
-/* Possible UI states of the error screen. */
-/** @const */ var ERROR_SCREEN_UI_STATE = {
-  UNKNOWN: 'ui-state-unknown',
-  UPDATE: 'ui-state-update',
-  SIGNIN: 'ui-state-signin',
-  KIOSK_MODE: 'ui-state-kiosk-mode',
-  LOCAL_STATE_ERROR: 'ui-state-local-state-error',
-  AUTO_ENROLLMENT_ERROR: 'ui-state-auto-enrollment-error',
-  ROLLBACK_ERROR: 'ui-state-rollback-error'
-};
-
 /** @const */ var USER_ACTION_ROLLBACK_TOGGLED = 'rollback-toggled';
 
 cr.define('cr.ui.login', function() {
@@ -87,7 +75,6 @@ cr.define('cr.ui.login', function() {
   var RESET_AVAILABLE_SCREEN_GROUP = [
     SCREEN_OOBE_NETWORK,
     SCREEN_GAIA_SIGNIN,
-    SCREEN_ACCOUNT_PICKER,
     SCREEN_KIOSK_ENABLE,
     SCREEN_ERROR_MESSAGE,
     SCREEN_PASSWORD_CHANGED,
@@ -258,10 +245,7 @@ cr.define('cr.ui.login', function() {
      * @return {boolean}
      */
     get hasUserPods() {
-      if (this.showingViewsLogin)
-        return this.userCount_ > 0;
-      return this.displayType_ == DISPLAY_TYPE.USER_ADDING &&
-          $('pod-row').pods.length > 0;
+      return this.showingViewsLogin && this.userCount_ > 0;
     },
 
     /**
@@ -570,21 +554,9 @@ cr.define('cr.ui.login', function() {
       }
 
       var screenId = screen.id;
-      if (screenId == SCREEN_ACCOUNT_PICKER && this.showingViewsLogin) {
-        chrome.send('hideOobeDialog');
-        return;
-      }
 
       // Make sure the screen is decorated.
       this.preloadScreen(screen);
-
-
-      // Show sign-in screen instead of account picker if pod row is empty.
-      if (screenId == SCREEN_ACCOUNT_PICKER && $('pod-row').pods.length == 0 &&
-          cr.isChromeOS) {
-        Oobe.showSigninUI();
-        return;
-      }
 
       var data = screen.data;
       var index = this.getScreenIndex_(screenId);
@@ -853,11 +825,15 @@ cr.define('cr.ui.login', function() {
     };
   };
 
+  // Only called from user-manager code, can be removed once desktop is
+  // migrated to profile-manager UI.
   /**
    * Disables signin UI.
    */
   DisplayManager.disableSigninUI = function() {
-    $('pod-row').disabled = true;
+    if ($('pod-row')) {
+      $('pod-row').disabled = true;
+    }
   };
 
   /**
@@ -883,7 +859,6 @@ cr.define('cr.ui.login', function() {
       $(SCREEN_GAIA_SIGNIN)
           .reset(currentScreenId == SCREEN_GAIA_SIGNIN, forceOnline);
     }
-    $('pod-row').reset(currentScreenId == SCREEN_ACCOUNT_PICKER);
   };
 
   /**
@@ -938,43 +913,6 @@ cr.define('cr.ui.login', function() {
   };
 
   /**
-   * Shows a warning to the user that the detachable base (keyboard) different
-   * than the one previously used by the user got attached to the device. It
-   * warn the user that the attached base might be untrusted.
-   *
-   * @param {string} username The username of the user with which the error
-   *     bubble is associated. For example, in the account picker screen, it
-   *     identifies the user pod under which the error bubble should be shown.
-   * @param {string} message Error message to show.
-   * @param {string} link Text to use for help link.
-   * @param {number} helpId Help topic Id associated with help link.
-   */
-  DisplayManager.showDetachableBaseChangedWarning = function(
-      username, message, link, helpId) {
-    var error = DisplayManager.createErrorElement_(message, link, helpId);
-
-    var currentScreen = Oobe.getInstance().currentScreen;
-    if (currentScreen &&
-        typeof currentScreen.showDetachableBaseWarningBubble === 'function') {
-      currentScreen.showDetachableBaseWarningBubble(username, error);
-    }
-  };
-
-  /**
-   * Hides the warning bubble shown by {@code showDetachableBaseChangedWarning}.
-   *
-   * @param {string} username The username of the user with wich the warning was
-   *     associated.
-   */
-  DisplayManager.hideDetachableBaseChangedWarning = function(username) {
-    var currentScreen = Oobe.getInstance().currentScreen;
-    if (currentScreen &&
-        typeof currentScreen.hideDetachableBaseWarningBubble === 'function') {
-      currentScreen.hideDetachableBaseWarningBubble(username);
-    }
-  };
-
-  /**
    * Clears error bubble.
    */
   DisplayManager.clearErrors = function() {
@@ -1013,20 +951,6 @@ cr.define('cr.ui.login', function() {
   DisplayManager.setBluetoothDeviceInfo = function(bluetoothName) {
     $('bluetooth-name').hidden = false;
     $('bluetooth-name').textContent = bluetoothName;
-  };
-
-  /**
-   * Clears password field in user-pod.
-   */
-  DisplayManager.clearUserPodPassword = function() {
-    $('pod-row').clearFocusedPod();
-  };
-
-  /**
-   * Restores input focus to currently selected pod.
-   */
-  DisplayManager.refocusCurrentPod = function() {
-    $('pod-row').refocusCurrentPod();
   };
 
   // Export

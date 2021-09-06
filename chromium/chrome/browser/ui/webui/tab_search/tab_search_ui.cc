@@ -44,7 +44,7 @@ TabSearchUI::TabSearchUI(content::WebUI* web_ui)
       {"a11yFoundTabFor", IDS_TAB_SEARCH_A11Y_FOUND_TAB_FOR},
       {"a11yFoundTabsFor", IDS_TAB_SEARCH_A11Y_FOUND_TABS_FOR},
   };
-  AddLocalizedStringsBulk(source, kStrings);
+  source->AddLocalizedStrings(kStrings);
 
   source->AddBoolean(
       "submitFeedbackEnabled",
@@ -89,10 +89,6 @@ TabSearchUI::TabSearchUI(content::WebUI* web_ui)
 }
 
 TabSearchUI::~TabSearchUI() = default;
-
-void TabSearchUI::EmbedderHidden() {
-  page_handler_.reset();
-}
 
 WEB_UI_CONTROLLER_TYPE_IMPL(TabSearchUI)
 

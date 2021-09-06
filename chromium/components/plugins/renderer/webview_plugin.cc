@@ -21,6 +21,7 @@
 #include "skia/ext/platform_canvas.h"
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
@@ -41,7 +42,6 @@ using blink::WebLocalFrame;
 using blink::WebMouseEvent;
 using blink::WebPlugin;
 using blink::WebPluginContainer;
-using blink::WebRect;
 using blink::WebString;
 using blink::WebURLError;
 using blink::WebURLResponse;
@@ -49,10 +49,10 @@ using blink::WebVector;
 using blink::WebView;
 using blink::web_pref::WebPreferences;
 
-WebViewPlugin::WebViewPlugin(content::RenderView* render_view,
+WebViewPlugin::WebViewPlugin(WebView* web_view,
                              WebViewPlugin::Delegate* delegate,
                              const WebPreferences& preferences)
-    : content::RenderViewObserver(render_view),
+    : blink::WebViewObserver(web_view),
       delegate_(delegate),
       container_(nullptr),
       finished_loading_(false),
@@ -62,13 +62,13 @@ WebViewPlugin::WebViewPlugin(content::RenderView* render_view,
       web_view_helper_(this, preferences) {}
 
 // static
-WebViewPlugin* WebViewPlugin::Create(content::RenderView* render_view,
+WebViewPlugin* WebViewPlugin::Create(WebView* web_view,
                                      WebViewPlugin::Delegate* delegate,
                                      const WebPreferences& preferences,
                                      const std::string& html_data,
                                      const GURL& url) {
   DCHECK(url.is_valid()) << "Blink requires the WebView to have a valid URL.";
-  WebViewPlugin* plugin = new WebViewPlugin(render_view, delegate, preferences);
+  WebViewPlugin* plugin = new WebViewPlugin(web_view, delegate, preferences);
   // Loading may synchronously access |delegate| which could be
   // uninitialized just yet, so load in another task.
   plugin->GetTaskRunner()->PostTask(
@@ -137,7 +137,7 @@ void WebViewPlugin::Destroy() {
     delegate_ = nullptr;
   }
   container_ = nullptr;
-  content::RenderViewObserver::Observe(nullptr);
+  blink::WebViewObserver::Observe(nullptr);
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
 }
 
@@ -160,7 +160,7 @@ bool WebViewPlugin::IsErrorPlaceholder() {
   return delegate_->IsErrorPlaceholder();
 }
 
-void WebViewPlugin::Paint(cc::PaintCanvas* canvas, const WebRect& rect) {
+void WebViewPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
   gfx::Rect paint_rect = gfx::IntersectRects(rect_, rect);
   if (paint_rect.IsEmpty())
     return;
@@ -177,15 +177,15 @@ void WebViewPlugin::Paint(cc::PaintCanvas* canvas, const WebRect& rect) {
 }
 
 // Coordinates are relative to the containing window.
-void WebViewPlugin::UpdateGeometry(const WebRect& window_rect,
-                                   const WebRect& clip_rect,
-                                   const WebRect& unobscured_rect,
+void WebViewPlugin::UpdateGeometry(const gfx::Rect& window_rect,
+                                   const gfx::Rect& clip_rect,
+                                   const gfx::Rect& unobscured_rect,
                                    bool is_visible) {
   DCHECK(container_);
 
   base::AutoReset<bool> is_resizing(&is_resizing_, true);
 
-  if (static_cast<gfx::Rect>(window_rect) != rect_) {
+  if (window_rect != rect_) {
     rect_ = window_rect;
     DCHECK(web_view()->MainFrameWidget());
     web_view()->MainFrameWidget()->Resize(rect_.size());
@@ -193,7 +193,8 @@ void WebViewPlugin::UpdateGeometry(const WebRect& window_rect,
 
   // Plugin updates are forbidden during Blink layout. Therefore,
   // UpdatePluginForNewGeometry must be posted to a task to run asynchronously.
-  blink::scheduler::WebThreadScheduler::MainThreadScheduler()
+  web_view_helper_.main_frame()
+      ->GetAgentGroupScheduler()
       ->CompositorTaskRunner()
       ->PostTask(FROM_HERE,
                  base::BindOnce(&WebViewPlugin::UpdatePluginForNewGeometry,
@@ -273,7 +274,7 @@ WebViewPlugin::WebViewHelper::WebViewHelper(WebViewPlugin* plugin,
   // consistent view of our preferences.
   blink::WebView::ApplyWebPreferences(preferences, web_view_);
   WebLocalFrame* web_frame = WebLocalFrame::CreateMainFrame(
-      web_view_, this, nullptr, base::UnguessableToken::Create(), nullptr);
+      web_view_, this, nullptr, blink::LocalFrameToken(), nullptr);
   blink::WebFrameWidget* frame_widget = web_frame->InitializeFrameWidget(
       blink::CrossVariantMojoAssociatedRemote<
           blink::mojom::FrameWidgetHostInterfaceBase>(),
@@ -312,7 +313,7 @@ void WebViewPlugin::WebViewHelper::SetToolTipText(
   }
 }
 
-void WebViewPlugin::WebViewHelper::DidInvalidateRect(const WebRect& rect) {
+void WebViewPlugin::WebViewHelper::DidInvalidateRect(const gfx::Rect& rect) {
   if (plugin_->container_)
     plugin_->container_->InvalidateRect(rect);
 }
@@ -383,14 +384,17 @@ void WebViewPlugin::OnZoomLevelChanged() {
 }
 
 void WebViewPlugin::LoadHTML(const std::string& html_data, const GURL& url) {
-  web_view_helper_.main_frame()->CommitNavigation(
-      blink::WebNavigationParams::CreateWithHTMLString(html_data, url),
-      nullptr /* extra_data */);
+  auto params = std::make_unique<blink::WebNavigationParams>();
+  params->url = url;
+  blink::WebNavigationParams::FillStaticResponse(params.get(), "text/html",
+                                                 "UTF-8", html_data);
+  web_view_helper_.main_frame()->CommitNavigation(std::move(params),
+                                                  /*extra_data=*/nullptr);
 }
 
 void WebViewPlugin::UpdatePluginForNewGeometry(
-    const blink::WebRect& window_rect,
-    const blink::WebRect& unobscured_rect) {
+    const gfx::Rect& window_rect,
+    const gfx::Rect& unobscured_rect) {
   DCHECK(container_);
   if (!delegate_)
     return;

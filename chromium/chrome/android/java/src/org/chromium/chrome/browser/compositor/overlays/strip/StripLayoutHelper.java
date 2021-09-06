@@ -1147,6 +1147,10 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         // 5. Prepare animations and propagate width to all tabs.
         finishAnimation();
         ArrayList<Animator> resizeAnimationList = null;
+        // Note(david@vivaldi.com): It can happen that |mWidth| is zero in some cases, in particular
+        // when changing themes or changing any others UI related settings. Make sure we don't
+        // create |resizeAnimationList| in this case. This will fix VAB-2985.
+        if (mWidth > 0)
         if (animate && !mAnimationsDisabledForTesting) resizeAnimationList = new ArrayList<>();
 
         for (int i = 0; i < mStripTabs.length; i++) {

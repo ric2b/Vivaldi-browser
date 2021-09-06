@@ -6,6 +6,7 @@
 
 #include <dlfcn.h>
 #include <string.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <va/va.h>
 #include <va/va_drm.h>
@@ -132,7 +133,7 @@ enum class VaapiFunctions {
   kVADestroyProtectedSession = 26,
   kVAAttachProtectedSession = 27,
   kVADetachProtectedSession = 28,
-  kVAProtectedSessionHwUpdate = 29,
+  kVAProtectedSessionHwUpdate_Deprecated = 29,
   kVAProtectedSessionExecute = 30,
   // Anything else is captured in this last entry.
   kOtherVAFunction = 31,
@@ -175,7 +176,7 @@ constexpr std::array<const char*,
                            "vaDestroyProtectedSession",
                            "vaAttachProtectedSession",
                            "vaDetachProtectedSession",
-                           "vaProtectedSessionHwUpdate",
+                           "vaProtectedSessionHwUpdate (Deprecated)",
                            "vaProtectedSessionExecute",
                            "Other VA function"};
 
@@ -234,6 +235,25 @@ namespace {
 // VAEntrypoint is an enumeration starting from 1, but has no "invalid" value.
 constexpr VAEntrypoint kVAEntrypointInvalid = static_cast<VAEntrypoint>(0);
 
+// Returns true if the SoC has a Gen8 GPU. CPU model ID's are referenced from
+// the following file in the kernel source: arch/x86/include/asm/intel-family.h.
+bool IsGen8Gpu() {
+  constexpr int kPentiumAndLaterFamily = 0x06;
+  constexpr int kBroadwellCoreModelId = 0x3D;
+  constexpr int kBroadwellGT3EModelId = 0x47;
+  constexpr int kBroadwellXModelId = 0x4F;
+  constexpr int kBroadwellXeonDModelId = 0x56;
+  constexpr int kBraswellModelId = 0x4C;
+  static const base::NoDestructor<base::CPU> cpuid;
+  static const bool is_gen8_gpu = cpuid->family() == kPentiumAndLaterFamily &&
+                                  (cpuid->model() == kBroadwellCoreModelId ||
+                                   cpuid->model() == kBroadwellGT3EModelId ||
+                                   cpuid->model() == kBroadwellXModelId ||
+                                   cpuid->model() == kBroadwellXeonDModelId ||
+                                   cpuid->model() == kBraswellModelId);
+  return is_gen8_gpu;
+}
+
 // Returns true if the SoC has a Gen9 GPU. CPU model ID's are referenced from
 // the following file in the kernel source: arch/x86/include/asm/intel-family.h.
 bool IsGen9Gpu() {
@@ -267,6 +287,17 @@ bool IsGen95Gpu() {
                                     cpuid->model() == kCometLakeModelId ||
                                     cpuid->model() == kCometLake_LModelId);
   return is_gen95_gpu;
+}
+
+// Returns true if the intel hybrid driver is used for decoding |va_profile|.
+// https://github.com/intel/intel-hybrid-driver
+// Note that since the hybrid driver runs as a part of the i965 driver,
+// vaQueryVendorString() returns "Intel i965 driver".
+bool IsUsingHybridDriverForDecoding(VAProfile va_profile) {
+  // Note that Skylake (not gen8) also needs the hybrid decoder for VP9
+  // decoding. However, it is disabled today on ChromeOS
+  // (see crrev.com/c/390511).
+  return va_profile == VAProfileVP9Profile0 && IsGen8Gpu();
 }
 
 // Returns true if the SoC is considered a low power one, i.e. it's an Intel
@@ -371,12 +402,7 @@ const ProfileCodecMap& GetProfileCodecMap() {
           {VP9PROFILE_PROFILE2, VAProfileVP9Profile2},
       // VaapiWrapper does not support Profile 3.
       //{VP9PROFILE_PROFILE3, VAProfileVP9Profile3},
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-          // TODO(hiroh): Remove if-macro once libva for linux-chrome is upreved
-          // to 2.9.0 or newer.
-          // https://source.chromium.org/chromium/chromium/src/+/master:build/linux/sysroot_scripts/generated_package_lists/sid.amd64
           {AV1PROFILE_PROFILE_MAIN, VAProfileAV1Profile0},
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
         // VaapiWrapper does not support AV1 Profile 1.
         // {AV1PROFILE_PROFILE_HIGH, VAProfileAV1Profile1},
 #if BUILDFLAG(ENABLE_PLATFORM_HEVC)
@@ -413,13 +439,8 @@ bool IsVAProfileSupported(VAProfile va_profile) {
 
 bool IsBlockedDriver(VaapiWrapper::CodecMode mode, VAProfile va_profile) {
   if (!IsModeEncoding(mode)) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-    if (va_profile == VAProfileAV1Profile0 &&
-        !base::FeatureList::IsEnabled(kVaapiAV1Decoder)) {
-      return true;
-    }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-    return false;
+    return va_profile == VAProfileAV1Profile0 &&
+           !base::FeatureList::IsEnabled(kVaapiAV1Decoder);
   }
 
   // TODO(posciak): Remove once VP8 encoding is to be enabled by default.
@@ -780,7 +801,7 @@ bool GetRequiredAttribs(const base::Lock* va_lock,
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (mode == VaapiWrapper::kDecodeProtected && profile != VAProfileProtected) {
     required_attribs->push_back(
-        {VAConfigAttribEncryption, VA_ENCRYPTION_TYPE_CTR_128});
+        {VAConfigAttribEncryption, VA_ENCRYPTION_TYPE_SUBSAMPLE_CTR});
     required_attribs->push_back(
         {VAConfigAttribDecProcessing, VA_DEC_PROCESSING});
   }
@@ -1085,6 +1106,41 @@ bool VASupportedProfiles::FillProfileInfo_Locked(
     return false;
   }
 
+  if (va_profile != VAProfileJPEGBaseline) {
+    // Deny unreasonably small resolutions (e.g. 0x0) for VA-API hardware video
+    // decode and encode acceleration.
+    profile_info->min_resolution.SetToMax(gfx::Size(16, 16));
+    if (entrypoint == VAEntrypointEncSliceLP ||
+        entrypoint == VAEntrypointEncSlice) {
+      // Using VA-API for accelerated encoding frames smaller than a certain
+      // size is less efficient than using a software encoder.
+      constexpr gfx::Size kMinEncodeResolution(320 + 1, 240 + 1);
+      if (!gfx::Rect(profile_info->min_resolution)
+               .Contains(gfx::Rect(kMinEncodeResolution))) {
+        profile_info->min_resolution.SetToMax(kMinEncodeResolution);
+        DVLOG(2) << "Setting the minimum supported encoding resolution to "
+                 << profile_info->min_resolution.ToString() << " for "
+                 << vaProfileStr(va_profile);
+      }
+    } else if (entrypoint == VAEntrypointVLD &&
+               IsUsingHybridDriverForDecoding(va_profile)) {
+      // Using the hybrid driver for accelerated decoding of frames smaller than
+      // a certain size is less efficient than using a software decoder. This
+      // minimum resolution is selected from the fact that the resolutions of
+      // videos in tile layout in Google Meet are QVGA.
+      constexpr gfx::Size kMinDecodeResolutionForHybridDecoder(320 + 1,
+                                                               240 + 1);
+      if (!gfx::Rect(profile_info->min_resolution)
+               .Contains(gfx::Rect(kMinDecodeResolutionForHybridDecoder))) {
+        profile_info->min_resolution.SetToMax(
+            kMinDecodeResolutionForHybridDecoder);
+        DVLOG(2) << "Setting the minimum supported decoding resolution to "
+                 << profile_info->min_resolution.ToString() << " for "
+                 << vaProfileStr(va_profile);
+      }
+    }
+  }
+
   // Create a new configuration to find the supported RT formats. We don't pass
   // required attributes here because we want the driver to tell us all the
   // supported RT formats.
@@ -1371,10 +1427,7 @@ VaapiWrapper::GetSupportedEncodeProfiles() {
 
     VideoEncodeAccelerator::SupportedProfile profile;
     profile.profile = media_profile;
-    // Using VA-API for accelerated encoding frames smaller than a certain
-    // size is less efficient than using a software encoder.
-    const gfx::Size kMinEncodeResolution = gfx::Size(320 + 1, 240 + 1);
-    profile.min_resolution = kMinEncodeResolution;
+    profile.min_resolution = profile_info->min_resolution;
     profile.max_resolution = profile_info->max_resolution;
     // Maximum framerate of encoded profile. This value is an arbitrary
     // limit and not taken from HW documentation.
@@ -1414,7 +1467,7 @@ VaapiWrapper::GetSupportedDecodeProfiles(
     VideoDecodeAccelerator::SupportedProfile profile;
     profile.profile = media_profile;
     profile.max_resolution = profile_info->max_resolution;
-    profile.min_resolution.SetSize(16, 16);
+    profile.min_resolution = profile_info->min_resolution;
     profiles.push_back(profile);
   }
   return profiles;
@@ -1789,13 +1842,14 @@ bool VaapiWrapper::CreateProtectedSession(
   // We have to hold the VABuffer outside of the lock because its destructor
   // will acquire the lock when it goes out of scope. We also must do this after
   // we create the protected session.
-  VAProtectedSessionHwUpdateBuffer hw_update_buf;
+  VAProtectedSessionExecuteBuffer hw_update_buf;
   std::unique_ptr<ScopedVABuffer> hw_update = CreateVABuffer(
-      VAProtectedSessionHwUpdateBufferType, sizeof(hw_update_buf));
+      VAProtectedSessionExecuteBufferType, sizeof(hw_update_buf));
   {
     base::AutoLock auto_lock(*va_lock_);
     constexpr size_t kHwIdentifierMaxSize = 64;
     memset(&hw_update_buf, 0, sizeof(hw_update_buf));
+    hw_update_buf.function_id = VA_TEE_EXEC_TEE_FUNCID_HW_UPDATE;
     hw_update_buf.input.data_size = hw_config.size();
     hw_update_buf.input.data =
         static_cast<void*>(const_cast<uint8_t*>(hw_config.data()));
@@ -1805,22 +1859,22 @@ bool VaapiWrapper::CreateProtectedSession(
     if (!MapAndCopy_Locked(
             hw_update->id(),
             {hw_update->type(), hw_update->size(), &hw_update_buf})) {
-      LOG(ERROR) << "Failed mapping HwUpdate buf";
+      LOG(ERROR) << "Failed mapping Execute buf";
       return false;
     }
 
-    VAStatus va_res = vaProtectedSessionHwUpdate(
+    VAStatus va_res = vaProtectedSessionExecute(
         va_display_, va_protected_session_id_, hw_update->id());
-    VA_SUCCESS_OR_RETURN(va_res, VaapiFunctions::kVAProtectedSessionHwUpdate,
+    VA_SUCCESS_OR_RETURN(va_res, VaapiFunctions::kVAProtectedSessionExecute,
                          false);
 
     ScopedVABufferMapping mapping(va_lock_, va_display_, hw_update->id());
     if (!mapping.IsValid()) {
-      LOG(ERROR) << "Failed mapping returned HwUpdate buf";
+      LOG(ERROR) << "Failed mapping returned Execute buf";
       return false;
     }
     auto* hw_update_buf_out =
-        reinterpret_cast<VAProtectedSessionHwUpdateBuffer*>(mapping.data());
+        reinterpret_cast<VAProtectedSessionExecuteBuffer*>(mapping.data());
     if (!hw_update_buf_out->output.data_size) {
       LOG(ERROR) << "Received empty HW identifier";
       return false;
@@ -1901,10 +1955,9 @@ bool VaapiWrapper::IsProtectedSessionDead() {
   if (va_protected_session_id_ == VA_INVALID_ID)
     return false;
 
-  constexpr uint32_t kVaTeeExecGpuFuncIdIsSessionAlive = 0x40000103;
   uint8_t alive;
   VAProtectedSessionExecuteBuffer tee_exec_buf = {};
-  tee_exec_buf.function_id = kVaTeeExecGpuFuncIdIsSessionAlive;
+  tee_exec_buf.function_id = VA_TEE_EXEC_TEE_FUNCID_IS_SESSION_ALIVE;
   tee_exec_buf.input.data_size = 0;
   tee_exec_buf.input.data = nullptr;
   tee_exec_buf.output.data_size = sizeof(alive);
@@ -1968,6 +2021,26 @@ bool VaapiWrapper::CreateContext(const gfx::Size& size) {
   // vpp, just passing 0x0.
   const int flag = mode_ != kVideoProcess ? VA_PROGRESSIVE : 0x0;
   const gfx::Size picture_size = mode_ != kVideoProcess ? size : gfx::Size();
+  if (base::FeatureList::IsEnabled(kVaapiEnforceVideoMinMaxResolution) &&
+      mode_ != kVideoProcess) {
+    const VASupportedProfiles::ProfileInfo* profile_info =
+        VASupportedProfiles::Get().IsProfileSupported(mode_, va_profile_,
+                                                      va_entrypoint_);
+    DCHECK(profile_info);
+    const bool is_picture_within_bounds =
+        gfx::Rect(picture_size)
+            .Contains(gfx::Rect(profile_info->min_resolution)) &&
+        gfx::Rect(profile_info->max_resolution)
+            .Contains(gfx::Rect(picture_size));
+    if (!is_picture_within_bounds) {
+      VLOG(2) << "Requested resolution=" << picture_size.ToString()
+              << " is not within bounds ["
+              << profile_info->min_resolution.ToString() << ", "
+              << profile_info->max_resolution.ToString() << "]";
+      return false;
+    }
+  }
+
   VAStatus va_res = vaCreateContext(
       va_display_, va_config_id_, picture_size.width(), picture_size.height(),
       flag, empty_va_surfaces_ids_pointer, empty_va_surfaces_ids_size,
@@ -2003,13 +2076,27 @@ scoped_refptr<VASurface> VaapiWrapper::CreateVASurfaceForPixmap(
   }
   va_attrib_extbuf.num_planes = num_planes;
 
-  if (pixmap->GetDmaBufFd(0) < 0) {
+  const int dma_buf_fd = pixmap->GetDmaBufFd(0);
+  if (dma_buf_fd < 0) {
     LOG(ERROR) << "Failed to get dmabuf from an Ozone NativePixmap";
     return nullptr;
   }
+  const off_t data_size = lseek(dma_buf_fd, /*offset=*/0, SEEK_END);
+  if (data_size == static_cast<off_t>(-1)) {
+    PLOG(ERROR) << "Failed to get the size of the dma-buf";
+    return nullptr;
+  }
+  if (lseek(dma_buf_fd, /*offset=*/0, SEEK_SET) == static_cast<off_t>(-1)) {
+    PLOG(ERROR) << "Failed to reset the file offset of the dma-buf";
+    return nullptr;
+  }
+  // If the data size doesn't fit in a uint32_t, we probably have bigger
+  // problems.
+  va_attrib_extbuf.data_size = base::checked_cast<uint32_t>(data_size);
+
   // We only have to pass the first file descriptor to a driver. A VA-API driver
   // shall create a VASurface from the single fd correctly.
-  uintptr_t fd = base::checked_cast<uintptr_t>(pixmap->GetDmaBufFd(0));
+  uintptr_t fd = base::checked_cast<uintptr_t>(dma_buf_fd);
   va_attrib_extbuf.buffers = &fd;
   va_attrib_extbuf.num_buffers = 1u;
 
@@ -2052,14 +2139,19 @@ scoped_refptr<VASurface> VaapiWrapper::CreateVASurfaceForUserPtr(
     uintptr_t* buffers,
     size_t buffer_size) {
   VASurfaceAttribExternalBuffers va_attrib_extbuf{};
+  va_attrib_extbuf.num_planes = 3;
   va_attrib_extbuf.buffers = buffers;
-  va_attrib_extbuf.data_size = buffer_size;
+  va_attrib_extbuf.data_size = base::checked_cast<uint32_t>(buffer_size);
   va_attrib_extbuf.num_buffers = 1u;
-  va_attrib_extbuf.width = size.width();
-  va_attrib_extbuf.height = size.height();
+  va_attrib_extbuf.width = base::checked_cast<uint32_t>(size.width());
+  va_attrib_extbuf.height = base::checked_cast<uint32_t>(size.height());
+  va_attrib_extbuf.offsets[0] = 0;
+  va_attrib_extbuf.offsets[1] = size.GetCheckedArea().ValueOrDie<uint32_t>();
+  va_attrib_extbuf.offsets[2] =
+      (size.GetCheckedArea() * 2).ValueOrDie<uint32_t>();
   std::fill(va_attrib_extbuf.pitches, va_attrib_extbuf.pitches + 3,
-            size.width());
-  va_attrib_extbuf.pixel_format = VA_FOURCC_NV12;
+            base::checked_cast<uint32_t>(size.width()));
+  va_attrib_extbuf.pixel_format = VA_FOURCC_RGBP;
 
   std::vector<VASurfaceAttrib> va_attribs(2);
   va_attribs[0].flags = VA_SURFACE_ATTRIB_SETTABLE;
@@ -2073,7 +2165,7 @@ scoped_refptr<VASurface> VaapiWrapper::CreateVASurfaceForUserPtr(
   va_attribs[1].value.value.p = &va_attrib_extbuf;
 
   VASurfaceID va_surface_id = VA_INVALID_ID;
-  const unsigned int va_format = VA_RT_FORMAT_YUV420;
+  const unsigned int va_format = VA_RT_FORMAT_RGBP;
   {
     base::AutoLock auto_lock(*va_lock_);
     VAStatus va_res = vaCreateSurfaces(
@@ -2421,7 +2513,7 @@ std::unique_ptr<ScopedVABuffer> VaapiWrapper::CreateVABuffer(VABufferType type,
   base::AutoLock auto_lock(*va_lock_);
   TRACE_EVENT0("media,gpu", "VaapiWrapper::CreateVABufferLocked");
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  VAContextID context_id = type == VAProtectedSessionHwUpdateBufferType
+  VAContextID context_id = type == VAProtectedSessionExecuteBufferType
                                ? va_protected_session_id_
                                : va_context_id_;
 #else
@@ -2704,17 +2796,19 @@ bool VaapiWrapper::Initialize(CodecMode mode,
     return false;
   }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (encryption_scheme != EncryptionScheme::kUnencrypted) {
     DCHECK(!required_attribs.empty());
     // We need to adjust the attribute for encryption scheme.
     for (auto& attrib : required_attribs) {
       if (attrib.type == VAConfigAttribEncryption) {
         attrib.value = (encryption_scheme == EncryptionScheme::kCbcs)
-                           ? VA_ENCRYPTION_TYPE_CBC
-                           : VA_ENCRYPTION_TYPE_CTR_128;
+                           ? VA_ENCRYPTION_TYPE_SUBSAMPLE_CBC
+                           : VA_ENCRYPTION_TYPE_SUBSAMPLE_CTR;
       }
     }
   }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   const VAStatus va_res =
       vaCreateConfig(va_display_, va_profile, entrypoint,

@@ -18,10 +18,6 @@ enum class Gesture;
 }  // namespace mojom
 }  // namespace ax
 
-namespace chromeos {
-enum class Sound;
-}
-
 namespace gfx {
 class Point;
 class PointF;
@@ -29,9 +25,9 @@ class Rect;
 }  // namespace gfx
 
 namespace ash {
-
 enum class AccessibilityAlert;
 enum class SelectToSpeakPanelAction;
+enum class Sound;
 
 // Interface for Ash to request accessibility service from its client, Chrome.
 class ASH_PUBLIC_EXPORT AccessibilityControllerClient {
@@ -45,9 +41,9 @@ class ASH_PUBLIC_EXPORT AccessibilityControllerClient {
 
   // Plays an earcon. Earcons are brief and distinctive sounds that indicate
   // that their mapped event has occurred. The |sound_key| enums can be found in
-  // chromeos/audio/chromeos_sounds.h. This method exists because the browser
-  // owns all media playback.
-  virtual void PlayEarcon(chromeos::Sound sound_key) = 0;
+  // ash/components/audio/sounds.h. This method exists because the browser owns
+  // all media playback.
+  virtual void PlayEarcon(Sound sound_key) = 0;
 
   // Initiates play of shutdown sound and returns sound duration. This method
   // exists because the browser owns all media playback.

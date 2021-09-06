@@ -15,6 +15,7 @@ import org.chromium.base.LocaleUtils;
 import org.chromium.base.Log;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.page_info.CertificateChainHelper;
+import org.chromium.components.url_formatter.SchemeDisplay;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.RenderFrameHost;
 import org.chromium.content_public.browser.WebContents;
@@ -226,7 +227,7 @@ public class PaymentRequestService
          * @param url The URL to check.
          * @return Whether the origin of the URL is secure.
          */
-        default boolean isOriginSecure(String url) {
+        default boolean isOriginSecure(GURL url) {
             return OriginSecurityChecker.isOriginSecure(url);
         }
 
@@ -246,8 +247,8 @@ public class PaymentRequestService
          * @return Stripped-down String containing the essential bits of the URL, or the original
          *         URL if it fails to parse it.
          */
-        default String formatUrlForSecurityDisplay(String uri) {
-            return UrlFormatter.formatUrlForSecurityDisplay(uri);
+        default String formatUrlForSecurityDisplay(GURL uri) {
+            return UrlFormatter.formatUrlForSecurityDisplay(uri, SchemeDisplay.SHOW);
         }
 
         /**
@@ -263,7 +264,7 @@ public class PaymentRequestService
          * @param url The URL to check.
          * @return Whether the page is allowed to use web payment APIs.
          */
-        default boolean isOriginAllowedToUseWebPaymentApis(String url) {
+        default boolean isOriginAllowedToUseWebPaymentApis(GURL url) {
             return UrlUtil.isOriginAllowedToUseWebPaymentApis(url);
         }
 
@@ -705,11 +706,11 @@ public class PaymentRequestService
             }
         }
         if (isAutofillCard) {
-            mJourneyLogger.setEventOccurred(Event.SELECTED_CREDIT_CARD);
+            mJourneyLogger.setSelectedMethod(PaymentMethodCategory.BASIC_CARD);
         } else if (isGooglePaymentApp) {
-            mJourneyLogger.setEventOccurred(Event.SELECTED_GOOGLE);
+            mJourneyLogger.setSelectedMethod(PaymentMethodCategory.GOOGLE);
         } else {
-            mJourneyLogger.setEventOccurred(Event.SELECTED_OTHER);
+            mJourneyLogger.setSelectedMethod(PaymentMethodCategory.OTHER);
         }
     }
 
@@ -896,12 +897,12 @@ public class PaymentRequestService
         mHasNonAutofillApp |= !paymentApp.isAutofillInstrument();
 
         if (paymentApp.isAutofillInstrument()) {
-            mJourneyLogger.setEventOccurred(Event.AVAILABLE_METHOD_BASIC_CARD);
+            mJourneyLogger.setAvailableMethod(PaymentMethodCategory.BASIC_CARD);
         } else if (paymentApp.getInstrumentMethodNames().contains(MethodStrings.GOOGLE_PAY)
                 || paymentApp.getInstrumentMethodNames().contains(MethodStrings.ANDROID_PAY)) {
-            mJourneyLogger.setEventOccurred(Event.AVAILABLE_METHOD_GOOGLE);
+            mJourneyLogger.setAvailableMethod(PaymentMethodCategory.GOOGLE);
         } else {
-            mJourneyLogger.setEventOccurred(Event.AVAILABLE_METHOD_OTHER);
+            mJourneyLogger.setAvailableMethod(PaymentMethodCategory.OTHER);
         }
 
         mPendingApps.add(paymentApp);

@@ -11,6 +11,7 @@
 <translation id="1037492556044956303"><ph name="DEVICE_NAME" /> ઉમેર્યું</translation>
 <translation id="1047017786576569492">આંશિક</translation>
 <translation id="1047773237499189053">નવી સુવિધા ઉપલબ્ધ છે, વધુ જાણવા માટે ઉપર એરો કીનો ઉપયોગ કરો.</translation>
+<translation id="1052916631016577720">આઇટમ સ્કૅન</translation>
 <translation id="1056775291175587022">કોઈ નેટવર્ક નથી</translation>
 <translation id="1059194134494239015"><ph name="DISPLAY_NAME" />: <ph name="RESOLUTION" /></translation>
 <translation id="108486256082349153">સેલ્યુલર: <ph name="ADDRESS" /></translation>
@@ -24,6 +25,7 @@
 <translation id="1165712434476988950">અપડેટ લાગુ કરવા માટે ડિવાઇસને ફરી શરૂ કરવાની જરૂર છે.</translation>
 <translation id="1175572348579024023">સ્ક્રોલ કરો</translation>
 <translation id="1178581264944972037">થોભો</translation>
+<translation id="1181037720776840403">કાઢી નાખો</translation>
 <translation id="118532027333893379">પૂર્ણ સ્ક્રીન કૅપ્ચર કરવા માટે ગમે ત્યાં ટૅપ કરો</translation>
 <translation id="1190609913194133056">સૂચના કેન્દ્ર</translation>
 <translation id="1195412055398077112">ઓવરસ્કૅન</translation>
@@ -147,6 +149,7 @@
 <translation id="2220572644011485463">PIN અથવા પાસવર્ડ</translation>
 <translation id="2222338659135520253">સાઇન ઇન આવશ્યક</translation>
 <translation id="2222841058024245321">ડેસ્ક 7</translation>
+<translation id="2224075387478458881">સંરક્ષિત કન્ટેન્ટ દેખાય ત્યારે સ્ક્રીન રેકોર્ડિંગની મંજૂરી નથી</translation>
 <translation id="225680501294068881">ઉપકરણો માટે સ્કેન કરી રહ્યું છે...</translation>
 <translation id="2268130516524549846">Bluetooth અક્ષમ છે</translation>
 <translation id="2268813581635650749">બધાને સાઇન આઉટ કરો</translation>
@@ -239,7 +242,6 @@
 <translation id="3038571455154067151">સાઇન ઇન કરવા માટે, તમારી Family Linkનો માતાપિતા માટેનો ઍક્સેસ કોડ દાખલ કરો</translation>
 <translation id="3039939407102840004">સ્ટાઇલસ બૅટરી <ph name="PERCENTAGE" /> ટકા છે.</translation>
 <translation id="3045488863354895414">ગુડ આફ્ટરનૂન,</translation>
-<translation id="3051128274746680507">તમારું નિરીક્ષિત વપરાશકર્તા પ્રોફાઇલ ટૂંક સમયમાં કાઢી નાખવામાં આવશે. વધુ જાણવા માટે સાઇન ઇન કરો.</translation>
 <translation id="3055162170959710888">આજે તમે <ph name="USED_TIME" /> માટે આ ડિવાઇસનો ઉપયોગ કર્યો છે</translation>
 <translation id="3077734595579995578">shift</translation>
 <translation id="3081696990447829002">મેનૂ વિસ્તૃત કરો</translation>
@@ -252,13 +254,11 @@
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
 <translation id="3126069444801937830">અપડેટ કરવા માટે પુનઃપ્રારંભ કરો</translation>
 <translation id="3139942575505304791">ડેસ્ક 1</translation>
-<translation id="3147157020428159854">સ્ક્રીન રેકોર્ડિંગ બંધ કર્યું</translation>
 <translation id="315116470104423982">મોબાઇલ ડેટા</translation>
 <translation id="3151786313568798007">ઓરિએન્ટેશન</translation>
 <translation id="3153444934357957346">તમે એકથી વધુ સાઇન ઇનમાં માત્ર <ph name="MULTI_PROFILE_USER_LIMIT" /> સુધી એકાઉન્ટ રાખી શકો છો.</translation>
 <translation id="3154351730702813399">ડિવાઇસ વ્યવસ્થાપક તમારી બ્રાઉઝિંગ પ્રવૃત્તિને મોનિટર કરી શકે છે.</translation>
 <translation id="3181441307743005334">ફરી શરૂ થવામાં થોડો સમય લાગી શકે છે</translation>
-<translation id="3190230207529484457">સુરક્ષિત કન્ટેન્ટ ઉપલબ્ધ હોય ત્યારે સ્ક્રીન કૅપ્ચરની મંજૂરી નથી</translation>
 <translation id="3202010236269062730">{NUM_DEVICES,plural, =1{ઉપકરણ સાથે કનેક્ટ કર્યું}one{# ઉપકરણો સાથે કનેક્ટ કર્યું}other{# ઉપકરણો સાથે કનેક્ટ કર્યું}}</translation>
 <translation id="320207200541803018">ટાઇમર સેટ કરો</translation>
 <translation id="3203405173652969239">સ્વિચ ઍક્સેસ ચાલુ કર્યો</translation>
@@ -267,7 +267,6 @@
 <translation id="3226991577105957773">+ વધુ <ph name="COUNT" /></translation>
 <translation id="3236488194889173876">કોઈ મોબાઇલ નેટવર્ક ઉપલબ્ધ નથી</translation>
 <translation id="3249513730522716925">વિડો <ph name="WINDOW_TITLE" />ને ડેસ્ક <ph name="ACTIVE_DESK" />માંથી ડેસ્ક <ph name="TARGET_DESK" />માં ખસેડી</translation>
-<translation id="3252068179161473151"><ph name="WIRELESS_PROVIDER" />, સિગ્નલની પ્રબળતા <ph name="SIGNAL_STRENGTH" /> ટકા.</translation>
 <translation id="3255483164551725916">તમે શું કરી શકો?</translation>
 <translation id="3269597722229482060">રાઇટ ક્લિક કરો</translation>
 <translation id="3289674678944039601">અડૅપ્ટર વડે ચાર્જિંગ</translation>
@@ -306,6 +305,7 @@
 <translation id="3571734092741541777">સેટ અપ</translation>
 <translation id="3573179567135747900">"<ph name="FROM_LOCALE" />" પર પાછા જાઓ (ફરી શરૂ કરવું જરૂરી છે)</translation>
 <translation id="3576141592585647168">ટાઇમઝોનમાં ફેરફાર કરો</translation>
+<translation id="3593039967545720377">તમારું ક્લિપબોર્ડ જોવા માટે <ph name="SHORTCUT_KEY_NAME" /> + V દબાવીને તમારા ક્લિપબોર્ડનો ઇતિહાસ ઍક્સેસ કરો. શરૂ કરવા માટે કોઈ આઇટમ કૉપિ કરો.</translation>
 <translation id="3593646411856133110">ખુલ્લી ઍપ જોવા માટે ઉપર સ્વાઇપ કરો અને હોલ્ડ કરો</translation>
 <translation id="3595596368722241419">બૅટરી પૂર્ણ ચાર્જ</translation>
 <translation id="3604801046548457007">ડેસ્ક <ph name="DESK_TITILE" /> બનાવ્યું</translation>
@@ -349,6 +349,7 @@
 <translation id="3901991538546252627"><ph name="NAME" /> થી કનેક્ટ કરી રહ્યું છે</translation>
 <translation id="3943857333388298514">પેસ્ટ કરો</translation>
 <translation id="394485226368336402">ઑડિઓ સેટિંગ્સ</translation>
+<translation id="3945319193631853098">સેટઅપ કરવાનું પૂર્ણ કરવા માટે ટૅપ કરો</translation>
 <translation id="3945867833895287237">હૉટસ્પૉટ સાથે કનેક્ટ કરી રહ્યાં છીએ...</translation>
 <translation id="3962859241508114581">પાછલું ટ્રૅક</translation>
 <translation id="3969043077941541451">બંધ</translation>
@@ -393,10 +394,12 @@
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4321776623976362024">તમે હાઇ કૉન્ટ્રાસ્ટ માટેનો કીબોર્ડ શૉર્ટકટ દબાવેલ છે. શું તમે તેને ચાલુ કરવા માગો છો?</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
+<translation id="4333628967105022692">એકથી વધુ વપરાશકર્તાઓએ સાઇન ઇન કર્યું હોય, ત્યારે Lacros કામ કરતું નથી.</translation>
 <translation id="4338109981321384717">બૃહદદર્શક કાચ</translation>
 <translation id="4351433414020964307">સહાયક લોડ થઈ રહ્યું છે…</translation>
 <translation id="4356930093361201197">ઉચ્ચ કોન્ટ્રાસ્ટ મોડ</translation>
 <translation id="4371348193907997655">કાસ્ટ સેટિંગ</translation>
+<translation id="4378479437904450384"><ph name="WIRELESS_PROVIDER" />, સિગ્નલની પ્રબળતા <ph name="SIGNAL_STRENGTH" /> ટકા</translation>
 <translation id="4378551569595875038">કનેક્ટિંગ...</translation>
 <translation id="4379531060876907730">આ છે તમારા સ્ટાઇલસનાં સાધનો</translation>
 <translation id="4389184120735010762">તમે ડૉક કરેલ મૅગ્નિફાયર માટે કીબોર્ડ શૉર્ટકટ દબાવેલ છે. શું તમે તેને ચાલુ કરવા માગો છો?</translation>
@@ -404,6 +407,7 @@
 <translation id="4421231901400348175">દૂરસ્થ સહાય વડે <ph name="HELPER_NAME" /> સાથે તમારી સ્ક્રીનનું નિયંત્રણ શેર કરવું.</translation>
 <translation id="4424159417645388645">ડેસ્ક 5</translation>
 <translation id="4430019312045809116">વૉલ્યૂમ</translation>
+<translation id="4449692009715125625">{NUM_NOTIFICATIONS,plural, =1{1 મહત્ત્વપૂર્ણ નોટિફિકેશન}one{# મહત્ત્વપૂર્ણ નોટિફિકેશન}other{# મહત્ત્વપૂર્ણ નોટિફિકેશન}}</translation>
 <translation id="4450893287417543264">ફરી બતાવશો નહીં</translation>
 <translation id="445864333228800152">ગુડ ઇવનિંગ,</translation>
 <translation id="4458688154122353284">સ્ક્રીન રેકોર્ડિંગ બંધ કરો</translation>
@@ -475,6 +479,10 @@
 <translation id="4961318399572185831">સ્ક્રીનને કાસ્ટ કરો</translation>
 <translation id="4969092041573468113"><ph name="HOURS" /> કલાક <ph name="MINUTES" /> મિનિટ <ph name="SECONDS" /> સેકન્ડ</translation>
 <translation id="4975771730019223894">ઍપ બૅજિંગ</translation>
+<translation id="4977493774330778463"><ph name="NUM_IMPORTANT_NOTIFICATION" />:
+        <ph name="NOTIFICATION_1" />,
+        <ph name="NOTIFICATION_2" />,
+        <ph name="NUM_OTHER_NOTIFICATION" /></translation>
 <translation id="5003993274120026347">આગલું વાક્ય</translation>
 <translation id="5030687792513154421">સમય પૂરો થયો</translation>
 <translation id="5033299697334913360">પૂર્ણ સ્ક્રીન કૅપ્ચર કરવા માટે સ્ક્રીન પર ગમે ત્યાં ક્લિક કરો</translation>
@@ -488,6 +496,7 @@
 <translation id="5168181903108465623">Cast ઉપકરણો ઉપલબ્ધ</translation>
 <translation id="5170568018924773124">ફોલ્ડરમાં બતાવો</translation>
 <translation id="5176318573511391780">આંશિક સ્ક્રીન રેકોર્ડ કરો</translation>
+<translation id="5206057955438543357">{NUM_NOTIFICATIONS,plural, =1{અન્ય 1 નોટિફિકેશન}one{અન્ય # નોટિફિકેશન}other{અન્ય # નોટિફિકેશન}}</translation>
 <translation id="5207949376430453814">ટેક્સ્ટ કૅરેટને હાઇલાઇટ કરો</translation>
 <translation id="5208059991603368177">ચાલુ</translation>
 <translation id="5222676887888702881">સાઇન આઉટ</translation>
@@ -556,6 +565,7 @@
 <translation id="5825969630400862129">કનેક્ટ થયેલા ડિવાઇસના સેટિંગ</translation>
 <translation id="5837036133683224804"><ph name="RECEIVER_NAME" /> પર <ph name="ROUTE_TITLE" />ને રોકો</translation>
 <translation id="5860033963881614850">બંધ</translation>
+<translation id="5860491529813859533">ચાલુ કરો</translation>
 <translation id="5876666360658629066">માતાપિતાનો કોડ દાખલ કરો</translation>
 <translation id="5881540930187678962">થોડા સમય પછી ફોન હબનું સેટઅપ કરો</translation>
 <translation id="5895138241574237353">પુનઃપ્રારંભ કરો</translation>
@@ -587,6 +597,7 @@
 <translation id="6043212731627905357">આ મૉનિટર તમારા <ph name="DEVICE_TYPE" /> સાથે કામ કરી રહ્યું નથી (મૉનિટર સમર્થિત નથી).</translation>
 <translation id="6043994281159824495">હવે સાઇન આઉટ કરો</translation>
 <translation id="6047696787498798094">જ્યારે તમે બીજા વપરાશકર્તા પર સ્વિચ કરો ત્યારે સ્ક્રીન શેરિંગ રોકવામાં આવશે. શું તમે ચાલુ રાખવા માંગો છો?</translation>
+<translation id="6050368268239407309">પ્રસ્તુતિ માટેના સાધનો</translation>
 <translation id="6054305421211936131">સ્માર્ટ કાર્ડ વડે સાઇન ઇન કરો</translation>
 <translation id="6059276912018042191">તાજેતરની Chrome ટૅબ</translation>
 <translation id="6062360702481658777">તમે ઑટોમૅટિક રીતે <ph name="LOGOUT_TIME_LEFT" /> માં સાઇન આઉટ થઈ જશો.</translation>
@@ -597,10 +608,10 @@
 <translation id="612734058257491180">અતિથિ સત્રમાં Google આસિસ્ટંટ ઉપલબ્ધ હોતું નથી.</translation>
 <translation id="6137566720514957455"><ph name="USER_EMAIL_ADDRESS" /> માટે કાઢી નાખવાનો સંવાદ ખોલો</translation>
 <translation id="615957422585914272">ઑન-સ્ક્રીન કીબોર્ડ બતાવો</translation>
-<translation id="6164005077879661055">એકવાર આ નિરીક્ષણ કરેલ વપરાશકર્તાને દૂર કરવામાં આવે પછી નિરીક્ષણ કરેલ વપરાશકર્તા સાથે સંકળાયેલી બધી ફાઇલો અને સ્થાનિક ડેટા કાયમી રૂપે કાઢી નાંખવામાં આવશે. નિરીક્ષણ કરેલ વપરાશકર્તા માટે મુલાકાત લીધેલી વેબસાઇટ્સ અને સેટિંગ્સ <ph name="MANAGEMENT_URL" /> પરના સંચાલકને હજી પણ દૃશ્યમાન હોઈ શકે છે.</translation>
 <translation id="6165508094623778733">વધુ જાણો</translation>
 <translation id="6179832488876878285">તમે તમારી મહત્ત્વની ફાઇલો અહીં પિન કરી શકો છો. શરૂ કરવા માટે Files ઍપ ખોલો.</translation>
 <translation id="622484624075952240">Down</translation>
+<translation id="6231419273573514727">પેરિફેરલનું કાર્યપ્રદર્શન કદાચ મર્યાદિત કરવામાં આવી શકે</translation>
 <translation id="6236290670123303279">સેટિંગને મેનેજ કરો</translation>
 <translation id="6237231532760393653">1X</translation>
 <translation id="6254629735336163724">આડા પર લૉક કરેલું છે</translation>
@@ -617,6 +628,7 @@
 <translation id="6376931439017688372">બ્લૂટૂથ ચાલુ છે</translation>
 <translation id="6381109794406942707">ડિવાઇસને અનલૉક કરવા માટે. તમારો પિન દાખલ કરો.</translation>
 <translation id="639644700271529076">CAPS LOCK બંધ છે</translation>
+<translation id="6396835948284782440">બહાર નીકળવા માટે [Esc]ને દબાવી રાખો.</translation>
 <translation id="6406704438230478924">altgr</translation>
 <translation id="6424520630891723617"><ph name="SECURITY_STATUS" />, સિગ્નલની સશક્તતા <ph name="SIGNAL_STRENGTH" /></translation>
 <translation id="642644398083277086">બધા નોટિફિકેશન સાફ કરો</translation>
@@ -661,6 +673,7 @@
 <translation id="6715542151869432661">કોઈ મોબાઇલ ઉપકરણો મળ્યાં નથી.</translation>
 <translation id="6723839937902243910">પાવર</translation>
 <translation id="6727969043791803658">કનેક્ટ થયેલ, બૅટરી <ph name="BATTERY_PERCENTAGE" />%</translation>
+<translation id="6732800389263199929">+<ph name="COUNT" /></translation>
 <translation id="6751052314767925245">તમારા વ્યવસ્થાપક દ્વારા લાગુ કરેલી</translation>
 <translation id="6751826523481687655">કાર્યપ્રદર્શનની નોંધ રાખવાનું ચાલુ કરેલું છે</translation>
 <translation id="6752912906630585008">ડેસ્ક <ph name="REMOVED_DESK" /> કાઢી નાખ્યું અને ડેસ્ક <ph name="RECEIVE_DESK" /> સાથે મર્જ કર્યું</translation>
@@ -672,6 +685,7 @@
 <translation id="6818242057446442178">એક શબ્દ પાછળ જાઓ</translation>
 <translation id="6820676911989879663">વિરામ લો!</translation>
 <translation id="6850010208275816200">તમારી વર્તમાન ઍપ પૂર્ણ સ્ક્રીન મોડમાં છે. જો ઍપ તમારો પાસવર્ડ પૂછે, તો પહેલાં પૂર્ણ સ્ક્રીન મોડમાંથી બહાર નીકળો.</translation>
+<translation id="6852052252232534364">ક્લિકથી સક્રિય</translation>
 <translation id="6857725247182211756"><ph name="SECONDS" /> સેકન્ડ</translation>
 <translation id="6857811139397017780">સક્રિય કરો <ph name="NETWORKSERVICE" /></translation>
 <translation id="685782768769951078">{NUM_DIGITS,plural, =1{એક અંક બાકી}one{# અંક બાકી}other{# અંક બાકી}}</translation>
@@ -695,6 +709,7 @@
 <translation id="7029814467594812963">સત્રમાંથી બહાર નીકળો</translation>
 <translation id="703425375924687388"><ph name="QUERY_NAME" />, Google આસિસ્ટંટ</translation>
 <translation id="7042322267639375032">સ્ટેટસ એરિયા ઓછો કરો</translation>
+<translation id="7055910611768509537">એક અઠવાડિયા કરતાં વધુ સમયથી સ્ટાઇલસનો વપરાશ કરવામાં આવ્યો નથી</translation>
 <translation id="7066646422045619941">આ નેટવર્ક તમારા વ્યવસ્થાપક દ્વારા અક્ષમ કરેલ છે.</translation>
 <translation id="7067196344162293536">સ્વતઃ ફેરવો</translation>
 <translation id="7068360136237591149">ફાઇલો ખોલો</translation>
@@ -720,6 +735,7 @@
 <translation id="7346909386216857016">બરાબર, સમજાઇ ગયું</translation>
 <translation id="7348093485538360975">ઑન-સ્ક્રીન કીબોર્ડ</translation>
 <translation id="735745346212279324">VPN ડિસ્કનેક્ટ કર્યું છે</translation>
+<translation id="7360036564632145207">પેરિફેરલ સેટિંગ માટે તમારી ડેટા ઍક્સેસની સુરક્ષામાં ફેરફાર કરવાથી કાર્યપ્રદર્શન ઑપ્ટિમાઇઝ થઈ શકે છે</translation>
 <translation id="7371404428569700291">વિન્ડો રેકોર્ડ કરો</translation>
 <translation id="7377169924702866686">Caps Lock ચાલુ છે.</translation>
 <translation id="7378203170292176219">રેકોર્ડ કરવાના વિસ્તારને પસંદ કરવા માટે ખેંચો</translation>
@@ -728,11 +744,13 @@
 <translation id="7392563512730092880">તમે સેટિંગમાંથી કોઈપણ સમયે પછીથી સેટઅપ કરી શકશો.</translation>
 <translation id="7398254312354928459">સ્વિચ કરેલ નેટવર્ક કનેક્શન</translation>
 <translation id="7405710164030118432">ડિવાઇસને અનલૉક કરવા માટે, તમારી Family Linkનો માતાપિતા માટેનો ઍક્સેસ કોડ દાખલ કરો</translation>
+<translation id="7406608787870898861">તમારા મોબાઇલ નેટવર્કનું સેટઅપ કરવાનું પૂર્ણ કરો</translation>
 <translation id="741244894080940828">રૂપાંતરણ</translation>
 <translation id="7413851974711031813">બંધ કરવા માટે Escape કી દબાવો</translation>
 <translation id="742594950370306541">કૅમેરો ઉપયોગમાં છે.</translation>
 <translation id="742608627846767349">ગુડ મોર્નિંગ,</translation>
 <translation id="743058460480092004">કૅમેરો અને માઇક્રોફોન ઉપયોગમાં છે.</translation>
+<translation id="7434543979546293336">મુખ્ય વિચાર તરીકે માર્ક કર્યો</translation>
 <translation id="7452560014878697800">કોઈ ઍપ્લિકેશન તમારા કૅમેરાનો ઉપયોગ કરી રહી છે</translation>
 <translation id="7456049842111127849">કૅપ્ચર મોડ, ડિફૉલ્ટ તરીકે <ph name="SOURCE" /> <ph name="TYPE" /> છે.</translation>
 <translation id="7461924472993315131">પિન કરો</translation>
@@ -757,7 +775,7 @@
 <translation id="7607002721634913082">થોભાવેલું</translation>
 <translation id="7618774594543487847">ન્યૂટ્રલ</translation>
 <translation id="7624117708979618027"><ph name="TEMPERATURE_F" />° F</translation>
-<translation id="7633755430369750696">નજીકના શેરિંગ સેટિંગ બતાવો.</translation>
+<translation id="7633755430369750696">નજીકના શેર સેટિંગ બતાવો.</translation>
 <translation id="7641938616688887143">રેકોર્ડ કરો</translation>
 <translation id="7642647758716480637"><ph name="NETWORK_NAME" /> માટે સેટિંગ ખોલો, <ph name="CONNECTION_STATUS" /></translation>
 <translation id="7645176681409127223"><ph name="USER_NAME" /> (માલિક)</translation>
@@ -776,6 +794,7 @@
 <translation id="7780159184141939021">સ્ક્રીનને ફેરવો</translation>
 <translation id="7796353162336583443">એક નોંધ અથવા સ્ક્રીનશૉટ લેવા, Google સહાયક, લૅઝર પૉઇન્ટર અથવા બૃહદદર્શક કાચનો ઉપયોગ કરવા માટે શેલ્ફ પરના સ્ટાઇલસ બટનને ટૅપ કરો.</translation>
 <translation id="7798302898096527229">રદ કરવા માટે શોધો અથવા Shift દબાવો.</translation>
+<translation id="7807966291075028781">સુરક્ષા કારણોસર અતિથિ મોડમાં પેરિફેરલને સપોર્ટ આપવામાં આવતો નથી</translation>
 <translation id="7814236020522506259"><ph name="HOUR" /> અને <ph name="MINUTE" /></translation>
 <translation id="7829386189513694949">પ્રબળ સિગ્નલ</translation>
 <translation id="7837740436429729974">સમય સમાપ્ત</translation>
@@ -844,6 +863,7 @@
 <translation id="8345019317483336363"><ph name="WINDOW_TITLE" /> વિન્ડો પસંદ કરી</translation>
 <translation id="8351131234907093545">નોંધ બનાવો</translation>
 <translation id="8371779926711439835">એક અક્ષર આગળ જાઓ</translation>
+<translation id="8371991222807690464">અતિથિ મોડમાં પેરિફેરલ કાર્યપ્રદર્શન કદાચ મર્યાદિત કરવામાં આવી શકે છે</translation>
 <translation id="8375916635258623388">આ <ph name="DEVICE_NAME" /> અને તમારો ફોન ઑટોમૅટિક રીતે કનેક્ટ થશે</translation>
 <translation id="8380784334203145311">ગુડ નાઇટ,</translation>
 <translation id="8388750414311082622">છેલ્લું ડેસ્ક કાઢી નાખી શકાતું નથી.</translation>
@@ -853,7 +873,7 @@
 <translation id="8425213833346101688">બદલો</translation>
 <translation id="8426708595819210923">ગુડ ઇવનિંગ <ph name="GIVEN_NAME" />,</translation>
 <translation id="8427213022735114808">કોઈપણ ટેક્સ્ટ ફીલ્ડમાં અવાજ ટાઇપ કરવાને મંજૂરી આપવા માટે, શ્રુતલેખન Googleને તમારો અવાજ મોકલે છે.</translation>
-<translation id="8428213095426709021">સેટિંગ્સ</translation>
+<translation id="8428213095426709021">સેટિંગ</translation>
 <translation id="8433186206711564395">નેટવર્ક સેટિંગ્સ</translation>
 <translation id="8433977262951327081">શેલ્ફમાં મેનૂ પરપોટો ઇનપુટ વિકલ્પો બતાવવાનો શૉર્ટકટ બદલાયો છે. કૃપા કરીને <ph name="OLD_SHORTCUT" />ને બદલે <ph name="NEW_SHORTCUT" />નો ઉપયોગ કરો.</translation>
 <translation id="8444246603146515890">ડેસ્ક <ph name="DESK_TITILE" /> સક્રિય કર્યું</translation>
@@ -946,8 +966,10 @@
 <translation id="9091626656156419976"><ph name="DISPLAY_NAME" /> ડિસ્પ્લે કાઢી નાખ્યું</translation>
 <translation id="9098969848082897657">ફોન સાઇલન્ટ રાખો</translation>
 <translation id="9099154003160514616">Lacros બ્રાઉઝરની અપડેટ ઉપલબ્ધ છે</translation>
+<translation id="9105450214093926548">Lacros બ્રાઉઝર ચાલતું હોય, ત્યારે બીજા વપરાશકર્તા દ્વારા સાઇન ઇન કરવાને સપોર્ટ કરવામાં આવતો નથી. કૃપા કરીને તેના બદલે Lacrosમાં બીજી બ્રાઉઝર પ્રોફાઇલનો ઉપયોગ કરો કે Lacros બંધ કરો અને ફરી પ્રયાસ કરો.</translation>
+<translation id="9133335900048457298">સંરક્ષિત કન્ટેન્ટ રેકોર્ડ કરી શકાતું નથી</translation>
 <translation id="9151726767154816831">અપડેટ કરવા માટે પુનઃપ્રારંભ કરો અને પાવરવૉશ કરો</translation>
-<translation id="9166331175924255663">નજીકના શેરિંગની ઉચ્ચ દૃશ્યતા ટૉગલ કરો.</translation>
+<translation id="9166331175924255663">નજીકના શેરની ઉચ્ચ દૃશ્યતા ટૉગલ કરો.</translation>
 <translation id="9168436347345867845">આ પછીથી કરો</translation>
 <translation id="9179259655489829027">આ સુવિધા તમને પાસવર્ડની જરૂર વગર ઝડપથી કોઈ સાઇન-ઇન થયેલ વપરાશકર્તાને ઍક્સેસ કરવાની પરવાનગી આપે છે. માત્ર તમે જેના પર વિશ્વાસ કરતા હો તે એકાઉન્ટ સાથે જ આ સુવિધાનો ઉપયોગ કરો.</translation>
 <translation id="9183456764293710005">પૂર્ણ-સ્ક્રીન મૅગ્નિફાયર</translation>

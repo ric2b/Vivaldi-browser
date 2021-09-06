@@ -8,10 +8,12 @@
 #include <memory>
 
 #include "base/feature_list.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/enterprise/connectors/connectors_manager.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/policy/core/common/policy_types.h"
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "content/public/browser/browser_context.h"
 
 namespace base {
@@ -51,16 +53,31 @@ class ConnectorsService : public KeyedService {
   base::Optional<AnalysisSettings> GetAnalysisSettings(
       const GURL& url,
       AnalysisConnector connector);
+  base::Optional<FileSystemSettings> GetFileSystemSettings(
+      const GURL& url,
+      FileSystemConnector connector);
 
   bool IsConnectorEnabled(AnalysisConnector connector) const;
   bool IsConnectorEnabled(ReportingConnector connector) const;
+  bool IsConnectorEnabled(FileSystemConnector connector) const;
 
   bool DelayUntilVerdict(AnalysisConnector connector);
+
+  std::vector<std::string> GetAnalysisServiceProviderNames(
+      AnalysisConnector connector);
+  std::vector<std::string> GetReportingServiceProviderNames(
+      ReportingConnector connector);
 
   // DM token accessor function for real-time URL checks. Returns a profile or
   // browser DM token depending on the policy scope, and base::nullopt if there
   // is no token to use.
   base::Optional<std::string> GetDMTokenForRealTimeUrlCheck() const;
+
+  // Returns the value to used by the enterprise real-time URL check Connector
+  // if it is set and if the scope it's set at has a valid browser-profile
+  // affiliation.
+  safe_browsing::EnterpriseRealTimeUrlCheckMode GetAppliedRealTimeUrlCheck()
+      const;
 
   // Testing functions.
   ConnectorsManager* ConnectorsManagerForTesting();
@@ -84,7 +101,7 @@ class ConnectorsService : public KeyedService {
   // contain either POLICY_SCOPE_MACHINE or POLICY_SCOPE_USER.
   base::Optional<DmToken> GetDmToken(const char* scope_pref) const;
   base::Optional<DmToken> GetBrowserDmToken() const;
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   base::Optional<DmToken> GetProfileDmToken() const;
 
   // Returns true if the browser isn't managed by CBCM, otherwise this checks if

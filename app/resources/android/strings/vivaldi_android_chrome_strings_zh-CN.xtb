@@ -7,11 +7,13 @@
 <translation id="17513872634828108">打开的标签</translation>
 <translation id="1829244130665387512">在网页中查找</translation>
 <translation id="2038563949887743358">开启“请求切换到桌面版网站”</translation>
+<translation id="2306442503286132111">书签已保存至 <ph name="FOLDER_NAME" /> 文件夹</translation>
 <translation id="2433507940547922241">外观</translation>
 <translation id="2501278716633472235">返回上一页</translation>
 <translation id="2633278372998075009">隐身标签</translation>
 <translation id="3076631378407175873">版权所有 <ph name="YEAR" /> Vivaldi Technologies AS. 保留所有权利。</translation>
 <translation id="3234355010754616171">新建隐身标签</translation>
+<translation id="3377025655491224618">隐私标签</translation>
 <translation id="3518985090088779359">接受并继续</translation>
 <translation id="3700829948786686853">欢迎使用 Vivaldi</translation>
 <translation id="3719826155360621982">首页</translation>
@@ -30,10 +32,12 @@
 <translation id="5840488417521835756">无需离开所在页面，便可了解网站上的主题。“点按搜索”功能会在Google为默认搜索的前提下将所选字词及上下文一起发送给 Google 搜索，后者即会据此返回相应的定义、图片、搜索结果及其他详情。
 
 要调整您的搜索内容，长按即可选中所需内容。要缩小您的搜索范围，请向上滑动到面板顶部，然后点按搜索框。</translation>
+<translation id="6150320133806434356">书签已保存</translation>
 <translation id="6336451774241870485">新建隐身标签</translation>
 <translation id="6593061639179217415">桌面版网站</translation>
 <translation id="6610147964972079463">关闭隐身标签</translation>
 <translation id="706339621163631076">浏览器隐私政策</translation>
+<translation id="732145680195464316">书签已保存至 <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">关于 Vivaldi</translation>
 <translation id="7465104139234185284">关闭全部隐身标签</translation>
 <translation id="7519434535192513364">“点按搜索”功能会在以Google为默认搜索引擎的前提下将所选字词和当前页面（作为上下文）一起发送至 Google 搜索。您可在<ph name="BEGIN_LINK" />设置<ph name="END_LINK" />中关闭该功能。</translation>

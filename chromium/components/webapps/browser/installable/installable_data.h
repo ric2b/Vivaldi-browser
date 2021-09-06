@@ -24,13 +24,13 @@ namespace webapps {
 struct InstallableData {
   InstallableData(std::vector<InstallableStatusCode> errors,
                   const GURL& manifest_url,
-                  const blink::Manifest* manifest,
+                  const blink::Manifest& manifest,
                   const GURL& primary_icon_url,
                   const SkBitmap* primary_icon,
                   bool has_maskable_primary_icon,
                   const GURL& splash_icon_url,
                   const SkBitmap* splash_icon,
-                  const std::map<GURL, SkBitmap>& screenshots,
+                  const std::vector<SkBitmap>& screenshots,
                   bool valid_manifest,
                   bool has_worker);
   ~InstallableData();
@@ -51,9 +51,8 @@ struct InstallableData {
   // <link rel="manifest"> tag.
   const GURL& manifest_url;
 
-  // The parsed web app manifest. nullptr if the site has an unparseable
-  // manifest.
-  const blink::Manifest* manifest;
+  // The parsed web app manifest.
+  const blink::Manifest& manifest;
 
   // The URL of the chosen primary icon.
   const GURL& primary_icon_url;
@@ -79,7 +78,7 @@ struct InstallableData {
   const SkBitmap* splash_icon;
 
   // The screenshots to show in the install UI.
-  const std::map<GURL, SkBitmap>& screenshots;
+  const std::vector<SkBitmap>& screenshots;
 
   // true if the site has a valid, installable web app manifest. If
   // |valid_manifest| or |has_worker| was true and the site isn't installable,

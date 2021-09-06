@@ -113,6 +113,10 @@ class TranslateAgent : public content::RenderFrameObserver,
   // script was run successfully. Otherwise, returns 0.
   virtual int64_t ExecuteScriptAndGetIntegerResult(const std::string& script);
 
+  // Cancels any translation that is currently being performed.  This does not
+  // revert existing translations.
+  void CancelPendingTranslation();
+
  private:
   FRIEND_TEST_ALL_PREFIXES(TranslateAgentTest, TestBuildTranslationScript);
 
@@ -133,10 +137,6 @@ class TranslateAgent : public content::RenderFrameObserver,
   // RenderFrameObserver implementation.
   void OnDestruct() override;
 
-  // Cancels any translation that is currently being performed.  This does not
-  // revert existing translations.
-  void CancelPendingTranslation();
-
   // Checks if the current running page translation is finished or errored and
   // notifies the browser accordingly.  If the translation has not terminated,
   // posts a task to check again later.
@@ -153,6 +153,10 @@ class TranslateAgent : public content::RenderFrameObserver,
   // Convenience method to access the main frame.  Can return nullptr, typically
   // if the page is being closed.
   blink::WebLocalFrame* GetMainFrame();
+
+  // Called by the translate host when a new language detection model file
+  // has been loaded and is available.
+  void UpdateLanguageDetectionModel(base::File model_file);
 
   // The states associated with the current translation.
   TranslateFrameCallback translate_callback_pending_;
@@ -183,6 +187,9 @@ class TranslateAgent : public content::RenderFrameObserver,
 
   // Method factory used to make calls to TranslatePageImpl.
   base::WeakPtrFactory<TranslateAgent> weak_method_factory_{this};
+
+  // Weak pointer factory used to provide references to the translate host.
+  base::WeakPtrFactory<TranslateAgent> weak_pointer_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(TranslateAgent);
 };

@@ -11,6 +11,7 @@
 #include "ash/clipboard/clipboard_history_controller_impl.h"
 #include "ash/clipboard/clipboard_history_item.h"
 #include "ash/clipboard/test_support/clipboard_history_item_builder.h"
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/clipboard_image_model_factory.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
@@ -18,7 +19,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/icu_test_util.h"
 #include "base/test/scoped_feature_list.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -127,6 +127,8 @@ TEST_F(ClipboardHistoryResourceManagerTest, GetLabel) {
   builder.SetText("Text")
       .SetMarkup("HTML with no image or table tags")
       .SetRtf("Rtf")
+      .SetFilenames({ui::FileInfo(base::FilePath("/dir/filename"),
+                                  base::FilePath("filename"))})
       .SetBookmarkTitle("Bookmark Title")
       .SetBitmap(gfx::test::CreateBitmap(10, 10))
       .SetFileSystemData({"/path/to/File.txt", "/path/to/Other%20File.txt"})
@@ -164,6 +166,12 @@ TEST_F(ClipboardHistoryResourceManagerTest, GetLabel) {
             base::UTF8ToUTF16("RTF Content"));
 
   builder.ClearRtf();
+
+  // In the absence of RTF data, Filenames data takes precedence.
+  EXPECT_EQ(resource_manager()->GetLabel(builder.Build()),
+            base::UTF8ToUTF16("filename"));
+
+  builder.ClearFilenames();
 
   // In the absence of RTF data, bookmark data takes precedence.
   EXPECT_EQ(resource_manager()->GetLabel(builder.Build()),

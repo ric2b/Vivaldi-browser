@@ -223,19 +223,21 @@ NGConstraintSpace CreateConstraintSpaceForMinMax(
   NGConstraintSpaceBuilder builder(node.Style().GetWritingMode(),
                                    node.Style().GetWritingDirection(),
                                    node.CreatesNewFormattingContext());
-  builder.SetAvailableSize(LogicalSize());
+  builder.SetAvailableSize({kIndefiniteSize, kIndefiniteSize});
   builder.SetPercentageResolutionSize(
-      {LayoutUnit(), input.percentage_resolution_block_size});
+      {kIndefiniteSize, input.percentage_resolution_block_size});
   return builder.ToConstraintSpace();
 }
 
 LayoutUnit CalculateAvailableInlineSizeForLegacy(
     const LayoutBox& box,
     const NGConstraintSpace& space) {
-  if (box.ShouldComputeSizeAsReplaced())
-    return space.ReplacedPercentageResolutionInlineSize();
+  if (box.ShouldComputeSizeAsReplaced()) {
+    return space.ReplacedPercentageResolutionInlineSize()
+        .ClampIndefiniteToZero();
+  }
 
-  return space.PercentageResolutionInlineSize();
+  return space.PercentageResolutionInlineSize().ClampIndefiniteToZero();
 }
 
 LayoutUnit CalculateAvailableBlockSizeForLegacy(
@@ -322,6 +324,14 @@ bool CanUseCachedIntrinsicInlineSizes(const MinMaxSizesInput& input,
   if (node.IsNGTableCell() && To<LayoutNGTableCell>(node.GetLayoutBox())
                                       ->IntrinsicLogicalWidthsBorderSizes() !=
                                   constraint_space.TableCellBorders())
+    return false;
+
+  // We may have something like:
+  // "grid-template-columns: repeat(auto-fill, 50px); min-width: 50%;"
+  // In this specific case our min/max sizes are now dependent on what
+  // "min-width" resolves to - which is unique to grid.
+  if (node.IsGrid() && (style.LogicalMinWidth().IsPercentOrCalc() ||
+                        style.LogicalMaxWidth().IsPercentOrCalc()))
     return false;
 
   return true;
@@ -436,6 +446,18 @@ scoped_refptr<const NGLayoutResult> NGBlockNode::Layout(
   if (!fragment_geometry) {
     fragment_geometry =
         CalculateInitialFragmentGeometry(constraint_space, *this);
+  }
+
+  if (RuntimeEnabledFeatures::CSSContainerQueriesEnabled() &&
+      IsContainerForContainerQueries()) {
+    if (auto* element = DynamicTo<Element>(GetDOMNode())) {
+      LogicalSize available_size = CalculateChildAvailableSize(
+          constraint_space, *this, fragment_geometry->border_box_size,
+          fragment_geometry->border + fragment_geometry->padding);
+      LogicalAxes contained_axes = ContainedAxes();
+      GetDocument().GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(
+          *element, available_size, contained_axes);
+    }
   }
 
   TextAutosizer::NGLayoutScope text_autosizer_layout_scope(
@@ -732,8 +754,9 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
     // of the layout phase.
     // TODO(ikilpatrick): Remove this check.
     if (!box_->GetFrameView()->IsInPerformLayout()) {
-      sizes = ComputeMinMaxSizesFromLegacy(input);
-      return {sizes, /* depends_on_percentage_block_size */ false};
+      sizes = ComputeMinMaxSizesFromLegacy(input, *constraint_space);
+      return MinMaxSizesResult(sizes,
+                               /* depends_on_percentage_block_size */ false);
     }
 
     DCHECK(constraint_space);
@@ -743,7 +766,8 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
     sizes = NGFragment({container_writing_mode, TextDirection::kLtr},
                        layout_result->PhysicalFragment())
                 .InlineSize();
-    return {sizes, /* depends_on_percentage_block_size */ false};
+    return MinMaxSizesResult(sizes,
+                             /* depends_on_percentage_block_size */ false);
   }
 
   // Synthesize a zero space if not provided.
@@ -760,15 +784,16 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
       block_size = input.percentage_resolution_block_size;
     }
 
-    NGFragmentGeometry fragment_geometry =
+    const NGFragmentGeometry fragment_geometry =
         CalculateInitialMinMaxFragmentGeometry(*constraint_space, *this);
-    NGBoxStrut border_padding =
+    const NGBoxStrut border_padding =
         fragment_geometry.border + fragment_geometry.padding;
     LayoutUnit size_from_ar = ComputeInlineSizeFromAspectRatio(
-        *constraint_space, Style(), border_padding, block_size);
+        *constraint_space, Style(), border_padding,
+        ShouldBeConsideredAsReplaced(), block_size);
     if (size_from_ar != kIndefiniteSize) {
-      return {{size_from_ar, size_from_ar},
-              Style().LogicalHeight().IsPercentOrCalc()};
+      return MinMaxSizesResult({size_from_ar, size_from_ar},
+                               Style().LogicalHeight().IsPercentOrCalc());
     }
   }
 
@@ -787,10 +812,10 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
                             : box_->IntrinsicLogicalWidths(input.type);
     bool depends_on_percentage_block_size =
         box_->IntrinsicLogicalWidthsDependsOnPercentageBlockSize();
-    return {sizes, depends_on_percentage_block_size};
+    return MinMaxSizesResult(sizes, depends_on_percentage_block_size);
   }
 
-  NGFragmentGeometry fragment_geometry =
+  const NGFragmentGeometry fragment_geometry =
       CalculateInitialMinMaxFragmentGeometry(*constraint_space, *this);
 
   // Calculate the %-block-size for our children up front. This allows us to
@@ -800,7 +825,7 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
   bool uses_input_percentage_block_size = false;
   LayoutUnit child_percentage_resolution_block_size =
       CalculateChildPercentageBlockSizeForMinMax(
-          *constraint_space, *this, border_padding,
+          *constraint_space, *this, border_padding, fragment_geometry.scrollbar,
           input.percentage_resolution_block_size,
           &uses_input_percentage_block_size);
 
@@ -815,13 +840,13 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
     MinMaxSizes sizes = box_->IsTable() && !box_->IsLayoutNGMixin()
                             ? box_->PreferredLogicalWidths()
                             : box_->IntrinsicLogicalWidths(input.type);
-    return {sizes, cache_depends_on_percentage_block_size};
+    return MinMaxSizesResult(sizes, cache_depends_on_percentage_block_size);
   }
 
   box_->SetIntrinsicLogicalWidthsDirty();
 
   if (!CanUseNewLayout()) {
-    MinMaxSizes sizes = ComputeMinMaxSizesFromLegacy(input);
+    MinMaxSizes sizes = ComputeMinMaxSizesFromLegacy(input, *constraint_space);
 
     // Update the cache bits for this legacy root (but not the intrinsic
     // inline-sizes themselves).
@@ -831,7 +856,7 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
         /* child_depends_on_percentage_block_size */ true,
         /* sizes */ nullptr);
 
-    return {sizes, uses_input_percentage_block_size};
+    return MinMaxSizesResult(sizes, uses_input_percentage_block_size);
   }
 
   // Copy the input, and set the new %-block-size.
@@ -851,14 +876,12 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
       result.depends_on_percentage_block_size;
 
   if (!Style().AspectRatio().IsAuto() &&
-      BlockLengthUnresolvable(*constraint_space, Style().LogicalHeight(),
-                              LengthResolvePhase::kLayout)) {
+      BlockLengthUnresolvable(*constraint_space, Style().LogicalHeight())) {
     // If the block size will be computed from the aspect ratio, we need
     // to take the max-block-size into account.
     // https://drafts.csswg.org/css-sizing-4/#aspect-ratio
     MinMaxSizes min_max = ComputeMinMaxInlineSizesFromAspectRatio(
-        *constraint_space, Style(), border_padding,
-        LengthResolvePhase::kIntrinsic);
+        *constraint_space, Style(), border_padding);
     result.sizes.min_size = min_max.ClampSizeToMinAndMax(result.sizes.min_size);
     result.sizes.max_size = min_max.ClampSizeToMinAndMax(result.sizes.max_size);
     depends_on_percentage_block_size =
@@ -884,13 +907,10 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
 }
 
 MinMaxSizes NGBlockNode::ComputeMinMaxSizesFromLegacy(
-    const MinMaxSizesInput& input) const {
-  bool needs_size_reset = false;
-  if (!box_->HasOverrideContainingBlockContentLogicalHeight()) {
-    box_->SetOverrideContainingBlockContentLogicalHeight(
-        input.percentage_resolution_block_size);
-    needs_size_reset = true;
-  }
+    const MinMaxSizesInput& input,
+    const NGConstraintSpace& space) const {
+  BoxLayoutExtraInput extra_input(*box_);
+  SetupBoxLayoutExtraInput(space, *box_, &extra_input);
 
   // Tables don't calculate their min/max content contribution the same way as
   // other layout nodes. This is because width/min-width/etc have a different
@@ -900,9 +920,6 @@ MinMaxSizes NGBlockNode::ComputeMinMaxSizesFromLegacy(
   MinMaxSizes sizes = box_->IsTable()
                           ? box_->PreferredLogicalWidths()
                           : box_->IntrinsicLogicalWidths(input.type);
-
-  if (needs_size_reset)
-    box_->ClearOverrideContainingBlockContentSize();
 
   return sizes;
 }
@@ -1067,8 +1084,24 @@ void NGBlockNode::CopyFragmentDataToLayoutBox(
   // child layout.
   if (!ChildLayoutBlockedByDisplayLock()) {
     if (UNLIKELY(flow_thread)) {
-      PlaceChildrenInFlowThread(flow_thread, constraint_space,
-                                physical_fragment, previous_break_token);
+      // Hold off writing legacy data for the entire multicol container until
+      // done with the last fragment (we may have multiple if nested within
+      // another fragmentation context). This way we'll get everything in order.
+      // We'd otherwise mess up in complex cases of nested column balancing. The
+      // column layout algorithms may retry layout for a given fragment, which
+      // would confuse the code that writes back to legacy objects, so that we
+      // wouldn't always update column sets or establish fragmentainer groups
+      // correctly.
+      if (is_last_fragment) {
+        const NGBlockBreakToken* incoming_break_token = nullptr;
+        for (const NGPhysicalBoxFragment& multicol_fragment :
+             box_->PhysicalFragments()) {
+          PlaceChildrenInFlowThread(flow_thread, constraint_space,
+                                    multicol_fragment, incoming_break_token);
+          incoming_break_token =
+              To<NGBlockBreakToken>(multicol_fragment.BreakToken());
+        }
+      }
     } else {
       PlaceChildrenInLayoutBox(physical_fragment, previous_break_token);
     }
@@ -1265,6 +1298,8 @@ void NGBlockNode::PlaceChildrenInFlowThread(
     DCHECK(!child_box);
 
     LogicalSize logical_size = converter.ToLogical(child_fragment.Size());
+    logical_size.block_size =
+        ClampedToValidFragmentainerCapacity(logical_size.block_size);
 
     if (has_processed_first_column_in_flow_thread) {
       // Non-uniform fragmentainer widths not supported by legacy layout.
@@ -1362,8 +1397,6 @@ void NGBlockNode::CopyFragmentItemsToLayoutBox(
     const NGPhysicalBoxFragment& container,
     const NGFragmentItems& items,
     const NGBlockBreakToken* previous_break_token) const {
-  DCHECK(RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled());
-
   LayoutUnit previously_consumed_block_size;
   if (previous_break_token)
     previously_consumed_block_size = previous_break_token->ConsumedBlockSize();
@@ -1759,6 +1792,18 @@ void NGBlockNode::AddColumnResult(
     const NGBlockBreakToken* incoming_break_token) const {
   wtf_size_t index = FragmentIndex(incoming_break_token);
   GetFlowThread(To<LayoutBlockFlow>(box_))->AddLayoutResult(result, index);
+}
+
+void NGBlockNode::AddColumnResult(
+    scoped_refptr<const NGLayoutResult> result) const {
+  GetFlowThread(To<LayoutBlockFlow>(box_))->AddLayoutResult(std::move(result));
+}
+
+void NGBlockNode::ReplaceColumnResult(
+    scoped_refptr<const NGLayoutResult> result,
+    const NGPhysicalBoxFragment& old_fragment) const {
+  GetFlowThread(To<LayoutBlockFlow>(box_))
+      ->ReplaceLayoutResult(std::move(result), old_fragment);
 }
 
 }  // namespace blink

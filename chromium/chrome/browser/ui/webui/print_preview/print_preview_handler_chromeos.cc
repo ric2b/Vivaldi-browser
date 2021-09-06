@@ -11,13 +11,14 @@
 #include <string>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/lazy_instance.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/chromeos/account_manager/account_manager_util.h"
+#include "chrome/browser/ash/account_manager/account_manager_util.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
 #include "chrome/browser/chromeos/printing/cups_printers_manager.h"
 #include "chrome/browser/chromeos/printing/cups_printers_manager_factory.h"
@@ -28,7 +29,6 @@
 #include "chrome/browser/ui/webui/print_preview/print_preview_ui.h"
 #include "chrome/browser/ui/webui/print_preview/printer_handler.h"
 #include "chrome/common/printing/printer_capabilities.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/printing/printer_configuration.h"
 #include "components/cloud_devices/common/cloud_devices_urls.h"
 #include "components/signin/public/identity_manager/scope_set.h"

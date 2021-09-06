@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "ash/constants/ash_features.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -14,6 +15,7 @@
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/chromeos/release_notes/release_notes_notification.h"
 #include "chrome/browser/chromeos/release_notes/release_notes_storage.h"
 #include "chrome/browser/chromeos/web_applications/system_web_app_integration_test.h"
@@ -24,7 +26,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/web_applications/system_web_app_manager.h"
-#include "chrome/browser/web_applications/system_web_app_manager_browsertest.h"
+#include "chrome/browser/web_applications/test/system_web_app_browsertest_base.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -32,8 +34,6 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/components/help_app_ui/url_constants.h"
 #include "chromeos/components/web_applications/test/sandboxed_web_ui_test_base.h"
-#include "chromeos/constants/chromeos_features.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "components/user_manager/user_names.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -118,9 +118,8 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest, HelpAppV2AppServiceMetrics) {
   WaitForTestSystemAppInstall();
   base::HistogramTester histogram_tester;
 
-  // The metric is recorded in LaunchSystemWebApp (crbug/1112660), but using
-  // AppServiceProxy gives more coverage of the launch path and ensures the
-  // metric is not recorded twice.
+  // Using AppServiceProxy gives more coverage of the launch path and ensures
+  // the metric is not recorded twice.
   auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile());
   content::TestNavigationObserver navigation_observer(
       GURL("chrome://help-app/"));
@@ -129,7 +128,7 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest, HelpAppV2AppServiceMetrics) {
   proxy->Launch(
       *GetManager().GetAppIdForSystemApp(web_app::SystemAppType::HELP),
       ui::EventFlags::EF_NONE, apps::mojom::LaunchSource::kFromKeyboard,
-      display::kDefaultDisplayId);
+      apps::MakeWindowInfo(display::kDefaultDisplayId));
 
   navigation_observer.Wait();
   // The HELP app is 18, see DefaultAppName in
@@ -310,16 +309,17 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest, HelpAppV2OpenFeedbackDialog) {
     (async () => {
       const app = document.querySelector('showoff-app');
       const res = await app.getDelegate().openFeedbackDialog();
-      window.domAutomationController.send(res);
+      window.domAutomationController.send(res === null);
     })();
   )";
-  std::string result;
+  bool error_is_null;
   // Use ExecuteScript instead of EvalJsInAppFrame because the script needs to
   // run in the same world as the page's code.
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      SandboxedWebUiAppTestBase::GetAppFrame(web_contents), kScript, &result));
-  // A result of empty string means no error in opening feedback.
-  EXPECT_EQ(result, "");
+  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
+      SandboxedWebUiAppTestBase::GetAppFrame(web_contents), kScript,
+      &error_is_null));
+  // A null string result means no error in opening feedback.
+  EXPECT_TRUE(error_is_null);
 }
 
 // Test that the Help App opens the OS Settings family link page.
@@ -418,9 +418,8 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
   EXPECT_EQ(GURL("chrome://help-app"), GetActiveWebContents()->GetVisibleURL());
 }
 
-INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_WEB_APP_INFO_INSTALL_P(
+INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
     HelpAppIntegrationTest);
 
 INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_ALL_PROFILE_TYPES_P(
-    HelpAppAllProfilesIntegrationTest,
-    kWebAppInfoInstall);
+    HelpAppAllProfilesIntegrationTest);

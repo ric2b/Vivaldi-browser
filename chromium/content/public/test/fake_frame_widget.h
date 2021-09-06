@@ -82,7 +82,10 @@ class FakeFrameWidget : public blink::mojom::FrameWidget {
   void BindInputTargetClient(
       mojo::PendingReceiver<viz::mojom::InputTargetClient> receiver) override {}
   void SetViewportIntersection(
-      blink::mojom::ViewportIntersectionStatePtr intersection_state) override;
+      blink::mojom::ViewportIntersectionStatePtr intersection_state,
+      const base::Optional<blink::VisualProperties>& visual_properties)
+      override;
+
   void LoadImageAt(const gfx::Point&) override {}
 
   mojo::AssociatedReceiver<blink::mojom::FrameWidget> receiver_;

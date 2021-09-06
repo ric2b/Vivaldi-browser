@@ -8,6 +8,7 @@
 <translation id="1088300314857992706"><ph name="USER_EMAIL_ADDRESS" /> menggunakan Chrome sebelum ini</translation>
 <translation id="1097330777386562916">Kosongkan kuki dan data tapak apabila anda keluar daripada Chrome</translation>
 <translation id="110877069173485804">Ini Chrome anda</translation>
+<translation id="1125124144982679672">Siapakah yang sedang menggunakan Chrome?</translation>
 <translation id="1142745911746664600">Tidak dapat mengemas kini Chrome</translation>
 <translation id="1154147086299354128">&amp;Buka dalam Chrome</translation>
 <translation id="123620459398936149">OS Chrome tidak dapat menyegerakkan data anda. Sila kemas kini frasa laluan Segerak anda.</translation>
@@ -17,7 +18,10 @@
 <translation id="1399397803214730675">Komputer ini mempunyai versi Google Chrome paling terkini. Jika perisian tidak berfungsi, sila nyahpasang Google Chrome dan cuba semula.</translation>
 <translation id="1434626383986940139">Apl Chrome Canary</translation>
 <translation id="147727933880789532">Chrome mengesyorkan agar sambungan ini dilumpuhkan kerana tidak memenuhi standard Penyemakan Imbas Selamat Dipertingkat pada masa ini.</translation>
+<translation id="1516530951338665275">Google Chrome memerlukan akses Bluetooth untuk meneruskan 
+ penggandingan. <ph name="IDS_BLUETOOTH_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK" /></translation>
 <translation id="1553358976309200471">Kemas Kini Chrome</translation>
+<translation id="1583073672411044740"><ph name="EXISTING_USER" /> telah pun dilog masuk ke profil Chrome ini. Tindakan ini akan membuat profil Chrome baharu untuk <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="1587223624401073077">Google Chrome menggunakan kamera anda.</translation>
 <translation id="1587325591171447154"><ph name="FILE_NAME" /> berbahaya, jadi Chrome telah menyekat fail itu.</translation>
 <translation id="1597911401261118146">Untuk menyemak sama ada kata laluan anda selamat daripada pelanggaran data dan isu keselamatan lain, <ph name="BEGIN_LINK" />log masuk ke Chrome<ph name="END_LINK" />.</translation>
@@ -85,6 +89,7 @@
 <translation id="3065168410429928842">Tab Chrome</translation>
 <translation id="3080151273017101988">Terus menjalankan apl latar belakang apabila Google Chrome ditutup</translation>
 <translation id="3089968997497233615">Terdapat versi Google Chrome baharu yang lebih selamat tersedia.</translation>
+<translation id="3100998948628680988">Namakan profil Chrome anda</translation>
 <translation id="3114643501466072395">Untuk menyemak sama ada kata laluan anda yang lain selamat daripada pelanggaran data dan isu keselamatan lain, <ph name="BEGIN_LINK" />log masuk ke Chrome<ph name="END_LINK" />.</translation>
 <translation id="3127818369811890733">OS Chrome tidak dapat menyegerakkan data anda.</translation>
 <translation id="3140883423282498090">Perubahan anda akan berkuat kuasa apabila anda melancarkan semula Google Chrome pada masa hadapan.</translation>
@@ -109,6 +114,7 @@
 <translation id="3735758079232443276">Sambungan "<ph name="EXTENSION_NAME" />" telah menukar halaman yang ditunjukkan apabila anda memulakan Chrome.</translation>
 <translation id="3779473566290487688">Untuk mendapatkan kemaskinian Google Chrome yang akan datang, anda memerlukan OS X 10.11 atau yang lebih baharu. Komputer ini menggunakan OS X 10.10.</translation>
 <translation id="3780814664026482060">Chrome - <ph name="PAGE_TITLE" /></translation>
+<translation id="3835168907083856002">Tindakan ini akan membuat profil Chrome baharu untuk <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="386202838227397562">Sila tutup semua tetingkap Google Chrome dan cuba semula.</translation>
 <translation id="3865754807470779944">Chrome versi <ph name="PRODUCT_VERSION" /> dipasang</translation>
 <translation id="3873044882194371212">Buka pautan dalam tetingkap inko&amp;gnito Chrome</translation>
@@ -116,7 +122,6 @@
 <translation id="4050175100176540509">Peningkatan keselamatan penting dan ciri baharu tersedia dalam versi terkini.</translation>
 <translation id="4053720452172726777">Sesuaikan dan kawal Google Chrome</translation>
 <translation id="4110895483821904099">Sediakan profil Chrome baharu anda</translation>
-<translation id="4143243756087420366">Nama dan gambar Chrome</translation>
 <translation id="4147555960264124640">Anda log masuk menggunakan akaun terurus dan memberikan pentadbirnya kawalan terhadap profil Google Chrome anda. Data Chrome anda, seperti apl, penanda halaman, sejarah, kata laluan dan tetapan anda yang lain akan terikat kepada <ph name="USER_NAME" /> secara kekal. Anda akan dapat memadamkan data ini melalui Papan Pemuka Akaun Google, tetapi anda tidak akan dapat mengaitkan data ini dengan akaun lain. <ph name="LEARN_MORE" /></translation>
 <translation id="4149882025268051530">Pemasang gagal untuk nyahmampat arkib. Sila muat turun Google Chrome semula.</translation>
 <translation id="4191857738314598978">{0,plural, =1{Lancarkan semula Chrome dalam masa sehari}other{Lancarkan semula Chrome dalam masa # hari}}</translation>
@@ -145,7 +150,6 @@
 <translation id="4633000520311261472">Untuk menjadikan Chrome lebih selamat, kami melumpuhkan beberapa sambungan yang tidak disenaraikan dalam <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> dan mungkin telah ditambahkan tanpa pengetahuan anda.</translation>
 <translation id="4666328473657283332">Untuk mengakses bahan Chrome anda pada semua peranti anda, log masuk supaya anda boleh menghidupkan penyegerakan.</translation>
 <translation id="4728575227883772061">Pemasangan gagal disebabkan ralat tidak dinyatakan. Jika Google Chrome kini dijalankan, sila tutupnya dan cuba semula.</translation>
-<translation id="4750550185319565338">Mulakan semula Chrome untuk mendayakan <ph name="PLUGIN_NAME" /></translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
 <translation id="4771048833395599659">Fail ini mungkin berbahaya, maka Chrome telah menyekatnya.</translation>
 <translation id="479167709087336770">Ini menggunakan penyemak ejaan yang sama seperti yang digunakan dalam carian Google. Teks yang anda taip dalam penyemak imbas akan dihantar kepada Google. Anda boleh menukar gelagat ini dalam tetapan pada bila-bila masa.</translation>
@@ -167,10 +171,9 @@
 <translation id="5386244825306882791">Sambungan turut mengawal halaman yang ditunjukkan apabila anda memulakan Chrome atau membuat carian dari Kotak Omni.</translation>
 <translation id="5394833366792865639">Kongsi tab Chrome</translation>
 <translation id="5430073640787465221">Fail pilihan anda rosak atau tidak sah. Google Chrome tidak dapat mengembalikan tetapan anda.</translation>
+<translation id="5434383153637353914">Halaman ini membolehkan anda mengurus akaun Google anda yang dilog masuk. Akaun ini akan tersedia dalam penyemak imbas Chrome dan apl Gedung Play, serta perkhidmatan seperti Gmail, Drive dan YouTube. <ph name="LINK_BEGIN" />Ketahui lebih lanjut<ph name="LINK_END" /></translation>
 <translation id="556024056938947818">Google Chrome sedang cuba memaparkan kata laluan.</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
-<translation id="5655746611259367388">Anda boleh mengurus akaun ini dan Akaun Google lain yang telah ditambah untuk <ph name="USER_NAME" /> dari satu tempat dalam <ph name="LINK_BEGIN" />Tetapan<ph name="LINK_END" />.
-          Kebenaran yang telah anda berikan kepada laman web dalam penyemak imbas Chrome dan apl daripada Google Play boleh digunakan pada semua akaun.</translation>
 <translation id="5657226924540934362">Jika tetapan tidak ditunjukkan pada halaman ini, lihat dalam <ph name="LINK_BEGIN" />
 tetapan OS Chrome<ph name="LINK_END" /> anda</translation>
 <translation id="565744775970812598"><ph name="FILE_NAME" /> mungkin berbahaya, jadi Chrome telah menyekat fail itu.</translation>
@@ -179,6 +182,7 @@ tetapan OS Chrome<ph name="LINK_END" /> anda</translation>
 <translation id="5690427481109656848">Google LLC</translation>
 <translation id="5715063361988620182">{SECONDS,plural, =1{Google Chrome akan dimulakan semula dalam 1 saat}other{Google Chrome akan dimulakan semula dalam # saat}}</translation>
 <translation id="573759479754913123">Mengenai Chrome OS</translation>
+<translation id="5756509061973259733">Profil Chrome dengan akaun ini telah pun wujud pada peranti ini</translation>
 <translation id="5795887333006832406"><ph name="PAGE_TITLE" /> - Google Chrome Canary</translation>
 <translation id="5804318322022881572">Tidak dapat melancarkan Chrome. Cuba lagi.</translation>
 <translation id="5867197326698922595">Google Chrome cuba mengedit kata laluan.</translation>
@@ -251,7 +255,6 @@ tetapan OS Chrome<ph name="LINK_END" /> anda</translation>
 <translation id="7930071585467473040">Google Chrome cuba menyalin kata laluan.</translation>
 <translation id="7962410387636238736">Komputer ini tidak akan menerima kemas kini Google Chrome lagi kerana Windows XP dan Windows Vista sudah tidak disokong</translation>
 <translation id="8008534537613507642">Pasang Semula Chrome</translation>
-<translation id="8009904340233602924">Gunakan Chrome tanpa akaun</translation>
 <translation id="8013993649590906847">Jika imej tiada perihalan yang berguna, Chrome akan cuba memberikan perihalan untuk anda. Untuk membuat perihalan, imej dihantar kepada Google.</translation>
 <translation id="8129812357326543296">Mengenai &amp;Google Chrome</translation>
 <translation id="8255190535488645436">Google Chrome menggunakan kamera dan mikrofon anda.</translation>
@@ -292,6 +295,5 @@ tetapan OS Chrome<ph name="LINK_END" /> anda</translation>
 <translation id="9138603949443464873">Untuk menggunakan perubahan anda, mulakan semula Chrome</translation>
 <translation id="919706545465235479">Kemas kini Chrome untuk memulakan penyegerakan</translation>
 <translation id="940313311831216333">Untuk mengakses bahan Chrome anda pada semua peranti anda, log masuk, kemudian hidupkan penyegerakan.</translation>
-<translation id="94743460404517794">Jika anda mempunyai berbilang Akaun Google, anda boleh menambahkan akaun tersebut pada <ph name="DEVICE_TYPE" /> anda. Akaun anda akan tersedia dalam penyemak imbas Chrome dan Gedung Play, serta perkhidmatan seperti Gmail, Drive dan YouTube. <ph name="LINK_BEGIN" />Ketahui lebih lanjut<ph name="LINK_END" /></translation>
 <translation id="989369509083708165">Google Chrome ialah penyemak imbas lalai anda</translation>
 </translationbundle>

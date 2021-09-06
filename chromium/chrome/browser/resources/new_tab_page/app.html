@@ -70,12 +70,10 @@
     z-index: 1;  /* Needed so it layers on top of OneGoogleBar. */
   }
 
-  ntp-fakebox,
   ntp-realbox {
     margin-bottom: 16px;
   }
 
-  ntp-fakebox,
   ntp-realbox,
   ntp-module-wrapper {
     flex-shrink: 0;
@@ -104,22 +102,23 @@
   }
 
   :host(:not([promo-and-modules-loaded_])) ntp-middle-slot-promo,
-  :host(:not([promo-and-modules-loaded_])) ntp-module-wrapper,
-  :host(:not([modules-visible_])) ntp-module-wrapper {
+  :host(:not([promo-and-modules-loaded_])) ntp-module-wrapper {
     display: none;
   }
 
-  #customizeButtonSpacer {
-    flex-grow: 1;
-  }
-
   #customizeButtonContainer {
-    align-self: flex-end;
     background-color: var(--ntp-background-override-color);
     border-radius: calc(.5 * var(--cr-button-height));
     bottom: 16px;
-    margin-inline-end: 16px;
-    position: sticky;
+    position: fixed;
+  }
+
+  :host-context([dir='ltr']) #customizeButtonContainer {
+    right: 16px;
+  }
+
+  :host-context([dir='rtl']) #customizeButtonContainer {
+    left: 16px;
   }
 
   :host([show-background-image_]) #customizeButtonContainer {
@@ -239,6 +238,12 @@
     font-size: .75rem;
   }
 
+  #contentBottomSpacer {
+    flex-shrink: 0;
+    height: 32px;
+    width: 1px;
+  }
+
   svg {
     position: fixed;
   }
@@ -257,16 +262,12 @@
        be nicer to use a dom-if. However, that breaks
        StartupBrowserCreatorPickerNoParamsTest.ShowPickerWhenAlreadyLaunched on
        the msan builder. See crbug.com/1169070. -->
-  <ntp-logo id="logo" doodle-allowed$="[[doodleAllowed_]]"
-      single-colored$="[[singleColoredLogo_]]" dark="[[theme_.isDark]]"
-      background-color="[[backgroundColor_]]" hidden$="[[!logoEnabled_]]">
+  <ntp-logo id="logo" single-colored$="[[singleColoredLogo_]]"
+      dark="[[theme_.isDark]]" background-color="[[backgroundColor_]]"
+      hidden$="[[!logoEnabled_]]">
   </ntp-logo>
-  <ntp-fakebox id="fakebox" on-open-voice-search="onOpenVoiceSearch_"
-      hidden$="[[realboxEnabled_]]">
-  </ntp-fakebox>
   <ntp-realbox id="realbox" on-open-voice-search="onOpenVoiceSearch_"
-      theme="[[theme_.searchBox]]" shown$="[[realboxShown_]]"
-      hidden$="[[!realboxEnabled_]]">
+      theme="[[theme_.searchBox]]" shown$="[[realboxShown_]]">
   </ntp-realbox>
   <dom-if if="[[lazyRender_]]" on-dom-change="onLazyRendered_">
     <template>
@@ -284,7 +285,12 @@
       <template is="dom-repeat" items="[[moduleDescriptors_]]" id="modules"
           on-dom-change="onModulesLoaded_">
         <ntp-module-wrapper descriptor="[[item]]"
-            on-dismiss-module="onDismissModule_">
+            on-dismiss-module="onDismissModule_"
+            on-disable-module="onDisableModule_"
+            on-customize-module="onCustomizeModule_"
+            hidden="[[moduleDisabled_(item.id,
+                                      dismissedModules_.*,
+                                      disabledModules_)]]">
         </ntp-module-wrapper>
       </template>
       <a id="backgroundImageAttribution"
@@ -301,7 +307,6 @@
           [[backgroundImageAttribution2_]]
         </div>
       </a>
-      <div id="customizeButtonSpacer"></div>
       <!-- cr-button has a transparent background. This leads to incorrect
            results when a custom background is set. Therefore, wrap customize
            button in container to enfore solid background color. -->
@@ -321,6 +326,7 @@
       </div>
     </template>
   </dom-if>
+  <div id="contentBottomSpacer"></div>
 </div>
 <dom-if if="[[showVoiceSearchOverlay_]]" restamp>
   <template>
@@ -328,21 +334,21 @@
     </ntp-voice-search-overlay>
   </template>
 </dom-if>
-<dom-if if="[[showCustomizeDialog_]]" restamp>
-  <template>
-    <ntp-customize-dialog on-close="onCustomizeDialogClose_"
-        theme="[[theme_]]"
-        background-selection="{{backgroundSelection_}}">
-    </ntp-customize-dialog>
-  </template>
-</dom-if>
+<template is="dom-if" if="[[showCustomizeDialog_]]" restamp>
+  <ntp-customize-dialog
+      on-close="onCustomizeDialogClose_"
+      theme="[[theme_]]"
+      background-selection="{{backgroundSelection_}}"
+      selected-page="[[selectedCustomizeDialogPage_]]">
+  </ntp-customize-dialog>
+</template>
 <dom-if if="[[lazyRender_]]" restamp>
   <template>
-    <cr-toast id="dismissModuleToast" duration="10000">
-      <div id="dismissModuleToastMessage">[[dismissedModuleData_.message]]</div>
-      <cr-button id="undoDismissModuleButton"
+    <cr-toast id="removeModuleToast" duration="10000">
+      <div id="removeModuleToastMessage">[[removedModuleData_.message]]</div>
+      <cr-button id="undoRemoveModuleButton"
           aria-label="$i18n{undoDescription}"
-          on-click="onUndoDismissModuleButtonClick_">
+          on-click="onUndoRemoveModuleButtonClick_">
         $i18n{undo}
       </cr-button>
     </cr-toast>

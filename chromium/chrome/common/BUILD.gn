@@ -46,10 +46,10 @@ buildflag_header("buildflags") {
     "ENABLE_DOWNGRADE_PROCESSING=$enable_downgrade_processing",
     "ENABLE_HANGOUT_SERVICES_EXTENSION=$enable_hangout_services_extension",
     "ENABLE_ONE_CLICK_SIGNIN=$enable_one_click_signin",
-    "ENABLE_NATIVE_NOTIFICATIONS=$enable_native_notifications",
     "ENABLE_SERVICE_DISCOVERY=$enable_service_discovery",
     "ENABLE_SESSION_SERVICE=$enable_session_service",
     "ENABLE_SUPERVISED_USERS=$enable_supervised_users",
+    "ENABLE_SYSTEM_NOTIFICATIONS=$enable_system_notifications",
     "ENABLE_WAYLAND_SERVER=$enable_wayland_server",
     "ENABLE_WEBUI_TAB_STRIP=$enable_webui_tab_strip",
     "OPTIMIZE_WEBUI=$optimize_webui",
@@ -351,7 +351,7 @@ static_library("common") {
       "extensions/api/input_ime/input_components_handler.h",
     ]
     public_deps += [ "//ash/keyboard/ui" ]
-    deps += [ "//chromeos/constants" ]
+    deps += [ "//ash/constants" ]
   }
 
   if (enable_nacl) {
@@ -403,6 +403,7 @@ static_library("common") {
       "media/chrome_media_drm_bridge_client.cc",
       "media/chrome_media_drm_bridge_client.h",
     ]
+    deps += [ "//components/embedder_support/android/common:url_constants" ]
   } else {
     # Non-Android.
     public_deps += [ "//chrome/common/importer" ]
@@ -607,10 +608,6 @@ static_library("constants") {
     "//third_party/widevine/cdm:buildflags",
   ]
 
-  if (enable_extensions) {
-    public_deps += [ "//components/services/app_service/public/mojom" ]
-  }
-
   if (is_android) {
     sources += [ "chrome_paths_android.cc" ]
 
@@ -717,7 +714,6 @@ mojom("mojo_bindings") {
     "renderer_configuration.mojom",
     "subresource_redirect_service.mojom",
     "sync_encryption_keys_extension.mojom",
-    "web_page_metadata.mojom",
   ]
 
   deps = []
@@ -740,10 +736,6 @@ mojom("mojo_bindings") {
     sources += [ "mhtml_page_notifier.mojom" ]
     deps += [ "//third_party/blink/public/mojom:mojom_mhtml_load_result" ]
     enabled_features = [ "enable_offline_pages" ]
-  }
-
-  if (enable_extensions) {
-    sources += [ "url_loader_factory_proxy.mojom" ]
   }
 
   public_deps = [
@@ -772,21 +764,6 @@ mojom("mojo_bindings") {
   ]
 
   component_deps = [ "//content/public/common" ]
-
-  cpp_typemaps = [
-    {
-      types = [
-        {
-          mojom = "chrome.mojom.WebApplicationInfo"
-          cpp = "::WebApplicationInfo"
-        },
-      ]
-      traits_headers = [ "web_application_info.h" ]
-      traits_private_headers =
-          [ "web_application_info_provider_param_traits.h" ]
-      traits_deps = [ "//ipc" ]
-    },
-  ]
 }
 
 if (enable_print_preview && !is_chromeos_ash) {

@@ -40,73 +40,9 @@ bool IsDirectiveNameCharacter(char c) {
 }
 
 bool IsDirectiveValueCharacter(char c) {
+  // Whitespace + VCHAR, but not ',' and ';'
   return base::IsAsciiWhitespace(c) ||
-         base::IsAsciiPrintable(c);  // Whitespace + VCHAR
-}
-
-static CSPDirectiveName CSPFallback(CSPDirectiveName directive,
-                                    CSPDirectiveName original_directive) {
-  switch (directive) {
-    case CSPDirectiveName::ConnectSrc:
-    case CSPDirectiveName::FontSrc:
-    case CSPDirectiveName::ImgSrc:
-    case CSPDirectiveName::ManifestSrc:
-    case CSPDirectiveName::MediaSrc:
-    case CSPDirectiveName::PrefetchSrc:
-    case CSPDirectiveName::ObjectSrc:
-    case CSPDirectiveName::ScriptSrc:
-    case CSPDirectiveName::StyleSrc:
-      return CSPDirectiveName::DefaultSrc;
-
-    case CSPDirectiveName::ScriptSrcAttr:
-    case CSPDirectiveName::ScriptSrcElem:
-      return CSPDirectiveName::ScriptSrc;
-
-    case CSPDirectiveName::StyleSrcAttr:
-    case CSPDirectiveName::StyleSrcElem:
-      return CSPDirectiveName::StyleSrc;
-
-    case CSPDirectiveName::FrameSrc:
-    case CSPDirectiveName::WorkerSrc:
-      return CSPDirectiveName::ChildSrc;
-
-    // Because the fallback chain of child-src can be different if we are
-    // checking a worker or a frame request, we need to know the original type
-    // of the request to decide. These are the fallback chains for worker-src
-    // and frame-src specifically.
-
-    // worker-src > child-src > script-src > default-src
-    // frame-src > child-src > default-src
-
-    // Since there are some situations and tests that will operate on the
-    // `child-src` directive directly (like for example the EE subsumption
-    // algorithm), we consider the child-src > default-src fallback path as the
-    // "default" and the worker-src fallback path as an exception.
-    case CSPDirectiveName::ChildSrc:
-      if (original_directive == CSPDirectiveName::WorkerSrc)
-        return CSPDirectiveName::ScriptSrc;
-
-      return CSPDirectiveName::DefaultSrc;
-
-    case CSPDirectiveName::BaseURI:
-    case CSPDirectiveName::BlockAllMixedContent:
-    case CSPDirectiveName::DefaultSrc:
-    case CSPDirectiveName::FormAction:
-    case CSPDirectiveName::FrameAncestors:
-    case CSPDirectiveName::NavigateTo:
-    case CSPDirectiveName::PluginTypes:
-    case CSPDirectiveName::ReportTo:
-    case CSPDirectiveName::ReportURI:
-    case CSPDirectiveName::RequireTrustedTypesFor:
-    case CSPDirectiveName::Sandbox:
-    case CSPDirectiveName::TreatAsPublicAddress:
-    case CSPDirectiveName::TrustedTypes:
-    case CSPDirectiveName::UpgradeInsecureRequests:
-      return CSPDirectiveName::Unknown;
-    case CSPDirectiveName::Unknown:
-      NOTREACHED();
-      return CSPDirectiveName::Unknown;
-  }
+         (base::IsAsciiPrintable(c) && c != ',' && c != ';');
 }
 
 std::string ElideURLForReportViolation(const GURL& url) {
@@ -136,7 +72,6 @@ bool SupportedInReportOnly(CSPDirectiveName directive) {
     case CSPDirectiveName::MediaSrc:
     case CSPDirectiveName::NavigateTo:
     case CSPDirectiveName::ObjectSrc:
-    case CSPDirectiveName::PluginTypes:
     case CSPDirectiveName::PrefetchSrc:
     case CSPDirectiveName::ReportTo:
     case CSPDirectiveName::ReportURI:
@@ -182,7 +117,6 @@ const char* ErrorMessage(CSPDirectiveName directive) {
     case CSPDirectiveName::ManifestSrc:
     case CSPDirectiveName::MediaSrc:
     case CSPDirectiveName::ObjectSrc:
-    case CSPDirectiveName::PluginTypes:
     case CSPDirectiveName::PrefetchSrc:
     case CSPDirectiveName::ReportTo:
     case CSPDirectiveName::ReportURI:
@@ -708,41 +642,6 @@ mojom::CSPSourceListPtr ParseSourceList(
   return directive;
 }
 
-// Checks whether |expression| is a plugin type matching the regex:
-// [^\s/]+\/[^\s/]+
-// We assume |expression| does not contain any whitespaces.
-bool IsPluginType(base::StringPiece expression) {
-  auto* it = expression.begin();
-  auto* end = expression.end();
-
-  int count_1 = EatChar(&it, end, [](char c) { return c != '/'; });
-  if (it == end || *it != '/')
-    return false;
-  ++it;
-  int count_2 = EatChar(&it, end, [](char c) { return c != '/'; });
-
-  return count_1 >= 1 && count_2 >= 1 && it == end;
-}
-
-std::vector<std::string> ParsePluginTypes(
-    base::StringPiece value,
-    std::vector<std::string>& parsing_errors) {
-  std::vector<std::string> out;
-  for (const auto expression : base::SplitStringPiece(
-           value, base::kWhitespaceASCII, base::TRIM_WHITESPACE,
-           base::SPLIT_WANT_NONEMPTY)) {
-    if (IsPluginType(expression))
-      out.emplace_back(expression.as_string());
-    else {
-      parsing_errors.emplace_back(base::StringPrintf(
-          "Invalid plugin type in 'plugin-types' Content Security Policy "
-          "directive: '%s'.",
-          expression.as_string().c_str()));
-    }
-  }
-  return out;
-}
-
 // Parse the 'required-trusted-types-for' directive.
 // https://w3c.github.io/webappsec-trusted-types/dist/spec/#require-trusted-types-for-csp-directive
 network::mojom::CSPRequireTrustedTypesFor ParseRequireTrustedTypesFor(
@@ -886,6 +785,20 @@ mojom::CSPSourcePtr ComputeSelfOrigin(const GURL& url) {
                                "", false, false);
 }
 
+std::string UnrecognizedDirectiveErrorMessage(
+    const std::string& directive_name) {
+  if (base::EqualsCaseInsensitiveASCII(directive_name, "plugin-types")) {
+    return "The Content-Security-Policy directive 'plugin-types' has been "
+           "removed from the "
+           "specification. If you want to block plugins, consider specifying "
+           "\"object-src 'none'\" instead.";
+  }
+
+  return base::StringPrintf(
+      "Unrecognized Content-Security-Policy directive '%s'.",
+      directive_name.c_str());
+}
+
 void AddContentSecurityPolicyFromHeader(base::StringPiece header,
                                         mojom::ContentSecurityPolicyType type,
                                         const GURL& base_url,
@@ -909,9 +822,8 @@ void AddContentSecurityPolicyFromHeader(base::StringPiece header,
         ToCSPDirectiveName(directive.first.as_string());
 
     if (directive_name == CSPDirectiveName::Unknown) {
-      out->parsing_errors.emplace_back(base::StringPrintf(
-          "Unrecognized Content-Security-Policy directive '%s'.",
-          directive.first.as_string().c_str()));
+      out->parsing_errors.emplace_back(
+          UnrecognizedDirectiveErrorMessage(directive.first.as_string()));
       continue;
     }
 
@@ -929,9 +841,13 @@ void AddContentSecurityPolicyFromHeader(base::StringPiece header,
     if (!base::ranges::all_of(directive.second, IsDirectiveValueCharacter)) {
       out->parsing_errors.emplace_back(base::StringPrintf(
           "The value for the Content-Security-Policy directive '%s' contains "
-          "one or more invalid characters. Non-whitespace characters outside "
-          "ASCII 0x21-0x7E must be percent-encoded, as described in RFC 3986, "
-          "section 2.1: http://tools.ietf.org/html/rfc3986#section-2.1.",
+          "one or more invalid characters. In a source expression, "
+          "non-whitespace characters outside ASCII "
+          "0x21-0x7E must be Punycode-encoded, as described in RFC 3492 "
+          "(https://tools.ietf.org/html/rfc3492), if part of the hostname and "
+          "percent-encoded, as described in RFC 3986, section 2.1 "
+          "(http://tools.ietf.org/html/rfc3986#section-2.1), if part of the "
+          "path.",
           directive.first.as_string().c_str()));
       continue;
     }
@@ -990,14 +906,6 @@ void AddContentSecurityPolicyFromHeader(base::StringPiece header,
         out->treat_as_public_address = true;
         WarnIfDirectiveValueNotEmpty(directive, out->parsing_errors);
         break;
-      case CSPDirectiveName::PluginTypes:
-        // If the plugin-types directive is present, then always initialize
-        // `out->plugin_types` to be non-null, since only the plugin types
-        // explicitly listed will be allowed..
-        out->plugin_types =
-            ParsePluginTypes(directive.second, out->parsing_errors);
-        break;
-
       case CSPDirectiveName::RequireTrustedTypesFor:
         out->require_trusted_types_for =
             ParseRequireTrustedTypesFor(directive.second, out->parsing_errors);
@@ -1036,7 +944,8 @@ std::pair<CSPDirectiveName, const mojom::CSPSourceList*> GetSourceList(
     const mojom::ContentSecurityPolicy& policy) {
   for (CSPDirectiveName effective_directive = directive;
        effective_directive != CSPDirectiveName::Unknown;
-       effective_directive = CSPFallback(effective_directive, directive)) {
+       effective_directive =
+           CSPFallbackDirective(effective_directive, directive)) {
     auto value = policy.directives.find(effective_directive);
     if (value != policy.directives.end())
       return std::make_pair(effective_directive, value->second.get());
@@ -1044,57 +953,71 @@ std::pair<CSPDirectiveName, const mojom::CSPSourceList*> GetSourceList(
   return std::make_pair(CSPDirectiveName::Unknown, nullptr);
 }
 
-// Check that all plugin-types allowed by the intersection of the policies in
-// |policies_b| are also allowed by |policy_a|.
-bool PluginTypesSubsumes(
-    const mojom::ContentSecurityPolicy& policy_a,
-    const std::vector<mojom::ContentSecurityPolicyPtr>& policies_b) {
-  // Note that `policy->plugin_types == base::nullopt` means all plugin-types
-  // are allowed, while if `policy->plugin_types` is the empty vector than no
-  // plugin-types are allowed.
-
-  if (!policy_a.plugin_types.has_value())
-    // |types_a| allows everything.
-    return true;
-
-  if (policies_b.empty())
-    return false;
-
-  // Compute the intersection of the allowed plugin-types from |policies_b|.
-  // First, find the first non-null plugin-types entry in |policies_b|.
-  base::Optional<base::flat_set<std::string>> types_b;
-  auto it = policies_b.begin();
-  for (; it != policies_b.end(); ++it) {
-    if ((*it)->plugin_types.has_value()) {
-      types_b = base::flat_set<std::string>((*it)->plugin_types.value());
-      break;
-    }
-  }
-
-  // If |types_b| is base::nullopt, then no policy in |policies_b| specified
-  // any plugin-types, so |policies_b| allows everything.
-  if (!types_b.has_value())
-    return false;
-
-  // Now complete the intersection by considering the remaining policies of
-  // |policies_b|.
-  for (; it != policies_b.end(); ++it) {
-    if ((*it)->plugin_types.has_value()) {
-      base::flat_set<std::string> set((*it)->plugin_types.value());
-      base::EraseIf(types_b.value(),
-                    [&set](const auto& type) { return !set.contains(type); });
-    }
-  }
-
-  // Check that every plugin-type in |types_b| is allowed by |types_a|.
-  return base::ranges::all_of(types_b.value(), [&](const std::string& type_b) {
-    return base::ranges::any_of(
-        policy_a.plugin_types.value(),
-        [&](const std::string& type_a) { return type_a == type_b; });
-  });
-}
-
 }  // namespace
+
+CSPDirectiveName CSPFallbackDirective(CSPDirectiveName directive,
+                                      CSPDirectiveName original_directive) {
+  switch (directive) {
+    case CSPDirectiveName::ConnectSrc:
+    case CSPDirectiveName::FontSrc:
+    case CSPDirectiveName::ImgSrc:
+    case CSPDirectiveName::ManifestSrc:
+    case CSPDirectiveName::MediaSrc:
+    case CSPDirectiveName::PrefetchSrc:
+    case CSPDirectiveName::ObjectSrc:
+    case CSPDirectiveName::ScriptSrc:
+    case CSPDirectiveName::StyleSrc:
+      return CSPDirectiveName::DefaultSrc;
+
+    case CSPDirectiveName::ScriptSrcAttr:
+    case CSPDirectiveName::ScriptSrcElem:
+      return CSPDirectiveName::ScriptSrc;
+
+    case CSPDirectiveName::StyleSrcAttr:
+    case CSPDirectiveName::StyleSrcElem:
+      return CSPDirectiveName::StyleSrc;
+
+    case CSPDirectiveName::FrameSrc:
+    case CSPDirectiveName::WorkerSrc:
+      return CSPDirectiveName::ChildSrc;
+
+    // Because the fallback chain of child-src can be different if we are
+    // checking a worker or a frame request, we need to know the original type
+    // of the request to decide. These are the fallback chains for worker-src
+    // and frame-src specifically.
+
+    // worker-src > child-src > script-src > default-src
+    // frame-src > child-src > default-src
+
+    // Since there are some situations and tests that will operate on the
+    // `child-src` directive directly (like for example the EE subsumption
+    // algorithm), we consider the child-src > default-src fallback path as the
+    // "default" and the worker-src fallback path as an exception.
+    case CSPDirectiveName::ChildSrc:
+      if (original_directive == CSPDirectiveName::WorkerSrc)
+        return CSPDirectiveName::ScriptSrc;
+
+      return CSPDirectiveName::DefaultSrc;
+
+    case CSPDirectiveName::BaseURI:
+    case CSPDirectiveName::BlockAllMixedContent:
+    case CSPDirectiveName::DefaultSrc:
+    case CSPDirectiveName::FormAction:
+    case CSPDirectiveName::FrameAncestors:
+    case CSPDirectiveName::NavigateTo:
+    case CSPDirectiveName::ReportTo:
+    case CSPDirectiveName::ReportURI:
+    case CSPDirectiveName::RequireTrustedTypesFor:
+    case CSPDirectiveName::Sandbox:
+    case CSPDirectiveName::TreatAsPublicAddress:
+    case CSPDirectiveName::TrustedTypes:
+    case CSPDirectiveName::UpgradeInsecureRequests:
+      return CSPDirectiveName::Unknown;
+    case CSPDirectiveName::Unknown:
+      NOTREACHED();
+      return CSPDirectiveName::Unknown;
+  }
+}
 
 void AddContentSecurityPolicyFromHeaders(
     const net::HttpResponseHeaders& headers,
@@ -1178,7 +1101,7 @@ bool CheckContentSecurityPolicy(const mojom::ContentSecurityPolicyPtr& policy,
   for (CSPDirectiveName effective_directive_name = directive_name;
        effective_directive_name != CSPDirectiveName::Unknown;
        effective_directive_name =
-           CSPFallback(effective_directive_name, directive_name)) {
+           CSPFallbackDirective(effective_directive_name, directive_name)) {
     const auto& directive = policy->directives.find(effective_directive_name);
     if (directive == policy->directives.end())
       continue;
@@ -1243,14 +1166,6 @@ bool IsValidRequiredCSPAttr(
   if (!policy[0])
     return false;
 
-  if (!policy[0]->parsing_errors.empty()) {
-    error_message =
-        "Parsing the csp attribute into a Content-Security-Policy returned one "
-        "or more parsing errors: " +
-        base::JoinString(policy[0]->parsing_errors, " ");
-    return false;
-  }
-
   if (!policy[0]->report_endpoints.empty() ||
       // We really don't want any report directives, even with invalid/missing
       // endpoints.
@@ -1277,8 +1192,6 @@ bool Subsumes(const mojom::ContentSecurityPolicy& policy_a,
   if (policy_a.header->type == mojom::ContentSecurityPolicyType::kReport)
     return true;
 
-  if (!PluginTypesSubsumes(policy_a, policies_b))
-    return false;
   if (policy_a.directives.empty())
     return true;
 
@@ -1355,8 +1268,6 @@ CSPDirectiveName ToCSPDirectiveName(const std::string& name) {
     return CSPDirectiveName::MediaSrc;
   if (name == "object-src")
     return CSPDirectiveName::ObjectSrc;
-  if (name == "plugin-types")
-    return CSPDirectiveName::PluginTypes;
   if (name == "prefetch-src")
     return CSPDirectiveName::PrefetchSrc;
   if (name == "report-uri")
@@ -1421,8 +1332,6 @@ std::string ToString(CSPDirectiveName name) {
       return "media-src";
     case CSPDirectiveName::ObjectSrc:
       return "object-src";
-    case CSPDirectiveName::PluginTypes:
-      return "plugin-types";
     case CSPDirectiveName::PrefetchSrc:
       return "prefetch-src";
     case CSPDirectiveName::ReportURI:
@@ -1460,6 +1369,33 @@ std::string ToString(CSPDirectiveName name) {
   }
   NOTREACHED();
   return "";
+}
+
+bool AllowsBlanketEnforcementOfRequiredCSP(
+    const url::Origin& request_origin,
+    const GURL& response_url,
+    const network::mojom::AllowCSPFromHeaderValue* allow_csp_from) {
+  if (response_url.SchemeIs(url::kAboutScheme) ||
+      response_url.SchemeIs(url::kDataScheme) || response_url.SchemeIsFile() ||
+      response_url.SchemeIsFileSystem() || response_url.SchemeIsBlob()) {
+    return true;
+  }
+
+  if (request_origin.IsSameOriginWith(url::Origin::Create(response_url)))
+    return true;
+
+  if (!allow_csp_from)
+    return false;
+
+  if (allow_csp_from->is_allow_star())
+    return true;
+
+  if (allow_csp_from->is_origin() &&
+      request_origin.IsSameOriginWith(allow_csp_from->get_origin())) {
+    return true;
+  }
+
+  return false;
 }
 
 }  // namespace network

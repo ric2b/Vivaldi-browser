@@ -5,8 +5,8 @@
 #include "chrome/browser/ui/webui/chromeos/login/fingerprint_setup_screen_handler.h"
 
 #include "base/strings/string_number_conversions.h"
-#include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_utils.h"
-#include "chrome/browser/chromeos/login/screens/fingerprint_setup_screen.h"
+#include "chrome/browser/ash/login/quick_unlock/quick_unlock_utils.h"
+#include "chrome/browser/ash/login/screens/fingerprint_setup_screen.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/login/localized_values_builder.h"
 #include "ui/chromeos/devicetype_utils.h"

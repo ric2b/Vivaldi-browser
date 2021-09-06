@@ -51,79 +51,64 @@ class NGGridLayoutAlgorithmTest
         algorithm.ComputeAutomaticRepetitions(kForRows));
 
     algorithm.BuildAlgorithmTrackCollections(
-        &grid_items_, &algorithm_column_track_collection_,
-        &algorithm_row_track_collection_, &grid_placement);
-
-    // Cache set indices.
-    algorithm.CacheItemSetIndices(algorithm_column_track_collection_,
-                                  &grid_items_);
-    algorithm.CacheItemSetIndices(algorithm_row_track_collection_,
-                                  &grid_items_);
-
-    // Create a vector of grid item indices using |NGGridChildIterator| order.
-    Vector<wtf_size_t> reordered_item_indices(grid_items_.size());
-    for (wtf_size_t i = 0; i < grid_items_.size(); ++i)
-      reordered_item_indices[i] = i;
+        &grid_items_, &column_track_collection_, &row_track_collection_,
+        &grid_placement);
 
     // Cache track span properties for grid items.
-    algorithm.CacheGridItemsTrackSpanProperties(
-        algorithm_column_track_collection_, &grid_items_,
-        &reordered_item_indices);
-    algorithm.CacheGridItemsTrackSpanProperties(
-        algorithm_row_track_collection_, &grid_items_, &reordered_item_indices);
+    algorithm.CacheGridItemsTrackSpanProperties(column_track_collection_,
+                                                &grid_items_);
+    algorithm.CacheGridItemsTrackSpanProperties(row_track_collection_,
+                                                &grid_items_);
+
+    for (auto& grid_item : grid_items_) {
+      grid_item.SetIndices(column_track_collection_);
+      grid_item.SetIndices(row_track_collection_);
+    }
+
+    grid_geometry_ = {algorithm.InitializeTrackSizes(&column_track_collection_),
+                      algorithm.InitializeTrackSizes(&row_track_collection_)};
 
     // Resolve inline size.
-    algorithm.ComputeUsedTrackSizes(&algorithm_column_track_collection_,
-                                    &grid_items_, &reordered_item_indices);
+    algorithm.ComputeUsedTrackSizes(
+        NGGridLayoutAlgorithm::SizingConstraint::kLayout, grid_geometry_,
+        &column_track_collection_, &grid_items_);
     // Resolve block size.
-    algorithm.ComputeUsedTrackSizes(&algorithm_row_track_collection_,
-                                    &grid_items_, &reordered_item_indices);
+    algorithm.ComputeUsedTrackSizes(
+        NGGridLayoutAlgorithm::SizingConstraint::kLayout, grid_geometry_,
+        &row_track_collection_, &grid_items_);
   }
 
   NGGridLayoutAlgorithmTrackCollection& TrackCollection(
       GridTrackSizingDirection track_direction) {
-    return (track_direction == kForColumns) ? algorithm_column_track_collection_
-                                            : algorithm_row_track_collection_;
+    return (track_direction == kForColumns) ? column_track_collection_
+                                            : row_track_collection_;
+  }
+
+  LayoutUnit BaseRowSizeForChild(const NGGridLayoutAlgorithm& algorithm,
+                                 wtf_size_t index) {
+    LayoutUnit offset, size;
+    algorithm.ComputeOffsetAndSize(grid_items_.item_data[index],
+                                   grid_geometry_.row_geometry, kForRows,
+                                   kIndefiniteSize, &offset, &size);
+    return size;
   }
 
   // Helper methods to access private data on NGGridLayoutAlgorithm. This class
   // is a friend of NGGridLayoutAlgorithm but the individual tests are not.
-  wtf_size_t GridItemCount(const NGGridLayoutAlgorithm& algorithm) {
-    return grid_items_.size();
-  }
-
-  Vector<LayoutUnit> GridItemInlineSizes(
-      const NGGridLayoutAlgorithm& algorithm) {
-    Vector<LayoutUnit> results;
-    for (const auto& item : grid_items_) {
-      results.push_back(item.inline_size);
-    }
-    return results;
-  }
+  wtf_size_t GridItemCount() { return grid_items_.item_data.size(); }
 
   Vector<LayoutUnit> GridItemInlineMarginSum(
       const NGGridLayoutAlgorithm& algorithm) {
     Vector<LayoutUnit> results;
-    for (const auto& item : grid_items_) {
+    for (const auto& item : grid_items_.item_data)
       results.push_back(item.margins.InlineSum());
-    }
-    return results;
-  }
-
-  Vector<MinMaxSizes> GridItemMinMaxSizes(
-      const NGGridLayoutAlgorithm& algorithm) {
-    Vector<MinMaxSizes> results;
-    for (const auto& item : grid_items_) {
-      results.push_back(item.min_max_sizes);
-    }
     return results;
   }
 
   Vector<GridArea> GridItemGridAreas(const NGGridLayoutAlgorithm& algorithm) {
     Vector<GridArea> results;
-    for (const auto& item : grid_items_) {
+    for (const auto& item : grid_items_.item_data)
       results.push_back(item.resolved_position);
-    }
     return results;
   }
 
@@ -131,8 +116,8 @@ class NGGridLayoutAlgorithmTest
       const NGGridLayoutAlgorithm& algorithm,
       TrackSpanProperties::PropertyId property) {
     Vector<wtf_size_t> results;
-    for (wtf_size_t i = 0; i < grid_items_.size(); ++i) {
-      if (grid_items_[i].column_span_properties.HasProperty(property))
+    for (wtf_size_t i = 0; i < GridItemCount(); ++i) {
+      if (grid_items_.item_data[i].column_span_properties.HasProperty(property))
         results.push_back(i);
     }
     return results;
@@ -142,8 +127,8 @@ class NGGridLayoutAlgorithmTest
       const NGGridLayoutAlgorithm& algorithm,
       TrackSpanProperties::PropertyId property) {
     Vector<wtf_size_t> results;
-    for (wtf_size_t i = 0; i < grid_items_.size(); ++i) {
-      if (grid_items_[i].row_span_properties.HasProperty(property))
+    for (wtf_size_t i = 0; i < GridItemCount(); ++i) {
+      if (grid_items_.item_data[i].row_span_properties.HasProperty(property))
         results.push_back(i);
     }
     return results;
@@ -198,14 +183,59 @@ class NGGridLayoutAlgorithmTest
     return fragment->DumpFragmentTree(flags);
   }
 
-  Vector<NGGridLayoutAlgorithm::GridItemData> grid_items_;
+  NGGridLayoutAlgorithm::GridItems grid_items_;
   Vector<NGGridLayoutAlgorithm::GridItemData> out_of_flow_items_;
 
-  NGGridLayoutAlgorithmTrackCollection algorithm_column_track_collection_;
-  NGGridLayoutAlgorithmTrackCollection algorithm_row_track_collection_;
+  NGGridLayoutAlgorithmTrackCollection column_track_collection_;
+  NGGridLayoutAlgorithmTrackCollection row_track_collection_;
+
+  NGGridLayoutAlgorithm::GridGeometry grid_geometry_;
 };
 
-TEST_F(NGGridLayoutAlgorithmTest, NGGridLayoutAlgorithmMeasuring) {
+TEST_F(NGGridLayoutAlgorithmTest, NGGridLayoutAlgorithmBaseSetSizes) {
+  if (!RuntimeEnabledFeatures::LayoutNGGridEnabled())
+    return;
+
+  SetBodyInnerHTML(R"HTML(
+    <style>
+    #grid1 {
+      display: grid;
+      grid-gap: 10px;
+      grid-template-columns: 100px;
+      grid-template-rows: auto auto 100px 100px auto 100px;
+    }
+    </style>
+    <div id="grid1">
+      <div style="grid-row: 1/2;"></div>
+      <div style="grid-row: 2/4;"></div>
+      <div style="grid-row: 3/5;"></div>
+      <div style="grid-row: 6/7;"></div>
+      <div style="grid-row: 4/6;"></div>
+    </div>
+  )HTML");
+
+  NGBlockNode node(GetLayoutBoxByElementId("grid1"));
+
+  NGConstraintSpace space = ConstructBlockLayoutTestConstraintSpace(
+      {WritingMode::kHorizontalTb, TextDirection::kLtr},
+      LogicalSize(LayoutUnit(100), LayoutUnit(100)),
+      /* stretch_inline_size_if_auto */ true,
+      /* is_new_formatting_context */ true);
+
+  NGFragmentGeometry fragment_geometry =
+      CalculateInitialFragmentGeometry(space, node);
+
+  NGGridLayoutAlgorithm algorithm({node, fragment_geometry, space});
+  BuildGridItemsAndTrackCollections(algorithm);
+  EXPECT_EQ(BaseRowSizeForChild(algorithm, 0), kIndefiniteSize);
+  EXPECT_EQ(BaseRowSizeForChild(algorithm, 1), kIndefiniteSize);
+  EXPECT_EQ(BaseRowSizeForChild(algorithm, 2), LayoutUnit(210));
+  EXPECT_EQ(BaseRowSizeForChild(algorithm, 3), LayoutUnit(100));
+  EXPECT_EQ(BaseRowSizeForChild(algorithm, 4), kIndefiniteSize);
+}
+
+// Flaky; see https://crbug.com/1146112 for suggestions on fixing.
+TEST_F(NGGridLayoutAlgorithmTest, DISABLED_NGGridLayoutAlgorithmMeasuring) {
   if (!RuntimeEnabledFeatures::LayoutNGGridEnabled())
     return;
 
@@ -344,47 +374,21 @@ TEST_F(NGGridLayoutAlgorithmTest, NGGridLayoutAlgorithmMeasuring) {
       CalculateInitialFragmentGeometry(space, node);
 
   NGGridLayoutAlgorithm algorithm({node, fragment_geometry, space});
-  EXPECT_EQ(GridItemCount(algorithm), 0U);
+  EXPECT_EQ(GridItemCount(), 0U);
   BuildGridItemsAndTrackCollections(algorithm);
-  EXPECT_EQ(GridItemCount(algorithm), 9U);
-
-  Vector<LayoutUnit> actual_inline_sizes = GridItemInlineSizes(algorithm);
-  EXPECT_EQ(GridItemCount(algorithm), actual_inline_sizes.size());
-
-  LayoutUnit expected_inline_sizes[] = {
-      LayoutUnit(50),  LayoutUnit(116), LayoutUnit(100),
-      LayoutUnit(100), LayoutUnit(300), LayoutUnit(100),
-      LayoutUnit(400), LayoutUnit(100), LayoutUnit(10)};
+  EXPECT_EQ(GridItemCount(), 9U);
 
   Vector<LayoutUnit> actual_inline_margin_sums =
       GridItemInlineMarginSum(algorithm);
-  EXPECT_EQ(GridItemCount(algorithm), actual_inline_margin_sums.size());
+  EXPECT_EQ(GridItemCount(), actual_inline_margin_sums.size());
 
   LayoutUnit expected_inline_margin_sums[] = {
       LayoutUnit(100), LayoutUnit(30),  LayoutUnit(0),
       LayoutUnit(0),   LayoutUnit(0),   LayoutUnit(0),
       LayoutUnit(10),  LayoutUnit(100), LayoutUnit(0)};
 
-  Vector<MinMaxSizes> actual_min_max_sizes = GridItemMinMaxSizes(algorithm);
-  EXPECT_EQ(GridItemCount(algorithm), actual_min_max_sizes.size());
-
-  MinMaxSizes expected_min_max_sizes[] = {
-      {LayoutUnit(40), LayoutUnit(60)},   {LayoutUnit(116), LayoutUnit(116)},
-      {LayoutUnit(40), LayoutUnit(60)},   {LayoutUnit(100), LayoutUnit(100)},
-      {LayoutUnit(300), LayoutUnit(300)}, {LayoutUnit(300), LayoutUnit(300)},
-      {LayoutUnit(300), LayoutUnit(300)}, {LayoutUnit(100), LayoutUnit(100)},
-      {LayoutUnit(40), LayoutUnit(40)}};
-
-  for (size_t i = 0; i < GridItemCount(algorithm); ++i) {
-    EXPECT_EQ(actual_inline_sizes[i], expected_inline_sizes[i])
-        << " index: " << i;
+  for (size_t i = 0; i < GridItemCount(); ++i) {
     EXPECT_EQ(actual_inline_margin_sums[i], expected_inline_margin_sums[i])
-        << " index: " << i;
-    EXPECT_EQ(actual_min_max_sizes[i].min_size,
-              expected_min_max_sizes[i].min_size)
-        << " index: " << i;
-    EXPECT_EQ(actual_min_max_sizes[i].max_size,
-              expected_min_max_sizes[i].max_size)
         << " index: " << i;
   }
 }
@@ -421,9 +425,9 @@ TEST_F(NGGridLayoutAlgorithmTest, NGGridLayoutAlgorithmRanges) {
       CalculateInitialFragmentGeometry(space, node);
 
   NGGridLayoutAlgorithm algorithm({node, fragment_geometry, space});
-  EXPECT_EQ(GridItemCount(algorithm), 0U);
+  EXPECT_EQ(GridItemCount(), 0U);
   BuildGridItemsAndTrackCollections(algorithm);
-  EXPECT_EQ(GridItemCount(algorithm), 4U);
+  EXPECT_EQ(GridItemCount(), 4U);
 
   NGGridTrackCollectionBase::RangeRepeatIterator row_iterator(
       &TrackCollection(kForRows), 0u);
@@ -478,9 +482,9 @@ TEST_F(NGGridLayoutAlgorithmTest, NGGridLayoutAlgorithmRangesWithAutoRepeater) {
       CalculateInitialFragmentGeometry(space, node);
 
   NGGridLayoutAlgorithm algorithm({node, fragment_geometry, space});
-  EXPECT_EQ(GridItemCount(algorithm), 0U);
+  EXPECT_EQ(GridItemCount(), 0U);
   BuildGridItemsAndTrackCollections(algorithm);
-  EXPECT_EQ(GridItemCount(algorithm), 4U);
+  EXPECT_EQ(GridItemCount(), 4U);
 
   NGGridTrackCollectionBase::RangeRepeatIterator row_iterator(
       &TrackCollection(kForRows), 0u);
@@ -511,6 +515,8 @@ TEST_F(NGGridLayoutAlgorithmTest, NGGridLayoutAlgorithmRangesWithAutoRepeater) {
   EXPECT_RANGE(4u, 1u, column_iterator);
   EXPECT_TRUE(column_iterator.MoveToNextRange());
   EXPECT_RANGE(5u, 1u, column_iterator);
+  EXPECT_TRUE(column_iterator.MoveToNextRange());
+  EXPECT_RANGE(6u, 1u, column_iterator);
   EXPECT_FALSE(column_iterator.MoveToNextRange());
 }
 
@@ -564,9 +570,9 @@ TEST_F(NGGridLayoutAlgorithmTest, NGGridLayoutAlgorithmRangesImplicit) {
       CalculateInitialFragmentGeometry(space, node);
 
   NGGridLayoutAlgorithm algorithm({node, fragment_geometry, space});
-  EXPECT_EQ(GridItemCount(algorithm), 0U);
+  EXPECT_EQ(GridItemCount(), 0U);
   BuildGridItemsAndTrackCollections(algorithm);
-  EXPECT_EQ(GridItemCount(algorithm), 4U);
+  EXPECT_EQ(GridItemCount(), 4U);
 
   NGGridTrackCollectionBase::RangeRepeatIterator column_iterator(
       &TrackCollection(kForColumns), 0u);
@@ -635,9 +641,9 @@ TEST_F(NGGridLayoutAlgorithmTest,
       CalculateInitialFragmentGeometry(space, node);
 
   NGGridLayoutAlgorithm algorithm({node, fragment_geometry, space});
-  EXPECT_EQ(GridItemCount(algorithm), 0U);
+  EXPECT_EQ(GridItemCount(), 0U);
   BuildGridItemsAndTrackCollections(algorithm);
-  EXPECT_EQ(GridItemCount(algorithm), 4U);
+  EXPECT_EQ(GridItemCount(), 4U);
 
   NGGridTrackCollectionBase::RangeRepeatIterator column_iterator(
       &TrackCollection(kForColumns), 0u);
@@ -702,9 +708,9 @@ TEST_F(NGGridLayoutAlgorithmTest, NGGridLayoutAlgorithmRangesImplicitAutoRows) {
       CalculateInitialFragmentGeometry(space, node);
 
   NGGridLayoutAlgorithm algorithm({node, fragment_geometry, space});
-  EXPECT_EQ(GridItemCount(algorithm), 0U);
+  EXPECT_EQ(GridItemCount(), 0U);
   BuildGridItemsAndTrackCollections(algorithm);
-  EXPECT_EQ(GridItemCount(algorithm), 4U);
+  EXPECT_EQ(GridItemCount(), 4U);
 
   NGGridTrackCollectionBase::RangeRepeatIterator column_iterator(
       &TrackCollection(kForColumns), 0u);
@@ -761,9 +767,9 @@ TEST_F(NGGridLayoutAlgorithmTest, NGGridLayoutAlgorithmRangesImplicitMixed) {
       CalculateInitialFragmentGeometry(space, node);
 
   NGGridLayoutAlgorithm algorithm({node, fragment_geometry, space});
-  EXPECT_EQ(GridItemCount(algorithm), 0U);
+  EXPECT_EQ(GridItemCount(), 0U);
   BuildGridItemsAndTrackCollections(algorithm);
-  EXPECT_EQ(GridItemCount(algorithm), 5U);
+  EXPECT_EQ(GridItemCount(), 5U);
 
   NGGridTrackCollectionBase::RangeRepeatIterator column_iterator(
       &TrackCollection(kForColumns), 0u);
@@ -849,9 +855,9 @@ TEST_F(NGGridLayoutAlgorithmTest, NGGridLayoutAlgorithmAutoGridPositions) {
       CalculateInitialFragmentGeometry(space, node);
 
   NGGridLayoutAlgorithm algorithm({node, fragment_geometry, space});
-  EXPECT_EQ(GridItemCount(algorithm), 0U);
+  EXPECT_EQ(GridItemCount(), 0U);
   BuildGridItemsAndTrackCollections(algorithm);
-  EXPECT_EQ(GridItemCount(algorithm), 4U);
+  EXPECT_EQ(GridItemCount(), 4U);
 
   Vector<GridArea> grid_positions = GridItemGridAreas(algorithm);
   ASSERT_EQ(grid_positions.size(), 4U);
@@ -978,9 +984,9 @@ TEST_F(NGGridLayoutAlgorithmTest, NGGridLayoutAlgorithmAutoDense) {
       CalculateInitialFragmentGeometry(space, node);
 
   NGGridLayoutAlgorithm algorithm({node, fragment_geometry, space});
-  EXPECT_EQ(GridItemCount(algorithm), 0U);
+  EXPECT_EQ(GridItemCount(), 0U);
   BuildGridItemsAndTrackCollections(algorithm);
-  EXPECT_EQ(GridItemCount(algorithm), 16U);
+  EXPECT_EQ(GridItemCount(), 16U);
 
   Vector<GridArea> grid_positions = GridItemGridAreas(algorithm);
   ASSERT_EQ(grid_positions.size(), 16U);
@@ -1063,9 +1069,9 @@ TEST_F(NGGridLayoutAlgorithmTest, NGGridLayoutAlgorithmGridPositions) {
       CalculateInitialFragmentGeometry(space, node);
 
   NGGridLayoutAlgorithm algorithm({node, fragment_geometry, space});
-  EXPECT_EQ(GridItemCount(algorithm), 0U);
+  EXPECT_EQ(GridItemCount(), 0U);
   BuildGridItemsAndTrackCollections(algorithm);
-  EXPECT_EQ(GridItemCount(algorithm), 3U);
+  EXPECT_EQ(GridItemCount(), 3U);
 
   NGGridTrackCollectionBase::RangeRepeatIterator column_iterator(
       &TrackCollection(kForColumns), 0u);
@@ -1132,8 +1138,8 @@ TEST_F(NGGridLayoutAlgorithmTest, NGGridLayoutAlgorithmResolveFixedTrackSizes) {
   for (wtf_size_t i = 0; i < growth_limits.size(); ++i)
     EXPECT_EQ(expected_column_growth_limits[i], growth_limits[i]);
 
-  Vector<LayoutUnit> expected_row_base_sizes = {LayoutUnit(0), LayoutUnit(50),
-                                                LayoutUnit(40)};
+  Vector<LayoutUnit> expected_row_base_sizes = {LayoutUnit(80), LayoutUnit(50),
+                                                LayoutUnit(70)};
   Vector<LayoutUnit> expected_row_growth_limits = {
       LayoutUnit(100), LayoutUnit(50), LayoutUnit(70)};
 
@@ -1758,6 +1764,40 @@ TEST_F(NGGridLayoutAlgorithmTest, PositionedOutOfFlowItems) {
         grid-column-start: 5;
         grid-column-end: 6;
       }
+
+      #fifthItem {
+        grid-column-start: auto;
+        grid-column-end: 1;
+        grid-row-start: 2;
+        grid-row-end: 3;
+        background-color: hotpink;
+      }
+
+      #sixthItem {
+        grid-column-start: 4;
+        grid-column-end: auto;
+        grid-row-start: 2;
+        grid-row-end: 3;
+        background-color: purple;
+      }
+
+      #seventhItem {
+        grid-column: -5 / 1;
+        grid-row: 3 / -1;
+        background-color: darkgreen;
+      }
+
+      .descendant {
+        background: blue;
+        grid-column: 3;
+        grid-row: 3;
+      }
+
+      #positioned {
+        left: 0;
+        top: 0;
+      }
+
     </style>
     <div id="wrapper">
       <div id="grid">
@@ -1765,8 +1805,15 @@ TEST_F(NGGridLayoutAlgorithmTest, PositionedOutOfFlowItems) {
         <div class="absolute" id="secondItem"></div>
         <div class="absolute" id="thirdItem"></div>
         <div class="absolute" id="fourthItem"></div>
-        <div class="item"></div>
-        <div class="item"></div>
+        <div class="absolute" id="fifthItem"></div>
+        <div class="absolute" id="sixthItem"></div>
+        <div class="absolute" id="seventhItem"></div>
+        <div class="item">
+          <div class="absolute descendant"></div>
+        </div>
+        <div class="item">
+          <div class="absolute descendant" id="positioned"></div>
+        </div>
         <div class="item"></div>
         <div class="item"></div>
         <div class="item"></div>
@@ -1791,10 +1838,15 @@ TEST_F(NGGridLayoutAlgorithmTest, PositionedOutOfFlowItems) {
       offset:10,210 size:100x100
       offset:110,210 size:100x100
       offset:210,210 size:100x100
+      offset:10,10 size:50x50
+      offset:210,210 size:50x50
       offset:160,135 size:50x50
       offset:5,235 size:50x50
       offset:205,5 size:50x50
       offset:5,5 size:50x50
+      offset:5,110 size:50x50
+      offset:310,110 size:50x50
+      offset:5,210 size:50x50
 )DUMP";
   EXPECT_EQ(expectation, dump);
 }

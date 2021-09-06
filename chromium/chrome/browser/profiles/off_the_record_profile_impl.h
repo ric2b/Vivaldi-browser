@@ -56,7 +56,6 @@ class OffTheRecordProfileImpl : public Profile {
   const Profile* GetOriginalProfile() const override;
   bool IsSupervised() const override;
   bool IsChild() const override;
-  bool IsLegacySupervised() const override;
   bool AllowsBrowserWindows() const override;
   ExtensionSpecialStoragePolicy* GetExtensionSpecialStoragePolicy() override;
   PrefService* GetPrefs() override;
@@ -89,6 +88,9 @@ class OffTheRecordProfileImpl : public Profile {
   void OnLogin() override;
   void InitChromeOSPreferences() override;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+  // Returns whether the wrapped underlying profile is new.
+  bool IsNewProfile() const override;
 
   GURL GetHomePage() override;
   void SetCreationTimeForTesting(base::Time creation_time) override;
@@ -124,12 +126,6 @@ class OffTheRecordProfileImpl : public Profile {
   content::BrowsingDataRemoverDelegate* GetBrowsingDataRemoverDelegate()
       override;
   media::VideoDecodePerfHistory* GetVideoDecodePerfHistory() override;
-  void SetCorsOriginAccessListForOrigin(
-      const url::Origin& source_origin,
-      std::vector<network::mojom::CorsOriginPatternPtr> allow_patterns,
-      std::vector<network::mojom::CorsOriginPatternPtr> block_patterns,
-      base::OnceClosure closure) override;
-  content::SharedCorsOriginAccessList* GetSharedCorsOriginAccessList() override;
   content::FileSystemAccessPermissionContext*
   GetFileSystemAccessPermissionContext() override;
   void RecordMainFrameNavigation() override;

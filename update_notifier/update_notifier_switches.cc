@@ -7,14 +7,23 @@ namespace vivaldi_update_notifier {
 // Cryptic on purpose; it is internal.
 const char kCheckForUpdates[] = "c";
 
-const char kEnableLogging[] = "enable-logging";
+const char kFromScheduler[] = "from-scheduler";
+
+const char kInstallMode[] = "install-mode";
+
+const char kDisable[] = "disable";
+const char kEnable[] = "enable";
+const char kEnableIfUpgrade[] = "enable-if-upgrade";
+const char kIsEnabled[] = "is-enabled";
+const char kLaunchIfEnabled[] = "launch-if-enabled";
+const char kUnregister[] = "unregister";
 
 #if !defined(OFFICIAL_BUILD)
 // Set the the directory to look for the installer for delta updates.
 const char kDebugExeDir[] = "debug-exe-dir";
 
-// The pause in seconds to wait before starting the first automated check.
-const char kDebugFirstDelay[] = "debug-first-delay";
+// Override the language to use. Without value force to use the system language.
+const char kDebugLanguage[] = "debug-language";
 
 // Keep the process running even when automatic option to check for updates is
 // disabled.
@@ -27,11 +36,22 @@ const char kDebugSetupExe[] = "debug-setup-exe";
 const char kDebugVersion[] = "debug-version";
 #endif
 
-const wchar_t kCheckForUpdatesEventName[] =
+const wchar_t kCheckForUpdatesEventPrefix[] =
     L"Local\\Vivaldi/Update_notifier/Check_for_updates/";
-const wchar_t kQuitEventName[] = L"Local\\Vivaldi/Update_notifier/Quit/";
-const wchar_t kGlobalQuitEventName[] = L"Global\\Vivaldi/Update_notifier/Quit/";
-const wchar_t kGlobalUniquenessCheckEventName[] =
-    L"Global\\Vivaldi/Update_notifier/Unique/";
+const wchar_t kQuitEventPrefix[] = L"Local\\Vivaldi/Update_notifier/Quit/";
+const wchar_t kGlobalQuitEventPrefix[] =
+    L"Global\\Vivaldi/Update_notifier/Quit/";
+const wchar_t kNetworkInstallerUniquenessEventName[] =
+    L"Local\\Vivaldi/NetworkInstaller/Unique";
+
+// The subject name in the Vivaldi certificate that signs the official builds.
+const wchar_t kVivaldiSubjectName[] = L"Vivaldi Technologies AS";
+
+#if !defined(OFFICIAL_BUILD)
+// The subject name in self-signing certificates in test builds.
+const wchar_t kVivaldiTestSubjectName[] = L"Vivaldi testbuild";
+#endif
+
+const wchar_t kVivaldiScheduleTaskNamePrefix[] = L"VivaldiUpdateCheck";
 
 }  // namespace vivaldi_update_notifier

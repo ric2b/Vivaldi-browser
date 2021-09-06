@@ -53,4 +53,10 @@ void TopSitesImpl::SetThumbnailConvertCallback(
   backend_->SetThumbnailConvertCallback(std::move(callback));
 }
 
+void TopSitesBackend::SetThumbnailConvertCallback(
+    ConvertThumbnailDataCallback callback) {
+  db_->SetThumbnailConvertCallback(std::move(callback));
+}
+
+
 }  // namespace history

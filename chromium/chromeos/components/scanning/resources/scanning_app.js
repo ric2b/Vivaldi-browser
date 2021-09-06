@@ -15,6 +15,7 @@ import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import './file_path.mojom-lite.js';
 import './color_mode_select.js';
 import './file_type_select.js';
+import './loading_page.js';
 import './page_size_select.js';
 import './resolution_select.js';
 import './scan_done_section.js';
@@ -36,10 +37,10 @@ import {colorModeFromString, fileTypeFromString, pageSizeFromString, tokenToStri
 import {ScanningBrowserProxy, ScanningBrowserProxyImpl} from './scanning_browser_proxy.js';
 
 /**
- * The default save directory for completed scans.
+ * URL for the Scanning help page.
  * @const {string}
  */
-const DEFAULT_SAVE_DIRECTORY = '/home/chronos/user/MyFiles';
+const HELP_PAGE_LINK = 'http://support.google.com/chromebook?p=chrome_scanning';
 
 /**
  * @fileoverview
@@ -243,10 +244,12 @@ Polymer({
   /** @override */
   created() {
     this.scanService_ = getScanService();
-    this.selectedFilePath = DEFAULT_SAVE_DIRECTORY;
-
     this.browserProxy_ = ScanningBrowserProxyImpl.getInstance();
     this.browserProxy_.initialize();
+    this.browserProxy_.getMyFilesPath().then(
+        /* @type {string} */ (myFilesPath) => {
+          this.selectedFilePath = myFilesPath;
+        });
   },
 
   /** @override */
@@ -362,11 +365,16 @@ Polymer({
    * @private
    */
   onScannersReceived_(response) {
-    this.setAppState_(AppState.GOT_SCANNERS);
+    if (response.scanners.length === 0) {
+      this.setAppState_(AppState.NO_SCANNERS);
+      return;
+    }
+
     for (const scanner of response.scanners) {
       this.scannerIds_.set(tokenToString(scanner.id), scanner.id);
     }
 
+    this.setAppState_(AppState.GOT_SCANNERS);
     this.scanners_ = response.scanners;
   },
 
@@ -512,7 +520,9 @@ Polymer({
   setAppState_(newState) {
     switch (newState) {
       case (AppState.GETTING_SCANNERS):
-        assert(this.appState_ === AppState.GETTING_SCANNERS);
+        assert(
+            this.appState_ === AppState.GETTING_SCANNERS ||
+            this.appState_ === AppState.NO_SCANNERS);
         break;
       case (AppState.GOT_SCANNERS):
         assert(this.appState_ === AppState.GETTING_SCANNERS);
@@ -543,6 +553,9 @@ Polymer({
       case (AppState.CANCELING):
         assert(this.appState_ === AppState.SCANNING);
         break;
+      case (AppState.NO_SCANNERS):
+        assert(this.appState_ === AppState.GETTING_SCANNERS);
+        break;
     }
 
     this.appState_ = newState;
@@ -550,7 +563,8 @@ Polymer({
 
   /** @private */
   onAppStateChange_() {
-    this.scannersLoaded_ = this.appState_ !== AppState.GETTING_SCANNERS;
+    this.scannersLoaded_ = this.appState_ !== AppState.GETTING_SCANNERS &&
+        this.appState_ !== AppState.NO_SCANNERS;
     this.settingsDisabled_ = this.appState_ !== AppState.READY;
     this.showCancelButton_ = this.appState_ === AppState.SCANNING ||
         this.appState_ === AppState.CANCELING;
@@ -602,7 +616,7 @@ Polymer({
   onDialogGetHelpClick_() {
     this.$.scanFailedDialog.close();
     this.setAppState_(AppState.READY);
-    window.open('http://support.google.com/chromebook?p=chrome_scanning');
+    window.open(HELP_PAGE_LINK);
   },
 
   /**
@@ -614,5 +628,19 @@ Polymer({
             chromeos.scanning.mojom.FileType.kPdf.toString() ?
         1 :
         this.pageNumber_;
-  }
+  },
+
+  /** @private */
+  onRetryClick_() {
+    this.setAppState_(AppState.GETTING_SCANNERS);
+    this.scanService_.getScanners().then(
+        /*@type {!{scanners: !ScannerArr}}*/ (response) => {
+          this.onScannersReceived_(response);
+        });
+  },
+
+  /** @private */
+  onLearnMoreClick_() {
+    window.open(HELP_PAGE_LINK);
+  },
 });

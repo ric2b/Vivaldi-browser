@@ -55,6 +55,8 @@ static vivaldi::menubar_menu::BookmarkCommand CommandToAction(int command) {
       return vivaldi::menubar_menu::BOOKMARK_COMMAND_ADDBOOKMARK;
     case IDC_BOOKMARK_BAR_NEW_FOLDER:
       return vivaldi::menubar_menu::BOOKMARK_COMMAND_ADDFOLDER;
+    case IDC_VIV_BOOKMARK_BAR_NEW_SEPARATOR:
+      return vivaldi::menubar_menu::BOOKMARK_COMMAND_ADDSEPARATOR;
     case IDC_BOOKMARK_BAR_EDIT:
       return vivaldi::menubar_menu::BOOKMARK_COMMAND_EDIT;
     case IDC_CUT:
@@ -274,56 +276,64 @@ std::string MenubarMenuShowFunction::PopulateModel(
     vivaldi::menubar_menu::Show::Params* params,
     int menu_id,
     bool dark_text_color,
-    const std::vector<vivaldi::menubar_menu::Element>& list,
+    const std::vector<Element>& list,
     ui::SimpleMenuModel* menu_model) {
-  for (const vivaldi::menubar_menu::Element& child: list) {
+  namespace menubar_menu = extensions::vivaldi::menubar_menu;
+  for (const Element& child: list) {
     if (child.item) {
-      int id = child.item->id + IDC_VIV_MENU_FIRST + 1;
-      const base::string16 label = base::UTF8ToUTF16(child.item->label);
-      if (child.children) {
-        // We create the SimpleMenuModel sub menu but do not populate it. That
-        // will be done in PopulateSubmodel() by the calling menu code when and
-        // if this sub menu will be shown to the user.
-        if (child.item->selected && *child.item->selected) {
-          if (selected_menu_id_ != -1) {
-            return "Only one menu item can be selected";
-          }
-          selected_menu_id_ = id;
-        }
-        ui::SimpleMenuModel* child_menu_model = new ui::SimpleMenuModel(nullptr);
-        models_.push_back(base::WrapUnique(child_menu_model));
-        menu_model->AddSubMenu(id, label, child_menu_model);
-        id_to_elementvector_map_[id] = child.children.get();
-      } else {
-        if (child.item->type == vivaldi::menubar_menu::ITEM_TYPE_CHECKBOX) {
+      const Item& item = *child.item;
+      int id = item.id + IDC_VIV_MENU_FIRST + 1;
+      const base::string16 label = base::UTF8ToUTF16(item.name);
+      switch (item.type) {
+        case menubar_menu::ITEM_TYPE_COMMAND:
+          menu_model->AddItem(id, label);
+          break;
+        case menubar_menu::ITEM_TYPE_CHECKBOX:
           menu_model->AddCheckItem(id, label);
-          id_to_checked_map_[id] = child.item->checked && *child.item->checked;
-        } else if (child.item->type == vivaldi::menubar_menu::ITEM_TYPE_RADIO) {
-          if (!child.item->group.get()) {
+          id_to_checked_map_[id] = item.checked && *item.checked;
+          break;
+        case menubar_menu::ITEM_TYPE_RADIO:
+          if (!item.radiogroup.get()) {
             return "Radio button added without group";
           }
-          menu_model->AddRadioItem(id, label, *child.item->group.get());
-          id_to_checked_map_[id] = child.item->checked && *child.item->checked;
-        } else {
-          menu_model->AddItem(id, label);
+          menu_model->AddRadioItem(id, label, *item.radiogroup.get());
+          id_to_checked_map_[id] = item.checked && *item.checked;
+          break;
+        case menubar_menu::ITEM_TYPE_FOLDER: {
+          // We create the SimpleMenuModel sub menu but do not populate it. That
+          // will be done in PopulateSubmodel() by the calling menu code when and
+          // if this sub menu will be shown to the user.
+          if (item.selected && *item.selected) {
+            if (selected_menu_id_ != -1) {
+              return "Only one menu item can be selected";
+            }
+            selected_menu_id_ = id;
+          }
+          ui::SimpleMenuModel* child_menu_model =
+              new ui::SimpleMenuModel(nullptr);
+          models_.push_back(base::WrapUnique(child_menu_model));
+          menu_model->AddSubMenu(id, label, child_menu_model);
+          id_to_elementvector_map_[id] = child.children.get();
+          break;
         }
-        if (child.item->shortcut) {
-          id_to_accelerator_map_[id] = ::vivaldi::ParseShortcut(
-              *child.item->shortcut, true);
-        }
-        if (child.item->url && child.item->url->length() > 0) {
-          id_to_url_map_[id] = *child.item->url;
-        }
-        if (child.item->persistent && *child.item->persistent == true) {
-          id_to_persistent_map_[id] = true;
-        }
+        case menubar_menu::ITEM_TYPE_NONE:
+          return "Item type missing";
       }
-      if (child.item->icons) {
-        if (child.item->icons->size() != 2) {
+      if (item.shortcut) {
+          id_to_accelerator_map_[id] = ::vivaldi::ParseShortcut(
+              *item.shortcut, true);
+      }
+      if (item.url && !item.url->empty()) {
+        id_to_url_map_[id] = *item.url;
+      }
+      if (item.persistent && *item.persistent == true) {
+        id_to_persistent_map_[id] = true;
+      }
+      if (item.icons) {
+        if (item.icons->size() != 2) {
           return "Wrong number of icons";
         } else {
-          const std::string* icon = &child.item->icons->at(
-              dark_text_color ? 0 : 1);
+          const std::string* icon = &item.icons->at(dark_text_color ? 0 : 1);
           if (icon->length() > 0) {
             std::string png_data;
             if (base::Base64Decode(*icon, &png_data)) {
@@ -385,8 +395,7 @@ std::string MenubarMenuShowFunction::PopulateModel(
         sibling->offset = child.container->offset;
         sibling->menu_index = menu_model->GetItemCount();
         sibling->tweak_separator = false;
-        sibling->folder_group =
-            child.container->group_folders && *child.container->group_folders;
+        sibling->folder_group = child.container->group_folders;
         bookmark_menu_container_->support.initIcons(params->properties.icons);
         switch (child.container->sort_field) {
           case vivaldi::menubar_menu::SORT_FIELD_NONE:

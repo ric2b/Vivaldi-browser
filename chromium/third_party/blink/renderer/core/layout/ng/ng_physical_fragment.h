@@ -175,6 +175,7 @@ class CORE_EXPORT NGPhysicalFragment
            !layout_object_->IsTableCellLegacy();
   }
 
+  bool IsTextControlContainer() const;
   bool IsTextControlPlaceholder() const;
 
   // Return true if this fragment is a container established by a fieldset
@@ -455,8 +456,11 @@ class CORE_EXPORT NGPhysicalFragment
                           base::Optional<PhysicalOffset> = base::nullopt,
                           unsigned indent = 2) const;
 
+  static String DumpFragmentTree(const LayoutObject& root, DumpFlags);
+
 #if DCHECK_IS_ON()
   void ShowFragmentTree() const;
+  static void ShowFragmentTree(const LayoutObject& root);
 #endif
 
  protected:

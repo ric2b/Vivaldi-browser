@@ -29,7 +29,6 @@
 #include "chrome/browser/chromeos/file_manager/volume_manager.h"
 #include "chrome/browser/chromeos/file_manager/volume_manager_factory.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/nearby_sharing/common/nearby_share_features.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/browser/ui/ash/holding_space/holding_space_downloads_delegate.h"
@@ -1440,13 +1439,13 @@ TEST_F(HoldingSpaceKeyedServiceTest,
 // Tests that items from an unmounted volume get removed from the holding space.
 TEST_F(HoldingSpaceKeyedServiceTest, RemoveItemsFromUnmountedVolumes) {
   auto test_mount_1 = std::make_unique<ScopedTestMountPoint>(
-      "test_mount_1", storage::kFileSystemTypeNativeLocal,
+      "test_mount_1", storage::kFileSystemTypeLocal,
       file_manager::VOLUME_TYPE_TESTING);
   test_mount_1->Mount(GetProfile());
   HoldingSpaceModelAttachedWaiter(GetProfile()).Wait();
 
   auto test_mount_2 = std::make_unique<ScopedTestMountPoint>(
-      "test_mount_2", storage::kFileSystemTypeNativeLocal,
+      "test_mount_2", storage::kFileSystemTypeLocal,
       file_manager::VOLUME_TYPE_TESTING);
   test_mount_2->Mount(GetProfile());
   HoldingSpaceModelAttachedWaiter(GetProfile()).Wait();

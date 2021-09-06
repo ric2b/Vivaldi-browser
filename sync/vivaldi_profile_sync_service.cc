@@ -9,7 +9,7 @@
 #include "base/version.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/base/sync_util.h"
-#include "components/sync/engine_impl/net/url_translator.h"
+#include "components/sync/engine/net/url_translator.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -55,11 +55,16 @@ VivaldiProfileSyncService::VivaldiProfileSyncService(
 
 VivaldiProfileSyncService::~VivaldiProfileSyncService() {}
 
+void VivaldiProfileSyncService::Initialize() {
+  ProfileSyncService::Initialize();
+  ui_helper_.RegisterObserver();
+}
+
 void VivaldiProfileSyncService::ClearSyncData() {
   // This isn't handled by the engine anymore, so we instead do the whole
   // request right here and shut down sync.
 
-  std::string client_id = sync_prefs_.GetCacheGuid();
+  std::string client_id = sync_transport_data_prefs_.GetCacheGuid();
   std::string auth_token = auth_manager_->GetCredentials().access_token;
   is_clearing_sync_data_ = true;
   StopAndClear();
@@ -138,12 +143,11 @@ void VivaldiProfileSyncService::OnEngineInitialized(
     const syncer::WeakHandle<syncer::JsBackend>& js_backend,
     const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>&
         debug_info_listener,
-    const std::string& birthday,
-    const std::string& bag_of_chips,
-    bool success) {
+    bool success,
+    bool is_first_time_sync_configure) {
   ProfileSyncService::OnEngineInitialized(initial_types, js_backend,
-                                          debug_info_listener, birthday,
-                                          bag_of_chips, success);
+                                          debug_info_listener, success,
+                                          is_first_time_sync_configure);
 
   if (!force_local_data_reset_)
     return;
@@ -172,13 +176,13 @@ void VivaldiProfileSyncService::OnClearDataComplete(
 }
 
 std::string VivaldiProfileSyncService::GetEncryptionBootstrapToken() const {
-  return sync_prefs_.GetEncryptionBootstrapToken();
+  return sync_transport_data_prefs_.GetEncryptionBootstrapToken();
 }
 
 void VivaldiProfileSyncService::SetEncryptionBootstrapToken(
     const std::string& token) {
   StopImpl(CLEAR_DATA);
-  sync_prefs_.SetEncryptionBootstrapToken(token);
+  sync_transport_data_prefs_.SetEncryptionBootstrapToken(token);
   GetUserSettings()->SetSyncRequested(true);
 }
 }  // namespace vivaldi

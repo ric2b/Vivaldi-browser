@@ -6,39 +6,15 @@
 
 #include <memory>
 
-#include "chromeos/assistant/internal/cros_display_connection.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
+#include "chromeos/services/libassistant/display_connection_impl.h"
 #include "chromeos/services/libassistant/public/mojom/speech_recognition_observer.mojom.h"
 #include "libassistant/shared/internal_api/assistant_manager_internal.h"
 
 namespace chromeos {
 namespace libassistant {
 
-namespace {
-
-assistant::AndroidAppInfo ToAndroidAppInfo(
-    const mojom::AndroidAppInfoPtr& app) {
-  assistant::AndroidAppInfo result;
-  result.package_name = app->package_name;
-  result.version = app->version;
-  result.localized_app_name = app->localized_app_name;
-  return result;
-}
-
-std::vector<assistant::AndroidAppInfo> ToAndroidAppInfoList(
-    const std::vector<mojom::AndroidAppInfoPtr>& apps) {
-  std::vector<assistant::AndroidAppInfo> result;
-
-  for (const auto& app : apps)
-    result.push_back(ToAndroidAppInfo(app));
-
-  return result;
-}
-
-}  // namespace
-
-class DisplayController::EventObserver
-    : public assistant::AssistantEventObserver {
+class DisplayController::EventObserver : public DisplayConnectionObserver {
  public:
   explicit EventObserver(DisplayController* parent) : parent_(parent) {}
   EventObserver(const EventObserver&) = delete;
@@ -58,7 +34,7 @@ DisplayController::DisplayController(
     mojo::RemoteSet<mojom::SpeechRecognitionObserver>*
         speech_recognition_observers)
     : event_observer_(std::make_unique<EventObserver>(this)),
-      display_connection_(std::make_unique<assistant::CrosDisplayConnection>(
+      display_connection_(std::make_unique<DisplayConnectionImpl>(
           event_observer_.get(),
           /*feedback_ui_enabled=*/true,
           assistant::features::IsMediaSessionIntegrationEnabled())),
@@ -86,8 +62,8 @@ void DisplayController::SetRelatedInfoEnabled(bool enabled) {
 }
 
 void DisplayController::SetAndroidAppList(
-    std::vector<mojom::AndroidAppInfoPtr> apps) {
-  display_connection_->OnAndroidAppListRefreshed(ToAndroidAppInfoList(apps));
+    const std::vector<::chromeos::assistant::AndroidAppInfo>& apps) {
+  display_connection_->OnAndroidAppListRefreshed(apps);
 }
 
 void DisplayController::OnAssistantManagerCreated(

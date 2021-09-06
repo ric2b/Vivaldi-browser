@@ -15,6 +15,7 @@
 #include "base/stl_util.h"
 #include "base/time/tick_clock.h"
 #include "base/trace_event/trace_event.h"
+#include "base/trace_event/traced_value.h"
 #include "components/viz/common/quads/compositor_render_pass.h"
 #include "components/viz/common/resources/returned_resource.h"
 #include "components/viz/common/resources/transferable_resource.h"
@@ -124,16 +125,6 @@ void Surface::SetDependencyDeadline(
 void Surface::SetPreviousFrameSurface(Surface* surface) {
   DCHECK(surface && (HasActiveFrame() || HasPendingFrame()));
   previous_frame_surface_id_ = surface->surface_id();
-}
-
-void Surface::RefResources(const std::vector<TransferableResource>& resources) {
-  if (surface_client_)
-    surface_client_->RefResources(resources);
-}
-
-void Surface::UnrefResources(const std::vector<ReturnedResource>& resources) {
-  if (surface_client_)
-    surface_client_->UnrefResources(resources);
 }
 
 void Surface::UpdateSurfaceReferences() {
@@ -267,6 +258,15 @@ Surface::QueueFrameResult Surface::QueueFrame(
     if (deadline_->HasDeadlinePassed()) {
       ActivatePendingFrameForDeadline();
     } else {
+      auto traced_value = std::make_unique<base::trace_event::TracedValue>();
+      traced_value->BeginArray("Pending");
+      for (auto& it : activation_dependencies_)
+        traced_value->AppendString(it.ToString());
+      traced_value->EndArray();
+      TRACE_EVENT_NESTABLE_ASYNC_BEGIN2(
+          "viz", "SurfaceQueuedPending", TRACE_ID_LOCAL(this), "LocalSurfaceId",
+          surface_info_.id().ToString(), "ActivationDependencies",
+          std::move(traced_value));
       result = QueueFrameResult::ACCEPTED_PENDING;
     }
   }
@@ -333,6 +333,11 @@ void Surface::OnActivationDependencyResolved(
 void Surface::ActivatePendingFrameForDeadline() {
   if (!pending_frame_data_)
     return;
+
+  if (!activation_dependencies_.empty()) {
+    TRACE_EVENT_NESTABLE_ASYNC_END0("viz", "SurfaceQueuedPending",
+                                    TRACE_ID_LOCAL(this));
+  }
 
   // If a frame is being activated because of a deadline, then clear its set
   // of blockers.
@@ -433,8 +438,8 @@ void Surface::RecomputeActiveReferencedSurfaces() {
 // A frame is activated if all its Surface ID dependencies are active or a
 // deadline has hit and the frame was forcibly activated.
 void Surface::ActivateFrame(FrameData frame_data) {
-  TRACE_EVENT1("viz", "Surface::ActivateFrame", "FrameSinkId",
-               surface_id().frame_sink_id().ToString());
+  TRACE_EVENT1("viz", "Surface::ActivateFrame", "SurfaceId",
+               surface_id().ToString());
 
   // Save root pass copy requests.
   std::vector<std::unique_ptr<CopyOutputRequest>> old_copy_requests;
@@ -488,7 +493,7 @@ void Surface::ActivateFrame(FrameData frame_data) {
 
   // Defer notifying the embedder of an updated token until the frame has been
   // completely processed.
-  const auto& metadata = GetActiveFrame().metadata;
+  const auto& metadata = GetActiveFrameMetadata();
   if (surface_client_ && metadata.send_frame_token_to_embedder)
     surface_client_->OnFrameTokenChanged(metadata.frame_token);
 }
@@ -599,19 +604,19 @@ void Surface::TakeCopyOutputRequestsFromClient() {
   }
 }
 
-bool Surface::HasCopyOutputRequests() {
-  if (!active_frame_data_)
-    return false;
-  for (const auto& render_pass : active_frame_data_->frame.render_pass_list) {
-    if (!render_pass->copy_requests.empty())
-      return true;
-  }
-  return false;
+bool Surface::HasCopyOutputRequests() const {
+  return active_frame_data_ &&
+         active_frame_data_->frame.HasCopyOutputRequests();
 }
 
 const CompositorFrame& Surface::GetActiveFrame() const {
   DCHECK(active_frame_data_);
   return active_frame_data_->frame;
+}
+
+const CompositorFrameMetadata& Surface::GetActiveFrameMetadata() const {
+  DCHECK(active_frame_data_);
+  return active_frame_data_->frame.metadata;
 }
 
 const CompositorFrame& Surface::GetPendingFrame() {
@@ -762,6 +767,10 @@ void Surface::ActivatePendingFrameForInheritedDeadline() {
 std::unique_ptr<DelegatedInkMetadata> Surface::TakeDelegatedInkMetadata() {
   DCHECK(active_frame_data_);
   return active_frame_data_->TakeDelegatedInkMetadata();
+}
+
+SurfaceSavedFrameStorage* Surface::GetSurfaceSavedFrameStorage() {
+  return &surface_saved_frame_storage_;
 }
 
 }  // namespace viz

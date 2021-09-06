@@ -31,6 +31,7 @@
 <translation id="2486841023299517366">Állat 4</translation>
 <translation id="2612127540243995147">Telepítésre kész. A Vivaldi most bezáródik, majd újraindul.</translation>
 <translation id="2613387515621326337">Frissítési weboldal megjelenítése</translation>
+<translation id="2647368062414805334">Sajnos az Edge beállításai nem érhetők el, míg a böngésző fut. A beállítások Vivaldiba importálásához mentsd el a munkáid és zárj be minden Edge ablakot. Majd Tovább gomb.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Állat 3</translation>
 <translation id="2873951654529031587">Kuka</translation>
@@ -62,6 +63,7 @@
 <translation id="3732157130969736834">Könyvjelző hivatkozás</translation>
 <translation id="3732388226447288666">Állat 2</translation>
 <translation id="3732439195215136813">Állat 5</translation>
+<translation id="3795800845758778870">Sajnos a Brave beállításai nem érhetők el, míg a böngésző fut. A beállítások Vivaldiba importálásához mentsd el a munkáid és zárj be minden Brave ablakot. Majd Tovább gomb.</translation>
 <translation id="3832132597516774400">Tájkép 5</translation>
 <translation id="3914946330804881301">Operából importálva</translation>
 <translation id="3921292902397893431">Szörny 8</translation>
@@ -116,6 +118,8 @@
 <translation id="6551219277044048123">Hozzáadás &amp;keresőmotorként...</translation>
 <translation id="6630781781151951863">Tájkép 18</translation>
 <translation id="6635049669875534328">Kiadási megjegyzések:</translation>
+<translation id="6693585104974197539">Importálandó Edge profil kiválasztása</translation>
+<translation id="6726279523566323394">Importálandó Brave profil kiválasztása</translation>
 <translation id="6804831687363620480">Sajnos az Opera 15+ beállításaid nem érhetők el, míg a böngésző fut. Hogy beimportáld azon beállításokat a Vivaldiba, mentsd el a munkáidat és zárj be minden Opera 15+ ablakot, majd kattints a Folytatás gombra.</translation>
 <translation id="6892812721183419409">Hivatkozás megnyitása mint <ph name="USER" /></translation>
 <translation id="6896758677409633944">Másolás</translation>

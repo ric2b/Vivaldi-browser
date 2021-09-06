@@ -19,7 +19,6 @@
 <translation id="1125564390852150847">Crea una nuova scheda.</translation>
 <translation id="1145536944570833626">Elimina i dati esistenti.</translation>
 <translation id="1147031633655575115">Accesso eseguito come <ph name="USER" /></translation>
-<translation id="1154690515305205900">Impossibile creare un link al testo evidenziato.</translation>
 <translation id="1154984953698510061">Vedi altre schede</translation>
 <translation id="1157749421655780457">Consenti accesso a posizione…</translation>
 <translation id="1165039591588034296">Errore</translation>
@@ -103,6 +102,7 @@
 <translation id="1952172573699511566">Se possibile, il testo dei siti web verrà mostrato nella tua lingua preferita.</translation>
 <translation id="1952728750904661634">Accedi con l'account gestito</translation>
 <translation id="1965935827552890526">Finisci ciò che stavi facendo in un'altra finestra di Chrome aperta.</translation>
+<translation id="1973912524893600642">Conserva i dati</translation>
 <translation id="1974060860693918893">Avanzate</translation>
 <translation id="1989112275319619282">Esplora</translation>
 <translation id="2015722694326466240">Per visualizzare le password, per prima cosa imposta un passcode sul tuo dispositivo.</translation>
@@ -174,6 +174,7 @@ I siti non possono utilizzare i cookie per conoscere la tua attività di navigaz
 <translation id="2780046210906776326">Nessun account email</translation>
 <translation id="2781331604911854368">On</translation>
 <translation id="2781692009645368755">Google Pay</translation>
+<translation id="2783054063075604403">Impossibile creare il link</translation>
 <translation id="2800683595868705743">Chiudi selettore di schede</translation>
 <translation id="2815198996063984598">2. Tocca App browser predefinita</translation>
 <translation id="2830972654601096923">Gestisci indirizzi…</translation>
@@ -197,6 +198,7 @@ I siti non possono utilizzare i cookie per conoscere la tua attività di navigaz
 <translation id="2964349545761222050">Blocca cookie di terze parti</translation>
 <translation id="2969979262385602596">Impossibile accedere. Riprova più tardi.</translation>
 <translation id="2975121486251958312">Disponibile solo la modalità in incognito</translation>
+<translation id="2982481275546140226">Cancella dati</translation>
 <translation id="298306318844797842">Aggiungi il metodo di pagamento…</translation>
 <translation id="2989805286512600854">Apri in un'altra scheda</translation>
 <translation id="3037605927509011580">Uffa!</translation>
@@ -257,6 +259,7 @@ In modalità di navigazione in incognito, i siti non possono utilizzare i cookie
 <translation id="3533436815740441613">Nuova scheda</translation>
 <translation id="3551320343578183772">Chiudi scheda</translation>
 <translation id="3581564640715911333">Proponi di tradurre le pagine in altre lingue</translation>
+<translation id="3588492282865875287">Uscire?</translation>
 <translation id="3588820906588687999">Apri immagine in un'altra scheda</translation>
 <translation id="359441731697487922">Puoi aprire automaticamente i link in Chrome impostandolo come app browser predefinita.
       
@@ -297,6 +300,7 @@ Svolgi i passaggi che seguono:</translation>
 <translation id="4038354071007134711">Impossibile aprire il file con le app sul dispositivo.</translation>
 <translation id="4042870976416480368">Trova nella pagina</translation>
 <translation id="4049507953662678203">Controlla la connessione di rete e riprova.</translation>
+<translation id="4079195788735381731">La tua organizzazione ha disconnesso il tuo account</translation>
 <translation id="4082688844002261427">Gestisci la modalità di utilizzo della cronologia di navigazione per personalizzare la Ricerca, gli annunci e non solo</translation>
 <translation id="408404951701638773">Ora è più facile raggiungere la barra di ricerca</translation>
 <translation id="411254640334432676">Download non riuscito.</translation>
@@ -305,7 +309,6 @@ Svolgi i passaggi che seguono:</translation>
 <translation id="4121993058175073134">Per inviare dati net-export, configura il tuo account email nell'app Impostazioni.</translation>
 <translation id="4124987746317609294">Intervallo di tempo</translation>
 <translation id="4152011295694446843">Qui troverai i tuoi preferiti</translation>
-<translation id="4152093603141133546">La tua organizzazione ha disconnesso il tuo account.</translation>
 <translation id="4172051516777682613">Mostra sempre</translation>
 <translation id="418156467088430727">Visualizza versione offline in una nuova scheda</translation>
 <translation id="4181841719683918333">Lingue</translation>
@@ -410,9 +413,9 @@ Per cambiare questa impostazione, <ph name="BEGIN_LINK" />reimposta la sincroniz
 <translation id="5317780077021120954">Salva</translation>
 <translation id="5327248766486351172">Nome</translation>
 <translation id="5339316356165661760">Attiva la sincronizzazione</translation>
+<translation id="5360976571138293719">Per altre impostazioni relative a privacy, sicurezza e raccolta dei dati, consulta la sezione <ph name="BEGIN_LINK" />Servizi Google<ph name="END_LINK" />.</translation>
 <translation id="5388358297987318779">Apri immagine</translation>
 <translation id="5407969256130905701">Annulla modifiche</translation>
-<translation id="5409365236829784218">Non ci sono applicazioni installate in grado di aprire questo file.</translation>
 <translation id="5416022985862681400">Ultimi 7 giorni</translation>
 <translation id="543338862236136125">Modifica password</translation>
 <translation id="5433691172869980887">Nome utente copiato</translation>
@@ -465,6 +468,7 @@ La funzione Handoff deve anche essere attivata nella sezione Generali di Imposta
 <translation id="5948291296578561264">In questo modo puoi salvare le foto nella raccolta di foto.</translation>
 <translation id="5955891643922670672">È visualizzata la versione offline</translation>
 <translation id="5957613098218939406">Altre opzioni</translation>
+<translation id="5963939892571022323">Non è possibile creare un link al testo evidenziato.</translation>
 <translation id="5964480694698977962">Crea nuova scheda in incognito.</translation>
 <translation id="5965679971710331625">Hai eseguito l'accesso</translation>
 <translation id="5979837087407522202">Cerca password</translation>
@@ -496,6 +500,7 @@ La funzione Handoff deve anche essere attivata nella sezione Generali di Imposta
 <translation id="6254066287920239840">Apri i link all'interno dell'app invece che nel browser.</translation>
 <translation id="6255097610484507482">Modifica carta di credito</translation>
 <translation id="6284652193729350524">Proponi di tradurre dalla lingua <ph name="LANGUAGE" /></translation>
+<translation id="6293101329759844770">Per attivare Navigazione sicura, apri <ph name="BEGIN_LINK" />Servizi Google<ph name="END_LINK" /> e tocca Navigazione sicura.</translation>
 <translation id="6303969859164067831">Esci e disattiva la sincronizzazione</translation>
 <translation id="6308436439357671616">In questo modo puoi scattare e caricare foto.</translation>
 <translation id="6324528485781869530">Cambia account di sincronizzazione</translation>
@@ -563,7 +568,6 @@ Cerca di usare una password univoca per ogni sito.</translation>
 <translation id="6807889908376551050">Mostra tutte...</translation>
 <translation id="681368974849482173">Elemento creato</translation>
 <translation id="6831043979455480757">Traduci</translation>
-<translation id="6841409746189899007">Crea link al testo</translation>
 <translation id="6851516051005285358">Richiedi sito desktop</translation>
 <translation id="6858855187367714033">Scansione eseguita</translation>
 <translation id="6859944681507688231">Per eseguire la scansione di un codice QR o di una carta di credito, attiva la fotocamera dalle impostazioni.</translation>
@@ -613,6 +617,7 @@ Cerca di usare una password univoca per ogni sito.</translation>
 <translation id="734758817008927353">Opzioni per salvare la carta</translation>
 <translation id="7348502496356775519">Aggiungi ai preferiti</translation>
 <translation id="7383797227493018512">Elenco di lettura</translation>
+<translation id="7398893703713203428">Crea link</translation>
 <translation id="739941347996872055">Scheda precedente</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7409985198648820906"><ph name="UNREAD_COUNT" /> articoli da leggere.</translation>
@@ -641,8 +646,8 @@ Cerca di usare una password univoca per ogni sito.</translation>
 <translation id="7658239707568436148">Annulla</translation>
 <translation id="766891008101699113">Per navigare sul Web in privato, aggiungi una nuova scheda.</translation>
 <translation id="7671141431838911305">INSTALLA</translation>
-<translation id="7690812411882623730">Impossibile creare un link al testo</translation>
 <translation id="7701040980221191251">Nulla</translation>
+<translation id="7741325291586284254">Pagina Nuova scheda in incognito</translation>
 <translation id="7765158879357617694">Sposta</translation>
 <translation id="7771470029643830783">Se ti disconnetti, i preferiti, la cronologia, le password e altri dati di Chrome non verranno più sincronizzati con il tuo Account Google.
 
@@ -650,6 +655,7 @@ Poiché il tuo account è gestito da <ph name="HOSTED_DOMAIN" />, i tuoi dati di
 <translation id="7772032839648071052">Conferma passphrase</translation>
 <translation id="7778472311864276518">Rimuovi account da questo dispositivo</translation>
 <translation id="7781011649027948662">Tradurre la pagina?</translation>
+<translation id="7781069478569868053">Pagina Nuova scheda</translation>
 <translation id="7781829728241885113">Ieri</translation>
 <translation id="778855399387580014">Avvia una ricerca in una nuova scheda di Chrome.</translation>
 <translation id="7791543448312431591">Aggiungi</translation>

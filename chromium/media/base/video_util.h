@@ -12,11 +12,21 @@
 #include "base/memory/ref_counted.h"
 #include "media/base/media_export.h"
 #include "media/base/status.h"
+#include "third_party/skia/include/core/SkImage.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
+class GrDirectContext;
+
+namespace gpu {
+namespace raster {
+class RasterInterface;
+}  // namespace raster
+}  // namespace gpu
+
 namespace media {
 
+class VideoFramePool;
 class VideoFrame;
 
 // Computes the pixel aspect ratio of a given |visible_rect| from its
@@ -143,7 +153,20 @@ MEDIA_EXPORT gfx::Size PadToMatchAspectRatio(const gfx::Size& size,
 MEDIA_EXPORT scoped_refptr<VideoFrame> ConvertToMemoryMappedFrame(
     scoped_refptr<VideoFrame> frame);
 
-// Converts a frame with YV12A format into I420 by dropping alpha channel.
+// This function synchronously reads pixel data from textures associated with
+// |txt_frame| and creates a new CPU memory backed frame. It's needed because
+// existing video encoders can't handle texture backed frames.
+//
+// TODO(crbug.com/1162530): Combine this function with
+// media::ConvertAndScaleFrame and put it into a new class
+// media:FrameSizeAndFormatConverter.
+MEDIA_EXPORT scoped_refptr<VideoFrame> ReadbackTextureBackedFrameToMemorySync(
+    const VideoFrame& txt_frame,
+    gpu::raster::RasterInterface* ri,
+    GrDirectContext* gr_context,
+    VideoFramePool* pool = nullptr);
+
+// Converts a frame with I420A format into I420 by dropping alpha channel.
 MEDIA_EXPORT scoped_refptr<VideoFrame> WrapAsI420VideoFrame(
     scoped_refptr<VideoFrame> frame);
 
@@ -173,6 +196,16 @@ MEDIA_EXPORT Status ConvertAndScaleFrame(const VideoFrame& src_frame,
                                          VideoFrame& dst_frame,
                                          std::vector<uint8_t>& tmp_buf)
     WARN_UNUSED_RESULT;
+
+// Backs a VideoFrame with a SkImage. The created frame takes a ref on the
+// provided SkImage to make this operation zero copy. Only works with CPU
+// backed images.
+MEDIA_EXPORT scoped_refptr<VideoFrame> CreateFromSkImage(
+    sk_sp<SkImage> sk_image,
+    const gfx::Rect& visible_rect,
+    const gfx::Size& natural_size,
+    base::TimeDelta timestamp);
+
 }  // namespace media
 
 #endif  // MEDIA_BASE_VIDEO_UTIL_H_

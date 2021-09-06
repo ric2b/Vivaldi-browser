@@ -649,10 +649,11 @@ bool TemplateURLRef::ParseParameter(size_t start,
     length--;
   }
 
-  const base::StringPiece parameter(original_url.begin() + start + 1,
-                                    original_url.begin() + start + 1 + length);
-  const base::StringPiece full_parameter(original_url.begin() + start,
-                                         original_url.begin() + end + 1);
+  const auto parameter =
+      base::MakeStringPiece(original_url.begin() + start + 1,
+                            original_url.begin() + start + 1 + length);
+  const auto full_parameter = base::MakeStringPiece(
+      original_url.begin() + start, original_url.begin() + end + 1);
   // Remove the parameter from the string.  For parameters who replacement is
   // constant and already known, just replace them directly.  For other cases,
   // like parameters whose values may change over time, use |replacements|.
@@ -666,6 +667,9 @@ bool TemplateURLRef::ParseParameter(size_t start,
     replacements->push_back(Replacement(GOOGLE_ASSISTED_QUERY_STATS, start));
   } else if (parameter == "google:baseURL") {
     replacements->push_back(Replacement(GOOGLE_BASE_URL, start));
+  } else if (parameter == "google:baseSearchByImageURL") {
+    replacements->push_back(
+        Replacement(GOOGLE_BASE_SEARCH_BY_IMAGE_URL, start));
   } else if (parameter == "google:baseSuggestURL") {
     replacements->push_back(Replacement(GOOGLE_BASE_SUGGEST_URL, start));
   } else if (parameter == "google:currentPageUrl") {
@@ -1056,6 +1060,13 @@ std::string TemplateURLRef::HandleReplacements(
         DCHECK(!i->is_post_param);
         HandleReplacement(
             std::string(), search_terms_data.GoogleBaseURLValue(), *i, &url);
+        break;
+
+      case GOOGLE_BASE_SEARCH_BY_IMAGE_URL:
+        DCHECK(!i->is_post_param);
+        HandleReplacement(std::string(),
+                          search_terms_data.GoogleBaseSearchByImageURLValue(),
+                          *i, &url);
         break;
 
       case GOOGLE_BASE_SUGGEST_URL:
