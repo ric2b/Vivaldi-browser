@@ -155,12 +155,12 @@ void VivaldiSyncServiceImpl::OnEngineInitialized(
                                 base::Unretained(this), error));
 }
 
-void VivaldiSyncServiceImpl::ShutdownImpl(syncer::ShutdownReason reason) {
-  if (reason == syncer::DISABLE_SYNC) {
+void VivaldiSyncServiceImpl::ResetEngine(syncer::ShutdownReason reason) {
+  if (reason == syncer::ShutdownReason::DISABLE_SYNC_AND_CLEAR_DATA) {
     sync_client_->GetPrefService()->ClearPref(
         vivaldiprefs::kSyncIsUsingSeparateEncryptionPassword);
   }
-  SyncServiceImpl::ShutdownImpl(reason);
+  SyncServiceImpl::ResetEngine(reason);
 }
 
 void VivaldiSyncServiceImpl::OnClearDataComplete(
@@ -175,7 +175,7 @@ std::string VivaldiSyncServiceImpl::GetEncryptionBootstrapToken() const {
 
 void VivaldiSyncServiceImpl::SetEncryptionBootstrapToken(
     const std::string& token) {
-  StopAndClearImpl();
+  StopAndClear();
   sync_prefs_.SetEncryptionBootstrapToken(token);
   GetUserSettings()->SetSyncRequested(true);
 }

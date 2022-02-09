@@ -19,12 +19,16 @@ class EntitySpecifics;
 
 namespace syncer {
 
-struct EntityData;
+// Populates |specifics->notes().unique_position()| from the various
+// supported proto fields in |update_entity| and worst-case falls back to a
+// random position. |specifics| must not be null.
+bool AdaptUniquePositionForNote(const sync_pb::SyncEntity& update_entity,
+                                sync_pb::EntitySpecifics* specifics);
 
-// Populates |data->unique_position| from the various supported proto fields in
-// |update_entity|. |data| must not be null.
-void AdaptUniquePositionForNote(const sync_pb::SyncEntity& update_entity,
-                                EntityData* data);
+// Populates |specifics->note().type()| (i.e. whether a note is a
+// folder) for the cases where the field isn't populated.
+void AdaptTypeForNote(const sync_pb::SyncEntity& update_entity,
+                      sync_pb::EntitySpecifics* specifics);
 
 // Populates |specifics->note().legacy_canonicalized_title()| from the various
 // supported sources, or no-op if specifics already have the field set.
@@ -37,7 +41,7 @@ void AdaptTitleForNote(const sync_pb::SyncEntity& update_entity,
 // sources, or no-op if a) specifics already have the field set; or b) the GUID
 // cannot be inferred. |specifics| must not be null. Returns true if |specifics|
 // were updated.
-bool AdaptGuidForNote(const sync_pb::SyncEntity& update_entity,
+void AdaptGuidForNote(const sync_pb::SyncEntity& update_entity,
                       sync_pb::EntitySpecifics* specifics);
 
 // GUID-inferring function exposed for testing.

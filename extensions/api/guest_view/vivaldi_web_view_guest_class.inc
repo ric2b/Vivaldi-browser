@@ -112,7 +112,8 @@
 
   content::WebContents::CreateParams GetWebContentsCreateParams(
       content::BrowserContext* context,
-      const GURL site);
+      const GURL site,
+      bool is_vivaldi_embedded);
 
   // vivaldi addition:
   bool IsMouseGesturesEnabled() const;

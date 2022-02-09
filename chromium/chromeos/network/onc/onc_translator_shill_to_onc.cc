@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/json/json_reader.h"
+#include "base/json/json_string_value_serializer.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -469,6 +470,16 @@ void ShillToONCTranslator::TranslateCellularWithState() {
         kCellularDeviceTable, network_state_);
     std::unique_ptr<base::DictionaryValue> nested_object =
         nested_translator.CreateTranslatedONCObject();
+    // Do not let any value for |::onc::cellular::kAllowRoaming| that was
+    // translated using the device table override the value that was translated
+    // using the cellular with state table.
+    // TODO(chadduffin): Remove when the
+    // |ash::features::kCellularAllowPerNetworkRoaming| feature flag has fully
+    // launched and |shill::kCellularAllowRoamingProperty| usage as a Shill
+    // device property is fully deprecated.
+    if (onc_object_->FindKey(::onc::cellular::kAllowRoaming)) {
+      nested_object->RemoveKey(::onc::cellular::kAllowRoaming);
+    }
     onc_object_->MergeDictionary(nested_object.get());
 
     // The Scanning property is retrieved from the Device dictionary, but only
@@ -744,6 +755,30 @@ void ShillToONCTranslator::TranslateEap() {
     onc_object_->SetKey(
         ::onc::eap::kPassword,
         base::Value(::onc::substitutes::kPasswordPlaceholderVerbatim));
+  }
+
+  // Set shill::kEapSubjectAlternativeNameMatchProperty to the serialized form
+  // of the subject alternative name match list of dictionaries.
+  const base::Value* subject_alternative_name_match =
+      shill_dictionary_->FindListKey(
+          shill::kEapSubjectAlternativeNameMatchProperty);
+
+  if (subject_alternative_name_match) {
+    base::Value deserialized_dicts(base::Value::Type::LIST);
+    std::string error_msg;
+    for (const base::Value& san : subject_alternative_name_match->GetList()) {
+      JSONStringValueDeserializer deserializer(san.GetString());
+      auto deserialized_dict =
+          deserializer.Deserialize(/*error_code=*/nullptr, &error_msg);
+      if (!deserialized_dict) {
+        LOG(ERROR) << "failed to deserialize " << san << " with error "
+                   << error_msg;
+        continue;
+      }
+      deserialized_dicts.Append(std::move(*deserialized_dict));
+    }
+    onc_object_->SetKey(::onc::eap::kSubjectAlternativeNameMatch,
+                        std::move(deserialized_dicts));
   }
 }
 

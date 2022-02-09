@@ -112,8 +112,9 @@ public class CustomTabActivity extends BaseCustomTabActivity {
 
         CustomTabNavigationBarController.update(getWindow(), mIntentDataProvider, getResources());
 
-        mCustomTabHeightStrategy = CustomTabHeightStrategy.createStrategy(
-                this, mIntentDataProvider.getInitialActivityHeight(), getLifecycleDispatcher());
+        mCustomTabHeightStrategy = CustomTabHeightStrategy.createStrategy(this,
+                mIntentDataProvider.getInitialActivityHeight(), getMultiWindowModeStateDispatcher(),
+                mConnection, mSession, getLifecycleDispatcher());
     }
 
     @Override
@@ -122,7 +123,7 @@ public class CustomTabActivity extends BaseCustomTabActivity {
 
         FontPreloader.getInstance().onPostInflationStartupCustomTabActivity();
 
-        getStatusBarColorController().updateStatusBarColor();
+        mRootUiCoordinator.getStatusBarColorController().updateStatusBarColor();
 
         // Properly attach tab's InfoBarContainer to the view hierarchy if the tab is already
         // attached to a ChromeActivity, as the main tab might have been initialized prior to
@@ -300,5 +301,11 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     @VisibleForTesting
     public NightModeStateProvider getNightModeStateProviderForTesting() {
         return super.getNightModeStateProvider();
+    }
+
+    @Override
+    protected void setDefaultTaskDescription() {
+        // mIntentDataProvider is not ready when the super calls this method. So, we skip setting
+        // the task description here, and do it in #performPostInflationStartup();
     }
 }

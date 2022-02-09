@@ -6,7 +6,6 @@
 #ifndef NOTES_NOTES_STORAGE_H_
 #define NOTES_NOTES_STORAGE_H_
 
-#include <memory>
 #include <string>
 
 #include "base/files/file_path.h"

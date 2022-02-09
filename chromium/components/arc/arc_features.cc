@@ -12,12 +12,6 @@ const base::Feature kBootCompletedBroadcastFeature {
     "ArcBootCompletedBroadcast", base::FEATURE_ENABLED_BY_DEFAULT
 };
 
-// Controls whether we should delete all ARC data before transitioning a user
-// from regular to child account.
-const base::Feature kCleanArcDataOnRegularToChildTransitionFeature{
-    "ArcCleanDataOnRegularToChildTransition",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Controls experimental Custom Tabs feature for ARC.
 const base::Feature kCustomTabsExperimentFeature{
     "ArcCustomTabsExperiment", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -25,14 +19,6 @@ const base::Feature kCustomTabsExperimentFeature{
 // Controls whether to handle files with unknown size.
 const base::Feature kDocumentsProviderUnknownSizeFeature{
     "ArcDocumentsProviderUnknownSize", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Controls whether ARC handles child->regular account transition.
-const base::Feature kEnableChildToRegularTransitionFeature{
-    "ArcEnableChildToRegularTransition", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Controls whether ARC handles regular->child account transition.
-const base::Feature kEnableRegularToChildTransitionFeature{
-    "ArcEnableRegularToChildTransition", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls whether to pass throttling notifications to Android side.
 const base::Feature kEnableThrottlingNotification{
@@ -54,8 +40,8 @@ const base::Feature kEnableUsap{"ArcEnableUsap",
                                 base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether ARC apps can share to Web Apps through WebAPKs and TWAs.
-const base::Feature kEnableWebAppShareFeature{
-    "ArcEnableWebAppShare", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kEnableWebAppShareFeature{"ArcEnableWebAppShare",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls experimental file picker feature for ARC.
 const base::Feature kFilePickerExperimentFeature{
@@ -63,7 +49,7 @@ const base::Feature kFilePickerExperimentFeature{
 
 // Controls image copy & paste app compat feature in ARC.
 const base::Feature kImageCopyPasteCompatFeature{
-    "ArcImageCopyPasteCompat", base::FEATURE_DISABLED_BY_DEFAULT};
+    "ArcImageCopyPasteCompat", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls keyboard shortcut helper integration feature in ARC.
 const base::Feature kKeyboardShortcutHelperIntegrationFeature{
@@ -93,7 +79,7 @@ const base::Feature kSaveRawFilesOnTracing{"ArcSaveRawFilesOnTracing",
 // Controls ARCVM real time vcpu feature on a device with 2 logical cores
 // online.
 const base::Feature kRtVcpuDualCore{"ArcRtVcpuDualCore",
-                                    base::FEATURE_DISABLED_BY_DEFAULT};
+                                    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls ARCVM real time vcpu feature on a device with 3+ logical cores
 // online.
@@ -137,5 +123,39 @@ const base::FeatureParam<int> kVmMemorySizeShiftMiB{&kVmMemorySize, "shift_mib",
 // INT32_MAX means that ARCVM's memory is not capped.
 const base::FeatureParam<int> kVmMemorySizeMaxMiB{&kVmMemorySize, "max_mib",
                                                   INT32_MAX};
+
+// Controls whether to use the new limit cache balloon policy. If disabled the
+// old balance available balloon policy is used. If enabled, ChromeOS's Resource
+// Manager (resourced) is able to kill ARCVM apps by sending a memory pressure
+// signal.
+// The limit cache balloon policy inflates the balloon to limit the kernel page
+// cache inside ARCVM if memory in the host is low. See FeatureParams below for
+// the conditions that limit cache. See mOomMinFreeHigh and mOomAdj in
+// frameworks/base/services/core/java/com/android/server/am/ProcessList.java
+// to see how LMKD maps kernel page cache to a priority level of app to kill.
+// To ensure fairness between tab manager discards and ARCVM low memory kills,
+// we want to stop LMKD killing things out of turn. We do this by making sure
+// ARCVM never has it's kernel page cache drop below the level that LMKD will
+// start killing.
+const base::Feature kVmBalloonPolicy{"ArcVmBalloonPolicy",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
+// The maximum amount of kernel page cache ARCVM can have when ChromeOS is under
+// moderate memory pressure. 0 for no limit.
+const base::FeatureParam<int> kVmBalloonPolicyModerateKiB{&kVmBalloonPolicy,
+                                                          "moderate_kib", 0};
+
+// The maximum amount of kernel page cache ARCVM can have when ChromeOS is under
+// critical memory pressure. 0 for no limit. The default value of 184320KiB
+// corresponds to the level LMKD will start to kill the lowest priority cached
+// app.
+const base::FeatureParam<int> kVmBalloonPolicyCriticalKiB{
+    &kVmBalloonPolicy, "critical_kib", 184320};
+
+// The maximum amount of kernel page cache ARCVM can have when ChromeOS is
+// reclaiming. 0 for no limit. The default value of 184320KiB corresponds to the
+// level LMKD will start to kill the lowest priority cached app.
+const base::FeatureParam<int> kVmBalloonPolicyReclaimKiB{&kVmBalloonPolicy,
+                                                         "reclaim_kib", 184320};
 
 }  // namespace arc

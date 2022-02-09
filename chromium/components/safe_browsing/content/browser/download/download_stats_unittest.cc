@@ -6,7 +6,9 @@
 
 #include "base/files/file_path.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "components/safe_browsing/content/common/file_type_policies.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace {
 
@@ -101,6 +103,52 @@ TEST(SafeBrowsingDownloadStatsTest, RecordDownloadOpened) {
       "SBClientDownload.SafeDownloadOpenedLatency.ShowInFolder",
       /*sample=*/base::TimeDelta::FromHours(5),
       /*count=*/1);
+}
+
+TEST(SafeBrowsingDownloadStatsTest, RecordDownloadFileTypeAttributes) {
+  {
+    base::HistogramTester histogram_tester;
+    RecordDownloadFileTypeAttributes(DownloadFileType::ALLOW_ON_USER_GESTURE,
+                                     /*has_user_gesture=*/false,
+                                     /*visited_referrer_before=*/false,
+                                     /*latest_bypass_time=*/absl::nullopt);
+    histogram_tester.ExpectUniqueSample(
+        "SBClientDownload.UserGestureFileType.Attributes",
+        /*sample=*/UserGestureFileTypeAttributes::TOTAL_TYPE_CHECKED,
+        /*expected_bucket_count=*/1);
+    histogram_tester.ExpectTotalCount(
+        "SBClientDownload.UserGestureFileType.LastBypassDownloadInterval",
+        /*count=*/0);
+  }
+  {
+    base::HistogramTester histogram_tester;
+    RecordDownloadFileTypeAttributes(DownloadFileType::ALLOW_ON_USER_GESTURE,
+                                     /*has_user_gesture=*/true,
+                                     /*visited_referrer_before=*/true,
+                                     /*latest_bypass_time=*/base::Time::Now() -
+                                         base::TimeDelta::FromHours(1));
+    histogram_tester.ExpectBucketCount(
+        "SBClientDownload.UserGestureFileType.Attributes",
+        /*sample=*/UserGestureFileTypeAttributes::TOTAL_TYPE_CHECKED,
+        /*expected_count=*/1);
+    histogram_tester.ExpectBucketCount(
+        "SBClientDownload.UserGestureFileType.Attributes",
+        /*sample=*/UserGestureFileTypeAttributes::HAS_USER_GESTURE,
+        /*expected_count=*/1);
+    histogram_tester.ExpectBucketCount(
+        "SBClientDownload.UserGestureFileType.Attributes",
+        /*sample=*/UserGestureFileTypeAttributes::HAS_REFERRER_VISIT,
+        /*expected_count=*/1);
+    histogram_tester.ExpectBucketCount(
+        "SBClientDownload.UserGestureFileType.Attributes",
+        /*sample=*/
+        UserGestureFileTypeAttributes::HAS_BOTH_USER_GESTURE_AND_REFERRER_VISIT,
+        /*expected_count=*/1);
+    histogram_tester.ExpectUniqueTimeSample(
+        "SBClientDownload.UserGestureFileType.LastBypassDownloadInterval",
+        /*sample=*/base::TimeDelta::FromHours(1),
+        /*expected_bucket_count=*/1);
+  }
 }
 
 }  // namespace safe_browsing

@@ -22,8 +22,15 @@ const std::u16string TitledUrlNode::GetTitledUrlNodeDescription() const {
 
 // BookmarkNode ---------------------------------------------------------------
 
+// Below predefined GUIDs for permanent bookmark folders, determined via named
+// GUIDs/UUIDs. Do NOT modify them as they may be exposed via Sync. For
+// reference, here's the python script to produce them:
+// > import uuid
+// > vivaldi_namespace = uuid.uuid5(uuid.NAMESPACE_DNS, "vivaldi.com")
+// > bookmarks_namespace = uuid.uuid5(vivaldi_namespace, "bookmarks")
+// > trash_guid = uuid.uuid5(bookmarks_namespace, "trash")
 const char BookmarkNode::kVivaldiTrashNodeGuid[] =
-    "00000000-0000-4000-a000-000000040000";
+    "9f32a0fb-bfd9-5032-be46-07afe4a25400";
 
 const std::u16string BookmarkNode::GetTitledUrlNodeNickName() const {
   return base::UTF8ToUTF16(vivaldi_bookmark_kit::GetNickname(this));

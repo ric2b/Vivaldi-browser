@@ -106,7 +106,7 @@ VivaldiWebUIControllerFactory::~VivaldiWebUIControllerFactory() {}
 // static
 base::RefCountedMemory* VivaldiWebUIControllerFactory::GetFaviconResourceBytes(
     const GURL& page_url,
-    ui::ScaleFactor scale_factor) {
+    ui::ResourceScaleFactor scale_factor) {
  if (page_url.host() == vivaldi::kVivaldiGameHost) {
     return ui::ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
       IDR_VIVALDI_GAME_FAVICON, scale_factor);

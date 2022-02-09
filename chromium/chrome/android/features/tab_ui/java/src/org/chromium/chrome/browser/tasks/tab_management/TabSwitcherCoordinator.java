@@ -96,6 +96,10 @@ public class TabSwitcherCoordinator
     // tab switcher.
     static final String COMPONENT_NAME = "GridTabSwitcher";
     private static boolean sAppendedMessagesForTesting;
+    // TODO(crbug.com/1240249): We have to use a static variable because startedShowing() &
+    // startedHiding() aren't always called for CAROUSEL tab switcher, thus we can't get its
+    // visibility directly.
+    private static boolean sIsGridTabSwitcherShowing;
     private final PropertyModelChangeProcessor mContainerViewChangeProcessor;
     private final ActivityLifecycleDispatcher mLifecycleDispatcher;
     private final MenuOrKeyboardActionController mMenuOrKeyboardActionController;
@@ -125,6 +129,15 @@ public class TabSwitcherCoordinator
             new MenuOrKeyboardActionController.MenuOrKeyboardActionHandler() {
                 @Override
                 public boolean handleMenuOrKeyboardAction(int id, boolean fromMenu) {
+                    // Both GRID and CAROUSEL tab switchers register a MenuOrKeyboardActionHandler
+                    // upon creation, but only the first registered handler will handle the menu
+                    // actions. Checking the mode allows the handler created under GRID tab switcher
+                    // to handle the menu actions when GRID tab switcher is showing; while CAROUSAL
+                    // tab switcher handles the menu actions when Start Surface is showing.
+                    if ((sIsGridTabSwitcherShowing && mMode == TabListMode.CAROUSEL)
+                            || (!sIsGridTabSwitcherShowing && mMode == TabListMode.GRID)) {
+                        return false;
+                    }
                     if (id == R.id.menu_group_tabs) {
                         assert mTabGroupManualSelectionMode != null;
 
@@ -241,6 +254,24 @@ public class TabSwitcherCoordinator
         mContainerViewChangeProcessor = PropertyModelChangeProcessor.create(containerViewModel,
                 mTabListCoordinator.getContainerView(), TabListContainerViewBinder::bind);
         }
+
+        mMediator.addOverviewModeObserver(new OverviewModeObserver() {
+            @Override
+            public void startedShowing() {
+                if (mMode == TabListMode.GRID) sIsGridTabSwitcherShowing = true;
+            }
+
+            @Override
+            public void finishedShowing() {}
+
+            @Override
+            public void startedHiding() {
+                if (mMode == TabListMode.GRID) sIsGridTabSwitcherShowing = false;
+            }
+
+            @Override
+            public void finishedHiding() {}
+        });
 
         if (TabUiFeatureUtilities.isLaunchPolishEnabled()
                 && TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(activity)) {
@@ -415,8 +446,8 @@ public class TabSwitcherCoordinator
     private void setUpPriceTracking(Context context, ModalDialogManager modalDialogManager) {
         if (PriceTrackingUtilities.isPriceTrackingEnabled()) {
             PriceDropNotificationManager notificationManager = new PriceDropNotificationManager();
-            mPriceTrackingDialogCoordinator = new PriceTrackingDialogCoordinator(
-                    context, modalDialogManager, this, mTabModelSelector, notificationManager);
+            mPriceTrackingDialogCoordinator = new PriceTrackingDialogCoordinator(context,
+                    modalDialogManager, this, mTabModelSelector, notificationManager, mMode);
             if (mMode == TabListCoordinator.TabListMode.GRID) {
                 mPriceMessageService = new PriceMessageService(
                         mTabListCoordinator, mMediator, notificationManager);

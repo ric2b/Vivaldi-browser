@@ -21,7 +21,7 @@ NoteAttachment::NoteAttachment(const std::string& content) : content_(content) {
     return;
 
   base::Base64Encode(crypto::SHA256HashString(content), &checksum_);
-  checksum_  += "|" + base::NumberToString(content.size());
+  checksum_ += "|" + base::NumberToString(content.size());
 }
 
 NoteAttachment::NoteAttachment(const std::string& checksum,
@@ -31,43 +31,38 @@ NoteAttachment::NoteAttachment(const std::string& checksum,
 NoteAttachment::NoteAttachment(NoteAttachment&&) = default;
 NoteAttachment& NoteAttachment::operator=(NoteAttachment&&) = default;
 
-std::unique_ptr<base::Value> NoteAttachment::Encode(
-    NotesCodec* checksummer) const {
+base::Value NoteAttachment::Encode(NotesCodec* checksummer) const {
   DCHECK(checksummer);
 
-  std::unique_ptr<base::DictionaryValue> attachment_value =
-      base::WrapUnique(new base::DictionaryValue());
-  attachment_value->SetKey("checksum", base::Value(checksum_));
+  base::Value attachment_value(base::Value::Type::DICTIONARY);
+  attachment_value.SetStringKey("checksum", checksum_);
   checksummer->UpdateChecksum(checksum_);
-  attachment_value->SetKey("content", base::Value(content_));
+  attachment_value.SetStringKey("content", content_);
   checksummer->UpdateChecksum(content_);
 
   return attachment_value;
 }
 
 std::unique_ptr<NoteAttachment> NoteAttachment::Decode(
-    const base::DictionaryValue* input,
+    const base::Value& input,
     NotesCodec* checksummer) {
-  DCHECK(input);
+  DCHECK(input.is_dict());
   DCHECK(checksummer);
 
-  const base::Value* checksum =
-      input->FindKeyOfType("checksum", base::Value::Type::STRING);
-  const base::Value* content =
-      input->FindKeyOfType("content", base::Value::Type::STRING);
+  const std::string* checksum = input.FindStringKey("checksum");
+  const std::string* content = input.FindStringKey("content");
 
   if (!content)
     return nullptr;
 
-  checksummer->UpdateChecksum(content->GetString());
+  checksummer->UpdateChecksum(*content);
 
   std::unique_ptr<NoteAttachment> attachment;
   if (checksum) {
-    checksummer->UpdateChecksum(checksum->GetString());
-    attachment = std::make_unique<NoteAttachment>(checksum->GetString(),
-                                                  content->GetString());
+    checksummer->UpdateChecksum(*checksum);
+    attachment = std::make_unique<NoteAttachment>(*checksum, *content);
   } else {
-    attachment = std::make_unique<NoteAttachment>(content->GetString());
+    attachment = std::make_unique<NoteAttachment>(*content);
   }
 
   return attachment;

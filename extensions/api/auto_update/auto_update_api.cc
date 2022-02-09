@@ -29,6 +29,12 @@ void AutoUpdateAPI::SendDidFindValidUpdate(const std::string& url,
 }
 
 /* static */
+void AutoUpdateAPI::SendUpdaterDidNotFindUpdate() {
+  ::vivaldi::BroadcastEventToAllProfiles(
+      auto_update::OnUpdaterDidNotFindUpdate::kEventName);
+}
+
+/* static */
 void AutoUpdateAPI::SendWillDownloadUpdate(const base::Version& version) {
   ::vivaldi::BroadcastEventToAllProfiles(
       auto_update::OnWillDownloadUpdate::kEventName,

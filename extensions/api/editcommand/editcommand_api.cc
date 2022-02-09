@@ -6,17 +6,10 @@
 
 #include "extensions/api/editcommand/editcommand_api.h"
 
-#include <memory>
+#include "content/browser/web_contents/web_contents_impl.h" // nogncheck
 
 #include "app/vivaldi_constants.h"
-#include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "content/public/browser/web_contents.h"
-#include "extensions/browser/extension_function_dispatcher.h"
-#include "extensions/browser/guest_view/web_view/web_view_guest.h"
-
-#include "content/browser/web_contents/web_contents_impl.h" // nogncheck
-#include "ui/vivaldi_ui_utils.h"
+#include "ui/vivaldi_browser_window.h"
 
 namespace extensions {
 
@@ -26,33 +19,14 @@ ExtensionFunction::ResponseAction EditcommandExecuteFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  content::WebContents* web_contents = nullptr;
-  if (params->tab_id) {
-    web_contents = ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
-        *params->tab_id, browser_context(), nullptr);
-  } else {
-    web_contents = dispatcher()->GetAssociatedWebContents();
+  VivaldiBrowserWindow* window =
+      VivaldiBrowserWindow::FromId(params->window_id);
+  if (!window) {
+    return RespondNow(Error("No such window"));
   }
-  if (!web_contents)
-    return RespondNow(Error("No WebContents"));
-
-  // NOTE(espen@vivaldi.com): Added with ch67 when we started to use separate
-  // documents for ui and page (cross process). The api happens in the ui
-  // document while actions can take place in ui or page. So look up the
-  // focused WebContents object and use that.
-  std::vector<content::WebContentsImpl*> impls =
-    content::WebContentsImpl::GetAllWebContents();
-  for (std::vector<content::WebContentsImpl*>::iterator it = impls.begin();
-        it != impls.end(); ++it) {
-    content::WebContentsImpl* impl = *it;
-    if (impl->GetAsWebContents() == web_contents) {
-      impl = impl->GetFocusedWebContents();
-      if (impl) {
-        web_contents = impl->GetAsWebContents();
-      }
-      break;
-    }
-  }
+  content::WebContents* web_contents =
+      static_cast<content::WebContentsImpl*>(window->web_contents())
+          ->GetFocusedWebContents();
 
   if (params->command == "undo")
     web_contents->Undo();

@@ -78,8 +78,6 @@ using web::NavigationManagerImpl;
 using web::WebState;
 using web::WebStateImpl;
 
-using web::wk_navigation_util::IsPlaceholderUrl;
-using web::wk_navigation_util::ExtractUrlFromPlaceholderUrl;
 using web::wk_navigation_util::IsRestoreSessionUrl;
 using web::wk_navigation_util::IsWKInternalUrl;
 
@@ -718,6 +716,9 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
 
 - (void)loadCurrentURLIfNecessary {
   if (self.navigationHandler.webProcessCrashed) {
+    // Log a user reloading a previously crashed renderer.
+    base::RecordAction(
+        base::UserMetricsAction("IOSMobileReloadCrashedRenderer"));
     [self loadCurrentURLWithRendererInitiatedNavigation:NO];
   } else if (!_currentURLLoadWasTrigerred) {
     [self ensureContainerViewCreated];
@@ -783,12 +784,6 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
   WKNavigation* navigation = [self.webView goToBackForwardListItem:wk_item];
 
   GURL URL = net::GURLWithNSURL(wk_item.URL);
-  if (!base::FeatureList::IsEnabled(web::features::kUseJSForErrorPage) &&
-      IsPlaceholderUrl(URL)) {
-    // No need to create navigation context for placeholder back forward
-    // navigations. Future callbacks do not expect that context will exist.
-    return;
-  }
 
   self.webStateImpl->ClearWebUI();
 
@@ -1006,10 +1001,6 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
         self.webStateImpl->GetNavigationManager()->GetLastCommittedItem();
     GURL committedURL =
         committedItem ? committedItem->GetURL() : GURL::EmptyGURL();
-    if (!base::FeatureList::IsEnabled(web::features::kUseJSForErrorPage) &&
-        IsPlaceholderUrl(committedURL)) {
-      committedURL = ExtractUrlFromPlaceholderUrl(committedURL);
-    }
     GURL committedOrigin = committedURL.GetOrigin();
     DCHECK_EQ(documentOrigin, committedOrigin)
         << "Old and new URL detection system have a mismatch";
@@ -1027,11 +1018,6 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
 - (GURL)webURLWithTrustLevel:(web::URLVerificationTrustLevel*)trustLevel {
   DCHECK(trustLevel);
   *trustLevel = web::URLVerificationTrustLevel::kAbsolute;
-  // Placeholder URL is an implementation detail. Don't expose it to users of
-  // web layer.
-  if (!base::FeatureList::IsEnabled(web::features::kUseJSForErrorPage) &&
-      IsPlaceholderUrl(_documentURL))
-    return ExtractUrlFromPlaceholderUrl(_documentURL);
   return _documentURL;
 }
 
@@ -1566,16 +1552,11 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
           requireGestureRecognizerToFail:swipeRecognizer];
     }
 
-    BOOL usingNewContextMenu = NO;
     if (web::GetWebClient()->EnableLongPressUIContextMenu()) {
-      if (@available(iOS 13, *)) {
-        usingNewContextMenu = YES;
         self.contextMenuController = [[CRWContextMenuController alloc]
             initWithWebView:self.webView
                    webState:self.webStateImpl];
-      }
-    }
-    if (!usingNewContextMenu) {
+    } else {
       // Default to legacy implementation.
       self.UIHandler.contextMenuController =
           [[CRWLegacyContextMenuController alloc]
@@ -1780,9 +1761,7 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
       lastNavigationState == web::WKNavigationState::STARTED ||
       lastNavigationState == web::WKNavigationState::REDIRECTED;
 
-  if (!hasPendingNavigation &&
-      (base::FeatureList::IsEnabled(web::features::kUseJSForErrorPage) ||
-       !IsPlaceholderUrl(net::GURLWithNSURL(self.webView.URL)))) {
+  if (!hasPendingNavigation) {
     // Do not update the title if there is a navigation in progress because
     // there is no way to tell if KVO change fired for new or previous page.
     [self.navigationHandler
@@ -1846,16 +1825,11 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
 - (void)navigationObserver:(CRWWebViewNavigationObserver*)navigationObserver
                 didLoadNewURL:(const GURL&)webViewURL
     forSameDocumentNavigation:(BOOL)isSameDocumentNavigation {
-  BOOL isPlaceholderURL =
-      base::FeatureList::IsEnabled(web::features::kUseJSForErrorPage)
-          ? NO
-          : IsPlaceholderUrl(webViewURL);
   std::unique_ptr<web::NavigationContextImpl> newContext =
       [_requestController registerLoadRequestForURL:webViewURL
                              sameDocumentNavigation:isSameDocumentNavigation
                                      hasUserGesture:NO
-                                  rendererInitiated:YES
-                              placeholderNavigation:isPlaceholderURL];
+                                  rendererInitiated:YES];
   [self.navigationHandler webPageChangedWithContext:newContext.get()
                                             webView:self.webView];
   newContext->SetHasCommitted(!isSameDocumentNavigation);
@@ -1929,8 +1903,7 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
           [_requestController registerLoadRequestForURL:newURL
                                  sameDocumentNavigation:YES
                                          hasUserGesture:NO
-                                      rendererInitiated:YES
-                                  placeholderNavigation:NO];
+                                      rendererInitiated:YES];
     }
   }
 
@@ -1986,13 +1959,11 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
     registerLoadRequestForURL:(const GURL&)URL
        sameDocumentNavigation:(BOOL)sameDocumentNavigation
                hasUserGesture:(BOOL)hasUserGesture
-            rendererInitiated:(BOOL)renderedInitiated
-        placeholderNavigation:(BOOL)placeholderNavigation {
+            rendererInitiated:(BOOL)renderedInitiated {
   return [_requestController registerLoadRequestForURL:URL
                                 sameDocumentNavigation:sameDocumentNavigation
                                         hasUserGesture:hasUserGesture
-                                     rendererInitiated:renderedInitiated
-                                 placeholderNavigation:placeholderNavigation];
+                                     rendererInitiated:renderedInitiated];
 }
 
 - (void)navigationHandlerDisplayWebView:

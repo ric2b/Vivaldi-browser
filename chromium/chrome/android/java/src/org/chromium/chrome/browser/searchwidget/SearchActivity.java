@@ -69,6 +69,7 @@ import org.chromium.url.GURL;
 import java.lang.ref.WeakReference;
 
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.vivaldi.browser.common.VivaldiIntentHandler;
 import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
 import org.vivaldi.browser.qrcode.VivaldiQrCodeScanDialog;
 
@@ -170,7 +171,7 @@ public class SearchActivity extends AsyncInitializationActivity
     @Override
     protected void triggerLayoutInflation() {
         mSnackbarManager = new SnackbarManager(this, findViewById(android.R.id.content), null);
-        mSearchBoxDataProvider = new SearchBoxDataProvider(getResources());
+        mSearchBoxDataProvider = new SearchBoxDataProvider(this);
 
         mContentView = createContentView();
         setContentView(mContentView);
@@ -363,8 +364,8 @@ public class SearchActivity extends AsyncInitializationActivity
     private void beginQuery() {
         // Vivaldi
         if (ChromeApplicationImpl.isVivaldi() && IntentUtils.safeGetBooleanExtra(
-                getIntent(), SearchWidgetProvider.EXTRA_VIVALDI_START_QR_CODE_SCAN, false)) {
-            VivaldiQrCodeScanDialog dialog = VivaldiQrCodeScanDialog.getInstance();
+                getIntent(), VivaldiIntentHandler.EXTRA_SCAN_QR_CODE, false)) {
+            VivaldiQrCodeScanDialog dialog = VivaldiQrCodeScanDialog.newInstance();
             dialog.show(getFragmentManager(), null);
             return;
         }

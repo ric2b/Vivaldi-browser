@@ -26,6 +26,7 @@ SWITCHES_EXPORT extern const char kDebugVivaldi[];
 SWITCHES_EXPORT extern const char kDisableVivaldi[];
 SWITCHES_EXPORT extern const char kRunningVivaldi[];
 
+SWITCHES_EXPORT extern const char kVivaldiDisableIPCDemuxer[];
 SWITCHES_EXPORT extern const char kVivaldiPlatformMedia[];
 SWITCHES_EXPORT extern const char kVivaldiSilentUpdate[];
 SWITCHES_EXPORT extern const char kVivaldiUpdateURL[];
@@ -33,6 +34,8 @@ SWITCHES_EXPORT extern const char kVivaldiUpdateURL[];
 SWITCHES_EXPORT extern const char kLaunchUpdater[];
 #endif
 SWITCHES_EXPORT extern const char kTestAlreadyRunningDialog[];
+SWITCHES_EXPORT extern const char kTranslateLanguageListUrl[];
+SWITCHES_EXPORT extern const char kTranslateServerUrl[];
 
 }  // namespace switches
 

@@ -14,6 +14,7 @@ declare_overrides() {
   ffmpeg_branding = "Chromium"
   proprietary_codecs = true
   enable_widevine = true
+  dcheck_always_on = is_debug # || is_component_build
 
   enable_media_remoting = true
 
@@ -36,6 +37,12 @@ declare_overrides() {
     ffmpeg_branding = "Chrome"
     android_channel = "stable"
     chrome_public_manifest_package = android_vivaldi_manifest_package
+    if (!is_debug) {
+      if (is_official_build) {
+        enable_resource_allowlist_generation = false
+      }
+      strip_debug_info = true
+    }
   }
 
   enable_hangout_services_extension = true

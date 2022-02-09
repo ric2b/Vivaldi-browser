@@ -14,7 +14,7 @@
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/services/qrcode_generator/public/cpp/qrcode_generator_service.h"
-#include "chrome/services/qrcode_generator/public/mojom/qrcode_generator.mojom-shared.h"
+#include "chrome/services/qrcode_generator/public/mojom/qrcode_generator.mojom.h"
 #include "components/password_manager/core/browser/password_access_authenticator.h"
 #include "components/password_manager/core/browser/reauth_purpose.h"
 #include "content/public/browser/download_manager.h"
@@ -849,6 +849,73 @@ class UtilitiesGetGAPIKeyFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(UtilitiesGetGAPIKeyFunction);
+};
+
+class UtilitiesGetGOAuthClientIdFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getGOAuthClientId",
+                             UTILITIES_GET_GOOGLE_API_CLIENT_ID)
+  UtilitiesGetGOAuthClientIdFunction() = default;
+
+ private:
+  ~UtilitiesGetGOAuthClientIdFunction() override = default;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetGOAuthClientIdFunction);
+};
+
+class UtilitiesGetGOAuthClientSecretFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getGOAuthClientSecret",
+                             UTILITIES_GET_GOOGLE_API_CLIENT_SECRET)
+  UtilitiesGetGOAuthClientSecretFunction() = default;
+
+ private:
+  ~UtilitiesGetGOAuthClientSecretFunction() override = default;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetGOAuthClientSecretFunction);
+};
+
+class UtilitiesGetCommandLineValueFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getCommandLineValue",
+                             UTILITIES_GET_COMMAND_LINE_VALUE)
+  UtilitiesGetCommandLineValueFunction();
+
+ private:
+  ~UtilitiesGetCommandLineValueFunction() override;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetCommandLineValueFunction);
+};
+
+class UtilitiesOsCryptFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.osCrypt", UTILITIES_OS_CRYPT)
+  UtilitiesOsCryptFunction();
+
+ private:
+  ~UtilitiesOsCryptFunction() override;
+  ResponseAction Run() override;
+
+  void OnEncryptDone(std::unique_ptr<std::string> encrypted, bool result);
+
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesOsCryptFunction);
+};
+
+class UtilitiesOsDecryptFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.osDecrypt", UTILITIES_OS_DECRYPT)
+  UtilitiesOsDecryptFunction();
+
+ private:
+  ~UtilitiesOsDecryptFunction() override;
+  ResponseAction Run() override;
+
+  void OnDecryptDone(std::unique_ptr<std::string> decrypted, bool result);
+
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesOsDecryptFunction);
 };
 
 }  // namespace extensions

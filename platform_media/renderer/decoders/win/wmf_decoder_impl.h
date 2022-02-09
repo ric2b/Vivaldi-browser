@@ -13,9 +13,9 @@
 #include <mfapi.h>
 #include <mftransform.h>
 
+#include <wrl/client.h>
 #include <deque>
 #include <string>
-#include <wrl/client.h>
 
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_piece.h"
@@ -59,14 +59,12 @@ class WMFDecoderImpl {
   using OutputCB = typename DecoderTraits::OutputCB;
   using OutputType = typename DecoderTraits::OutputType;
 
-  explicit WMFDecoderImpl(
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
+  explicit WMFDecoderImpl(scoped_refptr<base::SequencedTaskRunner> task_runner);
 
   void Initialize(const DecoderConfig& config,
                   InitCB init_cb,
                   const OutputCB& output_cb);
-  void Decode(scoped_refptr<DecoderBuffer> buffer,
-              DecodeCB decode_cb);
+  void Decode(scoped_refptr<DecoderBuffer> buffer, DecodeCB decode_cb);
   void Reset(base::OnceClosure closure);
 
  private:
@@ -102,10 +100,10 @@ class WMFDecoderImpl {
       DWORD data_size,
       base::TimeDelta timestamp);
   Microsoft::WRL::ComPtr<IMFSample> CreateSample(DWORD buffer_size,
-                                                  int buffer_alignment) const;
+                                                 int buffer_alignment) const;
   void ResetTimestampState();
 
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  scoped_refptr<base::SequencedTaskRunner> task_runner_;
   Microsoft::WRL::ComPtr<IMFTransform> decoder_;
   DecoderConfig config_;
   OutputCB output_cb_;

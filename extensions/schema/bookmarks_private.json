@@ -89,6 +89,11 @@
             "optional": true,
             "description": "When the contents of this folder last changed, in milliseconds since the epoch."
           },
+          "faviconUrl": {
+            "type": "string",
+            "optional": true,
+            "description": "If present this url should be used to retrive a favicon."
+          },
           "children": {
             "type": "array",
             "optional": true,

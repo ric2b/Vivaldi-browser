@@ -71,9 +71,14 @@ import org.chromium.ui.util.ColorUtils;
 import java.util.ArrayList;
 import java.util.List;
 
+// Vivaldi
+import android.content.Intent;
+import android.net.Uri;
+import android.provider.Browser;
 import org.chromium.build.BuildConfig;
+import org.vivaldi.browser.common.VivaldiIntentHandler;
+import org.vivaldi.browser.common.VivaldiUrlConstants;
 import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
-import org.vivaldi.browser.qrcode.VivaldiQrCodeScanDialog;
 
 /**
  * Mediator for the LocationBar component. Intended location for LocationBar business logic;
@@ -961,7 +966,7 @@ class LocationBarMediator
         // of whether it is branded or not.
         if (isUrlBarFocused()) {
             return ChromeColors.getDefaultThemeColor(
-                    mContext.getResources(), mLocationBarDataProvider.isIncognito());
+                    mContext, mLocationBarDataProvider.isIncognito());
         } else {
             return mLocationBarDataProvider.getPrimaryColor();
         }
@@ -1036,9 +1041,14 @@ class LocationBarMediator
     }
 
     private boolean shouldShowLensButton() {
+        // When this method is called on UI inflation, return false as the native is not ready.
+        if (!mNativeInitialized) {
+            return false;
+        }
+        // When this method is called after native initialized, check omnibox conditions and Lens
+        // eligibility.
         if (mIsTablet && mShouldShowButtonsWhenUnfocused) {
-            return mNativeInitialized && (mUrlHasFocus || mIsUrlFocusChangeInProgress)
-                    && isLensOnOmniboxEnabled();
+            return (mUrlHasFocus || mIsUrlFocusChangeInProgress) && isLensOnOmniboxEnabled();
         }
         return !shouldShowDeleteButton()
                 && (mUrlHasFocus || mIsUrlFocusChangeInProgress || mUrlFocusChangeFraction > 0f
@@ -1155,6 +1165,8 @@ class LocationBarMediator
         sLastCachedIsLensOnOmniboxEnabled = Boolean.valueOf(isLensEnabled(LensEntryPoint.OMNIBOX));
         updateButtonVisibility();
         updateSearchEngineStatusIconShownState();
+        // Update the visuals to use correct incognito colors.
+        mUrlCoordinator.setIncognitoColorsEnabled(mLocationBarDataProvider.isIncognito());
     }
 
     @Override
@@ -1406,12 +1418,23 @@ class LocationBarMediator
                         .build());
     }
 
-    /** Vivaldi */
+    /** Vivaldi
+     * Launch the Vivaldi QR scanner using an intent (to avoid unwanted source dependencies).
+     * @param view
+     */
     /* package */ void qrCodeButtonClicked(View view) {
         if (!mNativeInitialized) return;
         mUrlCoordinator.setKeyboardVisibility(false, false);
-        VivaldiQrCodeScanDialog dialog = VivaldiQrCodeScanDialog.getInstance();
-        dialog.show(getWindowAndroid().getActivity().get().getFragmentManager(), null);
+
+        Intent intent =
+                new Intent()
+                        .setAction(Intent.ACTION_VIEW)
+                        .setData(Uri.parse(VivaldiUrlConstants.NTP_NON_NATIVE_URL))
+                        .setClass(mContext, mContext.getClass())
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
+                        .putExtra(Browser.EXTRA_APPLICATION_ID, mContext.getPackageName())
+                        .putExtra(VivaldiIntentHandler.EXTRA_SCAN_QR_CODE, true);
+        mContext.startActivity(intent);
     }
 
     /** Vivaldi

@@ -35,13 +35,7 @@
 #include "ui/gl/test/gl_surface_test_support.h"
 #endif
 
-#if defined(OS_WIN)
-#include "base/win/scoped_com_initializer.h"
-#endif
-
-#if defined(VIVALDI_BUILD)
 #include "base/test/vivaldi_testinit.h"
-#endif
 
 namespace {
 
@@ -114,10 +108,6 @@ class ComponentsTestSuite : public base::TestSuite {
     ui::ResourceBundle::CleanupSharedInstance();
     base::TestSuite::Shutdown();
   }
-
-#if defined(OS_WIN)
-  base::win::ScopedCOMInitializer com_initializer_;
-#endif
 };
 
 class ComponentsUnitTestEventListener : public testing::EmptyTestEventListener {
@@ -157,9 +147,7 @@ class ComponentsUnitTestEventListener : public testing::EmptyTestEventListener {
 }  // namespace
 
 base::RunTestSuiteCallback GetLaunchCallback(int argc, char** argv) {
-#if defined(VIVALDI_BUILD)
   vivaldi::InitTestPathEnvironment();
-#endif
 
 #if !defined(OS_IOS)
   auto test_suite = std::make_unique<content::UnitTestTestSuite>(

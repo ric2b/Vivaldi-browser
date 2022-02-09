@@ -27,7 +27,7 @@ class VivaldiWebUIControllerFactory : public content::WebUIControllerFactory {
 
   static base::RefCountedMemory* GetFaviconResourceBytes(
       const GURL& page_url,
-      ui::ScaleFactor scale_factor);
+      ui::ResourceScaleFactor scale_factor);
 
  protected:
   VivaldiWebUIControllerFactory();

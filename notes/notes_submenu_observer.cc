@@ -3,37 +3,38 @@
 #include "notes/notes_submenu_observer.h"
 
 #include "base/strings/utf_string_conversions.h"
-#include "browser/menus/vivaldi_menu_enums.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/renderer_context_menu/render_view_context_menu_proxy.h"
 #include "components/prefs/pref_service.h"
+#include "components/renderer_context_menu/render_view_context_menu_proxy.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
-#include "notes/notes_factory.h"
-#include "notes/notes_model.h"
-#include "renderer/vivaldi_render_messages.h"
 #include "ui/base/accelerators/menu_label_accelerator_util.h"
 #include "ui/base/l10n/l10n_util.h"
+
+#include "browser/menus/vivaldi_menu_enums.h"
+#include "notes/notes_factory.h"
+#include "notes/notes_model.h"
 #include "vivaldi/app/grit/vivaldi_native_strings.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
+
 #define MAX_NOTES_MENUITEM_LENGTH 40
 
 using content::BrowserThread;
 using vivaldi::NotesModelFactory;
 
-
 NotesSubMenuObserver::NotesSubMenuObserver(
-  RenderViewContextMenuProxy* proxy,
-  RenderViewContextMenuBase::ToolkitDelegate* toolkit_delegate)
-  : helper_(CreateSubMenuObserverHelper(this, toolkit_delegate)),
-    proxy_(proxy),
-    root_id_(IDC_VIV_CONTENT_INSERT_NOTE) {
-}
+    RenderViewContextMenuProxy* proxy,
+    RenderViewContextMenuBase::ToolkitDelegate* toolkit_delegate)
+    : helper_(CreateSubMenuObserverHelper(this, toolkit_delegate)),
+      proxy_(proxy),
+      root_id_(IDC_VIV_CONTENT_INSERT_NOTE) {}
 
 NotesSubMenuObserver::~NotesSubMenuObserver() {}
 
-void NotesSubMenuObserver::SetRootModel(ui::SimpleMenuModel* model, int id,
+void NotesSubMenuObserver::SetRootModel(ui::SimpleMenuModel* model,
+                                        int id,
                                         bool is_folder) {
   root_menu_model_ = model;
   root_id_ = id;
@@ -70,13 +71,13 @@ void NotesSubMenuObserver::InitMenu(const content::ContextMenuParams& params) {
       models_.push_back(base::WrapUnique(menu_model));
       menumodel_to_note_map_[menu_model] = model->main_node();
       if (root_menu_model_) {
-        root_menu_model_->AddSubMenu(root_id_,
-          l10n_util::GetStringUTF16(IDS_VIV_CONTENT_INSERT_NOTE),
-          menu_model);
+        root_menu_model_->AddSubMenu(
+            root_id_, l10n_util::GetStringUTF16(IDS_VIV_CONTENT_INSERT_NOTE),
+            menu_model);
       } else {
-        proxy_->AddSubMenu(root_id_,
-          l10n_util::GetStringUTF16(IDS_VIV_CONTENT_INSERT_NOTE),
-          menu_model);
+        proxy_->AddSubMenu(
+            root_id_, l10n_util::GetStringUTF16(IDS_VIV_CONTENT_INSERT_NOTE),
+            menu_model);
       }
       if (!helper_->SupportsDelayedLoading()) {
         PopulateModel(menu_model);
@@ -115,11 +116,9 @@ void NotesSubMenuObserver::PopulateModel(ui::SimpleMenuModel* menu_model) {
 #endif
 
   for (auto& node : parent->children()) {
-
     if (node->is_separator()) {
       menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
-    }
-    else {
+    } else {
       std::u16string data = node->GetTitle();
       if (data.length() == 0) {
         data = node->GetContent();
@@ -130,8 +129,7 @@ void NotesSubMenuObserver::PopulateModel(ui::SimpleMenuModel* menu_model) {
       base::TrimWhitespace(title, base::TRIM_ALL, &title);
       // Truncate string if it is too long
       if (title.length() > MAX_NOTES_MENUITEM_LENGTH) {
-        title = title.substr(0, MAX_NOTES_MENUITEM_LENGTH - 3) +
-            u"...";
+        title = title.substr(0, MAX_NOTES_MENUITEM_LENGTH - 3) + u"...";
       }
 
       bool underline = underline_letter;
@@ -203,14 +201,11 @@ void NotesSubMenuObserver::ExecuteCommand(int command_id) {
 
   vivaldi::NoteNode* node = GetNodeFromId(root, command_id);
   if (node) {
-    content::RenderFrameHost* focused_frame =
-        proxy_->GetWebContents()->GetFocusedFrame();
-
+    auto* focused_frame = static_cast<content::RenderFrameHostImpl*>(
+        proxy_->GetWebContents()->GetFocusedFrame());
     if (focused_frame) {
-      focused_frame->Send(
-        new VivaldiMsg_InsertText(
-          focused_frame->GetRoutingID(),
-            node->GetContent()));
+      focused_frame->GetVivaldiFrameService()->InsertText(
+          base::UTF16ToUTF8(node->GetContent()));
     }
   }
 }

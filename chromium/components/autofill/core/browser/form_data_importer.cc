@@ -25,6 +25,7 @@
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_name.h"
+#include "components/autofill/core/browser/data_model/autofill_structured_address_utils.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/data_model/phone_number.h"
 #include "components/autofill/core/browser/form_structure.h"
@@ -450,7 +451,9 @@ bool FormDataImporter::ImportFormData(
   // Only import addresses if enabled.
   if (profile_autofill_enabled &&
       !base::FeatureList::IsEnabled(features::kAutofillDisableAddressImport)) {
-    address_import = ImportAddressProfiles(submitted_form);
+    address_import = ImportAddressProfiles(
+        submitted_form,
+        /*allow_save_prompts=*/imported_credit_card->get() == nullptr);
   }
 
   if (cc_import || address_import || imported_upi_id->has_value())
@@ -460,7 +463,8 @@ bool FormDataImporter::ImportFormData(
   return false;
 }
 
-bool FormDataImporter::ImportAddressProfiles(const FormStructure& form) {
+bool FormDataImporter::ImportAddressProfiles(const FormStructure& form,
+                                             bool allow_save_prompts) {
   // Create a buffer to collect logging output for the autofill-internals.
   LogBuffer import_log_buffer;
   import_log_buffer << LoggingScope::kAddressProfileFormImport;
@@ -493,7 +497,10 @@ bool FormDataImporter::ImportAddressProfiles(const FormStructure& form) {
       import_log_buffer << LogMessage::kImportAddressProfileFromFormSection
                         << section << CTag{};
       // Try to import an address profile from the form fields of this section.
-      if (ImportAddressProfileForSection(form, section, &import_log_buffer))
+      // Only allow for a prompt if no other complete profile was found so far.
+      if (ImportAddressProfileForSection(
+              form, section, allow_save_prompts && num_complete_profiles == 0,
+              &import_log_buffer))
         num_complete_profiles++;
       // And close the div of the section import log.
       import_log_buffer << CTag{"div"};
@@ -505,7 +512,8 @@ bool FormDataImporter::ImportAddressProfiles(const FormStructure& form) {
           AutofillMetrics::AddressProfileImportStatusMetric::REGULAR_IMPORT);
     } else if (sections.size() > 1) {
       // Try to import by combining all sections.
-      if (ImportAddressProfileForSection(form, "", &import_log_buffer)) {
+      if (ImportAddressProfileForSection(form, "", allow_save_prompts,
+                                         &import_log_buffer)) {
         num_complete_profiles++;
         AutofillMetrics::LogAddressFormImportStatustMetric(
             AutofillMetrics::AddressProfileImportStatusMetric::
@@ -531,6 +539,7 @@ bool FormDataImporter::ImportAddressProfiles(const FormStructure& form) {
 bool FormDataImporter::ImportAddressProfileForSection(
     const FormStructure& form,
     const std::string& section,
+    bool allow_save_prompts,
     LogBuffer* import_log_buffer) {
   // The candidate for profile import. There are many ways for the candidate to
   // be rejected (see everywhere this function returns false).
@@ -742,20 +751,38 @@ bool FormDataImporter::ImportAddressProfileForSection(
       all_fullfilled ? AddressImportRequirement::OVERALL_REQUIREMENT_FULFILLED
                      : AddressImportRequirement::OVERALL_REQUIREMENT_VIOLATED);
 
-  if (!all_fullfilled)
+  bool candidate_has_structured_data =
+      base::FeatureList::IsEnabled(
+          features::kAutofillSilentProfileUpdateForInsufficientImport) &&
+      candidate_profile.HasStructuredData();
+
+  // If the profile does not fulfill import requirements but contains the
+  // structured address or name information, it is eligible for silently
+  // updating the existing profiles.
+  if (!all_fullfilled && !candidate_has_structured_data) {
     return false;
+  }
 
   if (!candidate_profile.FinalizeAfterImport())
     return false;
+
+  // Restrict the import to silent updates meaning that no prompt will be shown
+  // in case the import requirements are not fulfilled or if save prompts are
+  // not allowed in case they are enabled at all.
+  bool only_silent_updates =
+      !all_fullfilled ||
+      (!allow_save_prompts && base::FeatureList::IsEnabled(
+                                  features::kAutofillAddressProfileSavePrompt));
 
   // At this stage, the saving of the profile can only be omitted by the
   // incognito mode but the import is not triggered if the browser is in the
   // incognito mode.
   DCHECK(!personal_data_manager_->IsOffTheRecord());
   address_profile_save_manager_->ImportProfileFromForm(
-      candidate_profile, app_locale_, form.source_url());
+      candidate_profile, app_locale_, form.source_url(),
+      /*allow_only_silent_updates=*/only_silent_updates);
 
-  return true;
+  return !only_silent_updates;
 }
 
 bool FormDataImporter::ImportCreditCard(

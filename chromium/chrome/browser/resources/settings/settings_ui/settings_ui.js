@@ -11,6 +11,8 @@
  *    <settings-ui prefs="{{prefs}}"></settings-ui>
  */
 import 'chrome://resources/cr_elements/cr_drawer/cr_drawer.js';
+import 'chrome://resources/cr_elements/cr_toolbar/cr_toolbar.js';
+import 'chrome://resources/cr_elements/cr_toolbar/cr_toolbar_search_field.js';
 import 'chrome://resources/cr_elements/cr_page_host_style_css.js';
 import 'chrome://resources/cr_elements/icons.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
@@ -21,7 +23,7 @@ import '../settings_menu/settings_menu.js';
 import '../settings_shared_css.js';
 import '../settings_vars_css.js';
 
-import {CrContainerShadowBehavior} from 'chrome://resources/cr_elements/cr_container_shadow_behavior.m.js';
+import {CrContainerShadowMixin, CrContainerShadowMixinInterface} from 'chrome://resources/cr_elements/cr_container_shadow_mixin.js';
 import {CrToolbarElement} from 'chrome://resources/cr_elements/cr_toolbar/cr_toolbar.js';
 import {CrToolbarSearchFieldElement} from 'chrome://resources/cr_elements/cr_toolbar/cr_toolbar_search_field.js';
 import {FindShortcutBehavior} from 'chrome://resources/cr_elements/find_shortcut_behavior.js';
@@ -41,10 +43,11 @@ import {Route, RouteObserverMixin, Router} from '../router.js';
 /**
  * @constructor
  * @extends {PolymerElement}
+ * @implements {CrContainerShadowMixinInterface}
  */
 const SettingsUiElementBase = mixinBehaviors(
-    [CrContainerShadowBehavior, FindShortcutBehavior],
-    RouteObserverMixin(PolymerElement));
+    [FindShortcutBehavior],
+    RouteObserverMixin(CrContainerShadowMixin(PolymerElement)));
 
 /** @polymer */
 export class SettingsUiElement extends SettingsUiElementBase {
@@ -226,6 +229,18 @@ export class SettingsUiElement extends SettingsUiElementBase {
 
   /** @param {!Route} route */
   currentRouteChanged(route) {
+    if (document.documentElement.hasAttribute('enable-branding-update')) {
+      if (route.depth <= 1) {
+        // Main page uses scroll position to determine whether a shadow should
+        // be shown.
+        this.enableShadowBehavior(true);
+      } else if (!route.isNavigableDialog) {
+        // Sub-pages always show the top shadow, regardless of scroll position.
+        this.enableShadowBehavior(false);
+        this.showDropShadows();
+      }
+    }
+
     const urlSearchQuery =
         Router.getInstance().getQueryParameters().get('search') || '';
     if (urlSearchQuery === this.lastSearchQuery_) {

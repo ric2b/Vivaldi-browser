@@ -61,7 +61,6 @@
 #include "third_party/webrtc/pc/media_session.h"
 #include "third_party/webrtc/pc/session_description.h"
 
-#include "third_party/blink/public/web/web_local_frame.h"
 #include "components/request_filter/adblock_filter/renderer/blink/web_cosmetic_filter_client.h"
 
 using webrtc::DataChannelInterface;
@@ -1198,9 +1197,8 @@ bool RTCPeerConnectionHandler::Initialize(
                                                      options, frame_);
   }
 
-  if (frame_->GetCosmeticFilterClient())
-    frame_->GetCosmeticFilterClient()->BlockWebRTCIfNeeded(
-        weak_factory_.GetWeakPtr(), configuration_);
+  WebCosmeticFilterClient::BlockWebRTCIfNeeded(
+      frame_, weak_factory_.GetWeakPtr(), configuration_);
 
   return true;
 }
@@ -1579,9 +1577,8 @@ webrtc::RTCErrorType RTCPeerConnectionHandler::SetConfiguration(
     configuration_ = new_configuration;
   }
 
-  if (frame_->GetCosmeticFilterClient())
-    frame_->GetCosmeticFilterClient()->BlockWebRTCIfNeeded(
-        weak_factory_.GetWeakPtr(), configuration_);
+  WebCosmeticFilterClient::BlockWebRTCIfNeeded(
+      frame_, weak_factory_.GetWeakPtr(), configuration_);
 
   return webrtc_error.type();
 }

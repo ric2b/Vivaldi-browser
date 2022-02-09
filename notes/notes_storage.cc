@@ -79,11 +79,11 @@ void NotesStorage::NotesModelDeleted() {
 
 bool NotesStorage::SerializeData(std::string* output) {
   NotesCodec codec;
-  std::unique_ptr<base::Value> value(
+  base::Value value(
       codec.Encode(model_, model_->sync_service()->EncodeNoteSyncMetadata()));
   JSONStringValueSerializer serializer(output);
   serializer.set_pretty_print(true);
-  return serializer.Serialize(*(value.get()));
+  return serializer.Serialize(value);
 }
 
 }  // namespace vivaldi

@@ -98,7 +98,7 @@ void DuckDuckGoRulesParser::Parse(const base::Value& root) {
 
   parse_result_->tracker_infos = base::Value(base::Value::Type::DICTIONARY);
 
-  for (const auto& item : trackers->DictItems()) {
+  for (const auto item : trackers->DictItems()) {
     const std::string& domain = item.first;
     if (!item.second.is_dict()) {
       parse_result_->rules_info.invalid_rules++;

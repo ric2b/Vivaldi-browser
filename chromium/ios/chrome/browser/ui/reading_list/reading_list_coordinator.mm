@@ -27,7 +27,7 @@
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
-#import "ios/chrome/browser/ui/menu/action_factory.h"
+#import "ios/chrome/browser/ui/menu/browser_action_factory.h"
 #import "ios/chrome/browser/ui/menu/menu_histograms.h"
 #import "ios/chrome/browser/ui/reading_list/context_menu/reading_list_context_menu_coordinator.h"
 #import "ios/chrome/browser/ui/reading_list/context_menu/reading_list_context_menu_delegate.h"
@@ -121,10 +121,12 @@
 
   // Create the table.
   self.tableViewController = [[ReadingListTableViewController alloc] init];
+  // Browser needs to be set before dataSource since the latter triggers a
+  // reloadData call.
+  self.tableViewController.browser = self.browser;
   self.tableViewController.delegate = self;
   self.tableViewController.audience = self;
   self.tableViewController.dataSource = self.mediator;
-  self.tableViewController.browser = self.browser;
 
   if (@available(iOS 13.0, *)) {
     self.tableViewController.menuProvider = self;
@@ -477,7 +479,7 @@ animationControllerForDismissedController:(UIViewController*)dismissed {
         // Record that this context menu was shown to the user.
         RecordMenuShown(MenuScenario::kReadingListEntry);
 
-        ActionFactory* actionFactory = [[ActionFactory alloc]
+        BrowserActionFactory* actionFactory = [[BrowserActionFactory alloc]
             initWithBrowser:strongSelf.browser
                    scenario:MenuScenario::kReadingListEntry];
 

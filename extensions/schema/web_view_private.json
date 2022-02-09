@@ -129,24 +129,14 @@
         ]
       },
       {
-        "name": "allowBlockedInsecureContent",
-        "type": "function",
-        "description": "Will load all blocked content in a page.",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "instanceId"
-          }
-        ]
-      },
-      {
         "name": "getFocusedElementInfo",
         "type": "function",
         "description": "Gets the tagname and type of currently focused element and whether it's editable.",
         "parameters": [
           {
             "type": "integer",
-            "name": "instanceId"
+            "name": "instanceId",
+            "description": "The instance ID of the guest <webview> process."
           },
           {
             "type": "function",
@@ -173,6 +163,17 @@
                 "description": "Element role"
               }
             ]
+          }
+        ]
+      },
+      {
+        "name": "allowBlockedInsecureContent",
+        "type": "function",
+        "description": "Will load all blocked content in a page.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "instanceId"
           }
         ]
       },

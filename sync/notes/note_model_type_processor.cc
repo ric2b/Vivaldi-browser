@@ -20,6 +20,7 @@
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/time.h"
 #include "components/sync/engine/commit_queue.h"
+#include "components/sync/engine/data_type_activation_response.h"
 #include "components/sync/engine/model_type_processor_proxy.h"
 #include "components/sync/model/data_type_activation_request.h"
 #include "components/sync/model/type_entities_count.h"
@@ -170,7 +171,7 @@ void NoteModelTypeProcessor::OnUpdateReceived(
     return;
   }
 
-// Before applying incremental updates, run a quirk to mitigate some data
+  // Before applying incremental updates, run a quirk to mitigate some data
   // corruption issue introduced by crbug.com/1231450.
   for (syncer::UpdateResponseData& update : updates) {
     MaybeFixGuidInSpecificsDueToPastBug(*note_tracker_, &update.entity);
@@ -485,10 +486,8 @@ void NoteModelTypeProcessor::AppendNodeAndChildrenForDebugging(
       syncer::ProtoTimeToTime(metadata->modification_time());
   data.name = base::UTF16ToUTF8(node->GetTitle().empty() ? node->GetContent()
                                                          : node->GetTitle());
-  data.is_folder = node->is_folder();
-  data.unique_position =
-      syncer::UniquePosition::FromProto(metadata->unique_position());
-  data.specifics = CreateSpecificsFromNoteNode(node, notes_model_);
+  data.specifics = CreateSpecificsFromNoteNode(node, notes_model_,
+                                               metadata->unique_position());
   if (node->is_permanent_node()) {
     data.server_defined_unique_tag =
         ComputeServerDefinedUniqueTagForDebugging(node, notes_model_);
@@ -525,6 +524,7 @@ void NoteModelTypeProcessor::AppendNodeAndChildrenForDebugging(
                           base::Value::FromUniquePtrValue(
                               syncer::EntityMetadataToValue(*metadata)));
   data_dictionary->SetString("modelType", "Notes");
+  data_dictionary->SetBoolean("IS_DIR", node->is_folder());
   all_nodes->Append(std::move(data_dictionary));
 
   int i = 0;

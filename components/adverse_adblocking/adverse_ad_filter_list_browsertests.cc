@@ -84,16 +84,6 @@ namespace proto = url_pattern_index::proto;
 static constexpr const char kTestFrameSetPath[] =
     "/subresource_filter/frame_set.html";
 
-constexpr const char kActivationDecision[] =
-    "SubresourceFilter.PageLoad.ActivationDecision";
-
-// Names of navigation chain patterns histogram.
-const char kActivationListHistogram[] =
-    "SubresourceFilter.PageLoad.ActivationList";
-
-// Other histograms.
-const char kSubresourceFilterActionsHistogram[] = "SubresourceFilter.Actions2";
-
 GURL GetURLWithFragment(const GURL& url, base::StringPiece fragment) {
   GURL::Replacements replacements;
   replacements.SetRefStr(fragment);

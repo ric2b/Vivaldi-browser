@@ -68,7 +68,6 @@
 #include "extensions/test/test_extension_dir.h"
 #include "google_apis/gaia/gaia_switches.h"
 #include "net/dns/mock_host_resolver.h"
-#include "net/test/spawned_test_server/spawned_test_server.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/network/public/cpp/features.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -975,6 +974,49 @@ IN_PROC_BROWSER_TEST_F(
   }
 }
 
+// Tests scenario where a blank iframe inside a blank popup (a popup with no
+// navigation entry) does a same document navigation. This test was added as a
+// regression test for crbug.com/1237874.
+IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest,
+                       SameDocumentNavigationInIframeInBlankDocument) {
+  ui_test_utils::NavigateToURL(browser(),
+                               embedded_test_server()->GetURL("/title1.html"));
+  content::RenderFrameHost* opener =
+      browser()->tab_strip_model()->GetActiveWebContents()->GetMainFrame();
+
+  // 1. Create a new blank window that won't create a NavigationEntry.
+  content::WebContents* popup = nullptr;
+  {
+    content::WebContentsAddedObserver popup_observer;
+    ASSERT_TRUE(content::ExecJs(
+        opener, content::JsReplace("window.open($1, 'my-popup')", GURL())));
+    popup = popup_observer.GetWebContents();
+  }
+  content::RenderFrameHost* popup_main_rfh = popup->GetMainFrame();
+  // Popup shouldn't have a navigation entry.
+  EXPECT_EQ(popup->GetController().GetLastCommittedEntry(), nullptr);
+
+  // 2. Add blank iframe in popup.
+  EXPECT_TRUE(content::ExecJs(popup_main_rfh,
+                              "let iframe = document.createElement('iframe');"
+                              "document.body.appendChild(iframe);"));
+
+  // 3. Same-document navigation in iframe.
+  {
+    const GURL kSameDocUrl("about:blank#foo");
+    content::TestNavigationManager navigation_manager(popup, kSameDocUrl);
+    EXPECT_TRUE(content::ExecJs(
+        popup_main_rfh,
+        content::JsReplace("document.querySelector('iframe').src = $1",
+                           kSameDocUrl)));
+    navigation_manager.WaitForNavigationFinished();
+  }
+
+  // Check that same-document navigation doesn't commit a new navigation entry
+  // if no entry existed previously.
+  EXPECT_EQ(popup->GetController().GetLastCommittedEntry(), nullptr);
+}
+
 class SignInIsolationBrowserTest : public ChromeNavigationBrowserTest {
  public:
   SignInIsolationBrowserTest()
@@ -1127,114 +1169,6 @@ IN_PROC_BROWSER_TEST_F(WebstoreIsolationBrowserTest, WebstorePopupIsIsolated) {
       popup_instance.get()));
   EXPECT_FALSE(popup->GetMainFrame()->GetSiteInstance()->IsRelatedSiteInstance(
       web_contents->GetMainFrame()->GetSiteInstance()));
-}
-
-// Helper class. Track one navigation and tell whether a response from the
-// server has been received or not. It is useful for discerning navigations
-// blocked after or before the request has been sent.
-class WillProcessResponseObserver : public content::WebContentsObserver {
- public:
-  explicit WillProcessResponseObserver(content::WebContents* web_contents,
-                                       const GURL& url)
-      : content::WebContentsObserver(web_contents), url_(url) {}
-  ~WillProcessResponseObserver() override {}
-
-  bool WillProcessResponseCalled() { return will_process_response_called_; }
-
- private:
-  GURL url_;
-  bool will_process_response_called_ = false;
-
-  // Is used to set |will_process_response_called_| to true when
-  // NavigationThrottle::WillProcessResponse() is called.
-  class WillProcessResponseObserverThrottle
-      : public content::NavigationThrottle {
-   public:
-    WillProcessResponseObserverThrottle(content::NavigationHandle* handle,
-                                        bool* will_process_response_called)
-        : NavigationThrottle(handle),
-          will_process_response_called_(will_process_response_called) {}
-
-    const char* GetNameForLogging() override {
-      return "WillProcessResponseObserverThrottle";
-    }
-
-   private:
-    bool* will_process_response_called_;
-    NavigationThrottle::ThrottleCheckResult WillProcessResponse() override {
-      *will_process_response_called_ = true;
-      return NavigationThrottle::PROCEED;
-    }
-  };
-
-  // WebContentsObserver
-  void DidStartNavigation(content::NavigationHandle* handle) override {
-    if (handle->GetURL() == url_) {
-      handle->RegisterThrottleForTesting(
-          std::make_unique<WillProcessResponseObserverThrottle>(
-              handle, &will_process_response_called_));
-    }
-  }
-};
-
-// In HTTP/HTTPS documents, check that no request with the "ftp:" scheme are
-// submitted to load an iframe.
-// See https://crbug.com/757809.
-// Note: This test couldn't be a content_browsertests, since there would be
-// no handler defined for the "ftp" protocol in
-// URLRequestJobFactoryImpl::protocol_handler_map_.
-IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest, BlockLegacySubresources) {
-  net::SpawnedTestServer ftp_server(net::SpawnedTestServer::TYPE_FTP,
-                                    GetChromeTestDataDir());
-  ASSERT_TRUE(ftp_server.Start());
-
-  GURL main_url_http(embedded_test_server()->GetURL("/iframe.html"));
-  GURL iframe_url_http(embedded_test_server()->GetURL("/simple.html"));
-  GURL iframe_url_ftp(ftp_server.GetURL("simple.html"));
-  GURL redirect_url(embedded_test_server()->GetURL("/server-redirect?"));
-
-  struct {
-    GURL main_url;
-    GURL iframe_url;
-    bool allowed;
-  } kTestCases[] = {
-      {main_url_http, iframe_url_http, true},
-      {main_url_http, iframe_url_ftp, false},
-  };
-  for (const auto& test_case : kTestCases) {
-    // Blocking the request should work, even after a redirect.
-    for (bool redirect : {false, true}) {
-      GURL iframe_url =
-          redirect ? GURL(redirect_url.spec() + test_case.iframe_url.spec())
-                   : test_case.iframe_url;
-      SCOPED_TRACE(::testing::Message()
-                   << std::endl
-                   << "- main_url = " << test_case.main_url << std::endl
-                   << "- iframe_url = " << iframe_url << std::endl);
-
-      ui_test_utils::NavigateToURL(browser(), test_case.main_url);
-      content::WebContents* web_contents =
-          browser()->tab_strip_model()->GetActiveWebContents();
-      content::NavigationHandleObserver navigation_handle_observer(web_contents,
-                                                                   iframe_url);
-      WillProcessResponseObserver will_process_response_observer(web_contents,
-                                                                 iframe_url);
-      EXPECT_TRUE(NavigateIframeToURL(web_contents, "test", iframe_url));
-
-      if (test_case.allowed) {
-        EXPECT_TRUE(will_process_response_observer.WillProcessResponseCalled());
-        EXPECT_FALSE(navigation_handle_observer.is_error());
-        EXPECT_EQ(test_case.iframe_url,
-                  navigation_handle_observer.last_committed_url());
-      } else {
-        EXPECT_FALSE(
-            will_process_response_observer.WillProcessResponseCalled());
-        EXPECT_TRUE(navigation_handle_observer.is_error());
-        EXPECT_EQ(net::ERR_ABORTED,
-                  navigation_handle_observer.net_error_code());
-      }
-    }
-  }
 }
 
 // Check that it's possible to navigate to a chrome scheme URL from a crashed
@@ -1643,17 +1577,10 @@ void ChromeNavigationBrowserTest::ExpectHideSadTabWhenNavigationCompletes(
   EXPECT_FALSE(sad_tab_helper->sad_tab());
 }
 
-#if defined(OS_MAC) && defined(ARCH_CPU_ARM64)
-// https://crbug.com/1223052
-#define MAYBE_ClearSadTabWhenNavigationCompletes_CrossSite \
-  DISABLED_ClearSadTabWhenNavigationCompletes_CrossSite
-#else
-#define MAYBE_ClearSadTabWhenNavigationCompletes_CrossSite \
-  ClearSadTabWhenNavigationCompletes_CrossSite
-#endif
+// Flaky, see https://crbug.com/1223052 and https://crbug.com/1236500.
 // Ensure that completing a navigation from a sad tab will clear the sad tab.
 IN_PROC_BROWSER_TEST_F(ChromeNavigationBrowserTest,
-                       MAYBE_ClearSadTabWhenNavigationCompletes_CrossSite) {
+                       DISABLED_ClearSadTabWhenNavigationCompletes_CrossSite) {
   ExpectHideSadTabWhenNavigationCompletes(/*cross_site=*/true);
 }
 

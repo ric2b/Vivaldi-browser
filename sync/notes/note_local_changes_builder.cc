@@ -72,6 +72,8 @@ syncer::CommitRequestDataList NoteLocalChangesBuilder::BuildCommitRequests(
     if (!metadata->is_deleted()) {
       const vivaldi::NoteNode* node = entity->note_node();
       DCHECK(node);
+      DCHECK(!node->is_permanent_node());
+
       // Earlier vivaldi versions were mistakenly using the BOOKMARKS type to
       // verify the type, so we temporarily produce tags using the BOOKMARKS
       // type. Change this to NOTES in a few version. 07-2021
@@ -84,12 +86,10 @@ syncer::CommitRequestDataList NoteLocalChangesBuilder::BuildCommitRequests(
           note_tracker_->GetEntityForNoteNode(parent);
       DCHECK(parent_entity);
       data->parent_id = parent_entity->metadata()->server_id();
-      data->is_folder = node->is_folder();
-      data->unique_position =
-          syncer::UniquePosition::FromProto(metadata->unique_position());
       // Assign specifics only for the non-deletion case. In case of deletion,
       // EntityData should contain empty specifics to indicate deletion.
-      data->specifics = CreateSpecificsFromNoteNode(node, notes_model_);
+      data->specifics = CreateSpecificsFromNoteNode(
+          node, notes_model_, metadata->unique_position());
       // TODO(crbug.com/1058376): check after finishing if we need to use full
       // title instead of legacy canonicalized one.
       data->name = data->specifics.notes().legacy_canonicalized_title();

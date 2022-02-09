@@ -39,7 +39,7 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
 
     public SearchActivityLocationBarLayout(Context context, AttributeSet attrs) {
         super(context, attrs, R.layout.location_bar_base);
-        setBackground(ToolbarPhone.createModernLocationBarBackground(getResources()));
+        setBackground(ToolbarPhone.createModernLocationBarBackground(getContext()));
 
         // Vivaldi (VB-58674 / VB-77045)
         if (ChromeApplicationImpl.isVivaldi()) {

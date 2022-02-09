@@ -5,6 +5,7 @@
 #include "ui/views/bubble/tooltip_icon.h"
 
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -12,7 +13,11 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/bubble/info_bubble.h"
+#include "ui/views/controls/focus_ring.h"
+#include "ui/views/controls/highlight_path_generator.h"
+#include "ui/views/layout/layout_provider.h"
 #include "ui/views/mouse_watcher_view_host.h"
+#include "ui/views/style/platform_style.h"
 
 namespace views {
 
@@ -21,7 +26,13 @@ TooltipIcon::TooltipIcon(const std::u16string& tooltip, int tooltip_icon_size)
       tooltip_icon_size_(tooltip_icon_size),
       mouse_inside_(false),
       bubble_(nullptr),
-      preferred_width_(0) {}
+      preferred_width_(0) {
+  SetFocusBehavior(PlatformStyle::kDefaultFocusBehavior);
+  FocusRing::Install(this);
+  SetBorder(CreateEmptyBorder(
+      LayoutProvider::Get()->GetInsetsMetric(INSETS_VECTOR_IMAGE_BUTTON)));
+  InstallCircleHighlightPathGenerator(this);
+}
 
 TooltipIcon::~TooltipIcon() {
   for (auto& observer : observers_)
@@ -42,6 +53,18 @@ void TooltipIcon::OnMouseExited(const ui::MouseEvent& event) {
 bool TooltipIcon::OnMousePressed(const ui::MouseEvent& event) {
   // Swallow the click so that the parent doesn't process it.
   return true;
+}
+
+void TooltipIcon::OnFocus() {
+  ShowBubble();
+#if defined(OS_WIN)
+  // Tooltip text does not announce on Windows; crbug.com/1245470
+  NotifyAccessibilityEvent(ax::mojom::Event::kFocus, true);
+#endif
+}
+
+void TooltipIcon::OnBlur() {
+  HideBubble();
 }
 
 void TooltipIcon::OnGestureEvent(ui::GestureEvent* event) {
@@ -93,9 +116,8 @@ void TooltipIcon::ShowBubble() {
 
   SetDrawAsHovered(true);
 
-  bubble_ = new InfoBubble(this, tooltip_);
+  bubble_ = new InfoBubble(this, anchor_point_arrow_, tooltip_);
   bubble_->set_preferred_width(preferred_width_);
-  bubble_->SetArrow(anchor_point_arrow_);
   // When shown due to a gesture event, close on deactivate (i.e. don't use
   // "focusless").
   bubble_->SetCanActivate(!mouse_inside_);

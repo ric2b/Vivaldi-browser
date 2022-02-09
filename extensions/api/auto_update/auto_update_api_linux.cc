@@ -44,6 +44,11 @@ AutoUpdateSetAutoInstallUpdatesFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction
+AutoUpdateGetLastCheckTimeFunction::Run() {
+  return RespondNow(Error("Not implemented"));
+}
+
+ExtensionFunction::ResponseAction
 AutoUpdateGetUpdateStatusFunction::Run() {
   return RespondNow(Error("Not implemented"));
 }

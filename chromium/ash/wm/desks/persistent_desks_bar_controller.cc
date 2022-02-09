@@ -6,6 +6,7 @@
 
 #include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/app_list/app_list_controller_impl.h"
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/session/session_controller_impl.h"
@@ -18,6 +19,8 @@
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/work_area_insets.h"
 #include "base/metrics/histogram_macros.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "components/prefs/pref_service.h"
 #include "ui/aura/window.h"
 #include "ui/display/screen.h"
 #include "ui/views/widget/widget.h"
@@ -27,6 +30,10 @@ namespace ash {
 namespace {
 
 constexpr int kBarHeight = 40;
+
+// A boolean pref indicates whether the bar is set to show or hide through the
+// context menu. Showing the bar if this pref is true, hiding otherwise.
+constexpr char kBentoBarEnabled[] = "ash.bento_bar.enabled";
 
 // Creates and returns the widget that contains the PersistentDesksBarView. The
 // returned widget has no content view yet, and hasn't been shown yet.
@@ -80,12 +87,32 @@ PersistentDesksBarController::~PersistentDesksBarController() {
   shell->session_controller()->RemoveObserver(this);
 }
 
+// static
+void PersistentDesksBarController::RegisterProfilePrefs(
+    PrefRegistrySimple* registry) {
+  registry->RegisterBooleanPref(kBentoBarEnabled, /*default_value=*/true);
+}
+
 void PersistentDesksBarController::OnSessionStateChanged(
     session_manager::SessionState state) {
   if (state == session_manager::SessionState::ACTIVE)
     MaybeInitBarWidget();
   else
     DestroyBarWidget();
+}
+
+void PersistentDesksBarController::OnActiveUserPrefServiceChanged(
+    PrefService* prefs) {
+  active_user_pref_service_ = prefs;
+  pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
+  pref_change_registrar_->Init(prefs);
+
+  pref_change_registrar_->Add(
+      kBentoBarEnabled,
+      base::BindRepeating(
+          &PersistentDesksBarController::UpdateBarStateOnPrefChanges,
+          base::Unretained(this)));
+  UpdateBarStateOnPrefChanges();
 }
 
 void PersistentDesksBarController::OnOverviewModeStarting() {
@@ -193,12 +220,19 @@ void PersistentDesksBarController::OnDisplayMetricsChanged(
   MaybeInitBarWidget();
 }
 
+bool PersistentDesksBarController::IsEnabled() const {
+  return active_user_pref_service_ &&
+         active_user_pref_service_->GetBoolean(kBentoBarEnabled);
+}
+
 void PersistentDesksBarController::ToggleEnabledState() {
-  is_enabled_ = !is_enabled_;
-  if (!is_enabled_)
+  DCHECK(active_user_pref_service_);
+  const bool new_state = !IsEnabled();
+  active_user_pref_service_->SetBoolean(kBentoBarEnabled, new_state);
+  if (!new_state)
     DestroyBarWidget();
 
-  UMA_HISTOGRAM_BOOLEAN("Ash.Desks.BentoBarEnabled", is_enabled_);
+  UMA_HISTOGRAM_BOOLEAN("Ash.Desks.BentoBarEnabled", new_state);
 }
 
 void PersistentDesksBarController::MaybeInitBarWidget() {
@@ -256,10 +290,19 @@ void PersistentDesksBarController::UpdateBarOnWindowDestroying(
 }
 
 bool PersistentDesksBarController::ShouldPersistentDesksBarBeCreated() const {
-  if (!desks_restore_util::HasPrimaryUserUsedDesksRecently())
+  // `kBentoBar` feature is running as an experiment now. And we will only
+  // enable it for a specific group of existing desks users, see
+  // `kUserHasUsedDesksRecently` for more details. But we also want to enable it
+  // if the user has explicitly enabled `kBentoBar` from chrome://flags or from
+  // the command line. Even though the user is not in the group of existing
+  // desks users.
+  if (!base::FeatureList::GetInstance()->IsFeatureOverriddenFromCommandLine(
+          features::kBentoBar.name) &&
+      !desks_restore_util::HasPrimaryUserUsedDesksRecently()) {
     return false;
+  }
 
-  if (!is_enabled_)
+  if (!IsEnabled())
     return false;
 
   Shell* shell = Shell::Get();
@@ -312,6 +355,13 @@ bool PersistentDesksBarController::ShouldPersistentDesksBarBeCreated() const {
   }
 
   return true;
+}
+
+void PersistentDesksBarController::UpdateBarStateOnPrefChanges() {
+  if (IsEnabled())
+    MaybeInitBarWidget();
+  else
+    DestroyBarWidget();
 }
 
 }  // namespace ash

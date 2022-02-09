@@ -12,6 +12,7 @@
 #include <queue>
 
 #include "base/callback_helpers.h"
+#include "base/command_line.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
@@ -20,6 +21,7 @@
 #include "media/base/decoder_buffer.h"
 #include "mojo/public/cpp/base/shared_memory_utils.h"
 
+#include "base/vivaldi_switches.h"
 #include "platform_media/common/feature_toggles.h"
 #include "platform_media/common/platform_ipc_util.h"
 #include "platform_media/common/platform_logging_util.h"
@@ -86,7 +88,12 @@ DemuxerStream::Status HandleConfigChange(PlatformStreamType stream_type,
 
 }  // namespace
 
-using media::DemuxerStream;
+/* static */
+bool IPCMediaPipelineHost::IsAvailable() {
+  static bool disabled = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kVivaldiDisableIPCDemuxer);
+  return g_available && !disabled;
+}
 
 IPCMediaPipelineHost::IPCMediaPipelineHost() {
   VLOG(2) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " this=" << this;

@@ -34,18 +34,18 @@ void DebugBufferLogger::Initialize(const std::string& stream_type) {
 #endif  // NDEBUG && CONTENT_LOG_FOLDERs
 }
 
-void DebugBufferLogger::Log(scoped_refptr<DecoderBuffer> buffer) {
+void DebugBufferLogger::Log(const DecoderBuffer& buffer) {
 #if !defined(NDEBUG)
   if (log_directory_.empty())
     return;
 
-  if (buffer->end_of_stream())
+  if (buffer.end_of_stream())
     return;
 
   base::WriteFile(
       log_directory_.AppendASCII(
-          base::NumberToString(buffer->timestamp().InMilliseconds())),
-      reinterpret_cast<const char*>(buffer->data()), buffer->data_size());
+          base::NumberToString(buffer.timestamp().InMilliseconds())),
+      reinterpret_cast<const char*>(buffer.data()), buffer.data_size());
 #endif  // NDEBUG
 }
 

@@ -16,10 +16,9 @@
 #include "ui/base/models/image_model.h"
 #include "ui/base/models/simple_menu_model.h"
 
-class Browser;
+class Profile;
 
 namespace content {
-class BrowserContext;
 class WebContents;
 }
 
@@ -58,12 +57,12 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   // that object as our root menu model. In that case it means it is the code of
   // VivaldiRenderViewContextMenu that will control how long this object will
   // live via MenuClosed.
-  ContextMenuController(content::BrowserContext* browser_context,
-                        content::WebContents* web_contents,
-                        content::WebContents* window_web_contents,
+  ContextMenuController(content::WebContents* window_web_contents,
                         VivaldiRenderViewContextMenu* rv_context_menu,
                         std::unique_ptr<Params> params);
   ~ContextMenuController() override;
+
+  Profile* GetProfile();
 
   bool Show();
 
@@ -107,10 +106,7 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   typedef std::map<int, std::string*> IdToStringMap;
   typedef std::map<int, ui::Accelerator> IdToAcceleratorMap;
 
-  content::BrowserContext* browser_context_;
-  content::WebContents* web_contents_;  // Not owned by us.
   content::WebContents* window_web_contents_;
-  Browser* browser_;
   VivaldiRenderViewContextMenu* rv_context_menu_;
   bool with_developer_tools_;
   bool has_shown_ = false;

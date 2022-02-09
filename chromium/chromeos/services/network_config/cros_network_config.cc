@@ -7,7 +7,6 @@
 #include <cmath>
 #include <vector>
 
-#include "ash/constants/ash_features.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
 #include "base/guid.h"
@@ -510,15 +509,7 @@ mojom::DeviceStatePropertiesPtr DeviceStateToMojo(
   result->mac_address =
       network_util::FormattedMacAddress(device->mac_address());
   result->scanning = device->scanning();
-
-  // Before multi-SIM support was in place, the Cellular device would always be
-  // disabled anytime that a SIM was absent. Special-case this logic to ensure
-  // that users with the flag off will still see a disabled UI in this case.
-  if (device->IsSimAbsent() && !features::IsCellularActivationUiEnabled())
-    result->device_state = mojom::DeviceStateType::kDisabled;
-  else
-    result->device_state = technology_state;
-
+  result->device_state = technology_state;
   result->managed_network_available =
       !device->available_managed_network_path().empty();
   result->sim_absent = device->IsSimAbsent();
@@ -658,6 +649,33 @@ void SetStringList(const char* key,
   for (const std::string& s : *property)
     list.Append(base::Value(s));
   dict->SetKey(key, std::move(list));
+}
+
+void SetSubjectAltNameMatch(
+    const char* key,
+    const std::vector<mojom::SubjectAltNamePtr>* property,
+    base::Value* dict) {
+  base::Value subject_alt_name_list(base::Value::Type::LIST);
+  for (const auto& ptr : *property) {
+    std::string type;
+    switch (ptr->type) {
+      case mojom::SubjectAltName::Type::kEmail:
+        type = ::onc::eap_subject_alternative_name_match::kEMAIL;
+        break;
+      case mojom::SubjectAltName::Type::kDns:
+        type = ::onc::eap_subject_alternative_name_match::kDNS;
+        break;
+      case mojom::SubjectAltName::Type::kUri:
+        type = ::onc::eap_subject_alternative_name_match::kURI;
+        break;
+    }
+    base::Value entry(base::Value::Type::DICTIONARY);
+    entry.SetStringKey(::onc::eap_subject_alternative_name_match::kType, type);
+    entry.SetStringKey(::onc::eap_subject_alternative_name_match::kValue,
+                       ptr->value);
+    subject_alt_name_list.Append(std::move(entry));
+  }
+  dict->SetKey(key, std::move(subject_alt_name_list));
 }
 
 // GetManagedDictionary() returns a ManagedDictionary representing the active
@@ -863,6 +881,60 @@ mojom::ManagedInt32Ptr GetManagedInt32(const base::Value* dict,
   }
   NET_LOG(ERROR) << "Expected int or dictionary, found: " << *v;
   return nullptr;
+}
+
+mojom::SubjectAltNamePtr GetSubjectAltName(const base::Value* dict) {
+  auto san = mojom::SubjectAltName::New();
+  san->value = GetRequiredString(
+      dict, ::onc::eap_subject_alternative_name_match::kValue);
+  std::string type =
+      GetRequiredString(dict, ::onc::eap_subject_alternative_name_match::kType);
+  if (type == ::onc::eap_subject_alternative_name_match::kEMAIL) {
+    san->type = mojom::SubjectAltName::Type::kEmail;
+  } else if (type == ::onc::eap_subject_alternative_name_match::kDNS) {
+    san->type = mojom::SubjectAltName::Type::kDns;
+  } else if (type == ::onc::eap_subject_alternative_name_match::kURI) {
+    san->type = mojom::SubjectAltName::Type::kUri;
+  } else {
+    NET_LOG(ERROR) << "Unknown subject alternative name type " << type;
+    return nullptr;
+  }
+  return san;
+}
+
+mojom::ManagedSubjectAltNameMatchListPtr GetManagedSubjectAltNameMatchList(
+    const base::Value* dict,
+    const char* key) {
+  auto result = mojom::ManagedSubjectAltNameMatchList::New();
+  const base::Value* value = dict->FindKey(key);
+  if (!value)
+    return result;
+
+  if (value->is_list()) {
+    std::vector<mojom::SubjectAltNamePtr> active;
+    for (const base::Value& value : value->GetList())
+      active.push_back(GetSubjectAltName(&value));
+    result->active_value = std::move(active);
+    return result;
+  }
+  if (value->is_dict()) {
+    ManagedDictionary managed_dict = GetManagedDictionary(value);
+    if (!managed_dict.active_value.is_list()) {
+      NET_LOG(ERROR) << "No active or effective value for WireGuardPeerList";
+      return result;
+    }
+    for (const base::Value& e : managed_dict.active_value.GetList())
+      result->active_value.push_back(GetSubjectAltName(&e));
+    result->policy_source = managed_dict.policy_source;
+    if (!managed_dict.policy_value.is_none()) {
+      result->policy_value = std::vector<mojom::SubjectAltNamePtr>();
+      for (const base::Value& e : managed_dict.policy_value.GetList())
+        result->policy_value.push_back(GetSubjectAltName(&e));
+    }
+    return result;
+  }
+  NET_LOG(ERROR) << "Expected list or dictionary, found: " << *value;
+  return result;
 }
 
 mojom::IPConfigPropertiesPtr GetIPConfig(const base::Value* dict) {
@@ -1131,6 +1203,8 @@ mojom::ManagedEAPPropertiesPtr GetManagedEAPProperties(const base::Value* dict,
       GetManagedString(eap_dict, ::onc::client_cert::kClientCertRef);
   eap->client_cert_type =
       GetManagedString(eap_dict, ::onc::client_cert::kClientCertType);
+  eap->domain_suffix_match =
+      GetManagedStringList(eap_dict, ::onc::eap::kDomainSuffixMatch);
   eap->identity = GetManagedString(eap_dict, ::onc::eap::kIdentity);
   eap->inner = GetManagedString(eap_dict, ::onc::eap::kInner);
   eap->outer = GetManagedString(eap_dict, ::onc::eap::kOuter);
@@ -1141,6 +1215,8 @@ mojom::ManagedEAPPropertiesPtr GetManagedEAPProperties(const base::Value* dict,
       GetManagedStringList(eap_dict, ::onc::eap::kServerCAPEMs);
   eap->server_ca_refs =
       GetManagedStringList(eap_dict, ::onc::eap::kServerCARefs);
+  eap->subject_alt_name_match = GetManagedSubjectAltNameMatchList(
+      eap_dict, ::onc::eap::kSubjectAlternativeNameMatch);
   eap->subject_match = GetManagedString(eap_dict, ::onc::eap::kSubjectMatch);
   eap->tls_version_max = GetManagedString(eap_dict, ::onc::eap::kTLSVersionMax);
   eap->use_proactive_key_caching =
@@ -1403,7 +1479,7 @@ mojom::ManagedPropertiesPtr ManagedPropertiesToMojo(
       cellular->apn_list =
           GetManagedApnList(cellular_dict->FindKey(::onc::cellular::kAPNList));
       cellular->allow_roaming =
-          GetBoolean(cellular_dict, ::onc::cellular::kAllowRoaming);
+          GetManagedBoolean(cellular_dict, ::onc::cellular::kAllowRoaming);
       cellular->esn = GetString(cellular_dict, ::onc::cellular::kESN);
       cellular->family = GetString(cellular_dict, ::onc::cellular::kFamily);
       cellular->firmware_revision =
@@ -1625,12 +1701,16 @@ base::Value GetEAPProperties(const mojom::EAPConfigProperties& eap) {
             &eap_dict);
   SetString(::onc::client_cert::kClientCertType, eap.client_cert_type,
             &eap_dict);
+  SetStringList(::onc::eap::kDomainSuffixMatch, eap.domain_suffix_match,
+                &eap_dict);
   SetString(::onc::eap::kIdentity, eap.identity, &eap_dict);
   SetString(::onc::eap::kInner, eap.inner, &eap_dict);
   SetString(::onc::eap::kOuter, eap.outer, &eap_dict);
   SetString(::onc::eap::kPassword, eap.password, &eap_dict);
   eap_dict.SetBoolKey(::onc::eap::kSaveCredentials, eap.save_credentials);
   SetStringList(::onc::eap::kServerCAPEMs, eap.server_ca_pems, &eap_dict);
+  SetSubjectAltNameMatch(::onc::eap::kSubjectAlternativeNameMatch,
+                         &eap.subject_alt_name_match, &eap_dict);
   SetString(::onc::eap::kSubjectMatch, eap.subject_match, &eap_dict);
   eap_dict.SetBoolKey(::onc::eap::kUseSystemCAs, eap.use_system_cas);
 
@@ -1675,6 +1755,10 @@ std::unique_ptr<base::DictionaryValue> GetOncFromConfigProperties(
       SetString(::onc::cellular_apn::kUsername, apn.username, &apn_dict);
       SetString(::onc::cellular_apn::kAttach, apn.attach, &apn_dict);
       type_dict.SetKey(::onc::cellular::kAPN, std::move(apn_dict));
+    }
+    if (cellular.roaming) {
+      type_dict.SetKey(::onc::cellular::kAllowRoaming,
+                       base::Value(cellular.roaming->allow_roaming));
     }
   } else if (properties->type_config->is_ethernet()) {
     type = mojom::NetworkType::kEthernet;
@@ -2651,15 +2735,19 @@ void CrosNetworkConfig::GetGlobalPolicy(GetGlobalPolicyCallback callback) {
       network_configuration_handler_->GetGlobalConfigFromPolicy(
           /*userhash=*/std::string());
   if (global_policy_dict) {
+    result->allow_only_policy_cellular_networks = GetBoolean(
+        global_policy_dict,
+        ::onc::global_network_config::kAllowOnlyPolicyCellularNetworks);
     result->allow_only_policy_networks_to_autoconnect = GetBoolean(
         global_policy_dict,
         ::onc::global_network_config::kAllowOnlyPolicyNetworksToAutoconnect);
-    result->allow_only_policy_networks_to_connect = GetBoolean(
+    result->allow_only_policy_wifi_networks_to_connect =
+        GetBoolean(global_policy_dict,
+                   ::onc::global_network_config::kAllowOnlyPolicyWiFiToConnect);
+    result
+        ->allow_only_policy_wifi_networks_to_connect_if_available = GetBoolean(
         global_policy_dict,
-        ::onc::global_network_config::kAllowOnlyPolicyNetworksToConnect);
-    result->allow_only_policy_networks_to_connect_if_available = GetBoolean(
-        global_policy_dict, ::onc::global_network_config::
-                                kAllowOnlyPolicyNetworksToConnectIfAvailable);
+        ::onc::global_network_config::kAllowOnlyPolicyWiFiToConnectIfAvailable);
     absl::optional<std::vector<std::string>> blocked_hex_ssids = GetStringList(
         global_policy_dict, ::onc::global_network_config::kBlockedHexSSIDs);
     if (blocked_hex_ssids)

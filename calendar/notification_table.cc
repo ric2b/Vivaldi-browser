@@ -54,7 +54,7 @@ NotificationID NotificationTable::CreateNotification(
   statement.BindString16(column_index++, notification.name);
   statement.BindString16(column_index++, notification.description);
   statement.BindInt64(column_index++, notification.when.ToInternalValue());
-  statement.BindInt(column_index++, notification.period);
+  statement.BindInt64(column_index++, notification.period.ToInternalValue());
   statement.BindInt(column_index++, notification.delay);
 
   statement.BindInt64(column_index++, base::Time().Now().ToInternalValue());
@@ -112,7 +112,7 @@ bool NotificationTable::UpdateNotificationRow(const NotificationRow& row) {
   statement.BindString16(column_index++, row.name);
   statement.BindString16(column_index++, row.description);
   statement.BindInt64(column_index++, row.when.ToInternalValue());
-  statement.BindInt64(column_index++, row.period);
+  statement.BindInt64(column_index++, row.period.ToInternalValue());
   statement.BindInt64(column_index++, row.delay);
   statement.BindInt64(column_index++, base::Time().Now().ToInternalValue());
   statement.BindInt64(column_index++, row.id);
@@ -129,7 +129,8 @@ void NotificationTable::FillNotificationRow(sql::Statement& s,
   std::u16string description = s.ColumnString16(column_index++);
   base::Time when =
       base::Time::FromInternalValue(s.ColumnInt64(column_index++));
-  int period = s.ColumnInt(column_index++);
+  base::Time period =
+      base::Time::FromInternalValue(s.ColumnInt64(column_index++));
   int delay = s.ColumnInt(column_index++);
 
   notification->id = id;

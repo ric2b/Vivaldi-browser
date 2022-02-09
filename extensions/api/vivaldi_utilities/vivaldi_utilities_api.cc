@@ -13,6 +13,7 @@
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
 #include "app/vivaldi_version_info.h"
+#include "base/base64.h"
 #include "base/command_line.h"
 #include "base/environment.h"
 #include "base/files/file_util.h"
@@ -64,6 +65,7 @@
 #include "components/locale/locale_kit.h"
 #include "components/media_router/browser/media_router_dialog_controller.h"
 #include "components/media_router/browser/media_router_metrics.h"
+#include "components/os_crypt/os_crypt.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/version_info/version_info.h"
@@ -353,11 +355,15 @@ VivaldiUtilitiesAPI::DialogPosition::DialogPosition(
       flow_direction_(flow_direction) {}
 
 ExtensionFunction::ResponseAction UtilitiesShowPasswordDialogFunction::Run() {
-  Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(
-      dispatcher()->GetAssociatedWebContents());
-  chrome::ManagePasswordsForPage(browser);
-
-  return RespondNow(NoArguments());
+  using vivaldi::utilities::ShowPasswordDialog::Params;
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+  Browser* browser = ::vivaldi::FindBrowserByWindowId(params->window_id);
+  if (browser) {
+    chrome::ManagePasswordsForPage(browser);
+    return RespondNow(NoArguments());
+  }
+  return RespondNow(Error("No Browser instance."));
 }
 
 ExtensionFunction::ResponseAction UtilitiesPrintFunction::Run() {
@@ -366,17 +372,11 @@ ExtensionFunction::ResponseAction UtilitiesPrintFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  std::string error;
-  content::WebContents* tabstrip_contents =
-      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
-          params->tab_id, browser_context(), &error);
-  if (!tabstrip_contents)
-    return RespondNow(Error(error));
-
-  Browser* browser = chrome::FindBrowserWithWebContents(tabstrip_contents);
-  if (browser) {
-    chrome::Print(browser);
+  Browser* browser = ::vivaldi::FindBrowserByWindowId(params->window_id);
+  if (!browser) {
+    return RespondNow(Error("No Browser instance."));
   }
+  chrome::Print(browser);
   return RespondNow(NoArguments());
 }
 
@@ -537,6 +537,7 @@ struct FileSelectionOptions {
   std::u16string title;
   ui::SelectFileDialog::Type type = ui::SelectFileDialog::SELECT_OPEN_FILE;
   ui::SelectFileDialog::FileTypeInfo file_type_info;
+  base::FilePath default_path;
   std::string preferences_path;
 };
 
@@ -583,8 +584,9 @@ void FileSelectionRunner::Start(const FileSelectionOptions& options,
 
   FileSelectionRunner* runner = new FileSelectionRunner(std::move(callback));
   runner->select_file_dialog_->SelectFile(
-      options.type, options.title, base::FilePath(), &options.file_type_info, 0,
-      base::FilePath::StringType(), window, nullptr);
+      options.type, options.title, options.default_path,
+      &options.file_type_info, 0, base::FilePath::StringType(), window,
+      nullptr);
 }
 
 void FileSelectionRunner::FileSelected(const base::FilePath& path,
@@ -632,14 +634,29 @@ ExtensionFunction::ResponseAction UtilitiesSelectFileFunction::Run() {
   if (params->title) {
     options.SetTitle(*params->title);
   }
-  options.type =
-      params->type == vivaldi::utilities::SELECT_FILE_DIALOG_TYPE_FOLDER
-          ? ui::SelectFileDialog::SELECT_EXISTING_FOLDER
-          : ui::SelectFileDialog::SELECT_OPEN_FILE;
+  switch (params->type) {
+    case vivaldi::utilities::SELECT_FILE_DIALOG_TYPE_FOLDER:
+      options.type = ui::SelectFileDialog::SELECT_EXISTING_FOLDER;
+      break;
+    case vivaldi::utilities::SELECT_FILE_DIALOG_TYPE_FILE:
+      options.type = ui::SelectFileDialog::SELECT_OPEN_FILE;
+      break;
+    case vivaldi::utilities::SELECT_FILE_DIALOG_TYPE_SAVE_FILE:
+      options.type = ui::SelectFileDialog::SELECT_SAVEAS_FILE;
+      break;
+    default:
+      NOTREACHED();
+  }
 
   if (params->accepts) {
     ConvertExtensionsToFileTypeInfo(*params->accepts, &options.file_type_info);
   }
+
+  if (params->default_path) {
+    options.default_path =
+        base::FilePath::FromUTF8Unsafe(*(params->default_path));
+  }
+
   options.file_type_info.include_all_files = true;
 
   FileSelectionRunner::Start(
@@ -951,22 +968,32 @@ UtilitiesLaunchNetworkSettingsFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction UtilitiesSavePageFunction::Run() {
+  using vivaldi::utilities::SavePage::Params;
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  std::string error;
+  content::WebContents* web_contents =
+      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
+          params->tab_id, browser_context(), &error);
+  if (!web_contents)
+    return RespondNow(Error(error));
+
+  web_contents->OnSavePage();
+
   namespace Results = vivaldi::utilities::SavePage::Results;
-
-  Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(
-      dispatcher()->GetAssociatedWebContents());
-
-  content::WebContents* current_tab =
-      browser->tab_strip_model()->GetActiveWebContents();
-  current_tab->OnSavePage();
   return RespondNow(ArgumentList(Results::Create()));
 }
 
 ExtensionFunction::ResponseAction UtilitiesOpenPageFunction::Run() {
+  using vivaldi::utilities::OpenPage::Params;
   namespace Results = vivaldi::utilities::OpenPage::Results;
-
-  Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(
-      dispatcher()->GetAssociatedWebContents());
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+  Browser* browser = ::vivaldi::FindBrowserByWindowId(params->window_id);
+  if (!browser) {
+    return RespondNow(Error("No browser with the supplied ID."));
+  }
   browser->OpenFile();
   return RespondNow(ArgumentList(Results::Create()));
 }
@@ -978,8 +1005,7 @@ ExtensionFunction::ResponseAction UtilitiesBroadcastMessageFunction::Run() {
 
   ::vivaldi::BroadcastEvent(
       vivaldi::utilities::OnBroadcastMessage::kEventName,
-      vivaldi::utilities::OnBroadcastMessage::Create(
-          params->window_id, params->action, params->prompt, params->urls),
+      vivaldi::utilities::OnBroadcastMessage::Create(*params->message),
       browser_context());
 
   namespace Results = vivaldi::utilities::BroadcastMessage::Results;
@@ -1424,9 +1450,14 @@ ExtensionFunction::ResponseAction UtilitiesFocusDialogFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction UtilitiesStartChromecastFunction::Run() {
+  using vivaldi::utilities::StartChromecast::Params;
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
   if (media_router::MediaRouterEnabled(browser_context())) {
-    Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(
-        dispatcher()->GetAssociatedWebContents());
+    Browser* browser = ::vivaldi::FindBrowserByWindowId(params->window_id);
+    if (!browser) {
+      return RespondNow(Error("No Browser instance."));
+    }
     content::WebContents* current_tab =
         browser->tab_strip_model()->GetActiveWebContents();
     media_router::MediaRouterDialogController* dialog_controller =
@@ -1610,6 +1641,123 @@ ExtensionFunction::ResponseAction UtilitiesGetGAPIKeyFunction::Run() {
 #else
   return RespondNow(Error("No API key defined"));
 #endif  // VIVALDI_GOOGLE_TASKS_API_KEY
+}
+
+ExtensionFunction::ResponseAction UtilitiesGetGOAuthClientIdFunction::Run() {
+  namespace Results = vivaldi::utilities::GetGOAuthClientId::Results;
+
+#ifdef VIVALDI_GOOGLE_OAUTH_API_CLIENT_ID
+  return RespondNow(
+      ArgumentList(Results::Create(VIVALDI_GOOGLE_OAUTH_API_CLIENT_ID)));
+#else
+  return RespondNow(Error("No client id defined"));
+#endif  // VIVALDI_GOOGLE_OAUTH_API_CLIENT_ID
+}
+
+ExtensionFunction::ResponseAction
+UtilitiesGetGOAuthClientSecretFunction::Run() {
+  namespace Results = vivaldi::utilities::GetGOAuthClientSecret::Results;
+
+#ifdef VIVALDI_GOOGLE_OAUTH_API_CLIENT_SECRET
+  return RespondNow(
+      ArgumentList(Results::Create(VIVALDI_GOOGLE_OAUTH_API_CLIENT_SECRET)));
+#else
+  return RespondNow(Error("No client secret defined"));
+#endif  // VIVALDI_GOOGLE_OAUTH_API_CLIENT_SECRET
+}
+
+UtilitiesGetCommandLineValueFunction::~UtilitiesGetCommandLineValueFunction() {}
+
+UtilitiesGetCommandLineValueFunction::UtilitiesGetCommandLineValueFunction() {}
+
+ExtensionFunction::ResponseAction UtilitiesGetCommandLineValueFunction::Run() {
+  namespace Results = vivaldi::utilities::GetCommandLineValue::Results;
+  using vivaldi::utilities::GetCommandLineValue::Params;
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  std::string result;
+  const base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
+  result = cmd_line.GetSwitchValueASCII(params->value);
+
+  return RespondNow(ArgumentList(Results::Create(result)));
+}
+
+UtilitiesOsCryptFunction::UtilitiesOsCryptFunction() {}
+UtilitiesOsCryptFunction::~UtilitiesOsCryptFunction() {}
+
+ExtensionFunction::ResponseAction UtilitiesOsCryptFunction::Run() {
+  std::unique_ptr<vivaldi::utilities::OsCrypt::Params> params(
+      vivaldi::utilities::OsCrypt::Params::Create(*args_));
+
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  auto encrypted = std::make_unique<std::string>();
+  // |encrypted_ptr| is expected to be valid as long as |encrypted| is valid,
+  // which should be at least until OnEncryptDone is called. So, it should be
+  // safe to use during EncryptString
+  std::string* encrypted_ptr = encrypted.get();
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(&OSCrypt::EncryptString, params->plain, encrypted_ptr),
+      base::BindOnce(&UtilitiesOsCryptFunction::OnEncryptDone, this,
+                     std::move(encrypted)));
+
+  return RespondLater();
+}
+
+void UtilitiesOsCryptFunction::OnEncryptDone(
+    std::unique_ptr<std::string> encrypted,
+    bool result) {
+  if (!result) {
+    Respond(Error("Encryption failed"));
+    return;
+  }
+
+  std::string encoded;
+  base::Base64Encode(*encrypted, &encoded);
+
+  Respond(ArgumentList(vivaldi::utilities::OsCrypt::Results::Create(encoded)));
+}
+
+UtilitiesOsDecryptFunction::UtilitiesOsDecryptFunction() {}
+UtilitiesOsDecryptFunction::~UtilitiesOsDecryptFunction() {}
+
+ExtensionFunction::ResponseAction UtilitiesOsDecryptFunction::Run() {
+  std::unique_ptr<vivaldi::utilities::OsDecrypt::Params> params(
+      vivaldi::utilities::OsDecrypt::Params::Create(*args_));
+
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  std::string encrypted;
+  if (!base::Base64Decode(params->encrypted, &encrypted)) {
+    return RespondNow(Error("Invalid base64 input"));
+  }
+
+  auto decrypted = std::make_unique<std::string>();
+  // |decrypted_ptr| is expected to be valid as long as |decrypted| is valid,
+  // which should be at least until OnEncryptDone is called. So, it should be
+  // safe to use during EncryptString
+  std::string* decrypted_ptr = decrypted.get();
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(&OSCrypt::DecryptString, encrypted, decrypted_ptr),
+      base::BindOnce(&UtilitiesOsDecryptFunction::OnDecryptDone, this,
+                     std::move(decrypted)));
+
+  return RespondLater();
+}
+
+void UtilitiesOsDecryptFunction::OnDecryptDone(
+    std::unique_ptr<std::string> decrypted,
+    bool result) {
+  if (!result) {
+    Respond(Error("Decryption failed"));
+    return;
+  }
+
+  Respond(
+      ArgumentList(vivaldi::utilities::OsCrypt::Results::Create(*decrypted)));
 }
 
 }  // namespace extensions

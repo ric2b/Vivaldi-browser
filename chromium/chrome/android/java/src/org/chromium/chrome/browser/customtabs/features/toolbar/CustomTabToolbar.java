@@ -163,6 +163,30 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
     };
 
     /**
+     * Whether to use the toolbar as handle to resize the Window height.
+     */
+    public interface HandleStrategy {
+        /**
+         * Decide whether we need to intercept the touch events so the events will be passed to the
+         * {@link #onTouchEvent()} method.
+         *
+         * @param event The touch event to be examined.
+         * @return whether the event will be passed to {@link #onTouchEvent()}.
+         */
+        boolean onInterceptTouchEvent(MotionEvent event);
+
+        /**
+         * Handling the touch events.
+         *
+         * @param event The touch event to be handled.
+         * @return whether the event is consumed..
+         */
+        boolean onTouchEvent(MotionEvent event);
+    }
+
+    private HandleStrategy mHandleStrategy;
+
+    /**
      * Constructor for getting this class inflated from an xml layout file.
      */
     public CustomTabToolbar(Context context, AttributeSet attrs) {
@@ -175,7 +199,7 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
-        final int backgroundColor = ChromeColors.getDefaultThemeColor(getResources(), false);
+        final int backgroundColor = ChromeColors.getDefaultThemeColor(getContext(), false);
         setBackground(new ColorDrawable(backgroundColor));
         mUseDarkColors = !ColorUtils.shouldUseLightForegroundOnBackground(backgroundColor);
         mUrlBar = (TextView) findViewById(R.id.url_bar);
@@ -360,6 +384,27 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
             }
         }
         mLocationBarModel.notifySecurityStateChanged();
+    }
+
+    @Override
+    @SuppressLint("ClickableViewAccessibility")
+    public boolean onTouchEvent(MotionEvent event) {
+        if (mHandleStrategy != null) {
+            return mHandleStrategy.onTouchEvent(event);
+        }
+        return false;
+    }
+
+    @Override
+    public boolean onInterceptTouchEvent(MotionEvent event) {
+        if (mHandleStrategy != null) {
+            return mHandleStrategy.onInterceptTouchEvent(event);
+        }
+        return false;
+    }
+
+    public void setHandleStrategy(HandleStrategy strategy) {
+        mHandleStrategy = strategy;
     }
 
     private void updateButtonsTint() {
@@ -664,8 +709,9 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
             mModalDialogManagerSupplier = modalDialogManagerSupplier;
             mUrlCoordinator =
                     new UrlBarCoordinator(urlBar, /*windowDelegate=*/null, actionModeCallback,
-                            /*focusChangeCallback=*/
-                            (unused) -> {}, this, new NoOpkeyboardVisibilityDelegate());
+                            /*focusChangeCallback=*/ (unused) -> {}, this,
+                            new NoOpkeyboardVisibilityDelegate(),
+                            locationBarDataProvider.isIncognito());
             updateUseDarkColors();
             updateSecurityIcon();
             updateProgressBarColors();
@@ -737,10 +783,11 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
         private void updateProgressBarColors() {
             final ToolbarProgressBar progressBar = getProgressBar();
             if (progressBar == null) return;
+            final Context context = getContext();
             final Resources resources = getResources();
             final int backgroundColor = getBackground().getColor();
             if (ThemeUtils.isUsingDefaultToolbarColor(
-                        resources, /*isIncognito=*/false, backgroundColor)) {
+                        context, /*isIncognito=*/false, backgroundColor)) {
                 progressBar.setBackgroundColor(
                         ApiCompatibilityUtils.getColor(resources, R.color.progress_bar_background));
                 progressBar.setForegroundColor(

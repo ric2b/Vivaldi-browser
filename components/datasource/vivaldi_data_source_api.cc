@@ -210,7 +210,7 @@ void VivaldiDataSourcesAPI::InitMappingsOnFileThread(
   DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(path_id_map_.empty());
 
-  for (const auto& i : dict->DictItems()) {
+  for (const auto i : dict->DictItems()) {
     const std::string& id = i.first;
     if (vivaldi_data_url_utils::isOldFormatThumbnailId(id)) {
       // Older mapping entry that we just skip as we know the path statically.

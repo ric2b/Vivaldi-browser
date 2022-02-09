@@ -8,7 +8,6 @@
 #include <map>
 #include <vector>
 
-#include "components/sync/base/unique_position.h"
 #include "components/sync/engine/commit_and_get_updates_types.h"
 #include "sync/notes/synced_note_tracker.h"
 
@@ -41,7 +40,7 @@ class NoteRemoteUpdatesHandler {
 
   static size_t ComputeChildNodeIndexForTest(
       const vivaldi::NoteNode* parent,
-      const syncer::UniquePosition& unique_position,
+      const sync_pb::UniquePosition& unique_position,
       const SyncedNoteTracker* note_tracker);
 
  private:

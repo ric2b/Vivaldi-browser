@@ -6,10 +6,15 @@
 
 #include "browser/translate/vivaldi_translate_client.h"
 
+#include <string>
+#include <string_view>
+
 #include "app/vivaldi_resources.h"
 #include "apps/switches.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/strings/string_util.h"
+#include "base/vivaldi_switches.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/language/language_model_manager_factory.h"
@@ -107,6 +112,18 @@ constexpr base::FilePath::StringPieceType kTranslateBundleName(
     FILE_PATH_LITERAL("translate-bundle.js"));
 #endif  // !defined(OS_ANDROID)
 
+namespace {
+std::string ReplaceServerUrl(std::string& script) {
+  const std::string search_pattern = "$OVERRIDE_TRANSLATE_SERVER";
+  const base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
+  std::string server = cmd_line.GetSwitchValueASCII(switches::kTranslateServerUrl);
+
+  base::ReplaceSubstringsAfterOffset(&script, 0, search_pattern, server);
+
+  return script;
+}
+}
+
 /* static */
 void VivaldiTranslateClient::LoadTranslationScript() {
 #if !defined(OS_ANDROID)
@@ -121,7 +138,7 @@ void VivaldiTranslateClient::LoadTranslationScript() {
       std::string script;
       if (base::ReadFileToString(filepath, &script)) {
         DCHECK(!script.empty());
-        VivaldiTranslateClient::GetTranslateScript() = script;
+        VivaldiTranslateClient::GetTranslateScript() = ReplaceServerUrl(script);
       }
     }
   }
@@ -131,10 +148,9 @@ void VivaldiTranslateClient::LoadTranslationScript() {
         ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
             VIVALDI_TRANSLATE_JS);
     DCHECK(!script.empty());
-    VivaldiTranslateClient::GetTranslateScript() = script;
+    VivaldiTranslateClient::GetTranslateScript() = ReplaceServerUrl(script);
   }
 }
-
 
 const translate::LanguageState& VivaldiTranslateClient::GetLanguageState() {
   return *translate_manager_->GetLanguageState();
@@ -370,24 +386,6 @@ void VivaldiTranslateClient::SetPredefinedTargetLanguage(
 
 bool VivaldiTranslateClient::IsTranslatableURL(const GURL& url) {
   return TranslateService::IsTranslatableURL(url);
-}
-
-void VivaldiTranslateClient::ShowReportLanguageDetectionErrorUI(
-    const GURL& report_url) {
-#if defined(OS_ANDROID)
-  // Android does not support reporting language detection errors.
-  NOTREACHED();
-#else
-  // We'll open the URL in a new tab so that the user can tell us more.
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
-  if (!browser) {
-    NOTREACHED();
-    return;
-  }
-
-  chrome::AddSelectedTabWithURL(browser, report_url,
-                                ui::PAGE_TRANSITION_AUTO_BOOKMARK);
-#endif  // defined(OS_ANDROID)
 }
 
 bool VivaldiTranslateClient::IsAutofillAssistantRunning() const {

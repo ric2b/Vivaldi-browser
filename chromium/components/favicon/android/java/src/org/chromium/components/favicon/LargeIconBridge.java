@@ -14,7 +14,7 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.components.browser_ui.util.ConversionUtils;
-import org.chromium.components.embedder_support.browser_context.BrowserContextHandle;
+import org.chromium.content_public.browser.BrowserContextHandle;
 import org.chromium.url.GURL;
 
 /**
@@ -144,7 +144,7 @@ public class LargeIconBridge {
                     mBrowserContextHandle, pageUrl, desiredSizePx, callback);
         } else {
             CachedFavicon cached = mFaviconCache.get(pageUrl);
-            if (cached != null) {
+            if (cached != null && cached.icon != null) {
                 callback.onLargeIconAvailable(cached.icon, cached.fallbackColor,
                         cached.isFallbackColorDefault, cached.iconType);
                 return true;

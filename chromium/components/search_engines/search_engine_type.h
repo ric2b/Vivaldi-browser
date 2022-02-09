@@ -86,6 +86,7 @@ enum SearchEngineType {
   SEARCH_ENGINE_QWANT_VIV,
   SEARCH_ENGINE_YANDEX_VIV,
   SEARCH_ENGINE_YANDEX_TR_VIV,
+  SEARCH_ENGINE_NEEVA_VIV,
 
   SEARCH_ENGINE_MAX  // Bounding value needed for UMA histogram macro.
 };

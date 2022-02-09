@@ -47,6 +47,9 @@ import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
 import java.util.List;
 
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplicationImpl;
+
 /**
  * A coordinator for TabGroupUi component. Manages the communication with
  * {@link TabListCoordinator} as well as the life-cycle of
@@ -187,7 +190,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
      */
     @Override
     public Supplier<Boolean> getTabGridDialogVisibilitySupplier() {
-        return mTabGridDialogCoordinator::isVisible;
+        return () -> mTabGridDialogCoordinator != null && mTabGridDialogCoordinator.isVisible();
     }
 
     /**
@@ -261,6 +264,9 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
     }
 
     private void recordTabGroupCount() {
+        // Note(david@vivaldi.com): Nothing will be recorded.
+        if (ChromeApplicationImpl.isVivaldi()) return;
+
         if (mTabModelSelector == null) return;
         TabModelFilterProvider provider = mTabModelSelector.getTabModelFilterProvider();
 
@@ -303,6 +309,9 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
     }
 
     private void recordSessionCount() {
+        // Note(david@vivaldi.com): Nothing will be recorded.
+        if (ChromeApplicationImpl.isVivaldi()) return;
+
         if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
             TabModelFilter normalTabModelFilter =
                     mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(false);

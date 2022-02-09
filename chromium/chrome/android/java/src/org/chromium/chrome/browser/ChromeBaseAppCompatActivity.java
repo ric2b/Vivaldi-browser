@@ -6,9 +6,13 @@ package org.chromium.chrome.browser;
 
 import static org.chromium.chrome.browser.base.SplitCompatUtils.CHROME_SPLIT_NAME;
 
+import android.app.ActivityManager.TaskDescription;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
+import android.content.res.Resources;
+import android.graphics.BitmapFactory;
+import android.os.Build;
 import android.os.Bundle;
 
 import androidx.annotation.CallSuper;
@@ -16,7 +20,6 @@ import androidx.annotation.Nullable;
 import androidx.annotation.StyleRes;
 import androidx.appcompat.app.AppCompatActivity;
 
-import org.chromium.base.BuildInfo;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
@@ -29,6 +32,7 @@ import org.chromium.chrome.browser.language.GlobalAppLocaleController;
 import org.chromium.chrome.browser.night_mode.GlobalNightModeStateProviderHolder;
 import org.chromium.chrome.browser.night_mode.NightModeStateProvider;
 import org.chromium.chrome.browser.night_mode.NightModeUtils;
+import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.ui.theme.ColorDelegateImpl;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManagerHolder;
@@ -80,6 +84,8 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
 
         // Activity level locale overrides must be done in onCreate.
         GlobalAppLocaleController.getInstance().maybeOverrideContextConfig(this);
+
+        setDefaultTaskDescription();
     }
 
     @Override
@@ -176,19 +182,47 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
     protected void applyThemeOverlays() {
         setTheme(R.style.ColorOverlay_ChromiumAndroid);
 
-        if (CachedFeatureFlags.isEnabled(ChromeFeatureList.DYNAMIC_COLOR_ANDROID)) {
+        if (supportsDynamicColors()) {
             new ColorDelegateImpl().applyDynamicColorsIfAvailable(this);
         }
+
         // Try to enable browser overscroll when content overscroll is enabled for consistency. This
         // needs to be in a cached feature because activity startup happens before native is
         // initialized. Unfortunately content overscroll is read in renderer threads, and these two
         // are not synchronized. Typically the first time overscroll is enabled, the following will
         // use the old value and then content will pick up the enabled value, causing one execution
         // of inconsistency.
-        if (BuildInfo.isAtLeastS()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
                 && !CachedFeatureFlags.isEnabled(ChromeFeatureList.ELASTIC_OVERSCROLL)) {
             setTheme(R.style.ThemeOverlay_DisableOverscroll);
         }
+
+        // We apply an extra theme overlay to override some of the dynamic colors. For example,
+        // android:textColorHighlight is overridden by dynamic colors, preventing us from specifying
+        // the alpha for the selected text highlight. In this case, the overridden colors should
+        // still use dynamic colors, as in the android:textColorHighlight example where we use a
+        // color state list that depends on colorPrimary.
+        setTheme(R.style.ThemeOverlay_DynamicColorOverrides);
+    }
+
+    /**
+     * Returns whether the activity supports dynamic colors. For most activities this is only true
+     * if full dynamic colors are enabled.
+     */
+    protected boolean supportsDynamicColors() {
+        return ThemeUtils.ENABLE_FULL_DYNAMIC_COLORS.getValue();
+    }
+
+    /**
+     * Sets the default task description that will appear in the recents UI.
+     */
+    protected void setDefaultTaskDescription() {
+        final Resources res = getResources();
+        final TaskDescription taskDescription =
+                new TaskDescription(res.getString(R.string.app_name),
+                        BitmapFactory.decodeResource(res, R.mipmap.app_icon),
+                        res.getColor(R.color.default_task_description_color));
+        setTaskDescription(taskDescription);
     }
 
     // NightModeStateProvider.Observer implementation.

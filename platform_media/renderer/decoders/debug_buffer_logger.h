@@ -8,7 +8,6 @@
 #define PLATFORM_MEDIA_RENDERER_DECODERS_BUFFER_LOGGER_H_
 
 #include "base/files/file_path.h"
-#include "base/memory/scoped_refptr.h"
 
 namespace media {
 
@@ -21,7 +20,7 @@ class DebugBufferLogger {
 
   void Initialize(const std::string& stream_type);
 
-  void Log(scoped_refptr<DecoderBuffer> buffer);
+  void Log(const DecoderBuffer& buffer);
 
  private:
 #ifndef NDEBUG

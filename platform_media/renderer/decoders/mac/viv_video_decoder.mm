@@ -146,10 +146,10 @@ void BufferHolder(const CVImageBufferRef& buffer) {
 // static
 std::unique_ptr<VideoDecoder>
 VivVideoDecoder::Create(
-    scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_,
+    scoped_refptr<base::SequencedTaskRunner> task_runner,
     MediaLog* media_log) {
   auto* decoder = new VivVideoDecoder(
-      std::move(media_task_runner_), media_log);
+      std::move(task_runner), media_log);
   return std::make_unique<AsyncDestroyVideoDecoder<VivVideoDecoder>>(
       base::WrapUnique(decoder));
 }
@@ -185,14 +185,14 @@ void decompressionSessionDecodeFrameCallback(void *decompressionOutputRefCon,
 }
 
 VivVideoDecoder::VivVideoDecoder(
-    scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
+    scoped_refptr<base::SequencedTaskRunner> task_runner,
     MediaLog* media_log)
-    : media_task_runner_(std::move(media_task_runner)),
+    : task_runner_(std::move(task_runner)),
       media_log_(std::move(media_log)),
       decoder_thread_("VivaldiVTDecoderThread"),
       weak_this_factory_(this)
        {
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(media_log_);
 
   weak_this_ = weak_this_factory_.GetWeakPtr();
@@ -203,14 +203,14 @@ VivVideoDecoder::VivVideoDecoder(
 
 VivVideoDecoder::~VivVideoDecoder() {
   DVLOG(3) << __func__;
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   decoder_thread_.Stop();
 }
 
 // static
 void VivVideoDecoder::DestroyAsync(std::unique_ptr<VivVideoDecoder> decoder) {
   DVLOG(3) << __func__;
-  DCHECK(decoder->media_task_runner_->BelongsToCurrentThread());
+  DCHECK(decoder->task_runner_->RunsTasksInCurrentSequence());
 
   if (!decoder->decoder_thread_.IsRunning()) {
     // Initialize was not called or failed.
@@ -250,12 +250,12 @@ void VivVideoDecoder::Output(void* source_frame_refcon,
   Frame* frame = reinterpret_cast<Frame*>(source_frame_refcon);
   frame->image.reset(image_buffer, base::scoped_policy::RETAIN);
 
-  media_task_runner_->PostTask(FROM_HERE,
+  task_runner_->PostTask(FROM_HERE,
       base::BindOnce(&VivVideoDecoder::DecodeDone, weak_this_, frame));
 }
 
 void VivVideoDecoder::DecodeDone(Frame* frame) {
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   // pending_frames_.erase() will delete |frame|.
   int32_t bitstream_id = frame->bitstream_id;
@@ -289,7 +289,7 @@ void VivVideoDecoder::Initialize(const VideoDecoderConfig& config,
                                  const OutputCB& output_cb,
                                  const WaitingCB& waiting_cb) {
   DVLOG(3) << __func__ << "(" << config.AsHumanReadableString() << ")";
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(config.IsValidConfig());
   DCHECK(!init_cb_);
   DCHECK(!flush_cb_);
@@ -346,7 +346,7 @@ void VivVideoDecoder::Initialize(const VideoDecoderConfig& config,
 
 void VivVideoDecoder::NotifyEndOfBitstreamBuffer(int32_t bitstream_buffer_id) {
   DVLOG(3) << __func__ << "(" << bitstream_buffer_id << ")";
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   if (has_error_)
     return;
@@ -365,7 +365,7 @@ void VivVideoDecoder::NotifyEndOfBitstreamBuffer(int32_t bitstream_buffer_id) {
 
 void VivVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
                              DecodeCB decode_cb) {
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(!init_cb_);
   DCHECK(!flush_cb_);
   DCHECK(!reset_cb_);
@@ -539,7 +539,7 @@ void VivVideoDecoder::DecodeTask(scoped_refptr<DecoderBuffer> buffer,
   // If there is nothing to decode, drop the request by returning a frame with
   // no image.
   if (!frame->has_slice) {
-    media_task_runner_->PostTask(FROM_HERE,
+    task_runner_->PostTask(FROM_HERE,
         base::BindOnce(&VivVideoDecoder::DecodeDone, weak_this_, frame));
     return;
   }
@@ -669,7 +669,7 @@ bool VivVideoDecoder::FinishDelayedFrames() {
 
 void VivVideoDecoder::ProcessWorkQueues() {
   DVLOG(3) << __func__;
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   switch (state_) {
     case STATE_DECODING:
       // TODO(sandersd): Batch where possible.
@@ -692,7 +692,7 @@ void VivVideoDecoder::ProcessWorkQueues() {
 
 bool VivVideoDecoder::ProcessTaskQueue() {
   DVLOG(3) << __func__ << " size=" << task_queue_.size();
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK_EQ(state_, STATE_DECODING);
 
   if (task_queue_.empty())
@@ -749,7 +749,7 @@ bool VivVideoDecoder::ProcessTaskQueue() {
 }
 
 bool VivVideoDecoder::ProcessReorderQueue() {
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK_EQ(state_, STATE_DECODING);
 
   if (reorder_queue_.empty())
@@ -776,7 +776,7 @@ bool VivVideoDecoder::ProcessReorderQueue() {
 }
 
 bool VivVideoDecoder::ProcessFrame(const Frame& frame) {
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK_EQ(state_, STATE_DECODING);
 
   // If the next pending flush is for a reset, then the frame will be dropped.
@@ -794,7 +794,7 @@ bool VivVideoDecoder::ProcessFrame(const Frame& frame) {
 }
 
 bool VivVideoDecoder::SendFrame(const Frame& frame) {
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK_EQ(state_, STATE_DECODING);
   DCHECK(frame.image.get());
 
@@ -952,20 +952,20 @@ bool VivVideoDecoder::ConfigureDecoder() {
 }
 
 int VivVideoDecoder::GetMaxDecodeRequests() const {
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   return 4;
 }
 
 void VivVideoDecoder::Reset(base::OnceClosure reset_cb) {
   DVLOG(2) << __func__;
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(!init_cb_);
   // Note: |flush_cb_| may be non-null. If so, the flush can be completed by
   // NotifyResetDone().
   DCHECK(!reset_cb_);
 
   if (has_error_) {
-    media_task_runner_->PostTask(FROM_HERE, std::move(reset_cb));
+    task_runner_->PostTask(FROM_HERE, std::move(reset_cb));
     return;
   }
 
@@ -986,14 +986,14 @@ void VivVideoDecoder::FlushTask(TaskType type) {
   }
 
   // Queue a task even if flushing fails, so that destruction always completes.
-  media_task_runner_->PostTask(
+  task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&VivVideoDecoder::FlushTaskDone, weak_this_, type));
 }
 
 void VivVideoDecoder::FlushTaskDone(TaskType type) {
   DVLOG(3) << __func__;
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   if (state_ == STATE_DESTROYING) {
     delete this;
     return;
@@ -1004,7 +1004,7 @@ void VivVideoDecoder::FlushTaskDone(TaskType type) {
 
 void VivVideoDecoder::FlushDone() {
   DVLOG(3) << __func__;
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   if (has_error_)
     return;
@@ -1017,7 +1017,7 @@ void VivVideoDecoder::FlushDone() {
 }
 
 void VivVideoDecoder::QueueFlush(TaskType type) {
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   pending_flush_tasks_.push(type);
   decoder_thread_.task_runner()->PostTask(
       FROM_HERE, base::BindOnce(&VivVideoDecoder::FlushTask,
@@ -1030,13 +1030,13 @@ void VivVideoDecoder::QueueFlush(TaskType type) {
 
 void VivVideoDecoder::Flush() {
   DVLOG(1) << __func__;
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   QueueFlush(TASK_FLUSH);
 }
 
 void VivVideoDecoder::NotifyError(std::string message) {
-  if (!media_task_runner_->BelongsToCurrentThread()) {
-    media_task_runner_->PostTask(
+  if (!task_runner_->RunsTasksInCurrentSequence()) {
+    task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&VivVideoDecoder::NotifyError, weak_this_, message));
   } else if (state_ == STATE_DECODING) {
@@ -1046,7 +1046,7 @@ void VivVideoDecoder::NotifyError(std::string message) {
 }
 
 void VivVideoDecoder::EnterErrorState(std::string message) {
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(weak_this_);
 
   MEDIA_LOG(ERROR, media_log_) << message;
@@ -1058,14 +1058,14 @@ void VivVideoDecoder::EnterErrorState(std::string message) {
   has_error_ = true;
 
   // Destroy callbacks aynchronously to avoid calling them on a client stack.
-  media_task_runner_->PostTask(
+  task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&VivVideoDecoder::DestroyCallbacks, weak_this_));
 }
 
 void VivVideoDecoder::DestroyCallbacks() {
   DVLOG(2) << __func__;
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   auto status = DecodeStatus::ABORTED;
   if (has_error_)

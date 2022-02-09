@@ -32,12 +32,6 @@ source_set("extraparts") {
       "vivaldi_browser_main_extra_parts_android.cc",
     ]
   }
-  if (!is_android) {
-    sources += [
-      "media_renderer_host_message_filter.cc",
-      "media_renderer_host_message_filter.h",
-    ]
-  }
   deps = [
     "//base:base",
     #"//chrome/browser",
@@ -68,6 +62,4 @@ source_set("extraparts") {
       "//vivaldi/extensions/tools",
     ]
   }
-
-  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 }

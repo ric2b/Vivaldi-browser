@@ -10,18 +10,17 @@
 namespace media {
 
 WMFAudioDecoder::WMFAudioDecoder(
-    const scoped_refptr<base::SingleThreadTaskRunner>& task_runner)
-    : impl_(task_runner) {
-}
+    scoped_refptr<base::SequencedTaskRunner> task_runner)
+    : impl_(std::move(task_runner)) {}
 
-WMFAudioDecoder::~WMFAudioDecoder() {
-}
+WMFAudioDecoder::~WMFAudioDecoder() {}
 
-void WMFAudioDecoder::Initialize(const AudioDecoderConfig& config,
-                                 CdmContext* cdm_context,
-                                 InitCB init_cb,
-                                 const OutputCB& output_cb,
-                                 const WaitingCB& waiting_for_decryption_key_cb) {
+void WMFAudioDecoder::Initialize(
+    const AudioDecoderConfig& config,
+    CdmContext* cdm_context,
+    InitCB init_cb,
+    const OutputCB& output_cb,
+    const WaitingCB& waiting_for_decryption_key_cb) {
   impl_.Initialize(config, std::move(init_cb), output_cb);
 }
 

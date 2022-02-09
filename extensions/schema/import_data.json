@@ -126,6 +126,10 @@
             }
           },
           {
+            "type": "integer",
+            "name": "windowId"
+          },
+          {
             "name": "masterPassword",
             "type": "string",
             "optional": true

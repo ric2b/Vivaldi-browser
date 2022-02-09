@@ -129,6 +129,9 @@ public class ChromeTabCreator extends TabCreator {
      */
     public Tab createNewTab(
             LoadUrlParams loadUrlParams, @TabLaunchType int type, Tab parent, Intent intent) {
+        // Vivaldi: ref. VAB-4372
+        if (mTabModel == null) return null;
+
         // If parent is in the same tab model, place the new tab next to it.
         int position = TabModel.INVALID_TAB_INDEX;
         int index = mTabModel.indexOf(parent);
@@ -463,6 +466,7 @@ public class ChromeTabCreator extends TabCreator {
             case TabLaunchType.FROM_STARTUP:
             case TabLaunchType.FROM_LAUNCHER_SHORTCUT:
             case TabLaunchType.FROM_LAUNCH_NEW_INCOGNITO_TAB:
+            case TabLaunchType.FROM_APP_WIDGET:
                 transition = PageTransition.AUTO_TOPLEVEL;
                 break;
             case TabLaunchType.FROM_LONGPRESS_FOREGROUND:

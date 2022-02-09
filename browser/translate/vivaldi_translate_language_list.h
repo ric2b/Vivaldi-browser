@@ -36,6 +36,7 @@ class VivaldiTranslateLanguageList
   void OnListDownloaded(std::unique_ptr<std::string> response_body);
   void SetPrefsListAsDefault();
   void SetListInChromium(const base::ListValue& list);
+  const std::string GetServer();
 
   content::BrowserContext* context_;
 

@@ -120,6 +120,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   TouchSelectionControllerClientManager*
   GetTouchSelectionControllerClientManager() override;
   bool ShouldVirtualKeyboardOverlayContent() override;
+  void NotifyVirtualKeyboardOverlayRect(
+      const gfx::Rect& keyboard_rect) override;
 
   // Overridden from RenderWidgetHostViewBase:
   void InitAsPopup(RenderWidgetHostView* parent_host_view,
@@ -362,7 +364,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void SetTooltipsEnabled(bool enable) override;
   void Shutdown() override;
 
-  void NotifyVirtualKeyboardOverlayRect(const gfx::Rect& keyboard_rect);
   bool FocusedFrameHasStickyActivation() const;
 
   RenderWidgetHostViewEventHandler* event_handler() {

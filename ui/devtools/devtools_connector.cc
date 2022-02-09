@@ -340,20 +340,6 @@ DevtoolsConnectorItem::GetJavaScriptDialogManager(
   return nullptr;
 }
 
-std::unique_ptr<content::ColorChooser> DevtoolsConnectorItem::OpenColorChooser(
-    content::WebContents* web_contents,
-    SkColor color,
-    const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions) {
-  if (devtools_delegate_) {
-    return devtools_delegate_->OpenColorChooser(web_contents, color,
-                                                suggestions);
-  } else if (guest_delegate_) {
-    return guest_delegate_->OpenColorChooser(web_contents, color, suggestions);
-  }
-  NOTREACHED();
-  return nullptr;
-}
-
 void DevtoolsConnectorItem::RunFileChooser(
     content::RenderFrameHost* render_frame_host,
     scoped_refptr<content::FileSelectListener> listener,

@@ -12,6 +12,7 @@
 
 namespace content {
 class BrowserContext;
+class WebContents;
 }
 
 namespace extensions {
@@ -62,7 +63,7 @@ class BookmarkContextMenuShowFunction : public ExtensionFunction,
   void OnBookmarkAction(int64_t bookmark_id, int command) override;
   void OnOpenMenu(int64_t bookmark_id) override;
 
-  std::string Open(const std::string& id);
+  std::string Open(content::WebContents* web_contents, const std::string& id);
 
   std::unique_ptr<::vivaldi::BookmarkMenuContainer> bookmark_menu_container_;
 

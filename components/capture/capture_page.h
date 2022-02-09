@@ -21,9 +21,6 @@ class CapturePage : private content::WebContentsObserver {
     gfx::Size target_size;
     int client_id = 0;
     bool full_page = false;
-
-    // Only single capture request will be made per given WebContents.
-    bool once_per_contents = false;
   };
 
   // Move only wrapper around results.
@@ -88,22 +85,13 @@ class CapturePage : private content::WebContentsObserver {
   void RenderViewHostChanged(content::RenderViewHost* old_host,
                              content::RenderViewHost* new_host) override;
 
-  bool OnMessageReceived(const IPC::Message& message,
-                         content::RenderFrameHost* render_frame_host) override;
-
   void OnRequestThumbnailForFrameResponse(
-      int callback_id,
-      gfx::Size image_size,
-      base::ReadOnlySharedMemoryRegion region,
-      int client_id);
+      const gfx::Size& image_size,
+      base::ReadOnlySharedMemoryRegion region);
 
   DoneCallback capture_callback_;
-  int callback_id_ = 0;
-  bool once_per_contents_ = false;
+  int client_id_ = 0;
   gfx::Size target_size_;
-
-  // Incrementing callback id counter
-  static int s_callback_id;
 
   base::WeakPtrFactory<CapturePage> weak_ptr_factory_;
 

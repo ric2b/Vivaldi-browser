@@ -55,7 +55,7 @@
 #include "components/download/public/common/download_ukm_helper.h"
 #include "components/download/public/common/download_url_parameters.h"
 #include "components/download/public/common/download_utils.h"
-#include "components/enterprise/common/proto/download_item_reroute_info.pb.h"
+#include "components/enterprise/common/download_item_reroute_info.h"
 #include "net/base/network_change_notifier.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
@@ -237,7 +237,8 @@ DownloadItemImpl::RequestInfo::RequestInfo(
     ui::PageTransition transition_type,
     bool has_user_gesture,
     const std::string& remote_address,
-    base::Time start_time)
+    base::Time start_time,
+    ::network::mojom::CredentialsMode credentials_mode)
     : url_chain(url_chain),
       referrer_url(referrer_url),
       site_url(site_url),
@@ -249,7 +250,8 @@ DownloadItemImpl::RequestInfo::RequestInfo(
       transition_type(transition_type),
       has_user_gesture(has_user_gesture),
       remote_address(remote_address),
-      start_time(start_time) {}
+      start_time(start_time),
+      credentials_mode(credentials_mode) {}
 
 DownloadItemImpl::RequestInfo::RequestInfo(const GURL& url)
     : url_chain(std::vector<GURL>(1, url)), start_time(base::Time::Now()) {}
@@ -318,6 +320,7 @@ DownloadItemImpl::DownloadItemImpl(
     base::Time last_access_time,
     bool transient,
     const std::vector<DownloadItem::ReceivedSlice>& received_slices,
+    const DownloadItemRerouteInfo& reroute_info,
     absl::optional<DownloadSchedule> download_schedule,
     std::unique_ptr<DownloadEntry> download_entry)
     : request_info_(url_chain,
@@ -331,7 +334,8 @@ DownloadItemImpl::DownloadItemImpl(
                     ui::PAGE_TRANSITION_LINK,
                     false,
                     std::string(),
-                    start_time),
+                    start_time,
+                    ::network::mojom::CredentialsMode::kInclude),
       guid_(guid),
       download_id_(download_id),
       mime_type_(mime_type),
@@ -358,7 +362,8 @@ DownloadItemImpl::DownloadItemImpl(
       etag_(etag),
       received_slices_(received_slices),
       is_updating_observers_(false),
-      download_schedule_(std::move(download_schedule)) {
+      download_schedule_(std::move(download_schedule)),
+      reroute_info_(reroute_info) {
   delegate_->Attach();
   DCHECK(state_ == COMPLETE_INTERNAL || state_ == INTERRUPTED_INTERNAL ||
          state_ == CANCELLED_INTERNAL);
@@ -392,7 +397,8 @@ DownloadItemImpl::DownloadItemImpl(DownloadItemImplDelegate* delegate,
                                          : ui::PAGE_TRANSITION_LINK,
                     info.has_user_gesture,
                     info.remote_address,
-                    info.start_time),
+                    info.start_time,
+                    info.credentials_mode),
       guid_(info.guid.empty() ? base::GenerateGUID() : info.guid),
       download_id_(download_id),
       response_headers_(info.response_headers),
@@ -1141,6 +1147,10 @@ const absl::optional<DownloadSchedule>& DownloadItemImpl::GetDownloadSchedule()
   return download_schedule_;
 }
 
+::network::mojom::CredentialsMode DownloadItemImpl::GetCredentialsMode() const {
+  return request_info_.credentials_mode;
+}
+
 void DownloadItemImpl::OnContentCheckCompleted(DownloadDangerType danger_type,
                                                DownloadInterruptReason reason) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -1197,7 +1207,10 @@ void DownloadItemImpl::OnDownloadScheduleChanged(
 }
 
 void DownloadItemImpl::SetOpenWhenComplete(bool open) {
-  open_when_complete_ = open;
+  if (open_when_complete_ != open) {
+    open_when_complete_ = open;
+    UpdateObservers();
+  }
 }
 
 void DownloadItemImpl::SetOpened(bool opened) {
@@ -1249,6 +1262,8 @@ std::string DownloadItemImpl::DebugString(bool verbose) const {
         " current_path = \"%" PRFilePath
         "\"\n\t"
         " target_path = \"%" PRFilePath
+        "\"\n\t"
+        " rereoute_info = '%s'"
         "\""
         " referrer = \"%s\""
         " site_url = \"%s\"",
@@ -1259,7 +1274,8 @@ std::string DownloadItemImpl::DebugString(bool verbose) const {
         GetLastModifiedTime().c_str(), GetETag().c_str(),
         download_file_ ? "true" : "false", url_list.c_str(),
         GetFullPath().value().c_str(), GetTargetFilePath().value().c_str(),
-        GetReferrerUrl().spec().c_str(), GetSiteUrl().spec().c_str());
+        reroute_info_.DebugString().c_str(), GetReferrerUrl().spec().c_str(),
+        GetSiteUrl().spec().c_str());
   } else {
     description += base::StringPrintf(" url = \"%s\"", url_list.c_str());
   }
@@ -1518,8 +1534,10 @@ void DownloadItemImpl::Init(bool active,
       file_name, GetDangerType(), GetReceivedBytes(), HasUserGesture());
 
   if (active) {
-    TRACE_EVENT_ASYNC_BEGIN1("download", "DownloadItemActive", download_id_,
-                             "download_item", std::move(active_data));
+    TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(
+        "download", "DownloadItemActive",
+        TRACE_ID_WITH_SCOPE("DownloadItemActive", download_id_),
+        "download_item", std::move(active_data));
     ukm_download_id_ = GetUniqueDownloadId();
   } else {
     TRACE_EVENT_INSTANT1("download", "DownloadItemActive",
@@ -2478,13 +2496,17 @@ void DownloadItemImpl::TransitionTo(DownloadInternalState new_state) {
 
   // Termination
   if (is_done && !was_done)
-    TRACE_EVENT_ASYNC_END0("download", "DownloadItemActive", download_id_);
+    TRACE_EVENT_NESTABLE_ASYNC_END0(
+        "download", "DownloadItemActive",
+        TRACE_ID_WITH_SCOPE("DownloadItemActive", download_id_));
 
   // Resumption
   if (was_done && !is_done) {
     std::string file_name(GetTargetFilePath().BaseName().AsUTF8Unsafe());
     TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(
-        "download", "DownloadItemActive", download_id_, "download_item",
+        "download", "DownloadItemActive",
+        TRACE_ID_WITH_SCOPE("DownloadItemActive", download_id_),
+        "download_item",
         std::make_unique<DownloadItemActivatedData>(
             TYPE_ACTIVE_DOWNLOAD, GetId(), GetOriginalUrl().spec(),
             GetURL().spec(), file_name, GetDangerType(), GetReceivedBytes(),

@@ -596,6 +596,13 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
                           modifierFlags:0
                                  action:@selector(keyCommandDown)];
 
+#if defined(__IPHONE_15_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_15_0
+  if (@available(iOS 15, *)) {
+    commandUp.wantsPriorityOverSystemBehavior = YES;
+    commandDown.wantsPriorityOverSystemBehavior = YES;
+  }
+#endif
+
   return @[ commandUp, commandDown ];
 }
 
@@ -633,6 +640,13 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
       [UIKeyCommand keyCommandWithInput:UIKeyInputRightArrow
                           modifierFlags:0
                                  action:@selector(keyCommandRight)];
+
+#if defined(__IPHONE_15_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_15_0
+  if (@available(iOS 15, *)) {
+    commandLeft.wantsPriorityOverSystemBehavior = YES;
+    commandRight.wantsPriorityOverSystemBehavior = YES;
+  }
+#endif
 
   return @[ commandLeft, commandRight ];
 }
@@ -767,6 +781,12 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
     UITextPosition* endOfUserText =
         [self positionFromPosition:self.endOfDocument
                             offset:-autocompleteLength];
+    // Move the cursor to the beginning of the field before setting the position
+    // to the end of the user input so if the text is very wide, the user sees
+    // the beginning of the text instead of the end.
+    self.selectedTextRange =
+        [self textRangeFromPosition:self.beginningOfDocument
+                         toPosition:self.beginningOfDocument];
     // Preserve the cursor position at the end of the user input.
     self.selectedTextRange = [self textRangeFromPosition:endOfUserText
                                               toPosition:endOfUserText];

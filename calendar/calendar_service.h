@@ -17,15 +17,13 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_list.h"
-#include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
-#include "base/sequenced_task_runner.h"
+#include "base/sequence_checker.h"
 #include "base/task/cancelable_task_tracker.h"
-#include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/notification_observer.h"
@@ -38,8 +36,6 @@ class Profile;
 
 namespace base {
 class SequencedTaskRunner;
-class FilePath;
-class Thread;
 }  // namespace base
 
 namespace calendar {
@@ -307,13 +303,8 @@ class CalendarService : public KeyedService {
 
   Profile* profile_;
 
-  base::ThreadChecker thread_checker_;
 
-  // The thread used by the calendar service to run CalendarBackend operations.
-  // Intentionally not a BrowserThread because the sync integration unit tests
-  // need to create multiple CalendarServices which each have their own thread.
-  // Nullptr if TaskScheduler is used for CalendarBackend operations.
-  std::unique_ptr<base::Thread> thread_;
+  SEQUENCE_CHECKER(sequence_checker_);
 
   // The TaskRunner to which CalendarBackend tasks are posted. Nullptr once
   // Cleanup() is called.

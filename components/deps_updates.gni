@@ -25,7 +25,6 @@ update_target("//chrome/browser:browser") {
 
 update_target("//chrome/renderer:renderer") {
   deps += [
-    "//vivaldi/components/request_filter/adblock_filter/renderer",
     "//vivaldi/components/content_injection/renderer",
     "//vivaldi/components/translate/renderer",
   ]

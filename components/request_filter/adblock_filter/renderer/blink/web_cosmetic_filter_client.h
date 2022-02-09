@@ -8,16 +8,15 @@
 
 namespace blink {
 
+class WebLocalFrame;
 class RTCPeerConnectionHandler;
 
 class WebCosmeticFilterClient {
  public:
-  virtual ~WebCosmeticFilterClient() = default;
-
-  virtual void BlockWebRTCIfNeeded(
-      base::WeakPtr<RTCPeerConnectionHandler> rtc_peer_connection_handler,
+  static void BlockWebRTCIfNeeded(
+      WebLocalFrame* web_frame, base::WeakPtr<RTCPeerConnectionHandler> rtc_peer_connection_handler,
       const webrtc::PeerConnectionInterface::RTCConfiguration&
-          configuration) = 0;
+          configuration);
 };
 
 }  // namespace blink

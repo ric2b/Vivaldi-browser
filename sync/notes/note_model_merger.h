@@ -92,6 +92,9 @@ class NoteModelMerger {
     RemoteTreeNode();
 
     syncer::UpdateResponseData update_;
+    // Redundant, parsed instance of the unique position in specifics, used
+    // to sort siblings by their position information.
+    syncer::UniquePosition unique_position_;
     std::vector<RemoteTreeNode> children_;
   };
 

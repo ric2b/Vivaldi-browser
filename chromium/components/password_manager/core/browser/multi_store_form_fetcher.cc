@@ -14,6 +14,7 @@
 #include "components/password_manager/core/browser/statistics_table.h"
 
 using Logger = autofill::SavePasswordProgressLogger;
+using password_manager_util::GetMatchType;
 
 namespace password_manager {
 
@@ -39,7 +40,8 @@ void MultiStoreFormFetcher::Fetch() {
     return;
   }
 
-  PasswordStore* account_password_store = client_->GetAccountPasswordStore();
+  PasswordStoreInterface* account_password_store =
+      client_->GetAccountPasswordStoreInterface();
 
   // Issue a fetch from the profile store and, if it exists, also from the
   // account store.
@@ -55,11 +57,6 @@ void MultiStoreFormFetcher::Fetch() {
   if (account_password_store) {
     state_ = State::WAITING;
     account_password_store->GetLogins(form_digest_, this);
-#if !defined(OS_IOS) && !defined(OS_ANDROID)
-    // The desktop bubble needs this information.
-    account_password_store->GetMatchingInsecureCredentials(
-        form_digest_.signon_realm, this);
-#endif
   }
 }
 
@@ -83,9 +80,11 @@ bool MultiStoreFormFetcher::IsMovingBlocked(
       // entries anyway).
       if (form->IsUsingAccountStore())
         continue;
-      // Ignore PSL matches for blocking moving.
-      if (form->is_public_suffix_match)
+      // Ignore non-exact matches for blocking moving.
+      if (GetMatchType(*form) !=
+          password_manager_util::GetLoginMatchType::kExact) {
         continue;
+      }
       if (form->username_value != username)
         continue;
       if (base::Contains(form->moving_blocked_for_list, destination))
@@ -153,7 +152,7 @@ void MultiStoreFormFetcher::AggregatePasswordStoreResults(
     BrowserSavePasswordProgressLogger(client_->GetLogManager())
         .LogNumber(Logger::STRING_ON_GET_STORE_RESULTS_METHOD, results.size());
   }
-  ProcessPasswordStoreResults(std::move(partial_results_));
+  FindMatchesAndNotifyConsumers(std::move(partial_results_));
 }
 
 void MultiStoreFormFetcher::ProcessMigratedForms(
@@ -161,14 +160,6 @@ void MultiStoreFormFetcher::ProcessMigratedForms(
   // The migration from HTTP to HTTPS (within the profile store) was finished.
   // Continue processing with the migrated results.
   AggregatePasswordStoreResults(std::move(forms));
-}
-
-void MultiStoreFormFetcher::OnGetInsecureCredentials(
-    std::vector<InsecureCredential> insecure_credentials) {
-  // Both the profile and account store has been queried. Therefore, append the
-  // received credentials to the existing ones.
-  base::ranges::move(insecure_credentials,
-                     std::back_inserter(insecure_credentials_));
 }
 
 void MultiStoreFormFetcher::SplitResults(
@@ -181,9 +172,11 @@ void MultiStoreFormFetcher::SplitResults(
   for (auto& result : results) {
     if (!result->blocked_by_user)
       continue;
-    // Ignore PSL matches for blocklisted entries.
-    if (result->is_public_suffix_match)
+    // Ignore non-exact matches for blocklisted entries.
+    if (GetMatchType(*result) !=
+        password_manager_util::GetLoginMatchType::kExact) {
       continue;
+    }
     // Ignore different schemes.
     if (result->scheme != form_digest_.scheme)
       continue;

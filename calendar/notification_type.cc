@@ -10,7 +10,7 @@
 
 namespace calendar {
 
-NotificationRow::NotificationRow() : period(0), delay(0) {}
+NotificationRow::NotificationRow() : delay(0) {}
 
 NotificationRow::NotificationRow(const NotificationRow& other) = default;
 

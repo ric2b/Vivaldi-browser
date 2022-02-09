@@ -37,6 +37,9 @@ class NoteNode : public ui::TreeNode<NoteNode> {
   static const char kOtherNotesNodeGuid[];
   static const char kTrashNodeGuid[];
 
+  // A bug in sync caused some problematic GUIDs to be produced.
+  static const char kBannedGuidDueToPastSyncBug[];
+
   NoteNode(int64_t id, const base::GUID& guid, Type type);
   ~NoteNode() override;
 

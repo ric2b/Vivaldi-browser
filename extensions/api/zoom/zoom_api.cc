@@ -5,12 +5,14 @@
 
 #include "base/lazy_instance.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "components/zoom/zoom_controller.h"
 #include "content/public/browser/storage_partition.h"
 #include "extensions/browser/extension_zoom_request_client.h"
-#include "extensions/tools/vivaldi_tools.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
+
+#include "extensions/tools/vivaldi_tools.h"
 #include "ui/vivaldi_browser_window.h"
 
 class Browser;
@@ -147,10 +149,13 @@ ExtensionFunction::ResponseAction ZoomSetVivaldiUIZoomFunction::Run() {
 ExtensionFunction::ResponseAction ZoomGetVivaldiUIZoomFunction::Run() {
   namespace Results = vivaldi::zoom::GetVivaldiUIZoom::Results;
 
-  WebContents* web_contents = dispatcher()->GetAssociatedWebContents();
-
+  // We rely on Chromium content::HostZoomMap that stores the zoom per host. So
+  // this value is shared between all Vivaldi windows and we can use
+  // GetSenderWebContents() to query for zoom even if that points to the hidden
+  // portal page.
+  content::WebContents* web_contents = GetSenderWebContents();
   if (!web_contents) {
-    return RespondNow(ArgumentList(Results::Create(-1)));
+    return RespondNow(Error("No sender WebContents"));
   }
 
   zoom::ZoomController* zoom_controller =

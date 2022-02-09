@@ -192,9 +192,10 @@ ContentBlockingEventRouter::ContentBlockingEventRouter(
           browser_context_);
   if (rules_service) {
     rules_service->AddObserver(this);
-    if (rules_service->IsLoaded())
+    if (rules_service->IsLoaded()) {
       rules_service->GetKnownSourcesHandler()->AddObserver(this);
-    rules_service->GetBlockerUrlsReporter()->AddObserver(this);
+      rules_service->GetBlockerUrlsReporter()->AddObserver(this);
+    }
   }
 }
 

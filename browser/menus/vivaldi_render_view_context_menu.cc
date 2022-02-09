@@ -323,6 +323,7 @@ void VivaldiRenderViewContextMenu::InitMenu() {
       ContextMenuContentType::ITEM_GROUP_MEDIA_IMAGE); // params.has_image_contents;
   request.isframe = content_type->SupportsGroup(
       ContextMenuContentType::ITEM_GROUP_FRAME);
+  request.ismailcontent = web_view_guest && web_view_guest->IsVivaldiMail();
   request.iswebpanel = web_view_guest && web_view_guest->IsVivaldiWebPanel();
   request.ismailto = params_.link_url.SchemeIs(url::kMailToScheme);
   request.support.copy = content_type->SupportsGroup(

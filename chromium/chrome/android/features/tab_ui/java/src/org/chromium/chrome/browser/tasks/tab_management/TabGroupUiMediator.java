@@ -55,6 +55,11 @@ import org.chromium.url.GURL;
 import java.util.ArrayList;
 import java.util.List;
 
+// Vivaldi
+import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.vivaldi.browser.toolbar.VivaldiTopToolbarCoordinator;
+
 /**
  * A mediator for the TabGroupUi. Responsible for managing the internal state of the component.
  */
@@ -156,6 +161,14 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
                         .setAction(context.getString(R.string.undo), null)
                         .setDuration(UNDO_DISMISS_SNACKBAR_DURATION);
 
+        if (overviewModeBehaviorSupplier.get() != null
+                && overviewModeBehaviorSupplier.get().overviewVisible()) {
+            // It is possible that the overview mode is showing when the TabGroupUiMediator is
+            // created, sets the mIsShowingOverViewMode early to prevent the Tab strip is wrongly
+            // showing on the Start surface homepage. See https://crbug.com/1239272.
+            mIsShowingOverViewMode = true;
+        }
+
         // register for tab model
         mTabModelObserver = new TabModelObserver() {
             private int mAddedTabId = Tab.INVALID_TAB_ID;
@@ -232,6 +245,9 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
                             getTabsToShowForId(tab.getId()).size() - 1);
                 }
 
+                // Note(david@vivaldi.com): Always update the strip otherwise we don't see the
+                // actual state of the grouped tabs.
+                if (!ChromeApplicationImpl.isVivaldi())
                 if (mIsTabGroupUiVisible) return;
 
                 resetTabStripWithRelatedTabsForId(tab.getId());
@@ -254,7 +270,7 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
 
             @Override
             public void tabClosureUndone(Tab tab) {
-                if (!mIsTabGroupUiVisible) {
+                if (!mIsTabGroupUiVisible || ChromeApplicationImpl.isVivaldi()) {
                     resetTabStripWithRelatedTabsForId(tab.getId());
                 }
             }
@@ -495,6 +511,12 @@ public class TabGroupUiMediator implements SnackbarManager.SnackbarController {
                                  -> mModel.set(TabGroupUiProperties.INITIAL_SCROLL_INDEX,
                                          listOfTabs.indexOf(mTabModelSelector.getCurrentTab())));
         }
+        // Note(david@vivaldi.com): The bottom controls are always visible in Vivaldi. We only
+        // handle the visibility of the tab group toolbar.
+        ChromeActivity activity = (ChromeActivity) mContext;
+        ((VivaldiTopToolbarCoordinator) activity.getToolbarManager().getToolbar())
+                .setIsTabGroupUiVisible(mIsTabGroupUiVisible);
+        if (!ChromeApplicationImpl.isVivaldi())
         mVisibilityController.setBottomControlsVisible(mIsTabGroupUiVisible);
     }
 

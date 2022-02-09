@@ -15,20 +15,14 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/compiler_specific.h"
 #include "base/i18n/string_compare.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
-#include "base/single_thread_task_runner.h"
-#include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
-#include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread.h"
-#include "base/threading/thread_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -38,16 +32,11 @@
 #include "calendar/calendar_type.h"
 #include "calendar/event_type.h"
 #include "calendar/notification_type.h"
-#include "components/variations/variations_associated_data.h"
 
 using base::Time;
 
 using calendar::CalendarBackend;
 namespace calendar {
-namespace {
-
-static const char* kCalendarThreadName = "Vivaldi_CalendarThread";
-}
 // Sends messages from the db backend to us on the main thread. This must be a
 // separate class from the calendar service so that it can hold a reference to
 // the history service (otherwise we would have to manually AddRef and
@@ -139,43 +128,28 @@ class CalendarService::CalendarBackendDelegate
 };
 
 CalendarService::CalendarService()
-    : thread_(variations::GetVariationParamValue("BrowserScheduler",
-                                                 "RedirectCalendarService") ==
-                      "true"
-                  ? nullptr
-                  : new base::Thread(kCalendarThreadName)),
-      backend_loaded_(false),
-      weak_ptr_factory_(this) {}
+    : backend_loaded_(false), weak_ptr_factory_(this) {}
 
 CalendarService::~CalendarService() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Shutdown the backend. This does nothing if Cleanup was already invoked.
+  Cleanup();
 }
 
-void CalendarService::Shutdown() {}
+void CalendarService::Shutdown() {
+  Cleanup();
+}
 
 bool CalendarService::Init(
     bool no_db,
     const CalendarDatabaseParams& calendar_database_params) {
-  TRACE_EVENT0("browser,startup", "CalendarService::Init")
-  SCOPED_UMA_HISTOGRAM_TIMER("Calendar.CalendarServiceInitTime");
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!backend_task_runner_);
 
-  if (thread_) {
-    base::Thread::Options options;
-    options.timer_slack = base::TIMER_SLACK_MAXIMUM;
-    if (!thread_->StartWithOptions(std::move(options))) {
-      Cleanup();
-      return false;
-    }
-    backend_task_runner_ = thread_->task_runner();
-  } else {
-    backend_task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
-        {base::TaskPriority::USER_BLOCKING,
-         base::TaskShutdownBehavior::BLOCK_SHUTDOWN, base::MayBlock(),
-         base::WithBaseSyncPrimitives()});
-  }
+  backend_task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
+      {base::MayBlock(), base::WithBaseSyncPrimitives(),
+       base::TaskPriority::USER_BLOCKING,
+       base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
 
   // Create the calendar backend.
   scoped_refptr<CalendarBackend> backend(new CalendarBackend(
@@ -195,7 +169,7 @@ base::CancelableTaskTracker::TaskId CalendarService::CreateCalendarEvent(
     EventResultCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<EventResultCB> create_results =
       std::shared_ptr<EventResultCB>(new EventResultCB());
@@ -212,7 +186,7 @@ base::CancelableTaskTracker::TaskId CalendarService::CreateCalendarEvents(
     CreateEventsCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<CreateEventsResult> create_results =
       std::shared_ptr<CreateEventsResult>(new CreateEventsResult());
@@ -231,7 +205,7 @@ base::CancelableTaskTracker::TaskId CalendarService::UpdateCalendarEvent(
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
 
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<EventResultCB> update_results =
       std::shared_ptr<EventResultCB>(new EventResultCB());
@@ -249,7 +223,7 @@ base::CancelableTaskTracker::TaskId CalendarService::DeleteCalendarEvent(
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
 
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<DeleteEventResult> delete_results =
       std::shared_ptr<DeleteEventResult>(new DeleteEventResult());
@@ -265,7 +239,7 @@ base::CancelableTaskTracker::TaskId CalendarService::GetAllEvents(
     QueryCalendarCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<EventQueryResults> query_results =
       std::shared_ptr<EventQueryResults>(new EventQueryResults());
@@ -282,7 +256,7 @@ base::CancelableTaskTracker::TaskId CalendarService::CreateCalendar(
     CreateCalendarCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<CreateCalendarResult> create_results =
       std::shared_ptr<CreateCalendarResult>(new CreateCalendarResult());
@@ -298,7 +272,7 @@ base::CancelableTaskTracker::TaskId CalendarService::GetAllCalendars(
     GetALLQueryCalendarCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<CalendarQueryResults> query_results =
       std::shared_ptr<CalendarQueryResults>(new CalendarQueryResults());
@@ -317,7 +291,7 @@ base::CancelableTaskTracker::TaskId CalendarService::UpdateCalendar(
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
 
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<UpdateCalendarResult> update_results =
       std::shared_ptr<UpdateCalendarResult>(new UpdateCalendarResult());
@@ -335,7 +309,7 @@ base::CancelableTaskTracker::TaskId CalendarService::DeleteCalendar(
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
 
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<DeleteCalendarResult> delete_results =
       std::shared_ptr<DeleteCalendarResult>(new DeleteCalendarResult());
@@ -353,7 +327,7 @@ base::CancelableTaskTracker::TaskId CalendarService::UpdateEventType(
     UpdateEventTypeCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<UpdateEventTypeResult> update_event_type_results =
       std::shared_ptr<UpdateEventTypeResult>(new UpdateEventTypeResult());
@@ -369,7 +343,7 @@ base::CancelableTaskTracker::TaskId CalendarService::GetAllEventTypes(
     GetALLEventTypesCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<EventTypeRows> query_results =
       std::shared_ptr<EventTypeRows>(new EventTypeRows());
@@ -386,7 +360,7 @@ base::CancelableTaskTracker::TaskId CalendarService::CreateEventType(
     CreateEventTypeCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<CreateEventTypeResult> create_event_type_results =
       std::shared_ptr<CreateEventTypeResult>(new CreateEventTypeResult());
@@ -404,7 +378,7 @@ base::CancelableTaskTracker::TaskId CalendarService::DeleteEventType(
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
 
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<DeleteEventTypeResult> delete_results =
       std::shared_ptr<DeleteEventTypeResult>(new DeleteEventTypeResult());
@@ -421,7 +395,7 @@ base::CancelableTaskTracker::TaskId CalendarService::CreateRecurrenceException(
     EventResultCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<EventResultCB> create_recurrence_exception_results =
       std::shared_ptr<EventResultCB>(new EventResultCB());
@@ -438,7 +412,7 @@ base::CancelableTaskTracker::TaskId CalendarService::GetAllNotifications(
     GetAllNotificationsCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<GetAllNotificationResult> query_results =
       std::shared_ptr<GetAllNotificationResult>(new GetAllNotificationResult());
@@ -455,7 +429,7 @@ base::CancelableTaskTracker::TaskId CalendarService::CreateNotification(
     NotificationCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<NotificationResult> create_notification_result =
       std::shared_ptr<NotificationResult>(new NotificationResult());
@@ -473,7 +447,7 @@ base::CancelableTaskTracker::TaskId CalendarService::UpdateNotification(
     NotificationCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<NotificationResult> update_notification_result =
       std::shared_ptr<NotificationResult>(new NotificationResult());
@@ -491,7 +465,7 @@ base::CancelableTaskTracker::TaskId CalendarService::DeleteNotification(
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
 
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<DeleteNotificationResult> delete_results =
       std::shared_ptr<DeleteNotificationResult>(new DeleteNotificationResult());
@@ -508,7 +482,7 @@ base::CancelableTaskTracker::TaskId CalendarService::CreateInvite(
     InviteCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<InviteResult> create_invite_result =
       std::shared_ptr<InviteResult>(new InviteResult());
@@ -526,7 +500,7 @@ base::CancelableTaskTracker::TaskId CalendarService::DeleteInvite(
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
 
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<DeleteInviteResult> delete_results =
       std::shared_ptr<DeleteInviteResult>(new DeleteInviteResult());
@@ -543,7 +517,7 @@ base::CancelableTaskTracker::TaskId CalendarService::UpdateInvite(
     InviteCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<InviteResult> update_invite_result =
       std::shared_ptr<InviteResult>(new InviteResult());
@@ -588,7 +562,7 @@ base::CancelableTaskTracker::TaskId CalendarService::UpdateAccount(
     UpdateAccountCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<UpdateAccountResult> update_account_result =
       std::shared_ptr<UpdateAccountResult>(new UpdateAccountResult());
@@ -604,7 +578,7 @@ base::CancelableTaskTracker::TaskId CalendarService::GetAllAccounts(
     GetALLAccounsCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<calendar::AccountRows> accounts =
       std::shared_ptr<calendar::AccountRows>(new calendar::AccountRows());
@@ -620,7 +594,7 @@ base::CancelableTaskTracker::TaskId CalendarService::GetAllEventTemplates(
     QueryCalendarCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<EventQueryResults> query_results =
       std::shared_ptr<EventQueryResults>(new EventQueryResults());
@@ -633,36 +607,36 @@ base::CancelableTaskTracker::TaskId CalendarService::GetAllEventTemplates(
 }
 
 void CalendarService::ScheduleTask(base::OnceClosure task) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK(backend_task_runner_);
 
   backend_task_runner_->PostTask(FROM_HERE, std::move(task));
 }
 
 void CalendarService::AddObserver(CalendarModelObserver* observer) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   observers_.AddObserver(observer);
 }
 
 void CalendarService::RemoveObserver(CalendarModelObserver* observer) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   observers_.RemoveObserver(observer);
 }
 
 void CalendarService::OnDBLoaded() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   backend_loaded_ = true;
   NotifyCalendarServiceLoaded();
 }
 
 void CalendarService::NotifyCalendarServiceLoaded() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   for (CalendarModelObserver& observer : observers_)
     observer.OnCalendarServiceLoaded(this);
 }
 
 void CalendarService::Cleanup() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!backend_task_runner_) {
     // We've already cleaned up.
     return;
@@ -673,46 +647,17 @@ void CalendarService::Cleanup() {
   weak_ptr_factory_.InvalidateWeakPtrs();
 
   // Unload the backend.
-  if (calendar_backend_.get()) {
-    // The backend's destructor must run on the calendar thread since it is not
-    // threadsafe. So this thread must not be the last thread holding a
-    // reference to the backend, or a crash could happen.
-    //
-    // We have a reference to the calendar backend. There is also an extra
-    // reference held by our delegate installed in the backend, which
-    // CalendarBackend::Closing will release. This means if we scheduled a call
-    // to CalendarBackend::Closing and *then* released our backend reference,
-    // there will be a race between us and the backend's Closing function to see
-    // who is the last holder of a reference. If the backend thread's Closing
-    // manages to run before we release our backend refptr, the last reference
-    // will be held by this thread and the destructor will be called from here.
-    //
-    // Therefore, we create a closure to run the Closing operation first. This
-    // holds a reference to the backend. Then we release our reference, then we
-    // schedule the task to run. After the task runs, it will delete its
-    // reference from the calendar thread, ensuring everything works properly.
-    //
-    calendar_backend_->AddRef();
-    base::RepeatingClosure closing_task =
-        base::BindRepeating(&CalendarBackend::Closing, calendar_backend_);
-    ScheduleTask(closing_task);
-    closing_task.Reset();
-    backend_task_runner_->ReleaseSoon(FROM_HERE, std::move(calendar_backend_));
+  if (calendar_backend_) {
+    // Get rid of the in-memory backend.
+
+    ScheduleTask(base::BindOnce(&CalendarBackend::Closing,
+                                std::move(calendar_backend_)));
   }
 
-  // Clear |backend_task_runner_| to make sure it's not used after Cleanup().
   backend_task_runner_ = nullptr;
-
-  // Join the background thread, if any.
-  thread_.reset();
 }
 
-void CalendarService::NotifyCalendarServiceBeingDeleted() {
-  // TODO(arnar): Add
-  /* DCHECK(thread_checker_.CalledOnValidThread());
-  for (CalendarServiceObserver& observer : observers_)
-    observer.CalendarServiceBeingDeleted(this);*/
-}
+void CalendarService::NotifyCalendarServiceBeingDeleted() {}
 
 void CalendarService::OnEventCreated(const EventResult& event) {
   for (CalendarModelObserver& observer : observers_) {

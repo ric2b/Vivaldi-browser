@@ -6,8 +6,10 @@
 #include <string>
 #include <vector>
 
+#include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/task/post_task.h"
+#include "base/vivaldi_switches.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/prefs/pref_service.h"
@@ -112,6 +114,10 @@ bool VivaldiTranslateLanguageList::ShouldUpdate() {
   if (!can_update_) {
     return false;
   }
+  if (GetServer() != kTranslateLanguageListUrl) {
+    // Always update when using a custom url
+    return true;
+  }
   PrefService* prefs = g_browser_process->local_state();
   base::Time last_update =
       prefs->GetTime(vivaldiprefs::kVivaldiTranslateLanguageListLastUpdate);
@@ -124,6 +130,14 @@ bool VivaldiTranslateLanguageList::ShouldUpdate() {
   }
   return false;
 }
+const std::string VivaldiTranslateLanguageList::GetServer() {
+  std::string server = kTranslateLanguageListUrl;
+  const base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
+  if (cmd_line.HasSwitch(switches::kTranslateLanguageListUrl)) {
+    server = cmd_line.GetSwitchValueASCII(switches::kTranslateLanguageListUrl);
+  }
+  return server;
+}
 
 void VivaldiTranslateLanguageList::StartDownload() {
   if (!ShouldUpdate()) {
@@ -131,7 +145,7 @@ void VivaldiTranslateLanguageList::StartDownload() {
     return;
   }
   auto resource_request = std::make_unique<network::ResourceRequest>();
-  resource_request->url = GURL(kTranslateLanguageListUrl);
+  resource_request->url = GURL(GetServer());
   resource_request->method = "GET";
   resource_request->load_flags = net::LOAD_BYPASS_CACHE;
   resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
@@ -194,8 +208,11 @@ void VivaldiTranslateLanguageList::OnListDownloaded(
         PrefService* prefs = g_browser_process->local_state();
         prefs->Set(vivaldiprefs::kVivaldiTranslateLanguageList,
                    base::ListValue(args));
-        prefs->SetTime(vivaldiprefs::kVivaldiTranslateLanguageListLastUpdate,
-                       base::Time::Now());
+        if (GetServer() != kTranslateLanguageListUrl) {
+          // Only update last update on the main server
+          prefs->SetTime(vivaldiprefs::kVivaldiTranslateLanguageListLastUpdate,
+                         base::Time::Now());
+        }
         LOG(INFO) << "Downloaded language list from server.";
 
         SetListInChromium(base::ListValue(args));

@@ -12,7 +12,6 @@
 #include "media/base/sample_format.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_audio_data_copy_to_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_audio_data_init.h"
-#include "third_party/blink/renderer/core/typed_arrays/dom_array_piece.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_buffer.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 
@@ -140,19 +139,22 @@ AudioData::AudioData(AudioDataInit* init, ExceptionState& exception_state)
     return;
   }
 
-  DOMArrayPiece source_data(init->data());
-  if (total_bytes > source_data.ByteLength()) {
+  auto data_wrapper = AsSpan<const uint8_t>(init->data());
+  if (!data_wrapper.data()) {
+    exception_state.ThrowTypeError("data is detached.");
+    return;
+  }
+  if (total_bytes > data_wrapper.size()) {
     exception_state.ThrowTypeError(
-        String::Format("`data` is too small: needs %u bytes, received %zu.",
-                       total_bytes, source_data.ByteLength()));
+        String::Format("data is too small: needs %u bytes, received %zu.",
+                       total_bytes, data_wrapper.size()));
     return;
   }
 
   std::vector<const uint8_t*> wrapped_data;
   if (media::IsInterleaved(media_format)) {
     // Interleaved data can directly added.
-    wrapped_data.push_back(
-        reinterpret_cast<const uint8_t*>(source_data.Bytes()));
+    wrapped_data.push_back(data_wrapper.data());
   } else {
     // Planar data needs one pointer per channel.
     wrapped_data.resize(init->numberOfChannels());
@@ -162,7 +164,7 @@ AudioData::AudioData(AudioDataInit* init, ExceptionState& exception_state)
         media::SampleFormatToBytesPerChannel(media_format);
 
     const uint8_t* plane_start =
-        reinterpret_cast<const uint8_t*>(source_data.Bytes());
+        reinterpret_cast<const uint8_t*>(data_wrapper.data());
 
     for (unsigned ch = 0; ch < init->numberOfChannels(); ++ch)
       wrapped_data[ch] = plane_start + ch * plane_size_in_bytes;
@@ -243,8 +245,11 @@ uint64_t AudioData::duration() const {
 
 uint32_t AudioData::allocationSize(AudioDataCopyToOptions* copy_to_options,
                                    ExceptionState& exception_state) {
-  if (!data_)
+  if (!data_) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "AudioData is closed.");
     return 0;
+  }
 
   auto format = data_->sample_format();
   if (copy_to_options->hasFormat()) {
@@ -316,12 +321,12 @@ uint32_t AudioData::allocationSize(AudioDataCopyToOptions* copy_to_options,
   return allocation_size;
 }
 
-void AudioData::copyTo(const V8BufferSource* destination,
+void AudioData::copyTo(const AllowSharedBufferSource* destination,
                        AudioDataCopyToOptions* copy_to_options,
                        ExceptionState& exception_state) {
   if (!data_) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
-                                      "Cannot read closed AudioData.");
+                                      "Cannot copy closed AudioData.");
     return;
   }
 
@@ -332,8 +337,12 @@ void AudioData::copyTo(const V8BufferSource* destination,
     return;
 
   // Validate destination buffer.
-  DOMArrayPiece buffer(destination);
-  if (buffer.ByteLength() < static_cast<size_t>(copy_size_in_bytes)) {
+  auto dest_wrapper = AsSpan<uint8_t>(destination);
+  if (!dest_wrapper.data()) {
+    exception_state.ThrowRangeError("destination is detached.");
+    return;
+  }
+  if (dest_wrapper.size() < static_cast<size_t>(copy_size_in_bytes)) {
     exception_state.ThrowRangeError("destination is not large enough.");
     return;
   }
@@ -399,7 +408,7 @@ void AudioData::copyTo(const V8BufferSource* destination,
 
   const uint8_t* data_start = src_data + offset_in_bytes;
   CHECK_LE(data_start + copy_size_in_bytes, src_data + src_data_size);
-  memcpy(buffer.Bytes(), data_start, copy_size_in_bytes);
+  memcpy(dest_wrapper.data(), data_start, copy_size_in_bytes);
 }
 
 void AudioData::Trace(Visitor* visitor) const {

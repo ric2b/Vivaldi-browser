@@ -14,6 +14,8 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/sync/driver/sync_driver_switches.h"
+#include "components/sync/protocol/entity_specifics.pb.h"
+#include "components/sync/protocol/notes_specifics.pb.h"
 #include "components/sync_bookmarks/switches.h"
 #include "notes/note_node.h"
 #include "notes/notes_model.h"
@@ -102,22 +104,17 @@ std::string LegacyCanonicalizedTitleFromSpecifics(
 // title, two notes match by semantics if they have the same title, content and
 // url. Separators are matched by title as well. Folders, notes and separators
 // never match one another.
-bool NodeSemanticsMatch(const vivaldi::NoteNode* local_node,
-                        const std::string& remote_canonicalized_title,
-                        const GURL& remote_url,
-                        const std::u16string& remote_content,
-                        bool remote_is_separator,
-                        bool remote_is_folder) {
-  DCHECK(!remote_is_folder || !remote_is_separator);
-  if (local_node->is_folder() != remote_is_folder) {
+bool NodeSemanticsMatch(
+    const vivaldi::NoteNode* local_node,
+    const std::string& remote_canonicalized_title,
+    const GURL& remote_url,
+    const std::u16string& remote_content,
+    sync_pb::NotesSpecifics::VivaldiSpecialNotesType remote_type) {
+  if (GetProtoTypeFromNoteNode(local_node) != remote_type) {
     return false;
   }
 
-  if (local_node->is_separator() != remote_is_separator) {
-    return false;
-  }
-
-  if (!remote_is_folder && !remote_is_separator &&
+  if (remote_type == sync_pb::NotesSpecifics::NORMAL &&
       (local_node->GetURL() != remote_url ||
        local_node->GetContent() != remote_content)) {
     return false;
@@ -171,10 +168,12 @@ bool CompareDuplicateUpdates(const UpdateResponseData& next_update,
             previous_update.entity.specifics.notes().guid());
   DCHECK_NE(next_update.entity.id, previous_update.entity.id);
 
-  if (next_update.entity.is_folder != previous_update.entity.is_folder) {
+  if (next_update.entity.specifics.notes().special_node_type() !=
+      previous_update.entity.specifics.notes().special_node_type()) {
     // There are two entities, one of them is a folder and another one is a
     // regular note. Prefer to save the folder as it may contain many notes.
-    return next_update.entity.is_folder;
+    return next_update.entity.specifics.notes().special_node_type() ==
+           sync_pb::NotesSpecifics::FOLDER;
   }
   // Choose the latest element to keep if both updates have the same type.
   return next_update.entity.creation_time >
@@ -229,14 +228,17 @@ void DeduplicateValidUpdatesByGUID(UpdatesPerParentId* updates_per_parent_id) {
 
   for (std::list<UpdateResponseData>::iterator updates_iter :
        updates_to_remove) {
-    if (updates_iter->entity.is_folder) {
+    if (updates_iter->entity.specifics.notes().special_node_type() ==
+        sync_pb::NotesSpecifics::FOLDER) {
       const base::GUID guid = base::GUID::ParseLowercase(
           updates_iter->entity.specifics.notes().guid());
       DCHECK(base::Contains(guid_to_update, guid));
       DCHECK(guid_to_update[guid] != updates_iter);
 
       // Never remove a folder if its duplicate is a URL.
-      DCHECK(guid_to_update[guid]->entity.is_folder);
+      DCHECK_EQ(
+          guid_to_update[guid]->entity.specifics.notes().special_node_type(),
+          sync_pb::NotesSpecifics::FOLDER);
 
       // Merge doesn't affect iterators.
       ReparentAllChildren(
@@ -260,14 +262,7 @@ bool IsValidUpdate(const UpdateResponseData& update) {
   DCHECK(!update_entity.is_deleted());
   DCHECK(update_entity.server_defined_unique_tag.empty());
 
-  if (!update_entity.unique_position.IsValid()) {
-    // Ignore updates with invalid positions.
-    DLOG(ERROR) << "Remote update with invalid position: "
-                << update_entity.specifics.notes().legacy_canonicalized_title();
-    return false;
-  }
-  if (!IsValidNotesSpecifics(update_entity.specifics.notes(),
-                             update_entity.is_folder)) {
+  if (!IsValidNotesSpecifics(update_entity.specifics.notes())) {
     // Ignore updates with invalid specifics.
     DLOG(ERROR) << "Remote update with invalid specifics";
     return false;
@@ -349,7 +344,7 @@ void NoteModelMerger::RemoteTreeNode::EmplaceSelfAndDescendantsByGUID(
 bool NoteModelMerger::RemoteTreeNode::UniquePositionLessThan(
     const RemoteTreeNode& lhs,
     const RemoteTreeNode& rhs) {
-  return lhs.entity().unique_position.LessThan(rhs.entity().unique_position);
+  return lhs.unique_position_.LessThan(rhs.unique_position_);
 }
 
 // static
@@ -358,9 +353,13 @@ NoteModelMerger::RemoteTreeNode NoteModelMerger::RemoteTreeNode::BuildTree(
     size_t max_depth,
     UpdatesPerParentId* updates_per_parent_id) {
   DCHECK(updates_per_parent_id);
+  DCHECK(!update.entity.server_defined_unique_tag.empty() ||
+         IsValidUpdate(update));
 
   RemoteTreeNode node;
   node.update_ = std::move(update);
+  node.unique_position_ = syncer::UniquePosition::FromProto(
+      node.update_.entity.specifics.notes().unique_position());
 
   // Ensure we have not reached the maximum tree depth to guard against stack
   // overflows.
@@ -379,7 +378,8 @@ NoteModelMerger::RemoteTreeNode NoteModelMerger::RemoteTreeNode::BuildTree(
 
   // Only folders may have descendants (ignore them otherwise). Treat
   // permanent nodes as folders explicitly.
-  if (!node.update_.entity.is_folder &&
+  if (node.update_.entity.specifics.notes().special_node_type() !=
+          sync_pb::NotesSpecifics::FOLDER &&
       node.update_.entity.server_defined_unique_tag.empty()) {
     return node;
   }
@@ -388,8 +388,7 @@ NoteModelMerger::RemoteTreeNode NoteModelMerger::RemoteTreeNode::BuildTree(
   node.children_.reserve(updates_per_parent_id_iter->second.size());
   for (UpdateResponseData& child_update : updates_per_parent_id_iter->second) {
     DCHECK_EQ(child_update.entity.parent_id, node.entity().id);
-    DCHECK(IsValidNotesSpecifics(child_update.entity.specifics.notes(),
-                                 child_update.entity.is_folder));
+    DCHECK(IsValidNotesSpecifics(child_update.entity.specifics.notes()));
 
     node.children_.push_back(BuildTree(std::move(child_update), max_depth - 1,
                                        updates_per_parent_id));
@@ -445,11 +444,11 @@ void NoteModelMerger::Merge() {
                  /*remote_node=*/tree_tag_and_root.second);
   }
 
-  if (base::FeatureList::IsEnabled(switches::kSyncReuploadBookmarkFullTitles)) {
+  if (base::FeatureList::IsEnabled(switches::kSyncReuploadBookmarks)) {
     // When the reupload feature is enabled, all new empty trackers are
     // automatically reuploaded (since there are no entities to reupload). This
     // is used to disable reupload after initial merge.
-    note_tracker_->SetNotesFullTitleReuploaded();
+    note_tracker_->SetNotesReuploaded();
   }
 }
 
@@ -525,7 +524,8 @@ NoteModelMerger::FindGuidMatchesOrReassignLocal(
       continue;
     }
 
-    if (node->is_folder() != remote_entity.is_folder ||
+    if (GetProtoTypeFromNoteNode(node) !=
+            remote_entity.specifics.notes().special_node_type() ||
         (node->is_separator() &&
          remote_entity.specifics.notes().special_node_type() !=
              sync_pb::NotesSpecifics::SEPARATOR) ||
@@ -563,7 +563,7 @@ void NoteModelMerger::MergeSubtree(const vivaldi::NoteNode* local_subtree_root,
   const SyncedNoteTracker::Entity* entity = note_tracker_->Add(
       local_subtree_root, remote_update_entity.id,
       remote_node.response_version(), remote_update_entity.creation_time,
-      remote_update_entity.unique_position, remote_update_entity.specifics);
+      remote_update_entity.specifics);
   const bool is_reupload_needed =
       !local_subtree_root->is_permanent_node() &&
       IsNoteEntityReuploadNeeded(remote_update_entity);
@@ -707,18 +707,15 @@ void NoteModelMerger::ProcessRemoteCreation(
   DCHECK(!FindMatchingLocalNodeByGUID(remote_node));
 
   const EntityData& remote_update_entity = remote_node.entity();
-  DCHECK(IsValidNotesSpecifics(remote_update_entity.specifics.notes(),
-                               remote_update_entity.is_folder));
+  DCHECK(IsValidNotesSpecifics(remote_update_entity.specifics.notes()));
 
   const sync_pb::EntitySpecifics& specifics = remote_node.entity().specifics;
-  const vivaldi::NoteNode* note_node =
-      CreateNoteNodeFromSpecifics(specifics.notes(), local_parent, index,
-                                  remote_update_entity.is_folder, notes_model_);
+  const vivaldi::NoteNode* note_node = CreateNoteNodeFromSpecifics(
+      specifics.notes(), local_parent, index, notes_model_);
   DCHECK(note_node);
   const SyncedNoteTracker::Entity* entity = note_tracker_->Add(
       note_node, remote_update_entity.id, remote_node.response_version(),
-      remote_update_entity.creation_time, remote_update_entity.unique_position,
-      specifics);
+      remote_update_entity.creation_time, specifics);
   const bool is_reupload_needed =
       IsNoteEntityReuploadNeeded(remote_node.entity());
   if (is_reupload_needed) {
@@ -772,9 +769,9 @@ void NoteModelMerger::ProcessLocalCreation(const vivaldi::NoteNode* parent,
   const syncer::UniquePosition pos =
       GenerateUniquePositionForLocalCreation(parent, index, suffix);
   const sync_pb::EntitySpecifics specifics =
-      CreateSpecificsFromNoteNode(node, notes_model_);
+      CreateSpecificsFromNoteNode(node, notes_model_, pos.ToProto());
   const SyncedNoteTracker::Entity* entity = note_tracker_->Add(
-      node, sync_id, server_version, creation_time, pos, specifics);
+      node, sync_id, server_version, creation_time, specifics);
   // Mark the entity that it needs to be committed.
   note_tracker_->IncrementSequenceNumber(entity);
   for (size_t i = 0; i < node->children().size(); ++i) {
@@ -801,13 +798,11 @@ size_t NoteModelMerger::FindMatchingChildBySemanticsStartingAt(
   // matching local node.
   const std::string remote_canonicalized_title =
       LegacyCanonicalizedTitleFromSpecifics(remote_entity.specifics.notes());
-  const bool remote_is_folder = remote_entity.is_folder;
-  const bool remote_is_separator =
-      remote_entity.specifics.notes().special_node_type() ==
-      sync_pb::NotesSpecifics::SEPARATOR;
+  const sync_pb::NotesSpecifics::VivaldiSpecialNotesType remote_type =
+      remote_entity.specifics.notes().special_node_type();
   GURL remote_url;
   std::u16string remote_content;
-  if (!remote_entity.is_folder) {
+  if (remote_type == sync_pb::NotesSpecifics::NORMAL) {
     remote_url = GURL(remote_entity.specifics.notes().url());
     remote_content =
         base::UTF8ToUTF16(remote_entity.specifics.notes().content());
@@ -815,11 +810,10 @@ size_t NoteModelMerger::FindMatchingChildBySemanticsStartingAt(
   const auto it = std::find_if(
       children.cbegin() + starting_child_index, children.cend(),
       [this, &remote_canonicalized_title, &remote_url, &remote_content,
-       remote_is_separator, remote_is_folder](const auto& child) {
+       remote_type](const auto& child) {
         return !FindMatchingRemoteNodeByGUID(child.get()) &&
                NodeSemanticsMatch(child.get(), remote_canonicalized_title,
-                                  remote_url, remote_content,
-                                  remote_is_separator, remote_is_folder);
+                                  remote_url, remote_content, remote_type);
       });
   return (it == children.cend()) ? kInvalidIndex : (it - children.cbegin());
 }

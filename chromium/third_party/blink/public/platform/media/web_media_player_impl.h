@@ -56,8 +56,6 @@
 #include "platform_media/renderer/pipeline/protocol_sniffer.h"
 #endif
 
-class VivaldiMediaElementEventDelegate;
-
 namespace base {
 class SingleThreadTaskRunner;
 class TaskRunner;
@@ -302,9 +300,7 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerImpl
   enum { kMaxKeyframeDistanceToDisableBackgroundVideoMs = 5500 };
 
   // Vivaldi:
-  VivaldiMediaElementEventDelegate* GetMediaElementEventDelegate() override;
-  void SetMediaElementEventDelegate(
-      std::unique_ptr<VivaldiMediaElementEventDelegate> delegate);
+  WebLocalFrame* VivaldiGetOwnerWebFrame() override { return frame_; }
 
  private:
   friend class WebMediaPlayerImplTest;
@@ -1060,10 +1056,6 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerImpl
   // Time of the last call to GetCurrentFrameFromCompositor(). Used to prevent
   // background optimizations from being applied when capturing is active.
   base::TimeTicks last_frame_request_time_;
-
-  // Vivaldi:
-  std::unique_ptr<VivaldiMediaElementEventDelegate>
-      vivaldi_media_element_event_delegate_;
 
   base::WeakPtr<WebMediaPlayerImpl> weak_this_;
   base::WeakPtrFactory<WebMediaPlayerImpl> weak_factory_{this};

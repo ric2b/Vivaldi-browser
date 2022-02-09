@@ -5,6 +5,7 @@
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
 #include "base/strings/string_number_conversions.h"
+#include "browser/vivaldi_runtime_feature.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/platform_locale_settings.h"
@@ -21,7 +22,6 @@
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "extensions/api/features/vivaldi_runtime_feature.h"
 #include "extensions/api/runtime/runtime_api.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/helper/vivaldi_app_helper.h"

@@ -2,10 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/**
- * Background script for the Enhanced Network TTS engine.
- */
+import {EnhancedNetworkTts} from './enhanced_network_tts.js';
 
-// TODO(crbug.com/1215357): Implement TTS engine.
-chrome.ttsEngine.onSpeak.addListener(() => {});
-chrome.ttsEngine.onStop.addListener(() => {});
+InstanceChecker.closeExtraInstances();
+export const enhancedNetworkTts = new EnhancedNetworkTts();

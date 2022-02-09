@@ -15,7 +15,12 @@
 #include "base/time/time.h"
 #include "components/sync/base/client_tag_hash.h"
 #include "components/sync/protocol/entity_metadata.pb.h"
-#include "components/sync/protocol/notes_model_metadata.pb.h"
+#include "components/sync/protocol/model_type_state.pb.h"
+
+namespace sync_pb {
+class NotesModelMetadata;
+class EntitySpecifics;
+}  // namespace sync_pb
 
 namespace base {
 class GUID;
@@ -24,7 +29,6 @@ class GUID;
 namespace vivaldi {
 class NotesModel;
 class NoteNode;
-class UniquePosition;
 }  // namespace vivaldi
 
 namespace syncer {
@@ -52,9 +56,10 @@ class SyncedNoteTracker {
     // A commit may or may not be in progress at this time.
     bool IsUnsynced() const;
 
-    // Check whether |data| matches the stored specifics hash. It ignores parent
-    // information.
-    bool MatchesDataIgnoringParent(const syncer::EntityData& data) const;
+    // Check whether |data| matches the stored specifics hash. It also compares
+    // parent information, but only if present in specifics (M94 and above).
+    bool MatchesDataPossiblyIncludingParent(
+        const syncer::EntityData& data) const;
 
     // Check whether |specifics| matches the stored specifics_hash.
     bool MatchesSpecificsHash(const sync_pb::EntitySpecifics& specifics) const;
@@ -122,7 +127,7 @@ class SyncedNoteTracker {
 
   // This method is used to denote that all notes are reuploaded and there
   // is no need to reupload them again after next browser startup.
-  void SetNotesFullTitleReuploaded();
+  void SetNotesReuploaded();
 
   // Returns null if no entity is found.
   const Entity* GetEntityForSyncId(const std::string& sync_id) const;
@@ -142,7 +147,6 @@ class SyncedNoteTracker {
                     const std::string& sync_id,
                     int64_t server_version,
                     base::Time creation_time,
-                    const syncer::UniquePosition& unique_position,
                     const sync_pb::EntitySpecifics& specifics);
 
   // Updates the sync metadata for a tracked entity. |entity| must be owned by
@@ -150,7 +154,6 @@ class SyncedNoteTracker {
   void Update(const Entity* entity,
               int64_t server_version,
               base::Time modification_time,
-              const syncer::UniquePosition& unique_position,
               const sync_pb::EntitySpecifics& specifics);
 
   // Updates the server version of an existing entity. |entity| must be owned by
@@ -210,8 +213,7 @@ class SyncedNoteTracker {
   // Informs the tracker that the sync ID for |entity| has changed. It updates
   // the internal state of the tracker accordingly. |entity| must be owned by
   // this tracker.
-  void UpdateSyncIdForLocalCreationIfNeeded(const Entity* entity,
-                                            const std::string& sync_id);
+  void UpdateSyncIdIfNeeded(const Entity* entity, const std::string& sync_id);
 
   // Informs the tracker that a NoteNode has been replaced. It updates
   // the internal state of the tracker accordingly.
@@ -251,10 +253,10 @@ class SyncedNoteTracker {
 
   // This method is used to mark all entities except permanent nodes as
   // unsynced. This will cause reuploading of all notes. The reupload will be
-  // initiated only when the |notes_full_title_reuploaded| field in
+  // initiated only when the |notes_hierarchy_fields_reuploaded| field in
   // NotesMetadata is false. This field is used to prevent reuploading after
   // each browser restart. Returns true if the reupload was initiated.
-  // TODO(crbug.com/1066962): remove this code when most of notes are
+  // TODO(crbug.com/1232951): remove this code when most of notes are
   // reuploaded.
   bool ReuploadNotesOnLoadIfNeeded();
 
@@ -264,7 +266,7 @@ class SyncedNoteTracker {
 
  private:
   explicit SyncedNoteTracker(sync_pb::ModelTypeState model_type_state,
-                             bool notes_full_title_reuploaded,
+                             bool notes_reuploaded,
                              base::Time last_sync_time);
 
   // Add entities to |this| tracker based on the content of |*model| and
@@ -317,10 +319,10 @@ class SyncedNoteTracker {
   sync_pb::ModelTypeState model_type_state_;
 
   // This field contains the value of
-  // NotesMetadata::notes_full_title_reuploaded.
-  // TODO(crbug.com/1066962): remove this code when most of notes are
+  // NotesMetadata::notes_hierarchy_fields_reuploaded.
+  // TODO(crbug.com/1232951): remove this code when most of notes are
   // reuploaded.
-  bool notes_full_title_reuploaded_ = false;
+  bool notes_reuploaded_ = false;
 
   // The local timestamp corresponding to the last time remote updates were
   // received.

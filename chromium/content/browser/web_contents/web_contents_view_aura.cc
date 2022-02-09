@@ -270,7 +270,7 @@ void PrepareDragData(const DropData& drop_data,
   if (!drop_data.custom_data.empty()) {
     base::Pickle pickle;
     ui::WriteCustomDataToPickle(drop_data.custom_data, &pickle);
-    provider->SetPickledData(ui::ClipboardFormatType::GetWebCustomDataType(),
+    provider->SetPickledData(ui::ClipboardFormatType::WebCustomDataType(),
                              pickle);
   }
 }
@@ -350,7 +350,7 @@ void PrepareDropData(DropData* drop_data, const ui::OSExchangeData& data) {
           pickle, &file_system_files))
     drop_data->file_system_files = file_system_files;
 
-  if (data.GetPickledData(ui::ClipboardFormatType::GetWebCustomDataType(),
+  if (data.GetPickledData(ui::ClipboardFormatType::WebCustomDataType(),
                           &pickle))
     ui::ReadCustomDataIntoMap(
         pickle.data(), pickle.size(), &drop_data->custom_data);

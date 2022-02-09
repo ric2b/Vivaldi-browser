@@ -66,6 +66,8 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/web_test_support.h"
 
+#include "renderer/blink/vivaldi_render_frame_blink_proxy.h"
+
 namespace blink {
 
 namespace {
@@ -391,7 +393,7 @@ void HTMLVideoElement::PaintCurrentFrame(cc::PaintCanvas* canvas,
     media_flags = *flags;
   } else {
     media_flags.setAlpha(0xFF);
-    media_flags.setFilterQuality(kLow_SkFilterQuality);
+    media_flags.setFilterQuality(cc::PaintFlags::FilterQuality::kLow);
     media_flags.setBlendMode(SkBlendMode::kSrc);
   }
 
@@ -745,12 +747,7 @@ void HTMLVideoElement::OnWebMediaPlayerCreated() {
     if (auto* vfc_requester = VideoFrameCallbackRequester::From(*this))
       vfc_requester->OnWebMediaPlayerCreated();
   }
-  if (GetWebMediaPlayer() &&
-      GetWebMediaPlayer()->GetMediaElementEventDelegate()) {
-    GetWebMediaPlayer()
-        ->GetMediaElementEventDelegate()
-        ->SendAddedEventToBrowser();
-  }
+  VivaldiRenderFrameBlinkProxy::SendMediaElementAddedEvent(GetWebMediaPlayer());
 }
 
 void HTMLVideoElement::OnWebMediaPlayerCleared() {

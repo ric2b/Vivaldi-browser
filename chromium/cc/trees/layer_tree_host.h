@@ -441,6 +441,9 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
 
   void UpdateViewportIsMobileOptimized(bool is_viewport_mobile_optimized);
 
+  // Returns if the viewport is considered to be mobile optimized.
+  bool IsMobileOptimized() const;
+
   void SetPrefersReducedMotion(bool prefers_reduced_motion);
 
   void SetBrowserControlsParams(const BrowserControlsParams& params);

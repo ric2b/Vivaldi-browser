@@ -22,7 +22,7 @@
                                                  &ext_data))               \
       return;                                                              \
                                                                            \
-    current_window->ext_data.swap(ext_data);                               \
+    current_window->first->ext_data.swap(ext_data);                               \
     break;                                                                 \
   }                                                                        \
                                                                            \

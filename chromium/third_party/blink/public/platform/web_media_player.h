@@ -47,8 +47,6 @@
 #include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
 
-#include "renderer/vivaldi_media_element_event_delegate.h"
-
 namespace cc {
 class PaintCanvas;
 class PaintFlags;
@@ -66,6 +64,9 @@ class WebMediaPlayerSource;
 class WebString;
 class WebURL;
 enum class WebFullscreenVideoStatus;
+
+// Vivaldi addition
+class WebLocalFrame;
 
 class WebMediaPlayer {
  public:
@@ -376,7 +377,7 @@ class WebMediaPlayer {
   virtual void UpdateFrameIfStale() {}
 
   // Vivaldi:
-  virtual VivaldiMediaElementEventDelegate* GetMediaElementEventDelegate() = 0;
+  virtual WebLocalFrame* VivaldiGetOwnerWebFrame() = 0;
 
   virtual base::WeakPtr<WebMediaPlayer> AsWeakPtr() = 0;
 };

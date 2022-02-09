@@ -1296,5 +1296,4 @@ void RequestFilterProxyingURLLoaderFactory::MaybeRemoveProxy() {
   // Deletes |this|.
   proxies_->RemoveProxy(this);
 }
-
 }  // namespace vivaldi

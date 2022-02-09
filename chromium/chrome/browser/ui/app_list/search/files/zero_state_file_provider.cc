@@ -61,7 +61,7 @@ bool IsSuggestedContentEnabled(Profile* profile) {
 }  // namespace
 
 ZeroStateFileProvider::ZeroStateFileProvider(Profile* profile)
-    : profile_(profile) {
+    : profile_(profile), thumbnail_loader_(profile) {
   DCHECK(profile_);
   task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
       {base::TaskPriority::BEST_EFFORT, base::MayBlock(),
@@ -84,16 +84,6 @@ ZeroStateFileProvider::ZeroStateFileProvider(Profile* profile)
         "ZeroStateLocalFiles",
         profile->GetPath().AppendASCII("zero_state_local_files.pb"), config,
         chromeos::ProfileHelper::IsEphemeralUserProfile(profile));
-  }
-
-  // Normalize scores if the launcher search normalization experiment is
-  // enabled, but don't if the categorical search experiment is also enabled.
-  // This is because categorical search normalizes scores from all providers
-  // during ranking, and we don't want to do it twice.
-  if (base::FeatureList::IsEnabled(
-          app_list_features::kEnableLauncherSearchNormalization) &&
-      !app_list_features::IsCategoricalSearchEnabled()) {
-    normalizer_.emplace("zero_state_file_provider", profile, 25);
   }
 }
 
@@ -125,10 +115,12 @@ void ZeroStateFileProvider::SetSearchResults(
   // Use valid results for search results.
   SearchProvider::Results new_results;
   for (const auto& filepath_score : results.first) {
-    new_results.emplace_back(std::make_unique<FileResult>(
+    auto result = std::make_unique<FileResult>(
         kZeroStateFileSchema, filepath_score.first,
         ash::AppListSearchResultType::kZeroStateFile,
-        ash::SearchResultDisplayType::kList, filepath_score.second, profile_));
+        ash::SearchResultDisplayType::kList, filepath_score.second, profile_);
+    result->RequestThumbnail(&thumbnail_loader_);
+    new_results.push_back(std::move(result));
 
     // Add suggestion chip file results
     if (app_list_features::IsSuggestedFilesEnabled() &&
@@ -139,11 +131,6 @@ void ZeroStateFileProvider::SetSearchResults(
                                        ash::SearchResultDisplayType::kChip,
                                        filepath_score.second, profile_));
     }
-  }
-
-  if (normalizer_.has_value()) {
-    normalizer_->RecordResults(new_results);
-    normalizer_->NormalizeResults(&new_results);
   }
 
   UMA_HISTOGRAM_TIMES("Apps.AppList.ZeroStateFileProvider.Latency",

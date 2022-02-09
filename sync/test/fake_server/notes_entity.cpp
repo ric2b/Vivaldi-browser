@@ -10,6 +10,7 @@
 
 #include "base/guid.h"
 #include "components/sync/base/model_type.h"
+#include "components/sync/protocol/loopback_server.pb.h"
 #include "components/sync/protocol/sync.pb.h"
 
 using std::string;

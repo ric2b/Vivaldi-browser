@@ -970,11 +970,22 @@ const PrepopulatedEngine* const engines_UA[] = {
 
 // United States
 const PrepopulatedEngine* const engines_US[] = {
+#if defined (VIVALDI_BUILD) && defined(OS_ANDROID)
+    &bing_viv,
+    &yahoo_viv,
+    &duckduckgo_viv,
+    &neeva_viv,
+    &ecosia_viv,
+    &startpage_com_viv,
+    &wikipedia_viv,
+    &google_viv,
+#else
     &google,
     &bing,
     &yahoo,
     &duckduckgo,
     &ecosia,
+#endif
 };
 
 // Uruguay
@@ -1410,10 +1421,13 @@ std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedEngines(
   if (vivaldi::IsVivaldiRunning()) {
     const int country_id_ru = country_codes::CountryCharsToCountryID('R', 'U');
     const int country_id_tr = country_codes::CountryCharsToCountryID('T', 'R');
+    const int country_id_us = country_codes::CountryCharsToCountryID('U', 'S');
     if (country_codes::GetCurrentCountryID() == country_id_ru)
         t_urls = GetPrepopulationSetFromCountryID(country_id_ru);
     else if (country_codes::GetCurrentCountryID() == country_id_tr)
         t_urls = GetPrepopulationSetFromCountryID(country_id_tr);
+    else if (country_codes::GetCurrentCountryID() == country_id_us)
+        t_urls = GetPrepopulationSetFromCountryID(country_id_us);
     else
         t_urls =
             GetPrepopulationSetFromCountryID(country_codes::kCountryIDUnknown);

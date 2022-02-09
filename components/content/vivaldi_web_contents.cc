@@ -26,9 +26,9 @@ const std::string& WebContentsImpl::GetExtData() const {
 }
 
 void FrameTreeNode::DidChangeLoadProgressExtended(double load_progress,
-  double loaded_bytes,
-  int loaded_elements,
-  int total_elements) {
+                                                  double loaded_bytes,
+                                                  int loaded_elements,
+                                                  int total_elements) {
   loaded_bytes_ = loaded_bytes;
   loaded_elements_ = loaded_elements;
   total_elements_ = total_elements;

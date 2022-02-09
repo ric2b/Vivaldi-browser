@@ -15,7 +15,15 @@ ExtensionFunction::ResponseAction AutoUpdateCheckForUpdatesFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  LOG(INFO) << "Sparkle hook";
+  AppController* controller =
+    base::mac::ObjCCastStrict<AppController>([NSApp delegate]);
+
+  if (params->with_ui) {
+    [controller checkForUpdates:nil];
+  } else {
+    [controller checkForUpdatesInBackground];
+  }
+
   return RespondNow(NoArguments());
 }
 
@@ -44,7 +52,7 @@ AutoUpdateInstallUpdateAndRestartFunction::Run() {
 
 ExtensionFunction::ResponseAction
 AutoUpdateGetAutoInstallUpdatesFunction::Run() {
-  namespace Results = vivaldi::auto_update::IsUpdateNotifierEnabled::Results;
+  namespace Results = vivaldi::auto_update::GetAutoInstallUpdates::Results;
   using ::vivaldi::kSparkleAutoInstallSettingName;
 
   NSString* key =
@@ -67,6 +75,21 @@ AutoUpdateSetAutoInstallUpdatesFunction::Run() {
                                           forKey:key];
 
   return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+AutoUpdateGetLastCheckTimeFunction::Run() {
+  namespace Results = vivaldi::auto_update::GetLastCheckTime::Results;
+  using ::vivaldi::kSparkleLastCheckTimeSettingName;
+
+  NSString* key =
+      [NSString stringWithUTF8String:kSparkleLastCheckTimeSettingName];
+  NSDate* value = [[NSUserDefaults standardUserDefaults] objectForKey:key];
+  double result = 0;
+  if (value) {
+    result = [@(floor([value timeIntervalSince1970] * 1000)) doubleValue];
+  }
+  return RespondNow(ArgumentList(Results::Create(result)));
 }
 
 ExtensionFunction::ResponseAction AutoUpdateGetUpdateStatusFunction::Run() {

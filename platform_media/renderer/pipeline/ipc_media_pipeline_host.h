@@ -45,7 +45,7 @@ class IPCMediaPipelineHost : public platform_media::mojom::PipelineDataSource {
   IPCMediaPipelineHost();
   ~IPCMediaPipelineHost() override;
 
-  static bool IsAvailable() { return g_available; }
+  static bool IsAvailable();
 
   DataSource* data_source() const { return data_source_; }
   int bitrate() const { return bitrate_; }

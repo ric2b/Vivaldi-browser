@@ -40,7 +40,7 @@ default_args.enable_nacl = false
 default_args.enable_ipc_fuzzer = false
 
 # We don't need the Chrome field trials
-default_args.fieldtrial_testing_like_official_build = true
+default_args.disable_fieldtrial_testing_config = true
 
 # Don't need this normally
 default_args.chrome_pgo_phase = 0

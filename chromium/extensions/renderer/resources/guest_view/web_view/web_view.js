@@ -140,21 +140,17 @@ WebViewImpl.prototype.onSizeChanged = function(webViewEvent) {
 };
 
 WebViewImpl.prototype.createGuest = function() {
-  var params = this.buildParams();
+  const params = this.buildParams();
   if (GuestViewInternalNatives.IsVivaldi()) {
-  params['storagePartitionId'] = this.attributes[
-      WebViewConstants.ATTRIBUTE_PARTITION].getValue();
+    if (this.attributes[WebViewConstants.ATTRIBUTE_TAB_ID].getValue()) {
+      params['tab_id'] = Number(this.attributes[
+          WebViewConstants.ATTRIBUTE_TAB_ID].getValue());
+    }
 
-  if (this.attributes[WebViewConstants.ATTRIBUTE_TAB_ID].getValue()) {
-    params['tab_id'] = Number(this.attributes[
-        WebViewConstants.ATTRIBUTE_TAB_ID].getValue());
-  }
-
-  if (this.attributes[WebViewConstants.ATTRIBUTE_INSPECT_TAB_ID].getValue()) {
-    params['inspect_tab_id'] = Number(this.attributes[
-        WebViewConstants.ATTRIBUTE_INSPECT_TAB_ID].getValue());
-  }
-
+    if (this.attributes[WebViewConstants.ATTRIBUTE_INSPECT_TAB_ID].getValue()) {
+      params['inspect_tab_id'] = Number(this.attributes[
+          WebViewConstants.ATTRIBUTE_INSPECT_TAB_ID].getValue());
+    }
   }
 
   this.guest.create(params, $Function.bind(function() {

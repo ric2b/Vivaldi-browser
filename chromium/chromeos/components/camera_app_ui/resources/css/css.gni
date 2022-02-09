@@ -3,11 +3,13 @@
 # found in the LICENSE file.
 
 css_files = [
+  "button.css",
+  "document_mode_dialog.css",
   "focus_ring.css",
   "inkdrop.css",
   "main.css",
+  "new_feature_toast.css",
   "ptz_panel.css",
-  "ptz_toast.css",
-  "ripple.css",
-  "scanner.css",
+  "review_document.css",
+  "scan.css",
 ]

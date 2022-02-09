@@ -24,6 +24,8 @@
 #include "content/public/browser/web_contents.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace {
 
 bool IsFullScreenMode(content::WebContents* web_contents, Browser* browser) {
@@ -64,7 +66,7 @@ std::unique_ptr<permissions::PermissionPrompt> CreatePermissionPrompt(
   }
 
   if (delegate->Requests().size() == 1U &&
-      delegate->Requests()[0]->GetRequestType() ==
+      delegate->Requests()[0]->request_type() ==
           permissions::RequestType::kFileHandling) {
     return FileHandlingPermissionPrompt::Create(web_contents, delegate);
   }
@@ -300,6 +302,11 @@ void PermissionPromptImpl::ShowChip() {
 }
 
 bool PermissionPromptImpl::ShouldCurrentRequestUseChip() {
+
+  if (vivaldi::IsVivaldiRunning()) {
+    return false;
+  }
+
   if (!base::FeatureList::IsEnabled(permissions::features::kPermissionChip))
     return false;
 
@@ -317,9 +324,9 @@ bool PermissionPromptImpl::ShouldCurrentRequestUseQuietChip() {
 
   std::vector<permissions::PermissionRequest*> requests = delegate_->Requests();
   return std::all_of(requests.begin(), requests.end(), [](auto* request) {
-    return request->GetRequestType() ==
+    return request->request_type() ==
                permissions::RequestType::kNotifications ||
-           request->GetRequestType() == permissions::RequestType::kGeolocation;
+           request->request_type() == permissions::RequestType::kGeolocation;
   });
 }
 

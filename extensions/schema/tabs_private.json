@@ -76,6 +76,9 @@
         "type": "object",
         "description": "Provides custom drag data.",
         "properties": {
+          "windowId": {
+            "type": "integer"
+          },
           "mimeType": {
             "type": "string",
             "description": "The mime type to use for the custom data."

@@ -167,6 +167,10 @@ class VivaldiBrowserWindow final
   // browser is null or is not held by a Vivaldi Window.
   static VivaldiBrowserWindow* FromBrowser(const Browser* browser);
 
+  // Get the Vivaldi Window with the given id or null if such windows does not
+  // exist or was closed.
+  static VivaldiBrowserWindow* FromId(SessionID::id_type window_id);
+
   // Create a new VivaldiBrowserWindow;
   static VivaldiBrowserWindow* CreateVivaldiBrowserWindow(
       std::unique_ptr<Browser> browser);
@@ -176,6 +180,8 @@ class VivaldiBrowserWindow final
   const Browser* browser() const { return browser_.get(); }
   content::WebContents* web_contents() const { return web_contents_.get(); }
 
+  // Use the id together with FromId() to store long-term references to the
+  // window.
   SessionID::id_type id() const { return browser()->session_id().id(); }
 
   VivaldiNativeAppWindowViews* views() const { return views_.get(); }
@@ -269,6 +275,10 @@ class VivaldiBrowserWindow final
   bool IsToolbarVisible() const override;
   void ShowUpdateChromeDialog() override {}
   void ShowBookmarkBubble(const GURL& url, bool already_bookmarked) override {}
+  sharing_hub::ScreenshotCapturedBubble* ShowScreenshotCapturedBubble(
+      content::WebContents* contents,
+      const gfx::Image& image,
+      sharing_hub::ScreenshotCapturedBubbleController* controller) override;
   qrcode_generator::QRCodeGeneratorBubbleView* ShowQRCodeGeneratorBubble(
       content::WebContents* contents,
       qrcode_generator::QRCodeGeneratorBubbleController* controller,
@@ -340,7 +350,8 @@ class VivaldiBrowserWindow final
       const std::string& site_id,
       base::OnceClosure success_callback,
       base::OnceClosure failure_callback,
-      const std::map<std::string, bool>& product_specific_data) override {}
+      const SurveyBitsData& product_specific_bits_data,
+      const SurveyStringData& product_specific_string_data) override {}
   std::unique_ptr<content::EyeDropper> OpenEyeDropper(
       content::RenderFrameHost* frame,
       content::EyeDropperListener* listener) override;
@@ -349,6 +360,7 @@ class VivaldiBrowserWindow final
   void CloseTabSearchBubble() override {}
   FeaturePromoController* GetFeaturePromoController() override;
   void ShowIncognitoClearBrowsingDataDialog() override {}
+  void ShowIncognitoHistoryDisclaimerDialog() override {}
   // BrowserWindow overrides end
 
   // BaseWindow overrides

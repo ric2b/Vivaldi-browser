@@ -13,7 +13,7 @@ except:
 
 modules = {}
 
-for m in re.findall(r"(.*node_modules[/\\]((@[^/\\]+)?[^@][^/\\]+))", maindeps):
+for m in re.findall(r"(.*node_modules[/\\]((@[^/\\]+[/\\])?[^@][^/\\\n]+))\n", maindeps):
   moduledir = m[0]
   modulename = m[1]
   if (moduledir in modules

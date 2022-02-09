@@ -22,6 +22,7 @@ import org.chromium.base.test.UiThreadTest;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
+import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.util.concurrent.TimeUnit;
 
@@ -42,7 +43,7 @@ public class PriceDropMetricsLoggerTest {
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
+        TestThreadUtils.runOnUiThreadBlocking(() -> MockitoAnnotations.initMocks(this));
         doReturn("offer-id").when(mShoppingPersistedTabData).getMainOfferId();
         doReturn(true).when(mShoppingPersistedTabData).hasPriceMicros();
         doReturn(true).when(mShoppingPersistedTabData).hasPreviousPriceMicros();
@@ -147,5 +148,25 @@ public class PriceDropMetricsLoggerTest {
         Assert.assertEquals(1,
                 RecordHistogram.getHistogramTotalCountForTesting(
                         "Commerce.PriceDrops.ActiveTabEnterTabSwitcher.ContainsPriceDrop"));
+    }
+
+    @UiThreadTest
+    @SmallTest
+    @Test
+    public void testEmptyPriceDropResponse() {
+        doReturn(null).when(mShoppingPersistedTabData).getMainOfferId();
+        doReturn(false).when(mShoppingPersistedTabData).hasPriceMicros();
+        doReturn(false).when(mShoppingPersistedTabData).hasPreviousPriceMicros();
+        mPriceDropMetricsLogger.logPriceDropMetrics(
+                "EnterTabSwitcher", TimeUnit.HOURS.toMillis(12));
+        Assert.assertEquals(1,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        "Commerce.PriceDrops.ActiveTabEnterTabSwitcher.IsProductDetailPage", 0));
+        Assert.assertEquals(1,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        "Commerce.PriceDrops.ActiveTabEnterTabSwitcher.ContainsPrice", 0));
+        Assert.assertEquals(1,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        "Commerce.PriceDrops.ActiveTabEnterTabSwitcher.ContainsPriceDrop", 0));
     }
 }

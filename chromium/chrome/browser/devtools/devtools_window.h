@@ -266,6 +266,10 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
     content::WebContents* inspected_web_contents);
   void ForceCloseWindow();
 
+  // Vivaldi
+  static DevToolsWindow* FindWindowByDevtoolsWebContents(
+    content::WebContents* devtools_web_contents);
+
  private:
   friend class DevToolsWindowTesting;
   friend class DevToolsWindowCreationObserver;
@@ -384,11 +388,6 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
       const content::NativeWebKeyboardEvent& event) override;
   content::JavaScriptDialogManager* GetJavaScriptDialogManager(
       content::WebContents* source) override;
-  std::unique_ptr<content::ColorChooser> OpenColorChooser(
-      content::WebContents* web_contents,
-      SkColor color,
-      const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions)
-      override;
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
                       scoped_refptr<content::FileSelectListener> listener,
                       const blink::mojom::FileChooserParams& params) override;

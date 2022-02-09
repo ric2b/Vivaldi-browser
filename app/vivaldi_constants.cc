@@ -58,4 +58,5 @@ const char kWindowExtDataKey[] = "extData";
 const wchar_t kUpdateNotifierAutorunName[] = L"Vivaldi Update Notifier";
 
 const char kSparkleAutoInstallSettingName[] = "SUAutomaticallyUpdate";
+const char kSparkleLastCheckTimeSettingName[] = "SULastCheckTime";
 }  // namespace vivaldi

@@ -62,6 +62,7 @@
 #include "extensions/tools/vivaldi_tools.h"
 
 #include "components/strings/grit/components_strings.h"
+#include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
 
 class Browser;
@@ -340,8 +341,6 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  std::u16string dialog_title;
-
   std::vector<std::string>& ids = params->items_to_import;
   size_t count = ids.size();
   if (count < 9) {
@@ -387,16 +386,19 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
 
   imported_items_ = (selected_items & supported_items);
 
-  base::FilePath path;
+  SessionID::id_type window_id = params->window_id;
+  std::u16string dialog_title;
   if (importer_type_ == importer::TYPE_BOOKMARKS_FILE) {
     dialog_title =
         l10n_util::GetStringUTF16(IDS_IMPORT_HTML_BOOKMARKS_FILE_TITLE);
-    return HandleChooseBookmarksFileOrFolder(dialog_title, "html", path, true);
+    return HandleChooseBookmarksFileOrFolder(window_id, dialog_title, "html",
+                                             base::FilePath(), true);
   } else if (importer_type_ == importer::TYPE_OPERA_BOOKMARK_FILE) {
     dialog_title =
         l10n_util::GetStringUTF16(IDS_IMPORT_OPERA_BOOKMARKS_FILE_TITLE);
-    path = path.AppendASCII("bookmarks.adr");
-    return HandleChooseBookmarksFileOrFolder(dialog_title, "adr", path, true);
+    base::FilePath path(FILE_PATH_LITERAL("bookmarks.adr"));
+    return HandleChooseBookmarksFileOrFolder(window_id, dialog_title, "adr",
+                                             path, true);
   } else if ((importer_type_ == importer::TYPE_OPERA ||
               importer_type_ == importer::TYPE_EDGE_CHROMIUM ||
               importer_type_ == importer::TYPE_BRAVE ||
@@ -413,7 +415,8 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
       dialog_title =
           l10n_util::GetStringUTF16(IDS_IMPORT_VIVALDI_PROFILE_TITLE);
     }
-    return HandleChooseBookmarksFileOrFolder(dialog_title, "ini", path, false);
+    return HandleChooseBookmarksFileOrFolder(window_id, dialog_title, "ini",
+                                             base::FilePath(), false);
   } else {
     if (imported_items_) {
       StartImport(source_profile);
@@ -427,21 +430,19 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
 
 ExtensionFunction::ResponseAction
 ImportDataStartImportFunction::HandleChooseBookmarksFileOrFolder(
+    SessionID::id_type window_id,
     const std::u16string& title,
     base::StringPiece extension,
     const base::FilePath& default_file,
     bool file_selection) {
-  if (!dispatcher())
-    return RespondNow(Error("Extension was unloaded"));
-  content::WebContents* web_contents = dispatcher()->GetAssociatedWebContents();
+  VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromId(window_id);
+  if (!window) {
+    return RespondNow(Error("No such window"));
+  }
 
   AddRef();
 
   select_file_dialog_ = ui::SelectFileDialog::Create(this, nullptr);
-
-  gfx::NativeWindow window =
-      web_contents ? platform_util::GetTopLevel(web_contents->GetNativeView())
-                   : nullptr;
 
   ui::SelectFileDialog::FileTypeInfo file_type_info;
 
@@ -455,7 +456,7 @@ ImportDataStartImportFunction::HandleChooseBookmarksFileOrFolder(
       file_selection ? ui::SelectFileDialog::SELECT_OPEN_FILE
                      : ui::SelectFileDialog::SELECT_FOLDER,
       title, default_file, &file_type_info, 0, base::FilePath::StringType(),
-      window, nullptr);
+      window->GetNativeWindow(), nullptr);
   return RespondLater();
 }
 

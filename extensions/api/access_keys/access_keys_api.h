@@ -3,10 +3,11 @@
 #ifndef EXTENSIONS_API_ACCESS_KEYS_H_
 #define EXTENSIONS_API_ACCESS_KEYS_H_
 
-#include "extensions/browser/extension_function.h"
-#include "renderer/mojo/vivaldi_tabs_private.mojom.h"
-
 #include <string>
+
+#include "extensions/browser/extension_function.h"
+
+#include "renderer/mojo/vivaldi_frame_service.mojom.h"
 
 namespace extensions {
 

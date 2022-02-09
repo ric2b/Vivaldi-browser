@@ -14,7 +14,6 @@
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/website_settings_registry.h"
 #include "components/content_settings/core/common/content_settings.h"
-#include "net/cookies/cookie_util.h"
 
 #if defined(OS_ANDROID)
 #include "media/base/android/media_drm_bridge.h"
@@ -345,13 +344,9 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_AND_INSECURE_ORIGINS);
 
-  ContentSetting legacy_cookie_access_initial_default =
-      net::cookie_util::IsSameSiteByDefaultCookiesEnabled()
-          ? CONTENT_SETTING_BLOCK
-          : CONTENT_SETTING_ALLOW;
   Register(ContentSettingsType::LEGACY_COOKIE_ACCESS, "legacy-cookie-access",
-           legacy_cookie_access_initial_default,
-           WebsiteSettingsInfo::UNSYNCABLE, AllowlistedSchemes(),
+           CONTENT_SETTING_BLOCK, WebsiteSettingsInfo::UNSYNCABLE,
+           AllowlistedSchemes(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
            WebsiteSettingsRegistry::ALL_PLATFORMS,
@@ -592,7 +587,11 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
 
   Register(ContentSettingsType::IDLE_DETECTION, "idle-detection",
+#if defined(VIVALDI_BUILD)
+           CONTENT_SETTING_BLOCK, WebsiteSettingsInfo::UNSYNCABLE,
+#else
            CONTENT_SETTING_ASK, WebsiteSettingsInfo::UNSYNCABLE,
+#endif  // defined(VIVALDI_BUILD)
            AllowlistedSchemes(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_ASK,
                          CONTENT_SETTING_BLOCK),

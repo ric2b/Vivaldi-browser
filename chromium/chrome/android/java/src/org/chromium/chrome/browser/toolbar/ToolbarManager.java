@@ -852,12 +852,6 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
                     mControlContainer.addOnLayoutChangeListener(mLayoutChangeListener);
                 }
             }
-
-            @Override
-            public void onAndroidVisibilityChanged(int visibility) {
-                // TODO(crbug/1223069): Remove this workaround for default method desugaring in D8
-                // causing AbstractMethodErrors in some cases once fixed upstream.
-            }
         };
         mBrowserControlsSizer.addObserver(mBrowserControlsObserver);
 
@@ -1207,10 +1201,12 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
     public void enableBottomControls() {
         if (!(mActivity instanceof ChromeTabbedActivity)) return;
         View root = ((ViewStub) mActivity.findViewById(R.id.bottom_controls_stub)).inflate();
-        // Note(David@vivaldi.com): For now we don't support tab stacking.
-        if (!ChromeApplicationImpl.isVivaldi())
+        // Note(david@vivaldi.com): Depending on the address-bar position we apply the correct
+        // |ThemeColorProvider|.
+        ThemeColorProvider tabGroupUiThemeProvider =
+                VivaldiUtils.isTopToolbarOn() ? mAppThemeColorProvider : mTopUiThemeColorProvider;
         mTabGroupUi = TabManagementModuleProvider.getDelegate().createTabGroupUi(mActivity,
-                root.findViewById(R.id.bottom_container_slot), mAppThemeColorProvider,
+                root.findViewById(R.id.tab_group_ui_toolbar_view), tabGroupUiThemeProvider, // Vivaldi
                 mScrimCoordinator, mOmniboxFocusStateSupplier, mBottomSheetController,
                 mActivityLifecycleDispatcher, mIsWarmOnResumeSupplier, mTabModelSelector,
                 mTabContentManager, mCompositorViewHolder,
@@ -1630,7 +1626,7 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
                     && !(activity.isCustomTab()))
                 || activity.isTablet()) {
             color = ChromeColors.getDefaultThemeColor(
-                    mActivity.getResources(), mLocationBarModel.isIncognito());
+                    mActivity, mLocationBarModel.isIncognito());
         }
 
         boolean colorChanged = mCurrentThemeColor != color;
@@ -1873,8 +1869,7 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
             mActionModeController.startHideAnimation();
         }
         if (previousTab != tab || wasIncognito != isIncognito) {
-            int defaultPrimaryColor =
-                    ChromeColors.getDefaultThemeColor(mActivity.getResources(), isIncognito);
+            int defaultPrimaryColor = ChromeColors.getDefaultThemeColor(mActivity, isIncognito);
             int primaryColor = tab != null
                     ? mTopUiThemeColorProvider.calculateColor(tab, tab.getThemeColor())
                     : defaultPrimaryColor;

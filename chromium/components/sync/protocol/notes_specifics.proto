@@ -16,6 +16,8 @@ option optimize_for = LITE_RUNTIME;
 
 package sync_pb;
 
+import "components/sync/protocol/unique_position.proto";
+
 // Corresponds to a single attachment itemt for a notes entry.
 message NotesAttachmentDeprecated {
   optional string filename = 1;
@@ -31,9 +33,10 @@ message NoteAttachment {
 message NotesSpecifics {
   enum VivaldiSpecialNotesType {
     NORMAL = 0;
-    // TRASH_NODE is probably not needed anymore
-    TRASH_NODE = 1;
     SEPARATOR = 2;
+    FOLDER = 3;
+    reserved "TRASH_NODE";
+    reserved 1;
   }
 
   optional string url = 1;
@@ -54,4 +57,12 @@ message NotesSpecifics {
   // Contains full title as is. |legacy_canonicalized_title| is a prefix of
   // |full_title| with escaped symbols.
   optional string full_title = 12;
+
+  // Introduced in M94, represents the GUID (field |guid|) of the parent.
+  optional string parent_guid = 13;
+
+  // Introduced in M94, determines ordering among siblings. This field is
+  // redundant to the similar field in SyncEntity. If this field in specifics is
+  // set, it takes precedence over the one in SyncEntity.
+  optional UniquePosition unique_position = 14;
 }

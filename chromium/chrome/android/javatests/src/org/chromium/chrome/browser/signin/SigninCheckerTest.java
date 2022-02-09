@@ -39,6 +39,7 @@ import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.components.signin.AccountRenameChecker;
 import org.chromium.components.signin.ChildAccountStatus;
 import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.test.util.FakeAccountManagerFacade;
 
 /**
@@ -57,7 +58,7 @@ public class SigninCheckerTest {
 
     @Rule
     public final AccountManagerTestRule mAccountManagerTestRule =
-            new AccountManagerTestRule(new FakeAccountManagerFacade(null) {
+            new AccountManagerTestRule(new FakeAccountManagerFacade() {
                 @Override
                 public void checkChildAccountStatus(
                         Account account, ChildAccountStatusListener listener) {
@@ -121,7 +122,7 @@ public class SigninCheckerTest {
         CriteriaHelper.pollUiThread(() -> {
             return !IdentityServicesProvider.get()
                             .getIdentityManager(Profile.getLastUsedRegularProfile())
-                            .hasPrimaryAccount();
+                            .hasPrimaryAccount(ConsentLevel.SYNC);
         });
         Assert.assertNull(mAccountManagerTestRule.getCurrentSignedInAccount());
     }
@@ -140,9 +141,26 @@ public class SigninCheckerTest {
         CriteriaHelper.pollUiThread(() -> {
             return !IdentityServicesProvider.get()
                             .getIdentityManager(Profile.getLastUsedRegularProfile())
-                            .hasPrimaryAccount();
+                            .hasPrimaryAccount(ConsentLevel.SYNC);
         });
         Assert.assertNull(mAccountManagerTestRule.getCurrentSignedInAccount());
+    }
+
+    @Test
+    @MediumTest
+    @FlakyTest(message = "https://crbug.com/1205346")
+    public void signoutWhenPrimaryAccountWithoutSyncConsentIsRemoved() {
+        mActivityTestRule.startMainActivityOnBlankPage();
+        mAccountManagerTestRule.addAccountAndWaitForSeeding("the.second.account@gmail.com");
+        final CoreAccountInfo oldAccount = mAccountManagerTestRule.addTestAccountThenSignin();
+
+        mAccountManagerTestRule.removeAccountAndWaitForSeeding(oldAccount.getEmail());
+
+        CriteriaHelper.pollUiThread(() -> {
+            return !IdentityServicesProvider.get()
+                            .getIdentityManager(Profile.getLastUsedRegularProfile())
+                            .hasPrimaryAccount(ConsentLevel.SIGNIN);
+        });
     }
 
     @Test
@@ -159,7 +177,8 @@ public class SigninCheckerTest {
             return expectedPrimaryAccount.equals(
                     mAccountManagerTestRule.getCurrentSignedInAccount());
         });
-        Assert.assertEquals(2, SigninHelperProvider.get().getNumOfChildAccountChecksDoneForTests());
+        Assert.assertEquals(
+                2, SigninCheckerProvider.get().getNumOfChildAccountChecksDoneForTests());
         Assert.assertTrue(
                 actionTester.getActions().contains("Signin_Signin_WipeDataOnChildAccountSignin2"));
     }
@@ -177,7 +196,7 @@ public class SigninCheckerTest {
         // The check should be done twice, once at activity start-up, the other when account
         // is added.
         CriteriaHelper.pollUiThread(() -> {
-            return SigninHelperProvider.get().getNumOfChildAccountChecksDoneForTests() == 2;
+            return SigninCheckerProvider.get().getNumOfChildAccountChecksDoneForTests() == 2;
         });
         Assert.assertNull(mAccountManagerTestRule.getCurrentSignedInAccount());
         Assert.assertFalse(
@@ -195,7 +214,7 @@ public class SigninCheckerTest {
 
         // The check should be done once at activity start-up
         CriteriaHelper.pollUiThread(() -> {
-            return SigninHelperProvider.get().getNumOfChildAccountChecksDoneForTests() == 1;
+            return SigninCheckerProvider.get().getNumOfChildAccountChecksDoneForTests() == 1;
         });
         Assert.assertNull(mAccountManagerTestRule.getCurrentSignedInAccount());
         Assert.assertFalse(
@@ -213,7 +232,7 @@ public class SigninCheckerTest {
 
         // The check should be done once at activity start-up
         CriteriaHelper.pollUiThread(() -> {
-            return SigninHelperProvider.get().getNumOfChildAccountChecksDoneForTests() == 1;
+            return SigninCheckerProvider.get().getNumOfChildAccountChecksDoneForTests() == 1;
         });
         Assert.assertNull(mAccountManagerTestRule.getCurrentSignedInAccount());
         Assert.assertFalse(

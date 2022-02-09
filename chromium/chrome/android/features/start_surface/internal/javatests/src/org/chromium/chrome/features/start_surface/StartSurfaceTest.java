@@ -235,12 +235,14 @@ public class StartSurfaceTest {
                 mLayoutChangedCallbackHelper.notifyCalled();
             }
         };
-        mActivityTestRule.getActivity().getLayoutManagerSupplier().addObserver((manager) -> {
-            if (manager.getActiveLayout() != null) {
-                mCurrentlyActiveLayout = manager.getActiveLayout().getLayoutType();
-                mLayoutChangedCallbackHelper.notifyCalled();
-            }
-            manager.addObserver(mLayoutObserver);
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mActivityTestRule.getActivity().getLayoutManagerSupplier().addObserver((manager) -> {
+                if (manager.getActiveLayout() != null) {
+                    mCurrentlyActiveLayout = manager.getActiveLayout().getLayoutType();
+                    mLayoutChangedCallbackHelper.notifyCalled();
+                }
+                manager.addObserver(mLayoutObserver);
+            });
         });
     }
 
@@ -733,7 +735,8 @@ public class StartSurfaceTest {
         }
         assertTrue("Deferred startup never completed", mActivityTestRule.waitForDeferredStartup());
 
-        boolean isInstantStart = TabUiFeatureUtilities.supportInstantStart(false);
+        boolean isInstantStart =
+                TabUiFeatureUtilities.supportInstantStart(false, mActivityTestRule.getActivity());
         Assert.assertEquals(1,
                 RecordHistogram.getHistogramTotalCountForTesting(
                         StartSurfaceConfiguration.getHistogramName(
@@ -804,7 +807,7 @@ public class StartSurfaceTest {
     @Feature({"StartSurface", "TabGroup"})
     @CommandLineFlags.Add({BASE_PARAMS + "/single"})
     @EnableFeatures({ChromeFeatureList.TAB_GROUPS_ANDROID})
-    @DisabledTest(message = "crbug.com/1148365")
+    @FlakyTest(message = "https://crbug.com/1232695")
     public void testCreateTabWithinTabGroup() throws Exception {
         // Create tab state files for a group with two tabs.
         TabUiTestHelper.finishActivity(mActivityTestRule.getActivity());
@@ -1888,6 +1891,59 @@ public class StartSurfaceTest {
         });
     }
 
+    @Test
+    @MediumTest
+    @Feature({"StartSurface"})
+    // clang-format off
+    @CommandLineFlags.Add({BASE_PARAMS + "/single"})
+    public void testDoNotInitializeSecondaryTasksSurfaceWithoutOpenGridTabSwitcher() {
+        // clang-format on
+        ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        if (!mImmediateReturn) StartSurfaceTestUtils.pressHomePageButton(cta);
+        StartSurfaceTestUtils.waitForOverviewVisible(
+                mLayoutChangedCallbackHelper, mCurrentlyActiveLayout);
+        StartSurfaceTestUtils.waitForTabModel(cta);
+        StartSurfaceCoordinator startSurfaceCoordinator =
+                StartSurfaceTestUtils.getStartSurfaceFromUIThread(cta);
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertTrue(startSurfaceCoordinator.isSecondaryTasksSurfaceEmptyForTesting());
+        });
+        StartSurfaceTestUtils.launchFirstMVTile(cta, /* currentTabCount = */ 1);
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertTrue(startSurfaceCoordinator.isSecondaryTasksSurfaceEmptyForTesting());
+        });
+
+        TabUiTestHelper.enterTabSwitcher(cta);
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertFalse(startSurfaceCoordinator.isSecondaryTasksSurfaceEmptyForTesting());
+        });
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"StartSurface"})
+    // clang-format off
+    @CommandLineFlags.Add({BASE_PARAMS + "/single/check_sync_before_show_start_at_startup/true"})
+    public void testShowStartWithSyncCheck() throws Exception {
+        // clang-format on
+        ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        StartSurfaceTestUtils.waitForTabModel(cta);
+        assertEquals(1, cta.getTabModelSelector().getTotalTabCount());
+        mActivityTestRule.waitForActivityNativeInitializationComplete();
+        Assert.assertFalse(cta.getLayoutManager().overviewVisible());
+
+        Assert.assertFalse(ReturnToChromeExperimentsUtil.isPrimaryAccountSync());
+        Assert.assertFalse(ReturnToChromeExperimentsUtil.shouldShowOverviewPageOnStart(cta,
+                cta.getIntent(), cta.getTabModelSelector(), cta.getInactivityTrackerForTesting()));
+        ReturnToChromeExperimentsUtil.setSyncForTesting(true);
+        Assert.assertTrue(ReturnToChromeExperimentsUtil.isPrimaryAccountSync());
+        Assert.assertEquals(mImmediateReturn,
+                ReturnToChromeExperimentsUtil.shouldShowOverviewPageOnStart(cta, cta.getIntent(),
+                        cta.getTabModelSelector(), cta.getInactivityTrackerForTesting()));
+        ReturnToChromeExperimentsUtil.setSyncForTesting(false);
+    }
+
     private void backActionDeleteBlankTabForOmniboxFocusedOnNewTabSingleSurface(
             Runnable backAction) {
         if (!mImmediateReturn) {
@@ -2039,5 +2095,3 @@ public class StartSurfaceTest {
         return dialogView.getVisibility() == View.GONE;
     }
 }
-
-// TODO(crbug.com/1033909): Add more integration tests.

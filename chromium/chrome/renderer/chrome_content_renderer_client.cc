@@ -76,6 +76,7 @@
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/contextual_search/buildflags.h"
 #include "components/contextual_search/content/renderer/overlay_js_render_frame_observer.h"
+#include "components/continuous_search/renderer/search_result_extractor_impl.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "components/dom_distiller/content/renderer/distillability_agent.h"
 #include "components/dom_distiller/content/renderer/distiller_js_render_frame_observer.h"
@@ -86,6 +87,7 @@
 #include "components/error_page/common/localized_error.h"
 #include "components/feed/buildflags.h"
 #include "components/grit/components_scaled_resources.h"
+#include "components/history_clusters/core/memories_features.h"
 #include "components/network_hints/renderer/web_prescient_networking_impl.h"
 #include "components/no_state_prefetch/common/prerender_url_loader_throttle.h"
 #include "components/no_state_prefetch/renderer/no_state_prefetch_client.h"
@@ -166,7 +168,6 @@
 
 #if defined(OS_ANDROID)
 #include "chrome/renderer/sandbox_status_extension_android.h"
-#include "components/continuous_search/renderer/search_result_extractor_impl.h"  // nogncheck
 #else
 #include "chrome/renderer/cart/commerce_hint_agent.h"
 #include "chrome/renderer/media/chrome_speech_recognition_client.h"
@@ -249,9 +250,8 @@
 #endif
 
 #include "app/vivaldi_apptools.h"
-#include "renderer/vivaldi_render_frame_observer.h"
-#include "components/request_filter/adblock_filter/renderer/adblock_cosmetic_filter_agent.h"
 #include "components/content_injection/renderer/content_injection_manager.h"
+#include "renderer/vivaldi_render_frame_blink_proxy_impl.h"
 
 using autofill::AutofillAgent;
 using autofill::AutofillAssistantAgent;
@@ -576,11 +576,16 @@ void ChromeContentRendererClient::RenderFrameCreated(
     new webapps::WebPageMetadataAgent(render_frame);
 
 #if defined(OS_ANDROID)
-  if (base::FeatureList::IsEnabled(features::kContinuousSearch) &&
-      render_frame->IsMainFrame()) {
+  const base::Feature& kSearchResultExtractorFeature =
+      features::kContinuousSearch;
+#else
+  const base::Feature& kSearchResultExtractorFeature =
+      history_clusters::kMemories;
+#endif
+  if (render_frame->IsMainFrame() &&
+      base::FeatureList::IsEnabled(kSearchResultExtractorFeature)) {
     continuous_search::SearchResultExtractorImpl::Create(render_frame);
   }
-#endif
 
   new NetErrorHelper(render_frame);
 
@@ -671,10 +676,13 @@ void ChromeContentRendererClient::RenderFrameCreated(
     new subresource_redirect::LoginRobotsDeciderAgent(associated_interfaces,
                                                       render_frame);
   }
-  if (!vivaldi::IsVivaldiRunning())
+  if (!vivaldi::IsVivaldiRunning()) {
+    // clang-format off
   if (translate::IsSubFrameTranslationEnabled()) {
     new translate::PerFrameTranslateAgent(
         render_frame, ISOLATED_WORLD_ID_TRANSLATE, associated_interfaces);
+  }
+    // clang-format on
   }
 
 #if !defined(OS_ANDROID)
@@ -704,10 +712,7 @@ void ChromeContentRendererClient::RenderFrameCreated(
   }
 #endif
 
-  new vivaldi::VivaldiRenderFrameObserver(render_frame);
-  new adblock_filter::CosmeticFilterAgent(render_frame);
-  content_injection::Manager::GetInstance().OnFrameCreated(render_frame,
-                                                           registry);
+  VivaldiRenderFrameBlinkProxyImpl::PrepareFrame(render_frame, registry);
 }
 
 void ChromeContentRendererClient::WebViewCreated(blink::WebView* web_view) {
@@ -1068,7 +1073,7 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
             ASCIIToUTF16(ChromeContentClient::kPDFInternalPluginName)) {
           return pdf::CreateInternalPlugin(
               info, std::move(params), render_frame,
-              std::make_unique<ChromePdfInternalPluginDelegate>(render_frame));
+              std::make_unique<ChromePdfInternalPluginDelegate>());
         }
 #endif  // BUILDFLAG(ENABLE_PDF)
 

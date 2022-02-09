@@ -7,7 +7,6 @@
 #include "app/vivaldi_apptools.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/schema/access_keys.h"
-#include "renderer/vivaldi_render_messages.h"
 #include "ui/vivaldi_ui_utils.h"
 
 namespace extensions {

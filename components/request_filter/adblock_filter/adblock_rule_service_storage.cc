@@ -9,9 +9,9 @@
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/json/json_string_value_serializer.h"
+#include "base/json/values_util.h"
 #include "base/task/post_task.h"
 #include "base/time/time.h"
-#include "base/util/values/values_util.h"
 #include "components/request_filter/adblock_filter/adblock_known_sources_handler.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_impl.h"
 #include "content/public/browser/browser_context.h"
@@ -77,7 +77,7 @@ void LoadCounters(const base::Value& counters_value,
                   std::map<std::string, int>& counters) {
   DCHECK(counters_value.is_dict());
 
-  for (const auto& counter : counters_value.DictItems()) {
+  for (const auto counter : counters_value.DictItems()) {
     if (!counter.second.is_int())
       continue;
     counters[counter.first] = counter.second.GetInt();
@@ -125,13 +125,13 @@ void LoadSourcesList(base::Value& sources_list, RuleSources& rule_sources) {
       rule_sources.back().rules_list_checksum = std::move(*rules_list_checksum);
 
     absl::optional<base::Time> last_update =
-        util::ValueToTime(source_value.FindKey(kLastUpdateKey));
+        base::ValueToTime(source_value.FindKey(kLastUpdateKey));
     if (last_update) {
       rule_sources.back().last_update = last_update.value();
     }
 
     absl::optional<base::Time> next_fetch =
-        util::ValueToTime(source_value.FindKey(kNextFetchKey));
+        base::ValueToTime(source_value.FindKey(kNextFetchKey));
     if (next_fetch) {
       rule_sources.back().next_fetch = next_fetch.value();
     }
@@ -182,12 +182,12 @@ void LoadSourcesList(base::Value& sources_list, RuleSources& rule_sources) {
       rule_sources.back().unsafe_adblock_metadata.redirect = GURL(*redirect);
 
     absl::optional<int64_t> version =
-        util::ValueToInt64(source_value.FindKey(kVersionKey));
+        base::ValueToInt64(source_value.FindKey(kVersionKey));
     if (version)
       rule_sources.back().unsafe_adblock_metadata.version = *version;
 
     absl::optional<base::TimeDelta> expires =
-        util::ValueToTimeDelta(source_value.FindKey(kExpiresKey));
+        base::ValueToTimeDelta(source_value.FindKey(kExpiresKey));
     if (last_update) {
       rule_sources.back().unsafe_adblock_metadata.expires = expires.value();
     }
@@ -357,9 +357,9 @@ base::Value SerializeSourcesList(
     source_value.SetStringKey(kRulesListChecksumKey,
                               rule_source.rules_list_checksum);
     source_value.SetKey(kLastUpdateKey,
-                        util::TimeToValue(rule_source.last_update));
+                        base::TimeToValue(rule_source.last_update));
     source_value.SetKey(kNextFetchKey,
-                        util::TimeToValue(rule_source.next_fetch));
+                        base::TimeToValue(rule_source.next_fetch));
     source_value.SetIntKey(kValidRulesCountKey,
                            rule_source.rules_info.valid_rules);
     source_value.SetIntKey(kUnsupportedRulesCountKey,
@@ -379,10 +379,10 @@ base::Value SerializeSourcesList(
         kRedirectKey, rule_source.unsafe_adblock_metadata.redirect.spec());
     source_value.SetKey(
         kVersionKey,
-        util::Int64ToValue(rule_source.unsafe_adblock_metadata.version));
+        base::Int64ToValue(rule_source.unsafe_adblock_metadata.version));
     source_value.SetKey(
         kExpiresKey,
-        util::TimeDeltaToValue(rule_source.unsafe_adblock_metadata.expires));
+        base::TimeDeltaToValue(rule_source.unsafe_adblock_metadata.expires));
     sources_list.Append(std::move(source_value));
   }
 

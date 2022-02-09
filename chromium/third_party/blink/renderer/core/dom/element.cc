@@ -484,7 +484,8 @@ HeapLinkedHashSet<WeakMember<Element>>* GetExplicitlySetElementsForAttr(
     const QualifiedName& name) {
   ExplicitlySetAttrElementsMap* element_attribute_map =
       element->GetDocument().GetExplicitlySetAttrElementsMap(element);
-  return element_attribute_map->at(name);
+  return element_attribute_map->Contains(name) ? element_attribute_map->at(name)
+                                               : nullptr;
 }
 
 // Checks that the given element |candidate| is a descendant of
@@ -655,7 +656,7 @@ bool Element::IsFocusableStyle() const {
 Node* Element::Clone(Document& factory, CloneChildrenFlag flag) const {
   if (flag == CloneChildrenFlag::kSkip)
     return &CloneWithoutChildren(&factory);
-  Element* copy = &CloneWithChildren(&factory);
+  Element* copy = &CloneWithChildren(flag, &factory);
   // 7. If node is a shadow host and the clone shadows flag is set, run these
   // steps:
   if (flag == CloneChildrenFlag::kCloneWithShadows) {
@@ -693,7 +694,8 @@ Node* Element::Clone(Document& factory, CloneChildrenFlag flag) const {
   return copy;
 }
 
-Element& Element::CloneWithChildren(Document* nullable_factory) const {
+Element& Element::CloneWithChildren(CloneChildrenFlag flag,
+                                    Document* nullable_factory) const {
   Element& clone = CloneWithoutAttributesAndChildren(
       nullable_factory ? *nullable_factory : GetDocument());
   // This will catch HTML elements in the wrong namespace that are not correctly
@@ -701,8 +703,8 @@ Element& Element::CloneWithChildren(Document* nullable_factory) const {
   DCHECK_EQ(IsHTMLElement(), clone.IsHTMLElement());
 
   clone.CloneAttributesFrom(*this);
-  clone.CloneNonAttributePropertiesFrom(*this, CloneChildrenFlag::kClone);
-  clone.CloneChildNodesFrom(*this, CloneChildrenFlag::kClone);
+  clone.CloneNonAttributePropertiesFrom(*this, flag);
+  clone.CloneChildNodesFrom(*this, flag);
   return clone;
 }
 
@@ -849,7 +851,7 @@ Element* Element::GetElementAttribute(const QualifiedName& name) {
 
 void Element::SetElementArrayAttribute(
     const QualifiedName& name,
-    const absl::optional<HeapVector<Member<Element>>>& given_elements) {
+    const HeapVector<Member<Element>>* given_elements) {
   ExplicitlySetAttrElementsMap* element_attribute_map =
       GetDocument().GetExplicitlySetAttrElementsMap(this);
 
@@ -867,7 +869,8 @@ void Element::SetElementArrayAttribute(
   // run the synchronization steps which modify the map invalidating any
   // outstanding iterators.
   HeapLinkedHashSet<WeakMember<Element>>* stored_elements =
-      element_attribute_map->at(name);
+      element_attribute_map->Contains(name) ? element_attribute_map->at(name)
+                                            : nullptr;
   if (!stored_elements) {
     stored_elements =
         MakeGarbageCollected<HeapLinkedHashSet<WeakMember<Element>>>();
@@ -876,7 +879,7 @@ void Element::SetElementArrayAttribute(
   }
   SpaceSplitString value;
 
-  for (auto element : given_elements.value()) {
+  for (auto element : *given_elements) {
     // If |value| is null and |stored_elements| is non-empty, then a previous
     // element must have been invalid wrt. the content attribute string rules,
     // and therefore the content attribute string should reflect the empty
@@ -920,9 +923,10 @@ void Element::SetElementArrayAttribute(
   element_attribute_map->Set(name, stored_elements);
 }
 
-absl::optional<HeapVector<Member<Element>>> Element::GetElementArrayAttribute(
+HeapVector<Member<Element>>* Element::GetElementArrayAttribute(
     const QualifiedName& name) {
-  HeapVector<Member<Element>> result_elements;
+  HeapVector<Member<Element>>* result_elements =
+      MakeGarbageCollected<HeapVector<Member<Element>>>();
   // TODO(chrishall): this will fail to preserve `e1.ariaFoo === e1.ariaFoo`,
   // need additional cache to preserve this invariant, add tests covering this
   // case.
@@ -932,7 +936,7 @@ absl::optional<HeapVector<Member<Element>>> Element::GetElementArrayAttribute(
   if (explicitly_set_elements) {
     for (auto attrElement : *explicitly_set_elements) {
       if (ElementIsDescendantOfShadowIncludingAncestor(*this, *attrElement))
-        result_elements.push_back(attrElement);
+        result_elements->push_back(attrElement);
     }
     return result_elements;
   }
@@ -948,7 +952,7 @@ absl::optional<HeapVector<Member<Element>>> Element::GetElementArrayAttribute(
   }
 
   if (!hasAttribute(attr))
-    return absl::nullopt;
+    return nullptr;
 
   String attribute_value = getAttribute(attr).GetString();
   Vector<String> tokens;
@@ -961,7 +965,7 @@ absl::optional<HeapVector<Member<Element>>> Element::GetElementArrayAttribute(
   for (auto id : tokens) {
     Element* candidate = GetTreeScope().getElementById(AtomicString(id));
     if (candidate)
-      result_elements.push_back(candidate);
+      result_elements->push_back(candidate);
   }
 
   return result_elements;
@@ -2783,7 +2787,6 @@ void Element::DetachLayoutTree(bool performing_reattach) {
         element_animations->CssAnimations().Cancel();
         element_animations->SetAnimationStyleChange(false);
       }
-      element_animations->ClearBaseComputedStyle();
     }
   }
 
@@ -2893,6 +2896,12 @@ void Element::RecalcStyle(const StyleRecalcChange change,
     child_change = RecalcOwnStyle(change, style_recalc_context);
     if (GetStyleChangeType() == kSubtreeStyleChange)
       child_change = child_change.ForceRecalcDescendants();
+    ClearNeedsStyleRecalc();
+  } else if (GetForceReattachLayoutTree()) {
+    DCHECK(GetComputedStyle()) << "No need to force a layout tree reattach if "
+                                  "we had no computed style";
+    SetNeedsReattachLayoutTree();
+    child_change = child_change.ForceReattachLayoutTree();
     ClearNeedsStyleRecalc();
   }
 
@@ -4219,6 +4228,14 @@ bool Element::IsFocusableStyleAfterUpdate() const {
   // Note that this isn't a part of `IsFocusableStyle()` because there are
   // callers of that function which cannot do a layout tree update (e.g.
   // accessibility).
+  //
+  // Also note that if this node is ignored due to a display lock for focus
+  // activation reason, we simply return false to avoid updating style & layout
+  // tree for this node.
+  if (DisplayLockUtilities::ShouldIgnoreNodeDueToDisplayLock(
+          *this, DisplayLockActivationReason::kUserFocus)) {
+    return false;
+  }
   GetDocument().UpdateStyleAndLayoutTreeForNode(this);
   return IsFocusableStyle();
 }
@@ -4228,16 +4245,12 @@ bool Element::IsKeyboardFocusable() const {
          ((SupportsFocus() &&
            GetIntegralAttribute(html_names::kTabindexAttr, 0) >= 0) ||
           (RuntimeEnabledFeatures::KeyboardFocusableScrollersEnabled() &&
-           IsScrollableNode(this))) &&
-         !DisplayLockPreventsActivation(
-             DisplayLockActivationReason::kUserFocus);
+           IsScrollableNode(this)));
 }
 
 bool Element::IsMouseFocusable() const {
   return isConnected() && !IsInert() && IsFocusableStyleAfterUpdate() &&
-         SupportsFocus() &&
-         !DisplayLockPreventsActivation(
-             DisplayLockActivationReason::kUserFocus);
+         SupportsFocus();
 }
 
 bool Element::IsAutofocusable() const {
@@ -4282,32 +4295,6 @@ bool Element::ActivateDisplayLockIfNeeded(DisplayLockActivationReason reason) {
     }
   }
   return activated;
-}
-
-bool Element::DisplayLockPreventsActivation(
-    DisplayLockActivationReason reason) const {
-  if (!RuntimeEnabledFeatures::CSSContentVisibilityEnabled())
-    return false;
-
-  if (GetDocument().GetDisplayLockDocumentState().LockedDisplayLockCount() == 0)
-    return false;
-
-  // TODO(vmpstr): Similar to Document::EnsurePaintLocationDataValidForNode(),
-  // this iterates up to the ancestor hierarchy looking for locked display
-  // locks. This is inefficient, particularly since it's unlikely that this will
-  // yield any "true" results in practice. We need to come up with a way to
-  // check whether a node is in a locked subtree quickly.
-  // See crbug.com/924550 for more details.
-  for (const Node& current : FlatTreeTraversal::InclusiveAncestorsOf(*this)) {
-    auto* current_element = DynamicTo<Element>(current);
-    if (!current_element)
-      continue;
-    if (auto* context = current_element->GetDisplayLockContext()) {
-      if (context->IsLocked() && !context->IsActivatable(reason))
-        return true;
-    }
-  }
-  return false;
 }
 
 bool Element::StyleShouldForceLegacyLayoutInternal() const {
@@ -4426,6 +4413,16 @@ void Element::ForceLegacyLayoutInFragmentationContext(
   // positives; e.g. if there's an absolutely positioned table, whose containing
   // block of the table is on the outside of the fragmentation context, we're
   // still going to fall back to legacy.
+
+  if (GetDocument().Printing()) {
+    // Force legacy layout on the entire document, since we're printing, and
+    // there's some fragmentable box that needs legacy layout inside somewhere.
+    Element* root = GetDocument().documentElement();
+    root->SetShouldForceLegacyLayoutForChild(true);
+    root->SetNeedsReattachLayoutTree();
+    return;
+  }
+
   Element* parent;
   for (Element* walker = this; walker; walker = parent) {
     parent = DynamicTo<Element>(LayoutTreeBuilderTraversal::Parent(*walker));
@@ -4440,12 +4437,6 @@ void Element::ForceLegacyLayoutInFragmentationContext(
     if (parent && !parent->GetComputedStyle()->InsideNGFragmentationContext())
       return;
   }
-  DCHECK(GetDocument().Printing());
-  // Force legacy layout on the entire document, since we're printing, and
-  // there's some fragmentable box that needs legacy layout inside somewhere.
-  Element* root = GetDocument().documentElement();
-  root->SetShouldForceLegacyLayoutForChild(true);
-  root->SetNeedsReattachLayoutTree();
 }
 
 bool Element::IsFocusedElementInDocument() const {
@@ -6174,6 +6165,7 @@ void Element::InlineStyleChanged() {
 void Element::SetInlineStyleProperty(CSSPropertyID property_id,
                                      CSSValueID identifier,
                                      bool important) {
+  DCHECK_NE(property_id, CSSPropertyID::kVariable);
   SetInlineStyleProperty(property_id, *CSSIdentifierValue::Create(identifier),
                          important);
 }
@@ -6182,6 +6174,7 @@ void Element::SetInlineStyleProperty(CSSPropertyID property_id,
                                      double value,
                                      CSSPrimitiveValue::UnitType unit,
                                      bool important) {
+  DCHECK_NE(property_id, CSSPropertyID::kVariable);
   SetInlineStyleProperty(
       property_id, *CSSNumericLiteralValue::Create(value, unit), important);
 }
@@ -6189,6 +6182,7 @@ void Element::SetInlineStyleProperty(CSSPropertyID property_id,
 void Element::SetInlineStyleProperty(CSSPropertyID property_id,
                                      const CSSValue& value,
                                      bool important) {
+  DCHECK_NE(property_id, CSSPropertyID::kVariable);
   DCHECK(IsStyledElement());
   EnsureMutableInlineStyle().SetProperty(property_id, value, important);
   InlineStyleChanged();
@@ -6197,6 +6191,7 @@ void Element::SetInlineStyleProperty(CSSPropertyID property_id,
 bool Element::SetInlineStyleProperty(CSSPropertyID property_id,
                                      const String& value,
                                      bool important) {
+  DCHECK_NE(property_id, CSSPropertyID::kVariable);
   DCHECK(IsStyledElement());
   bool did_change =
       EnsureMutableInlineStyle()
@@ -6209,6 +6204,14 @@ bool Element::SetInlineStyleProperty(CSSPropertyID property_id,
   if (did_change)
     InlineStyleChanged();
   return did_change;
+}
+
+void Element::SetInlineStyleProperty(const CSSPropertyName& name,
+                                     const CSSValue& value,
+                                     bool important) {
+  DCHECK(IsStyledElement());
+  EnsureMutableInlineStyle().SetProperty(name, value, important);
+  InlineStyleChanged();
 }
 
 bool Element::RemoveInlineStyleProperty(CSSPropertyID property_id) {

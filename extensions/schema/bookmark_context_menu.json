@@ -62,6 +62,7 @@
             "name": "properties",
             "type": "object",
             "properties": {
+              "windowId": { "type": "integer" },
               "siblings": { "type": "array", "items": {"$ref": "FolderEntry"}, "description": "List of menu entries."},
               "id": {"type": "string", "description": "Bookmark folder id. Must match an id in the sibling list."},
               "edge": {"$ref": "Edge", "optional": true, "description": "Where to place extra menu items"},

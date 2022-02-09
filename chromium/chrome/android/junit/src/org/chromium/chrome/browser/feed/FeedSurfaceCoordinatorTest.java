@@ -8,6 +8,7 @@ import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
@@ -38,6 +39,7 @@ import org.robolectric.shadows.ShadowLog;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.AppHooksImpl;
 import org.chromium.chrome.browser.feed.shared.FeedFeatures;
 import org.chromium.chrome.browser.feed.shared.FeedSurfaceDelegate;
@@ -197,6 +199,7 @@ public class FeedSurfaceCoordinatorTest {
     @Before
     public void setUp() {
         mActivity = Robolectric.buildActivity(Activity.class).get();
+        mActivity.setTheme(R.style.ColorOverlay);
         mocker.mock(FeedStreamJni.TEST_HOOKS, mFeedStreamJniMock);
         mocker.mock(FeedServiceBridgeJni.TEST_HOOKS, mFeedServiceBridgeJniMock);
         mocker.mock(WebFeedBridge.getTestHooksForTesting(), mWebFeedBridgeJniMock);
@@ -234,7 +237,7 @@ public class FeedSurfaceCoordinatorTest {
         when(mProcessScope.obtainSurfaceScope(any(SurfaceScopeDependencyProvider.class)))
                 .thenReturn(mSurfaceScope);
         when(mSurfaceScope.provideListRenderer()).thenReturn(mRenderer);
-        when(mRenderer.bind(mContentManagerCaptor.capture())).thenReturn(mRecyclerView);
+        when(mRenderer.bind(mContentManagerCaptor.capture(), isNull())).thenReturn(mRecyclerView);
         when(mSurfaceScope.getFeedLaunchReliabilityLogger()).thenReturn(mLaunchReliabilityLogger);
         AppHooksImpl.setInstanceForTesting(mApphooks);
 
@@ -311,7 +314,7 @@ public class FeedSurfaceCoordinatorTest {
 
     @Test
     public void testGetTabIdFromLaunchOrigin_unknown() {
-        assertEquals(FeedSurfaceCoordinator.StreamTabId.FOR_YOU,
+        assertEquals(FeedSurfaceCoordinator.StreamTabId.DEFAULT,
                 mCoordinator.getTabIdFromLaunchOrigin(NewTabPageLaunchOrigin.UNKNOWN));
     }
 
@@ -354,6 +357,6 @@ public class FeedSurfaceCoordinatorTest {
                 ()
                         -> { return null; },
                 new FeedLaunchReliabilityLoggingState(SURFACE_TYPE, SURFACE_CREATION_TIME_NS), null,
-                false);
+                false, null);
     }
 }

@@ -282,6 +282,9 @@
           "isframe": {
             "type": "boolean"
           },
+          "ismailcontent": {
+            "type": "boolean"
+          },
           "iswebpanel": {
             "type": "boolean"
           },

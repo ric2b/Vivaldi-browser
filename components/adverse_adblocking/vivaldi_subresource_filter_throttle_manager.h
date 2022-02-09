@@ -29,7 +29,7 @@ class VivaldiSubresourceFilterAdblockingThrottleManager
 
   // Creates a VivaldiSubresourceFilterAdblockingThrottleManager and attaches it to
   // |web_contents|.
-  static void CreateSubresourceFilterThrottleManagerForWebContents(
+  static void CreateSubresourceFilterWebContentsHelper(
       content::WebContents* web_contents);
 
   // Will just chain VivaldiSubresourceFilterAdblockingThrottle to existing

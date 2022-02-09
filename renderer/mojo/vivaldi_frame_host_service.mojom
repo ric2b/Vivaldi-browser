@@ -1,0 +1,6 @@
+module vivaldi.mojom;
+
+interface VivaldiFrameHostService {
+  [EnableIfNot=is_android]
+  NotifyMediaElementAdded();
+};

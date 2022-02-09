@@ -2204,4 +2204,8 @@ gfx::Vector2dF ThreadedInputHandler::UserScrollableDelta(
   return adjusted_delta;
 }
 
+bool ThreadedInputHandler::ScrollbarScrollIsActive() {
+  return scrollbar_controller_->ScrollbarScrollIsActive();
+}
+
 }  // namespace cc

@@ -145,8 +145,9 @@ public class WebApkUpdateManagerUnitTest {
                 String shareTargetParamTitle, String shareTargetParamText,
                 boolean shareTargetParamIsMethodPost, boolean shareTargetParamIsEncTypeMultipart,
                 String[] shareTargetParamFileNames, Object[] shareTargetParamAccepts,
-                String[][] shortcuts, String manifestUrl, String webApkPackage, int webApkVersion,
-                boolean isManifestStale, boolean isAppIdentityUpdateSupported, int[] updateReasons,
+                String[][] shortcuts, byte[][] shortcutIconData, String manifestUrl,
+                String webApkPackage, int webApkVersion, boolean isManifestStale,
+                boolean isAppIdentityUpdateSupported, int[] updateReasons,
                 Callback<Boolean> callback) {}
 
         @Override
@@ -525,6 +526,7 @@ public class WebApkUpdateManagerUnitTest {
 
         mJniMocker.mock(WebApkUpdateManagerJni.TEST_HOOKS, new TestWebApkUpdateManagerJni());
 
+        WebappRegistry.refreshSharedPrefsForTesting();
         registerWebApk(
                 WEBAPK_PACKAGE_NAME, defaultManifestData(), REQUEST_UPDATE_FOR_SHELL_APK_VERSION);
         registerStorageForWebApkPackage(WEBAPK_PACKAGE_NAME);

@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/paint/clip_path_clipper.h"
 
 #include "third_party/blink/renderer/core/css/clip_path_paint_image_generator.h"
+#include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
@@ -43,10 +44,14 @@ LayoutSVGResourceClipper* ResolveElementReference(
     return nullptr;
   LayoutSVGResourceClipper* resource_clipper =
       GetSVGResourceAsType(*client, reference_clip_path_operation);
-  if (resource_clipper) {
-    SECURITY_DCHECK(!resource_clipper->NeedsLayout());
-    resource_clipper->ClearInvalidationMask();
-  }
+  if (!resource_clipper)
+    return nullptr;
+
+  resource_clipper->ClearInvalidationMask();
+  if (DisplayLockUtilities::LockedAncestorPreventingLayout(*resource_clipper))
+    return nullptr;
+
+  SECURITY_DCHECK(!resource_clipper->SelfNeedsLayout());
   return resource_clipper;
 }
 
@@ -75,6 +80,8 @@ static void PaintWorkletBasedClip(GraphicsContext& context,
   scoped_refptr<Image> paint_worklet_image =
       generator->Paint(zoom, reference_box, *clip_path_owner.GetNode());
 
+  // TODO(crbug.com/1223975): Fix bounding box. It should enclose affected area
+  // of the animation.
   absl::optional<FloatRect> bounding_box =
       ClipPathClipper::LocalClipPathBoundingBox(clip_path_owner);
   DCHECK(bounding_box);
@@ -195,6 +202,8 @@ void ClipPathClipper::PaintClipPathAsMaskImage(
                                                   DisplayItem::kSVGClip))
     return;
 
+  // TODO(crbug.com/1223975): Fix paint rectangle for
+  // CompositeClipPathAnimation.
   DrawingRecorder recorder(
       context, display_item_client, DisplayItem::kSVGClip,
       EnclosingIntRect(properties->MaskClip()->UnsnappedClipRect().Rect()));
@@ -203,7 +212,10 @@ void ClipPathClipper::PaintClipPathAsMaskImage(
 
   bool uses_zoomed_reference_box = UsesZoomedReferenceBox(layout_object);
   FloatRect reference_box = LocalReferenceBox(layout_object);
+  // TODO(crbug.com/1223975): Currently for CompositeClipPathAnimation feature
+  // to be activated a node must have clip-path attribute.
   if (RuntimeEnabledFeatures::CompositeClipPathAnimationEnabled() &&
+      layout_object.StyleRef().HasCurrentClipPathAnimation() &&
       layout_object.StyleRef().ClipPath()->GetType() ==
           ClipPathOperation::SHAPE) {
     if (!layout_object.GetFrame())
@@ -258,8 +270,11 @@ void ClipPathClipper::PaintClipPathAsMaskImage(
 bool ClipPathClipper::ShouldUseMaskBasedClip(const LayoutObject& object) {
   if (object.IsText() || !object.StyleRef().HasClipPath())
     return false;
+  // TODO(crbug.com/1223975): Currently for CompositeClipPathAnimation feature
+  // to be activated a node must have clip-path attribute.
   if (RuntimeEnabledFeatures::CompositeClipPathAnimationEnabled() &&
-      object.StyleRef().ClipPath()->GetType() == ClipPathOperation::SHAPE)
+      object.StyleRef().ClipPath()->GetType() == ClipPathOperation::SHAPE &&
+      object.StyleRef().HasCurrentClipPathAnimation())
     return true;
   const auto* reference_clip =
       DynamicTo<ReferenceClipPathOperation>(object.StyleRef().ClipPath());
@@ -274,7 +289,10 @@ bool ClipPathClipper::ShouldUseMaskBasedClip(const LayoutObject& object) {
 
 absl::optional<Path> ClipPathClipper::PathBasedClip(
     const LayoutObject& clip_path_owner) {
-  if (RuntimeEnabledFeatures::CompositeClipPathAnimationEnabled()) {
+  // TODO(crbug.com/1223975): Currently for CompositeClipPathAnimation feature
+  // to be activated a node must have clip-path attribute.
+  if (RuntimeEnabledFeatures::CompositeClipPathAnimationEnabled() &&
+      clip_path_owner.StyleRef().HasCurrentClipPathAnimation()) {
     const ClipPathOperation& clip_path = *clip_path_owner.StyleRef().ClipPath();
     if (clip_path.GetType() == ClipPathOperation::SHAPE)
       return absl::nullopt;

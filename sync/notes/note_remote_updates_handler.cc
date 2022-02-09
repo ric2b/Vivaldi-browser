@@ -70,15 +70,18 @@ syncer::UniquePosition ComputeUniquePositionForTrackedNoteNode(
 }
 
 size_t ComputeChildNodeIndex(const vivaldi::NoteNode* parent,
-                             const syncer::UniquePosition& position,
+                             const sync_pb::UniquePosition& unique_position,
                              const SyncedNoteTracker* note_tracker) {
   DCHECK(parent);
   DCHECK(note_tracker);
 
+  const syncer::UniquePosition position =
+      syncer::UniquePosition::FromProto(unique_position);
+
   auto iter = std::partition_point(
       parent->children().begin(), parent->children().end(),
       [note_tracker,
-       position](const std::unique_ptr<vivaldi::NoteNode>& child) {
+       &position](const std::unique_ptr<vivaldi::NoteNode>& child) {
         // Return true for all |parent|'s children whose position is less than
         // |position|.
         return !position.LessThan(
@@ -108,11 +111,9 @@ void ApplyRemoteUpdate(
   const vivaldi::NoteNode* old_parent = node->parent();
   const vivaldi::NoteNode* new_parent = new_parent_tracked_entity->note_node();
 
-  if (update_entity.is_folder != node->is_folder()) {
-    DLOG(ERROR) << "Could not update node. Remote node is a "
-                << (update_entity.is_folder ? "folder" : "note")
-                << " while local node is a "
-                << (node->is_folder() ? "folder" : "note");
+  if (update_entity.specifics.notes().special_node_type() !=
+      GetProtoTypeFromNoteNode(node)) {
+    DLOG(ERROR) << "Could not update note node due to conflicting types";
     return;
   }
 
@@ -131,11 +132,10 @@ void ApplyRemoteUpdate(
   UpdateNoteNodeFromSpecifics(update_entity.specifics.notes(), node, model);
   // Compute index information before updating the |tracker|.
   const size_t old_index = static_cast<size_t>(old_parent->GetIndexOf(node));
-  const size_t new_index =
-      ComputeChildNodeIndex(new_parent, update_entity.unique_position, tracker);
+  const size_t new_index = ComputeChildNodeIndex(
+      new_parent, update_entity.specifics.notes().unique_position(), tracker);
   tracker->Update(tracked_entity, update.response_version,
-                  update_entity.modification_time,
-                  update_entity.unique_position, update_entity.specifics);
+                  update_entity.modification_time, update_entity.specifics);
 
   if (new_parent == old_parent &&
       (new_index == old_index || new_index == old_index + 1)) {
@@ -184,17 +184,10 @@ void NoteRemoteUpdatesHandler::Process(
 
     // Only non-deletions should have valid specifics and unique positions.
     if (!update_entity.is_deleted()) {
-      if (!IsValidNotesSpecifics(update_entity.specifics.notes(),
-                                 update_entity.is_folder)) {
+      if (!IsValidNotesSpecifics(update_entity.specifics.notes())) {
         // Ignore updates with invalid specifics.
         DLOG(ERROR)
             << "Couldn't process an update note with an invalid specifics.";
-        continue;
-      }
-      if (!update_entity.unique_position.IsValid()) {
-        // Ignore updates with invalid unique position.
-        DLOG(ERROR) << "Couldn't process an update note with an invalid "
-                       "unique position.";
         continue;
       }
       if (!HasExpectedNoteGuid(update_entity.specifics.notes(),
@@ -231,13 +224,27 @@ void NoteRemoteUpdatesHandler::Process(
     // Ignore updates that have already been seen according to the version.
     if (tracked_entity && tracked_entity->metadata()->server_version() >=
                               update->response_version) {
-      // Seen this update before. This update may be a reflection and may have
-      // missing the GUID in specifics. Next reupload will populate GUID in
-      // specifics and this codepath will not repeat indefinitely. This logic is
-      // needed for the case when there is only one device and hence the GUID
-      // will not be set by other devices.
-      ReuploadEntityIfNeeded(update_entity, tracked_entity);
+      if (update_entity.id == tracked_entity->metadata()->server_id()) {
+        // Seen this update before. This update may be a reflection and may have
+        // missing the GUID in specifics. Next reupload will populate GUID in
+        // specifics and this codepath will not repeat indefinitely. This logic
+        // is needed for the case when there is only one device and hence the
+        // GUID will not be set by other devices.
+        ReuploadEntityIfNeeded(update_entity, tracked_entity);
+      }
       continue;
+    }
+
+    // The server ID has changed for a tracked entity (matched via client tag).
+    // This can happen if a commit succeeds, but the response does not come back
+    // fast enough(e.g. before shutdown or crash), then the |note_tracker_|
+    // might assume that it was never committed. The server will track the
+    // client that sent up the original commit and return this in a get updates
+    // response. This also may happen due to duplicate GUIDs. In this case it's
+    // better to update to the latest server ID.
+    if (tracked_entity) {
+      note_tracker_->UpdateSyncIdIfNeeded(tracked_entity,
+                                              /*sync_id=*/update_entity.id);
     }
 
     if (tracked_entity && tracked_entity->IsUnsynced()) {
@@ -322,7 +329,7 @@ NoteRemoteUpdatesHandler::ReorderUpdatesForTest(
 // static
 size_t NoteRemoteUpdatesHandler::ComputeChildNodeIndexForTest(
     const vivaldi::NoteNode* parent,
-    const syncer::UniquePosition& unique_position,
+    const sync_pb::UniquePosition& unique_position,
     const SyncedNoteTracker* notetracker) {
   return ComputeChildNodeIndex(parent, unique_position, notetracker);
 }
@@ -464,14 +471,6 @@ NoteRemoteUpdatesHandler::DetermineLocalTrackedEntityToUpdate(
   DCHECK(tracked_entity_by_client_tag);
   DCHECK(!tracked_entity_by_sync_id);
 
-  // The server ID has changed for a tracked entity (matched via client tag).
-  // This can happen if a commit succeeds, but the response does not come back
-  // fast enough(e.g. before shutdown or crash), then the |note_tracker_|
-  // might assume that it was never committed. The server will track the client
-  // that sent up the original commit and return this in a get updates response.
-  note_tracker_->UpdateSyncIdForLocalCreationIfNeeded(
-      tracked_entity_by_client_tag,
-      /*sync_id=*/update_entity.id);
   return tracked_entity_by_client_tag;
 }
 
@@ -480,8 +479,7 @@ const SyncedNoteTracker::Entity* NoteRemoteUpdatesHandler::ProcessCreate(
   const syncer::EntityData& update_entity = update.entity;
   DCHECK(!update_entity.is_deleted());
   DCHECK(update_entity.server_defined_unique_tag.empty());
-  DCHECK(IsValidNotesSpecifics(update_entity.specifics.notes(),
-                               update_entity.is_folder));
+  DCHECK(IsValidNotesSpecifics(update_entity.specifics.notes()));
 
   const vivaldi::NoteNode* parent_node = GetParentNode(update_entity);
   if (!parent_node) {
@@ -500,14 +498,14 @@ const SyncedNoteTracker::Entity* NoteRemoteUpdatesHandler::ProcessCreate(
   }
   const vivaldi::NoteNode* note_node = CreateNoteNodeFromSpecifics(
       update_entity.specifics.notes(), parent_node,
-      ComputeChildNodeIndex(parent_node, update_entity.unique_position,
+      ComputeChildNodeIndex(parent_node,
+                            update_entity.specifics.notes().unique_position(),
                             note_tracker_),
-      update_entity.is_folder, notes_model_);
+      notes_model_);
   DCHECK(note_node);
-  const SyncedNoteTracker::Entity* entity = note_tracker_->Add(
-      note_node, update_entity.id, update.response_version,
-      update_entity.creation_time, update_entity.unique_position,
-      update_entity.specifics);
+  const SyncedNoteTracker::Entity* entity =
+      note_tracker_->Add(note_node, update_entity.id, update.response_version,
+                         update_entity.creation_time, update_entity.specifics);
   ReuploadEntityIfNeeded(update_entity, entity);
   return entity;
 }
@@ -525,8 +523,7 @@ void NoteRemoteUpdatesHandler::ProcessUpdate(
   // Must not be a deletion.
   DCHECK(!update_entity.is_deleted());
   DCHECK(update_entity.server_defined_unique_tag.empty());
-  DCHECK(IsValidNotesSpecifics(update_entity.specifics.notes(),
-                               update_entity.is_folder));
+  DCHECK(IsValidNotesSpecifics(update_entity.specifics.notes()));
   DCHECK(!tracked_entity->IsUnsynced());
 
   const vivaldi::NoteNode* node = tracked_entity->note_node();
@@ -553,16 +550,12 @@ void NoteRemoteUpdatesHandler::ProcessUpdate(
   // unique_position), or it could be that the node has moved under another
   // parent without any data change. Should check both the data and the parent
   // to confirm that no updates to the model are needed.
-  if (tracked_entity->MatchesDataIgnoringParent(update_entity) &&
+  if (tracked_entity->MatchesDataPossiblyIncludingParent(update_entity) &&
       new_parent == old_parent) {
     note_tracker_->Update(tracked_entity, update.response_version,
                           update_entity.modification_time,
-                          update_entity.unique_position,
                           update_entity.specifics);
-    if (base::FeatureList::IsEnabled(
-            switches::kSyncReuploadBookmarksUponMatchingData)) {
-      ReuploadEntityIfNeeded(update_entity, tracked_entity);
-    }
+    ReuploadEntityIfNeeded(update_entity, tracked_entity);
     return;
   }
   ApplyRemoteUpdate(update, tracked_entity, new_parent_entity, notes_model_,
@@ -670,11 +663,10 @@ void NoteRemoteUpdatesHandler::ProcessConflict(
   // unique_position), or it could be that the node has moved under another
   // parent without any data change. Should check both the data and the parent
   // to confirm that no updates to the model are needed.
-  if (tracked_entity->MatchesDataIgnoringParent(update_entity) &&
+  if (tracked_entity->MatchesDataPossiblyIncludingParent(update_entity) &&
       new_parent == old_parent) {
     note_tracker_->Update(tracked_entity, update.response_version,
                           update_entity.modification_time,
-                          update_entity.unique_position,
                           update_entity.specifics);
 
     // The changes are identical so there isn't a real conflict.

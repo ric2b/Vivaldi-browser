@@ -15,6 +15,9 @@
 #include "chrome/browser/ash/policy/core/user_policy_test_helper.h"
 #include "chrome/browser/ash/policy/dlp/data_transfer_dlp_controller.h"
 #include "chrome/browser/ash/policy/dlp/dlp_policy_constants.h"
+#include "chrome/browser/ash/policy/dlp/dlp_policy_event.pb.h"
+#include "chrome/browser/ash/policy/dlp/dlp_reporting_manager.h"
+#include "chrome/browser/ash/policy/dlp/dlp_reporting_manager_test_helper.h"
 #include "chrome/browser/ash/policy/dlp/dlp_rules_manager.h"
 #include "chrome/browser/ash/policy/dlp/dlp_rules_manager_factory.h"
 #include "chrome/browser/ash/policy/dlp/dlp_rules_manager_impl.h"
@@ -134,8 +137,10 @@ class FakeDlpController : public DataTransferDlpController,
 class MockDlpRulesManager : public DlpRulesManagerImpl {
  public:
   explicit MockDlpRulesManager(PrefService* local_state)
-      : DlpRulesManagerImpl(local_state) {}
+      : DlpRulesManagerImpl(local_state, /* dm_token_value= */ "") {}
   ~MockDlpRulesManager() override = default;
+
+  MOCK_CONST_METHOD0(GetReportingManager, DlpReportingManager*());
 };
 
 void SetClipboardText(std::u16string text,
@@ -552,9 +557,13 @@ class DataTransferDlpBlinkBrowserTest : public InProcessBrowserTest {
   }
 };
 
-// Disabled due to flakiness: crbug.com/1220328
-IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest,
-                       DISABLED_ProceedOnWarn) {
+// Flaky on MSan bots: crbug.com/1230617
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_ProceedOnWarn DISABLED_ProceedOnWarn
+#else
+#define MAYBE_ProceedOnWarn ProceedOnWarn
+#endif
+IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest, MAYBE_ProceedOnWarn) {
   ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
@@ -613,8 +622,8 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest,
              "  };"
              "});"));
 
-  content::UpdateUserActivationStateInterceptor user_activation_interceptor;
-  user_activation_interceptor.Init(GetActiveWebContents()->GetMainFrame());
+  content::UpdateUserActivationStateInterceptor user_activation_interceptor(
+      GetActiveWebContents()->GetMainFrame());
   user_activation_interceptor.UpdateUserActivationState(
       blink::mojom::UserActivationUpdateType::kNotifyActivation,
       blink::mojom::UserActivationNotificationType::kTest);
@@ -635,8 +644,13 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest,
   testing::Mock::VerifyAndClearExpectations(&dlp_controller);
 }
 
-// Disabled due to flakiness: crbug.com/1220328
-IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest, DISABLED_CancelWarn) {
+// Flaky on MSan bots: crbug.com/1230617
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_CancelWarn DISABLED_CancelWarn
+#else
+#define MAYBE_CancelWarn CancelWarn
+#endif
+IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest, MAYBE_CancelWarn) {
   ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
@@ -695,8 +709,8 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest, DISABLED_CancelWarn) {
              "  };"
              "});"));
 
-  content::UpdateUserActivationStateInterceptor user_activation_interceptor;
-  user_activation_interceptor.Init(GetActiveWebContents()->GetMainFrame());
+  content::UpdateUserActivationStateInterceptor user_activation_interceptor(
+      GetActiveWebContents()->GetMainFrame());
   user_activation_interceptor.UpdateUserActivationState(
       blink::mojom::UserActivationUpdateType::kNotifyActivation,
       blink::mojom::UserActivationNotificationType::kTest);
@@ -719,8 +733,13 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest, DISABLED_CancelWarn) {
 }
 
 // Test case for crbug.com/1213143
-// Disabled due to flakiness: crbug.com/1219981
-IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest, DISABLED_Reporting) {
+// Flaky on MSan bots: crbug.com/1230617
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_Reporting DISABLED_Reporting
+#else
+#define MAYBE_Reporting Reporting
+#endif
+IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest, MAYBE_Reporting) {
   ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
@@ -728,6 +747,12 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest, DISABLED_Reporting) {
 
   FakeClipboardNotifier helper;
   FakeDlpController dlp_controller(rules_manager, &helper);
+
+  DlpReportingManager reporting_manager;
+  std::vector<DlpPolicyEvent> events;
+  SetReportQueueForReportingManager(&reporting_manager, events);
+  EXPECT_CALL(rules_manager, GetReportingManager)
+      .WillRepeatedly(::testing::Return(&reporting_manager));
 
   {
     ListPrefUpdate update(g_browser_process->local_state(),
@@ -779,8 +804,8 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest, DISABLED_Reporting) {
              "  };"
              "});"));
 
-  content::UpdateUserActivationStateInterceptor user_activation_interceptor;
-  user_activation_interceptor.Init(GetActiveWebContents()->GetMainFrame());
+  content::UpdateUserActivationStateInterceptor user_activation_interceptor(
+      GetActiveWebContents()->GetMainFrame());
   user_activation_interceptor.UpdateUserActivationState(
       blink::mojom::UserActivationUpdateType::kNotifyActivation,
       blink::mojom::UserActivationNotificationType::kTest);
@@ -788,6 +813,12 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpBlinkBrowserTest, DISABLED_Reporting) {
   GetActiveWebContents()->Paste();
   EXPECT_FALSE(dlp_controller.ObserveWidget());
   EXPECT_EQ(kClipboardText1, EvalJs(GetActiveWebContents(), "p"));
+
+  EXPECT_EQ(events.size(), 1u);
+  EXPECT_THAT(events[0],
+              IsDlpPolicyEvent(CreateDlpPolicyEvent(
+                  kMailUrl, "*", DlpRulesManager::Restriction::kClipboard,
+                  DlpRulesManager::Level::kReport)));
 }
 
 }  // namespace policy

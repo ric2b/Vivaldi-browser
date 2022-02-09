@@ -30,6 +30,7 @@ class AutoUpdateAPI {
 
   static void SendDidFindValidUpdate(const std::string& url,
                                      const base::Version& version);
+  static void SendUpdaterDidNotFindUpdate();
   static void SendWillDownloadUpdate(const base::Version& version);
   static void SendDidDownloadUpdate(const base::Version& version);
   static void SendWillInstallUpdateOnQuit(const base::Version& version);
@@ -142,6 +143,19 @@ class AutoUpdateSetAutoInstallUpdatesFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(AutoUpdateSetAutoInstallUpdatesFunction);
+};
+
+class AutoUpdateGetLastCheckTimeFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autoUpdate.getLastCheckTime",
+                             AUTOUPDATE_GETLASTCHECKTIME)
+  AutoUpdateGetLastCheckTimeFunction() = default;
+
+ private:
+  ~AutoUpdateGetLastCheckTimeFunction() override = default;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(AutoUpdateGetLastCheckTimeFunction);
 };
 
 class AutoUpdateGetUpdateStatusFunction : public ExtensionFunction {

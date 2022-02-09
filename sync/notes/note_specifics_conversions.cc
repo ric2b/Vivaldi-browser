@@ -19,8 +19,10 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/sync/base/unique_position.h"
 #include "components/sync/engine/entity_data.h"
-#include "components/sync/protocol/sync.pb.h"
+#include "components/sync/protocol/entity_specifics.pb.h"
+#include "components/sync/protocol/notes_specifics.pb.h"
 #include "components/sync_bookmarks/switches.h"
 #include "notes/note_node.h"
 #include "notes/notes_model.h"
@@ -106,6 +108,36 @@ std::u16string NodeTitleFromSpecifics(
   return base::UTF8ToUTF16(node_title);
 }
 
+void MoveAllChildren(vivaldi::NotesModel* model,
+                     const vivaldi::NoteNode* old_parent,
+                     const vivaldi::NoteNode* new_parent) {
+  DCHECK(old_parent && old_parent->is_folder());
+  DCHECK(new_parent && new_parent->is_folder());
+  DCHECK(old_parent != new_parent);
+  DCHECK(new_parent->children().empty());
+
+  if (old_parent->children().empty()) {
+    return;
+  }
+
+  // This code relies on the underlying type to store children in the
+  // NotesModel which is vector. It moves the last child from |old_parent| to
+  // the end of |new_parent| step by step (which reverses the order of
+  // children). After that all children must be reordered to keep the original
+  // order in |new_parent|.
+  // This algorithm is used because of performance reasons.
+  std::vector<const vivaldi::NoteNode*> children_order(
+      old_parent->children().size(), nullptr);
+  for (size_t i = old_parent->children().size(); i > 0; --i) {
+    const size_t old_index = i - 1;
+    const vivaldi::NoteNode* child_to_move =
+        old_parent->children()[old_index].get();
+    children_order[old_index] = child_to_move;
+    model->Move(child_to_move, new_parent, new_parent->children().size());
+  }
+  model->ReorderChildren(new_parent, children_order);
+}
+
 }  // namespace
 
 std::string FullTitleToLegacyCanonicalizedTitle(const std::string& node_title) {
@@ -124,20 +156,24 @@ bool IsNoteEntityReuploadNeeded(const syncer::EntityData& remote_entity_data) {
   if (remote_entity_data.is_deleted()) {
     return false;
   }
+
   DCHECK(remote_entity_data.specifics.has_notes());
-  if (remote_entity_data.specifics.notes().has_full_title() &&
-      !remote_entity_data.is_note_guid_in_specifics_preprocessed) {
+  if (!remote_entity_data.is_note_unique_position_in_specifics_preprocessed) {
     return false;
   }
-  return base::FeatureList::IsEnabled(
-      switches::kSyncReuploadBookmarkFullTitles);
+
+  return base::FeatureList::IsEnabled(switches::kSyncReuploadBookmarks);
 }
 
 sync_pb::EntitySpecifics CreateSpecificsFromNoteNode(
     const vivaldi::NoteNode* node,
-    vivaldi::NotesModel* model) {
+    vivaldi::NotesModel* model,
+    const sync_pb::UniquePosition& unique_position) {
   sync_pb::EntitySpecifics specifics;
   sync_pb::NotesSpecifics* notes_specifics = specifics.mutable_notes();
+
+  notes_specifics->set_special_node_type(GetProtoTypeFromNoteNode(node));
+
   if (!node->is_folder() && !node->is_separator()) {
     notes_specifics->set_url(node->GetURL().spec());
     notes_specifics->set_content(base::UTF16ToUTF8(node->GetContent()));
@@ -151,15 +187,17 @@ sync_pb::EntitySpecifics CreateSpecificsFromNoteNode(
   DCHECK(node->guid().is_valid()) << "Actual: " << node->guid();
   notes_specifics->set_guid(node->guid().AsLowercaseString());
 
+  DCHECK(node->parent()->guid().is_valid())
+      << "Actual: " << node->parent()->guid();
+  notes_specifics->set_parent_guid(node->parent()->guid().AsLowercaseString());
+
   const std::string node_title = base::UTF16ToUTF8(node->GetTitle());
   notes_specifics->set_legacy_canonicalized_title(
       FullTitleToLegacyCanonicalizedTitle(node_title));
   notes_specifics->set_full_title(node_title);
   notes_specifics->set_creation_time_us(
       node->GetCreationTime().ToDeltaSinceWindowsEpoch().InMicroseconds());
-
-  if (node->is_separator())
-    notes_specifics->set_special_node_type(sync_pb::NotesSpecifics::SEPARATOR);
+  *notes_specifics->mutable_unique_position() = unique_position;
 
   return specifics;
 }
@@ -168,12 +206,10 @@ const vivaldi::NoteNode* CreateNoteNodeFromSpecifics(
     const sync_pb::NotesSpecifics& specifics,
     const vivaldi::NoteNode* parent,
     size_t index,
-    bool is_folder,
     vivaldi::NotesModel* model) {
   DCHECK(parent);
   DCHECK(model);
-  DCHECK(!is_folder ||
-         specifics.special_node_type() != sync_pb::NotesSpecifics::SEPARATOR);
+  DCHECK(IsValidNotesSpecifics(specifics));
 
   base::GUID guid = base::GUID::ParseLowercase(specifics.guid());
   DCHECK(guid.is_valid());
@@ -185,30 +221,32 @@ const vivaldi::NoteNode* CreateNoteNodeFromSpecifics(
       base::TimeDelta::FromMicroseconds(creation_time_us));
 
   const vivaldi::NoteNode* node;
-  if (is_folder) {
-    node = model->AddFolder(parent, index, NodeTitleFromSpecifics(specifics),
+  switch (specifics.special_node_type()) {
+    case sync_pb::NotesSpecifics::NORMAL:
+      node = model->AddNote(parent, index, NodeTitleFromSpecifics(specifics),
+                            GURL(specifics.url()),
+                            base::UTF8ToUTF16(specifics.content()),
                             creation_time, guid);
-  } else if (specifics.special_node_type() ==
-             sync_pb::NotesSpecifics::SEPARATOR) {
-    node = model->AddSeparator(parent, index, NodeTitleFromSpecifics(specifics),
-                               creation_time, guid);
-  } else {
-    const int64_t create_time_us = specifics.creation_time_us();
-    base::Time create_time = base::Time::FromDeltaSinceWindowsEpoch(
-        // Use FromDeltaSinceWindowsEpoch because create_time_us has
-        // always used the Windows epoch.
-        base::TimeDelta::FromMicroseconds(create_time_us));
-    node = model->AddNote(
-        parent, index, NodeTitleFromSpecifics(specifics), GURL(specifics.url()),
-        base::UTF8ToUTF16(specifics.content()), create_time, guid);
 
-    for (auto it : specifics.attachments()) {
-      if (!it.has_checksum())
-        continue;
-      model->AddAttachment(node, vivaldi::NoteAttachment(it.checksum(), ""));
-    }
+      for (auto it : specifics.attachments()) {
+        if (!it.has_checksum())
+          continue;
+        model->AddAttachment(node, vivaldi::NoteAttachment(it.checksum(), ""));
+      }
+      return node;
+    case sync_pb::NotesSpecifics::SEPARATOR:
+      return model->AddSeparator(parent, index,
+                                 NodeTitleFromSpecifics(specifics),
+                                 creation_time, guid);
+      break;
+    case sync_pb::NotesSpecifics::FOLDER:
+      return model->AddFolder(parent, index, NodeTitleFromSpecifics(specifics),
+                              creation_time, guid);
+      break;
   }
-  return node;
+
+  NOTREACHED();
+  return nullptr;
 }
 
 void UpdateNoteNodeFromSpecifics(const sync_pb::NotesSpecifics& specifics,
@@ -237,6 +275,26 @@ void UpdateNoteNodeFromSpecifics(const sync_pb::NotesSpecifics& specifics,
   }
 }
 
+sync_pb::NotesSpecifics::VivaldiSpecialNotesType GetProtoTypeFromNoteNode(
+    const vivaldi::NoteNode* node) {
+  DCHECK(node);
+
+  switch (node->type()) {
+    case vivaldi::NoteNode::NOTE:
+      DCHECK(!node->is_folder());
+      return sync_pb::NotesSpecifics::NORMAL;
+    case vivaldi::NoteNode::SEPARATOR:
+      DCHECK(!node->is_folder());
+      return sync_pb::NotesSpecifics::SEPARATOR;
+    case vivaldi::NoteNode::FOLDER:
+    case vivaldi::NoteNode::MAIN:
+    case vivaldi::NoteNode::OTHER:
+    case vivaldi::NoteNode::TRASH:
+      DCHECK(node->is_folder());
+      return sync_pb::NotesSpecifics::FOLDER;
+  }
+}
+
 const vivaldi::NoteNode* ReplaceNoteNodeGUID(const vivaldi::NoteNode* node,
                                              const base::GUID& guid,
                                              vivaldi::NotesModel* model) {
@@ -256,35 +314,47 @@ const vivaldi::NoteNode* ReplaceNoteNodeGUID(const vivaldi::NoteNode* node,
     new_node =
         model->AddSeparator(node->parent(), node->parent()->GetIndexOf(node),
                             node->GetTitle(), node->GetCreationTime(), guid);
+    MoveAllChildren(model, node, new_node);
   } else {
     new_node = model->AddNote(
         node->parent(), node->parent()->GetIndexOf(node), node->GetTitle(),
         node->GetURL(), node->GetContent(), node->GetCreationTime(), guid);
     model->SwapAttachments(new_node, node);
   }
-  for (size_t i = node->children().size(); i > 0; --i) {
-    model->Move(node->children()[i - 1].get(), new_node, 0);
-  }
   model->Remove(node);
 
   return new_node;
 }
 
-bool IsValidNotesSpecifics(const sync_pb::NotesSpecifics& specifics,
-                           bool is_folder) {
+bool IsValidNotesSpecifics(const sync_pb::NotesSpecifics& specifics) {
   bool is_valid = true;
   if (specifics.ByteSize() == 0) {
     DLOG(ERROR) << "Invalid note: empty specifics.";
     is_valid = false;
   }
-  if (is_folder &&
-      specifics.special_node_type() == sync_pb::NotesSpecifics::SEPARATOR) {
-    DLOG(ERROR) << "Invalid note: can't be both a folder and a separator.";
-    is_valid = false;
-  }
-  base::GUID guid = base::GUID::ParseLowercase(specifics.guid());
+  const base::GUID guid = base::GUID::ParseLowercase(specifics.guid());
+
   if (!guid.is_valid()) {
     DLOG(ERROR) << "Invalid note: invalid GUID in the specifics.";
+    is_valid = false;
+  } else if (guid.AsLowercaseString() ==
+             vivaldi::NoteNode::kBannedGuidDueToPastSyncBug) {
+    DLOG(ERROR) << "Invalid note: banned GUID in specifics.";
+    is_valid = false;
+  }
+  if (specifics.has_parent_guid()) {
+    const base::GUID parent_guid =
+        base::GUID::ParseLowercase(specifics.parent_guid());
+    if (!parent_guid.is_valid()) {
+      DLOG(ERROR) << "Invalid note: invalid parent GUID in specifics.";
+      is_valid = false;
+    }
+  }
+
+  if (!syncer::UniquePosition::FromProto(specifics.unique_position())
+           .IsValid()) {
+    // Ignore updates with invalid positions.
+    DLOG(ERROR) << "Invalid note: invalid unique position.";
     is_valid = false;
   }
 
@@ -377,7 +447,6 @@ void MaybeFixGuidInSpecificsDueToPastBug(const SyncedNoteTracker& tracker,
 
   update_entity->specifics.mutable_notes()->set_guid(
       local_guid.AsLowercaseString());
-  update_entity->is_note_guid_in_specifics_preprocessed = true;
 }
 
 }  // namespace sync_notes

@@ -54,7 +54,7 @@ static_library("ui") {
     ]
     deps += [
       "//chrome/browser/extensions:extensions",
-      "//chrome/browser/web_applications/components",
+      "//chrome/browser/web_applications",
       "//components/web_modal",
       "//extensions/browser",
       "//ui/views",

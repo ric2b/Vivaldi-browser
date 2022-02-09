@@ -181,7 +181,6 @@ NOINLINE void DetermineAlgorithmAndRun(const NGLayoutAlgorithmParams& params,
              RuntimeEnabledFeatures::LayoutNGGridEnabled()) {
     CreateAlgorithmAndRun<NGGridLayoutAlgorithm>(params, callback);
   } else if (box.IsLayoutReplaced()) {
-    DCHECK(RuntimeEnabledFeatures::LayoutNGReplacedEnabled());
     CreateAlgorithmAndRun<NGReplacedLayoutAlgorithm>(params, callback);
   } else if (box.IsLayoutNGFieldset()) {
     CreateAlgorithmAndRun<NGFieldsetLayoutAlgorithm>(params, callback);
@@ -692,7 +691,6 @@ void NGBlockNode::FinishLayout(
       To<NGPhysicalBoxFragment>(layout_result->PhysicalFragment());
 
   if (box_->IsLayoutReplaced()) {
-    DCHECK(RuntimeEnabledFeatures::LayoutNGReplacedEnabled());
     DCHECK(CanUseNewLayout());
     // NG replaced elements are painted with legacy painters. We need to force
     // a legacy "layout" so that paint invalidation flags are updated. But we
@@ -777,6 +775,22 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
   if (IsListItem())
     To<LayoutNGListItem>(box_)->UpdateMarkerTextIfNeeded();
 
+  const bool is_in_perform_layout = box_->GetFrameView()->IsInPerformLayout();
+  // In some scenarios, GridNG will run layout on its children during
+  // MinMaxSizes computation. Instead of running (and possible caching incorrect
+  // results), when we're not performing layout, just use border + padding.
+  if (!is_in_perform_layout && IsGrid()) {
+    const NGFragmentGeometry fragment_geometry =
+        CalculateInitialFragmentGeometry(constraint_space, *this,
+                                         /* is_intrinsic */ true);
+    const NGBoxStrut border_padding =
+        fragment_geometry.border + fragment_geometry.padding;
+    MinMaxSizes sizes;
+    sizes.min_size = border_padding.InlineSum();
+    sizes.max_size = sizes.min_size;
+    return MinMaxSizesResult(sizes, /* depends_on_block_constraints */ false);
+  }
+
   bool is_orthogonal_flow_root =
       !IsParallelWritingMode(container_writing_mode, Style().GetWritingMode());
 
@@ -790,7 +804,7 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
     // Some other areas of the code can query the intrinsic-sizes while outside
     // of the layout phase.
     // TODO(ikilpatrick): Remove this check.
-    if (!box_->GetFrameView()->IsInPerformLayout()) {
+    if (!is_in_perform_layout) {
       sizes = ComputeMinMaxSizesFromLegacy(type, constraint_space);
       return MinMaxSizesResult(sizes,
                                /* depends_on_block_constraints */ false);
@@ -1027,9 +1041,7 @@ bool NGBlockNode::CanUseNewLayout(const LayoutBox& box) {
   DCHECK(RuntimeEnabledFeatures::LayoutNGEnabled());
   if (box.ForceLegacyLayout())
     return false;
-  return box.IsLayoutNGMixin() ||
-         (box.IsLayoutReplaced() &&
-          RuntimeEnabledFeatures::LayoutNGReplacedEnabled());
+  return box.IsLayoutNGMixin() || box.IsLayoutReplaced();
 }
 
 bool NGBlockNode::CanUseNewLayout() const {
@@ -1427,6 +1439,16 @@ void NGBlockNode::CopyChildFragmentPosition(
   LayoutPoint point = ToLayoutPoint(child_fragment, offset, container_fragment,
                                     previous_container_break_token);
   layout_box->SetLocationAndUpdateOverflowControlsIfNeeded(point);
+}
+
+void NGBlockNode::MakeRoomForExtraColumns(LayoutUnit block_size) const {
+  auto* block_flow = DynamicTo<LayoutBlockFlow>(GetLayoutBox());
+  DCHECK(block_flow && block_flow->MultiColumnFlowThread());
+  MultiColumnFragmentainerGroup& last_group =
+      block_flow->MultiColumnFlowThread()
+          ->LastMultiColumnSet()
+          ->LastFragmentainerGroup();
+  last_group.ExtendLogicalBottomInFlowThread(block_size);
 }
 
 void NGBlockNode::CopyFragmentItemsToLayoutBox(

@@ -241,8 +241,19 @@ SrcAttribute.prototype.setupMutationObserver = function() {
 };
 
 SrcAttribute.prototype.parse = function() {
-  // Vivaldi can have webviews that are detached and no partitionid.
-  if (!GuestViewInternalNatives.IsVivaldi()) {
+  // Vivaldi can have webviews that are detached and no partitionid where we
+  // want navigation to happen. Check for tabId which is only set for us.
+  // TabStrip
+  const has_tabId = this.view.attributes[
+    WebViewConstants.ATTRIBUTE_TAB_ID].getValue();
+  // Extension popups.
+  const has_viewType = this.view.attributes[
+    WebViewConstants.ATTRIBUTE_VIEW_TYPE].getValue();
+  // Devtools.
+  const has_inspectTabId = this.view.attributes[
+    WebViewConstants.ATTRIBUTE_INSPECT_TAB_ID].getValue();
+
+  if (!has_tabId && !has_viewType && !has_inspectTabId) {
   if (!this.view.elementAttached ||
       !this.view.attributes[
           WebViewConstants.ATTRIBUTE_PARTITION].validPartitionId ||
@@ -260,7 +271,7 @@ SrcAttribute.prototype.parse = function() {
   }
 
   // Vivaldi specific; make sure we get the wasTyped attribute updated.
-  var wasTyped = this.view.attributes[
+  const wasTyped = this.view.attributes[
           WebViewConstants.ATTRIBUTE_WASTYPED].getValue();
 
   WebViewInternal.navigate(this.view.guest.getId(),

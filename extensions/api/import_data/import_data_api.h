@@ -11,6 +11,7 @@
 #include "chrome/browser/importer/importer_progress_observer.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/common/importer/importer_type.h"
+#include "components/sessions/core/session_id.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_function.h"
@@ -117,6 +118,7 @@ class ImportDataStartImportFunction : public ExtensionFunction,
   void ImportData(const base::ListValue* args);
 
   ResponseAction HandleChooseBookmarksFileOrFolder(
+      SessionID::id_type window_id,
       const std::u16string& title,
       base::StringPiece extension,
       const base::FilePath& default_file,

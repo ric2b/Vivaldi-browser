@@ -27,12 +27,14 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.support.test.InstrumentationRegistry;
 import android.view.View;
 
 import androidx.annotation.Nullable;
 import androidx.test.filters.MediumTest;
 
+import org.json.JSONArray;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -51,6 +53,8 @@ import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer;
+import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.util.Collections;
 import java.util.concurrent.ExecutionException;
@@ -83,6 +87,10 @@ public class AutofillAssistantOverlayUiTest {
         return mTestRule.getWebContents();
     }
 
+    private AssistantOverlayModel createModel() {
+        return TestThreadUtils.runOnUiThreadBlockingNoException(AssistantOverlayModel::new);
+    }
+
     /** Creates a coordinator for use in UI tests with a default, non-null overlay image. */
     private AssistantOverlayCoordinator createCoordinator(AssistantOverlayModel model)
             throws ExecutionException {
@@ -109,7 +117,7 @@ public class AutofillAssistantOverlayUiTest {
     @Test
     @MediumTest
     public void testInitialState() throws Exception {
-        AssistantOverlayModel model = new AssistantOverlayModel();
+        AssistantOverlayModel model = createModel();
         AssistantOverlayCoordinator coordinator = createCoordinator(model);
 
         assertScrimDisplayed(false);
@@ -121,7 +129,7 @@ public class AutofillAssistantOverlayUiTest {
     @Test
     @MediumTest
     public void testFullOverlay() throws Exception {
-        AssistantOverlayModel model = new AssistantOverlayModel();
+        AssistantOverlayModel model = createModel();
         AssistantOverlayCoordinator coordinator = createCoordinator(model);
 
         runOnUiThreadBlocking(
@@ -141,7 +149,7 @@ public class AutofillAssistantOverlayUiTest {
     @Test
     @MediumTest
     public void testFullOverlayWithImage() throws Exception {
-        AssistantOverlayModel model = new AssistantOverlayModel();
+        AssistantOverlayModel model = createModel();
         AssistantOverlayCoordinator coordinator = createCoordinator(model);
 
         AssistantOverlayImage image = new AssistantOverlayImage(
@@ -158,7 +166,7 @@ public class AutofillAssistantOverlayUiTest {
     @Test
     @MediumTest
     public void testPartialOverlay() throws Exception {
-        AssistantOverlayModel model = new AssistantOverlayModel();
+        AssistantOverlayModel model = createModel();
         AssistantOverlayCoordinator coordinator = createCoordinator(model);
 
         // Partial overlay, no touchable areas: equivalent to full overlay.
@@ -196,16 +204,18 @@ public class AutofillAssistantOverlayUiTest {
     @Test
     @MediumTest
     public void testSimpleScrollPartialOverlay() throws Exception {
-        AssistantOverlayModel model = new AssistantOverlayModel();
+        AssistantOverlayModel model = createModel();
         createCoordinator(model);
 
         ChromeTabUtils.waitForInteractable(mTestRule.getActivity().getActivityTab());
         scrollIntoViewIfNeeded(mTestRule.getWebContents(), "touch_area_five");
         waitUntil(() -> checkElementOnScreen(mTestRule, "touch_area_five"));
         Rect rect = getBoundingRectForElement(getWebContents(), "touch_area_five");
+        Rect viewport = getViewport(getWebContents());
         runOnUiThreadBlocking(() -> {
             model.set(AssistantOverlayModel.STATE, AssistantOverlayState.PARTIAL);
             model.set(AssistantOverlayModel.WEB_CONTENTS, getWebContents());
+            model.set(AssistantOverlayModel.VISUAL_VIEWPORT, new RectF(viewport));
             model.set(AssistantOverlayModel.TOUCHABLE_AREA,
                     Collections.singletonList(new AssistantOverlayRect(rect)));
         });
@@ -221,7 +231,7 @@ public class AutofillAssistantOverlayUiTest {
     @Test
     @MediumTest
     public void testOverlayImageDoesNotCrashIfValid() throws Exception {
-        AssistantOverlayModel model = new AssistantOverlayModel();
+        AssistantOverlayModel model = createModel();
         Bitmap bitmap = BitmapFactory.decodeResource(mTestRule.getActivity().getResources(),
                 org.chromium.chrome.autofill_assistant.R.drawable.btn_close);
         assertThat(bitmap, notNullValue());
@@ -241,7 +251,7 @@ public class AutofillAssistantOverlayUiTest {
     @Test
     @MediumTest
     public void testOverlayDoesNotCrashIfImageFailsToLoad() throws Exception {
-        AssistantOverlayModel model = new AssistantOverlayModel();
+        AssistantOverlayModel model = createModel();
         AssistantOverlayCoordinator coordinator =
                 createCoordinator(model, /* overlayImage = */ null);
 
@@ -278,7 +288,23 @@ public class AutofillAssistantOverlayUiTest {
         }
     }
 
-    void tapElement(String elementId) throws Exception {
+    private void tapElement(String elementId) throws Exception {
         AutofillAssistantUiTestUtil.tapElement(mTestRule, elementId);
+    }
+
+    private Rect getViewport(WebContents webContents) throws Exception {
+        TestCallbackHelperContainer.OnEvaluateJavaScriptResultHelper javascriptHelper =
+                new TestCallbackHelperContainer.OnEvaluateJavaScriptResultHelper();
+        javascriptHelper.evaluateJavaScriptForTests(webContents,
+                "(function() {"
+                        + " const v = window.visualViewport;"
+                        + " return ["
+                        + "   v.pageLeft, v.pageTop,"
+                        + "   v.pageLeft + v.width, v.pageTop + v.height"
+                        + " ];"
+                        + "})()");
+        javascriptHelper.waitUntilHasValue();
+        JSONArray values = new JSONArray(javascriptHelper.getJsonResultAndClear());
+        return new Rect(values.getInt(0), values.getInt(1), values.getInt(2), values.getInt(3));
     }
 }

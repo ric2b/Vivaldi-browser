@@ -13,12 +13,15 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/debug/alias.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/metrics/histogram_functions.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/buildflags.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
@@ -33,6 +36,8 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/session_crashed_bubble.h"
+#include "chrome/browser/ui/startup/launch_mode_recorder.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
@@ -66,10 +71,53 @@ using content::WebContents;
 using sessions::ContentSerializedNavigationBuilder;
 using sessions::SerializedNavigationEntry;
 
+namespace {
+
+const void* const kInstanceTrackerKey = &kInstanceTrackerKey;
+
+// An instance of this class is created pre-profile. It is used to track how
+// many SessionServices have been created.
+class InstanceTracker : public base::SupportsUserData::Data {
+ public:
+  InstanceTracker() = default;
+  InstanceTracker(const InstanceTracker&) = delete;
+  InstanceTracker& operator=(const InstanceTracker&) = delete;
+  ~InstanceTracker() override = default;
+
+  // Registers a new instance. Returns true is this is the first time called
+  // with the specified profile.
+  static bool RegisterNewSessionService(Profile* profile) {
+    InstanceTracker* tracker = static_cast<InstanceTracker*>(
+        profile->GetUserData(kInstanceTrackerKey));
+    if (!tracker) {
+      profile->SetUserData(kInstanceTrackerKey,
+                           std::make_unique<InstanceTracker>());
+      tracker = static_cast<InstanceTracker*>(
+          profile->GetUserData(kInstanceTrackerKey));
+    }
+    return tracker->IncrementSessionServiceCount();
+  }
+
+ private:
+  bool IncrementSessionServiceCount() {
+    const bool is_first = session_service_count_ == 0;
+    ++session_service_count_;
+    return is_first;
+  }
+
+  int session_service_count_ = 0;
+};
+
+}  // namespace
+
 SessionService::SessionService(Profile* profile)
     : SessionServiceBase(
           profile,
-          SessionServiceBase::SessionServiceType::kSessionRestore) {
+          SessionServiceBase::SessionServiceType::kSessionRestore),
+      is_first_session_service_(
+          InstanceTracker::RegisterNewSessionService(profile)) {
+  if (is_first_session_service_)
+    LogSessionServiceStartEvent(profile, HasPendingUncleanExit(profile));
   closing_all_browsers_subscription_ = chrome::AddClosingAllBrowsersCallback(
       base::BindRepeating(&SessionService::OnClosingAllBrowsersChanged,
                           base::Unretained(this)));
@@ -107,9 +155,11 @@ bool SessionService::ShouldNewWindowStartSession(Browser* browser) {
   // startup setting.
   if (full_restore::features::IsFullRestoreEnabled()) {
     // If there are other browser windows, or during the restoring process, or
-    // restore from crash, sessions should not be restored.
+    // restore from crash, or should not restore for `browser`, sessions should
+    // not be restored.
     if (SessionRestore::IsRestoring(profile()) ||
-        has_open_trackable_browsers_ || HasPendingUncleanExit(profile())) {
+        has_open_trackable_browsers_ || HasPendingUncleanExit(profile()) ||
+        (browser && !browser->should_trigger_session_restore())) {
       return false;
     }
 
@@ -130,7 +180,8 @@ bool SessionService::ShouldNewWindowStartSession(Browser* browser) {
       return false;
     }
 
-    return true;
+    // If the browser does not have a `restore_id`, then we restore the session.
+    return browser->create_params().restore_id == Browser::kDefaultRestoreId;
   }
 
   if (!force_browser_not_alive_with_no_windows_)
@@ -392,6 +443,24 @@ Browser::Type SessionService::GetDesiredBrowserTypeForWebContents() {
   return Browser::Type::TYPE_NORMAL;
 }
 
+void SessionService::DidScheduleCommand() {
+  if (did_schedule_command_)
+    return;
+  did_schedule_command_ = true;
+  if (is_first_session_service_)
+    return;
+
+  // TODO(https://crbug.com/1245816): for debugging, remove once tracked down
+  // source of problem.
+  // A command has been scheduled for a SessionService other than the first.
+  // Recreating the SessionService happens if shutdown is canceled, which is
+  // valid, but bugs seem to indicate we are getting here in scenarios we don't
+  // expect. This debug code is attempting to identify how that is happening.
+  const bool shutdown_started = browser_shutdown::HasShutdownStarted();
+  base::debug::Alias(&shutdown_started);
+  base::debug::DumpWithoutCrashing();
+}
+
 bool SessionService::ShouldRestoreWindowOfType(
     sessions::SessionWindow::WindowType window_type) const {
   // TYPE_APP and TYPE_APP_POPUP are handled by app_session_service.
@@ -424,6 +493,27 @@ bool SessionService::RestoreIfNecessary(const std::vector<GURL>& urls_to_open,
           urls_to_open);
       return true;
     }
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  } else if (full_restore::features::IsFullRestoreEnabled() &&
+             HasPendingUncleanExit(profile())) {
+    if (!browser) {
+      // If 'browser' is null, call StartupBrowserCreator to create a new
+      // browser instance.
+      StartupBrowserCreator browser_creator;
+      browser_creator.LaunchBrowser(*base::CommandLine::ForCurrentProcess(),
+                                    profile(), base::FilePath(),
+                                    chrome::startup::IS_PROCESS_STARTUP,
+                                    chrome::startup::IS_NOT_FIRST_RUN,
+                                    std::make_unique<LaunchModeRecorder>());
+      return true;
+    } else {
+      // If 'browser' is not null, show the crash bubble in the current browser
+      // instance.
+      SessionCrashedBubble::ShowIfNotOffTheRecordProfile(
+          browser, /*skip_tab_checking=*/true);
+      AddLaunchedProfile(profile());
+    }
+#endif
   }
   return false;
 }
@@ -576,7 +666,8 @@ void SessionService::LogExitEvent() {
     }
   }
   did_log_exit_ = true;
-  LogSessionServiceExitEvent(profile(), browser_count, tab_count);
+  LogSessionServiceExitEvent(profile(), browser_count, tab_count,
+                             is_first_session_service_, did_schedule_command_);
 }
 
 void SessionService::RemoveExitEvent() {

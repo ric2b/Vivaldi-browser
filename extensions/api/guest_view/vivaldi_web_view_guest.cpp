@@ -204,7 +204,7 @@ WebViewGuest::CursorHider::~CursorHider() {
 
 WebContents::CreateParams WebViewGuest::GetWebContentsCreateParams(
     content::BrowserContext* context,
-    const GURL site) {
+    const GURL site, bool is_vivaldi_embedded) {
   // If we already have a webview tag in the same app using the same storage
   // partition, we should use the same SiteInstance so the existing tag and
   // the new tag can script each other.
@@ -229,8 +229,15 @@ WebContents::CreateParams WebViewGuest::GetWebContentsCreateParams(
         profile = profile->GetOriginalProfile();
         context = profile;
       }
-      guest_site_instance =
-          content::SiteInstance::CreateForGuest(context, site);
+      // If the webview is embedded in the Vivaldi app do not handle the
+      // navigations as in regular guests. It is a tab or panel.
+      if (is_vivaldi_embedded) {
+        guest_site_instance =
+            content::SiteInstance::CreateForURL(context, site);
+      } else {
+        guest_site_instance =
+            content::SiteInstance::CreateForGuest(context, site);
+      }
     }
   }
 

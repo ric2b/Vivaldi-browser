@@ -3708,7 +3708,7 @@ TEST_F(WebViewTest, FinishComposingTextDoesntTriggerAutofillTextChange) {
   WebVector<ui::ImeTextSpan> empty_ime_text_spans;
   active_input_method_controller->SetComposition(
       WebString::FromUTF8(composition_text.c_str()), empty_ime_text_spans,
-      WebRange(), 0, composition_text.length());
+      WebRange(), 0, static_cast<int>(composition_text.length()));
 
   WebTextInputInfo info = active_input_method_controller->TextInputInfo();
   EXPECT_EQ(0, info.selection_start);
@@ -4658,8 +4658,46 @@ TEST_F(WebViewTest, PreferredSizeWithGrid) {
                                      base_url);
 
   gfx::Size size = web_view->ContentsPreferredMinimumSize();
-  EXPECT_EQ(100, size.width());
+  if (RuntimeEnabledFeatures::LayoutNGEnabled())
+    EXPECT_EQ(0, size.width());
+  else
+    EXPECT_EQ(100, size.width());
+
   EXPECT_EQ(100, size.height());
+}
+
+TEST_F(WebViewTest, PreferredSizeWithNGGridSkipped) {
+  WebViewImpl* web_view = web_view_helper_.Initialize();
+  WebURL base_url = url_test_helpers::ToKURL("http://example.com/");
+  frame_test_helpers::LoadHTMLString(web_view->MainFrameImpl(),
+                                     R"HTML(<!DOCTYPE html>
+    <style>
+      body { margin: 0px; }
+    </style>
+    <div style="display: inline-grid;
+                padding: 1%;
+                border: 5px solid black;
+                grid-template-rows: 1fr 2fr">
+      <svg id="target" viewBox="0 0 1 1" style="background: green;
+                                                height: 100%;" >
+        <circle id="c1" cx="50" cy="50" r="50"/>
+      </svg>
+    </div>
+                                   )HTML",
+                                     base_url);
+
+  LocalFrame* main_frame = web_view->MainFrameImpl()->GetFrame();
+  Document* document = main_frame->GetDocument();
+  Element* element = document->getElementById("target");
+
+  // Note: Not entirely clear how we get into this state in release builds, we
+  // *should* be layout clean and have cached results for the preferred size
+  // query. See https://crbug.com/1245654 for how we saw this issue in the wild.
+  element->GetLayoutBox()->ClearLayoutResults();
+
+  gfx::Size size = web_view->ContentsPreferredMinimumSize();
+  EXPECT_EQ(10, size.width());
+  EXPECT_EQ(10, size.height());
 }
 
 TEST_F(WebViewTest, PreferredSizeWithGridMinWidth) {

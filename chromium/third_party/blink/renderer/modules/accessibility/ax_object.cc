@@ -304,6 +304,7 @@ const RoleEntry kAriaRoles[] = {
     {"doc-afterword", ax::mojom::blink::Role::kDocAfterword},
     {"doc-appendix", ax::mojom::blink::Role::kDocAppendix},
     {"doc-backlink", ax::mojom::blink::Role::kDocBackLink},
+    // Deprecated in DPUB-ARIA 1.1. Use a listitem inside of a doc-bibliography.
     {"doc-biblioentry", ax::mojom::blink::Role::kDocBiblioEntry},
     {"doc-bibliography", ax::mojom::blink::Role::kDocBibliography},
     {"doc-biblioref", ax::mojom::blink::Role::kDocBiblioRef},
@@ -314,6 +315,7 @@ const RoleEntry kAriaRoles[] = {
     {"doc-credit", ax::mojom::blink::Role::kDocCredit},
     {"doc-credits", ax::mojom::blink::Role::kDocCredits},
     {"doc-dedication", ax::mojom::blink::Role::kDocDedication},
+    // Deprecated in DPUB-ARIA 1.1. Use a listitem inside of a doc-endnotes.
     {"doc-endnote", ax::mojom::blink::Role::kDocEndnote},
     {"doc-endnotes", ax::mojom::blink::Role::kDocEndnotes},
     {"doc-epigraph", ax::mojom::blink::Role::kDocEpigraph},
@@ -500,7 +502,8 @@ AXObject::AXObject(AXObjectCacheImpl& ax_object_cache)
       last_modification_count_(-1),
       cached_is_ignored_(false),
       cached_is_ignored_but_included_in_tree_(false),
-      cached_is_inert_or_aria_hidden_(false),
+      cached_is_inert_(false),
+      cached_is_aria_hidden_(false),
       cached_is_descendant_of_disabled_node_(false),
       cached_live_region_root_(nullptr),
       cached_aria_column_index_(0),
@@ -1561,10 +1564,11 @@ void AXObject::SerializeSparseAttributes(ui::AXNodeData* node_data) {
   HashSet<QualifiedName> set_attributes;
   for (const Attribute& attr : attributes) {
     set_attributes.insert(attr.GetName());
-    AXSparseSetterFunc callback = setter_map.at(attr.GetName());
-
-    if (callback)
-      callback.Run(this, node_data, attr.Value());
+    AXSparseSetterFunc callback;
+    auto it = setter_map.find(attr.GetName());
+    if (it == setter_map.end())
+      continue;
+    it->value.Run(this, node_data, attr.Value());
   }
 
   if (!element->DidAttachInternals())
@@ -1572,13 +1576,10 @@ void AXObject::SerializeSparseAttributes(ui::AXNodeData* node_data) {
   const auto& internals_attributes =
       element->EnsureElementInternals().GetAttributes();
   for (const QualifiedName& attr : internals_attributes.Keys()) {
-    if (set_attributes.Contains(attr))
+    auto it = setter_map.find(attr);
+    if (set_attributes.Contains(attr) || it == setter_map.end())
       continue;
-
-    AXSparseSetterFunc callback = setter_map.at(attr);
-
-    if (callback)
-      callback.Run(this, node_data, internals_attributes.at(attr));
+    it->value.Run(this, node_data, internals_attributes.at(attr));
   }
 }
 
@@ -2067,13 +2068,16 @@ void AXObject::UpdateCachedAttributeValuesIfNeeded(
   // the entire subtree needs to recompute descendants.
   // In addition, the below computations for is_ignored_but_included_in_tree is
   // dependent on having the correct new cached value.
-  bool is_inert_or_aria_hidden = ComputeIsInertOrAriaHidden();
-  if (cached_is_inert_or_aria_hidden_ != is_inert_or_aria_hidden) {
+  bool is_inert = ComputeIsInert();
+  bool is_aria_hidden = ComputeIsAriaHidden();
+  if (cached_is_inert_ != is_inert ||
+      cached_is_aria_hidden_ != is_aria_hidden) {
     // Update children if not already dirty (e.g. during Init() time.
     SetNeedsToUpdateChildren();
-    cached_is_inert_or_aria_hidden_ = is_inert_or_aria_hidden;
+    cached_is_inert_ = is_inert;
+    cached_is_aria_hidden_ = is_aria_hidden;
   }
-  cached_is_descendant_of_disabled_node_ = !!DisabledAncestor();
+  cached_is_descendant_of_disabled_node_ = ComputeIsDescendantOfDisabledNode();
 
   bool is_ignored = ComputeAccessibilityIsIgnored();
   bool is_ignored_but_included_in_tree =
@@ -2152,30 +2156,31 @@ bool AXObject::AccessibilityIsIgnoredByDefault(
 
 AXObjectInclusion AXObject::DefaultObjectInclusion(
     IgnoredReasons* ignored_reasons) const {
-  if (IsInertOrAriaHidden()) {
+  if (IsAriaHidden()) {
     // Keep focusable elements that are aria-hidden in tree, so that they can
     // still fire events such as focus and value changes.
     if (!CanSetFocusAttribute()) {
       if (ignored_reasons)
-        ComputeIsInertOrAriaHidden(ignored_reasons);
+        ComputeIsAriaHidden(ignored_reasons);
       return kIgnoreObject;
     }
+  }
+
+  if (IsInert()) {
+    if (ignored_reasons)
+      ComputeIsInert(ignored_reasons);
+    return kIgnoreObject;
   }
 
   return kDefaultBehavior;
 }
 
-bool AXObject::IsInertOrAriaHidden() const {
+bool AXObject::IsInert() const {
   UpdateCachedAttributeValuesIfNeeded();
-  return cached_is_inert_or_aria_hidden_;
+  return cached_is_inert_;
 }
 
-bool AXObject::IsAriaHidden() const {
-  return IsInertOrAriaHidden() && AriaHiddenRoot();
-}
-
-bool AXObject::ComputeIsInertOrAriaHidden(
-    IgnoredReasons* ignored_reasons) const {
+bool AXObject::ComputeIsInert(IgnoredReasons* ignored_reasons) const {
   if (GetNode()) {
     if (GetNode()->IsInert()) {
       if (ignored_reasons) {
@@ -2204,13 +2209,21 @@ bool AXObject::ComputeIsInertOrAriaHidden(
     }
   } else {
     AXObject* parent = ParentObject();
-    if (parent && parent->IsInertOrAriaHidden()) {
+    if (parent && parent->IsInert()) {
       if (ignored_reasons)
-        parent->ComputeIsInertOrAriaHidden(ignored_reasons);
+        parent->ComputeIsInert(ignored_reasons);
       return true;
     }
   }
+  return false;
+}
 
+bool AXObject::IsAriaHidden() const {
+  UpdateCachedAttributeValuesIfNeeded();
+  return cached_is_aria_hidden_;
+}
+
+bool AXObject::ComputeIsAriaHidden(IgnoredReasons* ignored_reasons) const {
   const AXObject* hidden_root = AriaHiddenRoot();
   if (hidden_root) {
     if (ignored_reasons) {
@@ -2265,7 +2278,9 @@ bool AXObject::IsBlockedByAriaModalDialog(
 }
 
 bool AXObject::IsVisible() const {
-  return !IsInertOrAriaHidden() && !IsHiddenViaStyle();
+  // TODO(accessibility) Consider exposing inert objects as visible, since they
+  // are visible. It should be fine, since the objexcts are ignored.
+  return !IsAriaHidden() && !IsInert() && !IsHiddenViaStyle();
 }
 
 const AXObject* AXObject::AriaHiddenRoot() const {
@@ -2386,18 +2401,18 @@ bool AXObject::IsDescendantOfDisabledNode() const {
   return cached_is_descendant_of_disabled_node_;
 }
 
-const AXObject* AXObject::DisabledAncestor() const {
+bool AXObject::ComputeIsDescendantOfDisabledNode() const {
+  if (IsA<Document>(GetNode()))
+    return false;
+
   bool disabled = false;
-  if (HasAOMPropertyOrARIAAttribute(AOMBooleanProperty::kDisabled, disabled)) {
-    if (disabled)
-      return this;
-    return nullptr;
-  }
+  if (HasAOMPropertyOrARIAAttribute(AOMBooleanProperty::kDisabled, disabled))
+    return disabled;
 
   if (AXObject* parent = ParentObject())
-    return parent->DisabledAncestor();
+    return parent->IsDescendantOfDisabledNode();
 
-  return nullptr;
+  return false;
 }
 
 bool AXObject::ComputeAccessibilityIsIgnoredButIncludedInTree() const {
@@ -2874,7 +2889,7 @@ bool AXObject::IsSubWidget() const {
     case ax::mojom::blink::Role::kColumnHeader:
     case ax::mojom::blink::Role::kRowHeader:
     case ax::mojom::blink::Role::kColumn:
-    case ax::mojom::blink::Role::kRow:
+    case ax::mojom::blink::Role::kRow: {
       // If it has an explicit ARIA role, it's a subwidget.
       //
       // Reasoning:
@@ -2893,13 +2908,14 @@ bool AXObject::IsSubWidget() const {
 
       // Otherwise it's only a subwidget if it's in a grid or treegrid,
       // not in a table.
-      return std::any_of(
+      AncestorsIterator ancestor = std::find_if(
           UnignoredAncestorsBegin(), UnignoredAncestorsEnd(),
-          [](const AXObject& ancestor) {
-            return ancestor.RoleValue() == ax::mojom::blink::Role::kGrid ||
-                   ancestor.RoleValue() == ax::mojom::blink::Role::kTreeGrid;
-          });
-
+          [](const AXObject& ancestor) { return ancestor.IsTableLikeRole(); });
+      return ancestor.current_ &&
+             (ancestor.current_->RoleValue() == ax::mojom::blink::Role::kGrid ||
+              ancestor.current_->RoleValue() ==
+                  ax::mojom::blink::Role::kTreeGrid);
+    }
     case ax::mojom::blink::Role::kListBoxOption:
     case ax::mojom::blink::Role::kMenuListOption:
     case ax::mojom::blink::Role::kTab:
@@ -2911,6 +2927,13 @@ bool AXObject::IsSubWidget() const {
 }
 
 bool AXObject::SupportsARIASetSizeAndPosInSet() const {
+  if (RoleValue() == ax::mojom::blink::Role::kRow) {
+    AncestorsIterator ancestor = std::find_if(
+        UnignoredAncestorsBegin(), UnignoredAncestorsEnd(),
+        [](const AXObject& ancestor) { return ancestor.IsTableLikeRole(); });
+    return ancestor.current_ &&
+           ancestor.current_->RoleValue() == ax::mojom::blink::Role::kTreeGrid;
+  }
   return ui::IsSetLike(RoleValue()) || ui::IsItemLike(RoleValue());
 }
 
@@ -3235,12 +3258,12 @@ bool AXObject::ElementsFromAttribute(Element* from,
   // element references set via the IDL, or computed from the content attribute.
   TokenVectorFromAttribute(from, ids, attribute);
 
-  absl::optional<HeapVector<Member<Element>>> attr_associated_elements =
+  HeapVector<Member<Element>>* attr_associated_elements =
       from->GetElementArrayAttribute(attribute);
   if (!attr_associated_elements)
     return false;
 
-  for (const auto& element : attr_associated_elements.value())
+  for (const auto& element : *attr_associated_elements)
     elements.push_back(element);
 
   return elements.size();
@@ -3439,6 +3462,7 @@ bool AXObject::SupportsARIAExpanded() const {
     case ax::mojom::blink::Role::kSwitch:
     case ax::mojom::blink::Role::kTab:
     case ax::mojom::blink::Role::kTextFieldWithComboBox:
+    case ax::mojom::blink::Role::kToggleButton:
     case ax::mojom::blink::Role::kTreeItem:
       return true;
     case ax::mojom::blink::Role::kCell:
@@ -3671,6 +3695,30 @@ ax::mojom::blink::Role AXObject::DetermineAriaRoleAttribute() const {
       role = ax::mojom::blink::Role::kComboBoxMenuButton;
   }
 
+  // DPUB ARIA 1.1 deprecated doc-biblioentry and doc-endnote, but it's still
+  // possible to create these internal roles / platform mappings with a listitem
+  // (native or ARIA) inside of a doc-bibliography or doc-endnotes section.
+  if (role == ax::mojom::blink::Role::kListItem ||
+      NativeRoleIgnoringAria() == ax::mojom::blink::Role::kListItem) {
+    AXObject* ancestor = ParentObjectUnignored();
+    if (ancestor && ancestor->RoleValue() == ax::mojom::blink::Role::kList) {
+      // Go up to the root, or next list, checking to see if the list item is
+      // inside an endnote or bibliography section. If it is, remap the role.
+      // The remapping does not occur for list items multiple levels deep.
+      while (true) {
+        ancestor = ancestor->ParentObjectUnignored();
+        if (!ancestor)
+          break;
+        ax::mojom::blink::Role ancestor_role = ancestor->RoleValue();
+        if (ancestor_role == ax::mojom::blink::Role::kList)
+          break;
+        if (ancestor_role == ax::mojom::blink::Role::kDocBibliography)
+          return ax::mojom::blink::Role::kDocBiblioEntry;
+        if (ancestor_role == ax::mojom::blink::Role::kDocEndnotes)
+          return ax::mojom::blink::Role::kDocEndnote;
+      }
+    }
+  }
   return role;
 }
 
@@ -5238,9 +5286,9 @@ ax::mojom::blink::Role AXObject::AriaRoleStringToRoleEnum(const String& value) {
   value.Split(' ', role_vector);
   ax::mojom::blink::Role role = ax::mojom::blink::Role::kUnknown;
   for (const auto& child : role_vector) {
-    role = role_map->at(child);
-    if (role != ax::mojom::blink::Role::kUnknown)
-      return role;
+    auto it = role_map->find(child);
+    if (it != role_map->end())
+      return it->value;
   }
 
   return role;
@@ -5521,12 +5569,13 @@ bool AXObject::SupportsARIAReadOnly() const {
 
   if (ui::IsCellOrTableHeader(RoleValue())) {
     // For cells and row/column headers, readonly is supported within a grid.
-    return std::any_of(
+    AncestorsIterator ancestor = std::find_if(
         UnignoredAncestorsBegin(), UnignoredAncestorsEnd(),
-        [](const AXObject& ancestor) {
-          return ancestor.RoleValue() == ax::mojom::blink::Role::kGrid ||
-                 ancestor.RoleValue() == ax::mojom::blink::Role::kTreeGrid;
-        });
+        [](const AXObject& ancestor) { return ancestor.IsTableLikeRole(); });
+    return ancestor.current_ &&
+           (ancestor.current_->RoleValue() == ax::mojom::blink::Role::kGrid ||
+            ancestor.current_->RoleValue() ==
+                ax::mojom::blink::Role::kTreeGrid);
   }
 
   return false;
@@ -5687,15 +5736,15 @@ String AXObject::ToString(bool verbose, bool cached_values_only) const {
       }
     }
     if (cached_values_only) {
-      if (cached_is_inert_or_aria_hidden_ && GetNode() && !GetNode()->IsInert())
+      if (cached_is_aria_hidden_)
         string_builder = string_builder + " ariaHidden";
-    } else {
-      if (const AXObject* aria_hidden_root = AriaHiddenRoot()) {
-        string_builder = string_builder + " ariaHiddenRoot";
-        if (aria_hidden_root != this) {
-          string_builder =
-              string_builder + GetNodeString(aria_hidden_root->GetNode());
-        }
+    } else if (IsAriaHidden()) {
+      const AXObject* aria_hidden_root = AriaHiddenRoot();
+      DCHECK(aria_hidden_root);
+      string_builder = string_builder + " ariaHiddenRoot";
+      if (aria_hidden_root != this) {
+        string_builder =
+            string_builder + GetNodeString(aria_hidden_root->GetNode());
       }
     }
     if (cached_values_only ? cached_is_hidden_via_style : IsHiddenViaStyle())

@@ -20,8 +20,7 @@ namespace media {
 // Decodes H.264 video streams using Windows Media Foundation library.
 class MEDIA_EXPORT WMFVideoDecoder : public VideoDecoder {
  public:
-  WMFVideoDecoder(
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
+  WMFVideoDecoder(scoped_refptr<base::SequencedTaskRunner> task_runner);
   ~WMFVideoDecoder() override;
 
   // VideoDecoder implementation.
@@ -31,8 +30,7 @@ class MEDIA_EXPORT WMFVideoDecoder : public VideoDecoder {
                   InitCB init_cb,
                   const OutputCB& output_cb,
                   const WaitingCB& waiting_for_decryption_key_cb) override;
-  void Decode(scoped_refptr<DecoderBuffer> buffer,
-              DecodeCB decode_cb) override;
+  void Decode(scoped_refptr<DecoderBuffer> buffer, DecodeCB decode_cb) override;
   void Reset(base::OnceClosure closure) override;
   VideoDecoderType GetDecoderType() const override;
 

@@ -1014,14 +1014,18 @@ void AuthenticatorCommon::MakeCredential(
 
   // Cryptotoken requests, making payment credentials, and Touch-to-Autofill
   // should be proxied without UI.
-  if (WebAuthRequestSecurityChecker::OriginIsCryptoTokenExtension(
-          caller_origin) ||
-      options->is_payment_credential_creation || disable_ui_) {
+  const bool origin_is_crypto_token_extension =
+      WebAuthRequestSecurityChecker::OriginIsCryptoTokenExtension(
+          caller_origin);
+  if (origin_is_crypto_token_extension ||
+      (!base::FeatureList::IsEnabled(
+           features::kSecurePaymentConfirmationAPIV3) &&
+       options->is_payment_credential_creation) ||
+      disable_ui_) {
     request_delegate_->DisableUI();
   }
 
-  if (WebAuthRequestSecurityChecker::OriginIsCryptoTokenExtension(
-          caller_origin)) {
+  if (origin_is_crypto_token_extension) {
     // Cryptotoken passes the real caller origin in |relying_party.name|.
     const url::Origin client_data_origin =
         url::Origin::Create(GURL(*options->relying_party.name));
@@ -1031,11 +1035,8 @@ void AuthenticatorCommon::MakeCredential(
   } else {
     // Regular WebAuthn request
     client_data_json_ = BuildClientDataJson(
-        WebAuthRequestSecurityChecker::OriginIsCryptoTokenExtension(
-            caller_origin)
-            ? ClientDataRequestType::kU2fRegister
-            : ClientDataRequestType::kWebAuthnCreate,
-        caller_origin_.Serialize(), options->challenge, is_cross_origin);
+        ClientDataRequestType::kWebAuthnCreate, caller_origin_.Serialize(),
+        options->challenge, is_cross_origin);
   }
 
   ctap_make_credential_request_ = device::CtapMakeCredentialRequest(
@@ -1045,7 +1046,7 @@ void AuthenticatorCommon::MakeCredential(
   // If the request originates from CryptoToken or carries a valid
   // googleLegacyAppidSupport extension, a U2F/CTAP1 credential bound to an
   // AppID will be created.
-  absl::optional<std::string> u2f_credential_app_id_override =
+  const absl::optional<std::string> u2f_credential_app_id_override =
       MakeCredentialU2fAppIdOverride(caller_origin, options);
   if (u2f_credential_app_id_override) {
     ctap_make_credential_request_->rp.id = *u2f_credential_app_id_override;
@@ -1084,7 +1085,8 @@ void AuthenticatorCommon::MakeCredential(
   if (attestation == device::AttestationConveyancePreference::
                          kEnterpriseIfRPListedOnAuthenticator &&
       GetWebAuthenticationDelegate()->ShouldPermitIndividualAttestation(
-          GetBrowserContext(), relying_party_id_)) {
+          GetBrowserContext(),
+          u2f_credential_app_id_override.value_or(relying_party_id_))) {
     attestation =
         device::AttestationConveyancePreference::kEnterpriseApprovedByBrowser;
   }
@@ -1097,6 +1099,7 @@ void AuthenticatorCommon::MakeCredential(
 void AuthenticatorCommon::GetAssertion(
     url::Origin caller_origin,
     blink::mojom::PublicKeyCredentialRequestOptionsPtr options,
+    blink::mojom::PaymentOptionsPtr payment,
     blink::mojom::Authenticator::GetAssertionCallback callback) {
   if (request_) {
     if (WebAuthRequestSecurityChecker::OriginIsCryptoTokenExtension(
@@ -1167,9 +1170,7 @@ void AuthenticatorCommon::GetAssertion(
     client_data_json_ = BuildClientDataJson(
         ClientDataRequestType::kU2fSign, options->relying_party_id,
         options->challenge, /*is_cross_origin=*/false);
-  } else if (options->payment &&
-             base::FeatureList::IsEnabled(
-                 features::kSecurePaymentConfirmationAPIV2)) {
+  } else if (payment) {
     auto* web_contents = WebContents::FromRenderFrameHost(GetRenderFrameHost());
     if (!web_contents) {
       CompleteGetAssertionRequest(
@@ -1180,7 +1181,7 @@ void AuthenticatorCommon::GetAssertion(
         url::Origin::Create(web_contents->GetLastCommittedURL());
     client_data_json_ = BuildClientDataJson(
         ClientDataRequestType::kPaymentGet, caller_origin_.Serialize(),
-        options->challenge, is_cross_origin, std::move(options->payment),
+        options->challenge, is_cross_origin, std::move(payment),
         relying_party_id_, top_origin.Serialize());
   } else {
     client_data_json_ = BuildClientDataJson(

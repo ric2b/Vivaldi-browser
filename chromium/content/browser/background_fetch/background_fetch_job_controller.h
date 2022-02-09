@@ -21,7 +21,6 @@
 #include "content/common/background_fetch/background_fetch_types.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_thread.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 namespace content {
@@ -209,6 +208,10 @@ class CONTENT_EXPORT BackgroundFetchJobController
   // The reason background fetch was aborted.
   blink::mojom::BackgroundFetchFailureReason failure_reason_ =
       blink::mojom::BackgroundFetchFailureReason::NONE;
+
+  // Whether one of the requests handled by the controller failed
+  // the CORS checks and should not have its response exposed.
+  bool has_failed_cors_request_ = false;
 
   // Custom callback that runs after the controller is finished.
   FinishedCallback finished_callback_;

@@ -11,10 +11,10 @@
 
 #include "base/callback.h"
 #include "base/time/time.h"
-#include "components/password_manager/core/browser/biometric_authenticator.h"
+#include "components/device_reauth/biometric_authenticator.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
-#include "components/password_manager/core/browser/password_store.h"
+#include "components/password_manager/core/browser/password_store_interface.h"
 #include "ui/gfx/native_widget_types.h"
 
 namespace network {
@@ -36,6 +36,18 @@ class SyncService;
 class PrefService;
 
 namespace password_manager_util {
+
+// For credentials returned from PasswordStore::GetLogins, the enum specifies
+// the type of the match for the requested page. Higher value always means
+// weaker match.
+enum class GetLoginMatchType {
+  // Exact origin or Android credentials.
+  kExact,
+  // A web site affiliated with the requesting page.
+  kAffiliated,
+  // eTLD + 1 match.
+  kPSL,
+};
 
 // Update |credential| to reflect usage.
 void UpdateMetadataForUsage(password_manager::PasswordForm* credential);
@@ -87,7 +99,7 @@ void UserTriggeredManualGenerationFromContextMenu(
 // and it can also be null for some unittests.
 void RemoveUselessCredentials(
     password_manager::CredentialsCleanerRunner* cleaning_tasks_runner,
-    scoped_refptr<password_manager::PasswordStore> store,
+    scoped_refptr<password_manager::PasswordStoreInterface> store,
     PrefService* prefs,
     base::TimeDelta delay,
     base::RepeatingCallback<network::mojom::NetworkContext*()>
@@ -100,6 +112,10 @@ void RemoveUselessCredentials(
 // This assumes that the |form|'s host is a substring of the signon_realm.
 base::StringPiece GetSignonRealmWithProtocolExcluded(
     const password_manager::PasswordForm& form);
+
+// For credentials returned from PasswordStore::GetLogins, specifies the type of
+// the match for the requested page.
+GetLoginMatchType GetMatchType(const password_manager::PasswordForm& form);
 
 // Given all non-blocklisted |non_federated_matches|, finds and populates
 // |non_federated_same_scheme|, |best_matches|, and |preferred_match|
@@ -143,8 +159,7 @@ password_manager::PasswordForm MakeNormalizedBlocklistedForm(
     password_manager::PasswordFormDigest digest);
 
 // Helper which checks if biometric authentication is available.
-bool CanUseBiometricAuth(
-    password_manager::BiometricAuthenticator* authenticator);
+bool CanUseBiometricAuth(device_reauth::BiometricAuthenticator* authenticator);
 
 }  // namespace password_manager_util
 

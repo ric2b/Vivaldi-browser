@@ -25,7 +25,6 @@ class VivaldiContentBrowserClient : public ChromeContentBrowserClient {
 
   bool CanCommitURL(content::RenderProcessHost* process_host,
                     const GURL& url) override;
-  void RenderProcessWillLaunch(content::RenderProcessHost* host) override;
 #endif
 
   void RegisterBrowserInterfaceBindersForFrame(

@@ -8,6 +8,8 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/strings/string_split.h"
+#include "build/build_config.h"
+#include "components/optimization_guide/core/optimization_guide_util.h"
 #include "components/optimization_guide/proto/hints.pb.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -62,6 +64,10 @@ const char kPurgeModelAndFeaturesStore[] = "purge-model-and-features-store";
 
 const char kDisableFetchingHintsAtNavigationStartForTesting[] =
     "disable-fetching-hints-at-navigation-start";
+
+// Disables fetching hints for active tabs on deferred startup.
+const char kDisableFetchHintsForActiveTabsOnDeferredStartup[] =
+    "optimization-guide-disable-hints-for-active-tabs-on-deferred-startup";
 
 const char kDisableCheckingUserPermissionsForTesting[] =
     "disable-checking-optimization-guide-user-permissions";
@@ -128,6 +134,11 @@ bool ShouldOverrideFetchModelsAndFeaturesTimer() {
       kFetchModelsAndHostModelFeaturesOverrideTimer);
 }
 
+bool DisableFetchHintsForActiveTabsOnDeferredStartup() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      kDisableFetchHintsForActiveTabsOnDeferredStartup);
+}
+
 std::unique_ptr<optimization_guide::proto::Configuration>
 ParseComponentConfigFromCommandLine() {
   base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
@@ -178,6 +189,14 @@ absl::optional<
     std::pair<std::string, absl::optional<optimization_guide::proto::Any>>>
 GetModelOverrideForOptimizationTarget(
     optimization_guide::proto::OptimizationTarget optimization_target) {
+#if defined(OS_WIN)
+  // TODO(crbug/1227996): The parsing below is not supported on Windows because
+  // ':' is used as a delimiter, but this must be used in the absolute file path
+  // on Windows.
+  DLOG(ERROR)
+      << "--optimization-guide-model-override is not available on Windows";
+  return absl::nullopt;
+#else
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (!command_line->HasSwitch(kModelOverride))
     return absl::nullopt;
@@ -207,10 +226,15 @@ GetModelOverrideForOptimizationTarget(
     if (optimization_target != recv_optimization_target)
       continue;
 
+    std::string file_name = override_parts[1];
+    if (!base::FilePath(file_name).IsAbsolute()) {
+      DLOG(ERROR) << "Provided model file path must be absolute " << file_name;
+      return absl::nullopt;
+    }
+
     if (override_parts.size() == 2) {
       std::pair<std::string, absl::optional<optimization_guide::proto::Any>>
-          file_path_and_metadata =
-              std::make_pair(override_parts[1], absl::nullopt);
+          file_path_and_metadata = std::make_pair(file_name, absl::nullopt);
       return file_path_and_metadata;
     }
     std::string binary_pb;
@@ -224,11 +248,11 @@ GetModelOverrideForOptimizationTarget(
       return absl::nullopt;
     }
     std::pair<std::string, absl::optional<optimization_guide::proto::Any>>
-        file_path_and_metadata =
-            std::make_pair(override_parts[1], model_metadata);
+        file_path_and_metadata = std::make_pair(file_name, model_metadata);
     return file_path_and_metadata;
   }
   return absl::nullopt;
+#endif
 }
 
 }  // namespace switches

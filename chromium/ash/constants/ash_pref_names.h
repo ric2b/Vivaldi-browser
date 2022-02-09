@@ -149,6 +149,10 @@ extern const char kAccessibilityDictationEnabled[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kAccessibilityDictationLocale[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityDictationLocaleOfflineNudge[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityEnhancedNetworkVoicesInSelectToSpeakAllowed[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kShouldAlwaysShowAccessibilityMenu[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kAltTabPerDesk[];
@@ -291,7 +295,6 @@ extern const char kSuggestLogoutAfterClosingLastWindow[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kUserWallpaperInfo[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kWallpaperColors[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kSyncableWallpaperInfo[];
-COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kWallpaperCollectionId[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kUserBluetoothAdapterEnabled[];

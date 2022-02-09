@@ -153,10 +153,11 @@ constexpr TaskType kAllFrameTaskTypes[] = {
     TaskType::kInternalHighPriorityLocalFrame,
     TaskType::kInternalInputBlocking,
     TaskType::kWakeLock,
-    TaskType::kWebGPU};
+    TaskType::kWebGPU,
+    TaskType::kInternalPostMessageForwarding};
 
 static_assert(
-    static_cast<int>(TaskType::kCount) == 79,
+    static_cast<int>(TaskType::kMaxValue) == 79,
     "When adding a TaskType, make sure that kAllFrameTaskTypes is updated.");
 
 void AppendToVectorTestTask(Vector<String>* vector, String value) {
@@ -650,20 +651,20 @@ class FrameSchedulerImplTestWithIntensiveWakeUpThrottling
 
   // Get the TaskRunner from |frame_scheduler_| using the test's task type
   // parameter.
-  scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() const {
+  scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() {
     return GetTaskRunner(frame_scheduler_.get());
   }
 
   // Get the TaskRunner from the provided |frame_scheduler| using the test's
   // task type parameter.
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner(
-      FrameSchedulerImpl* frame_scheduler) const {
+      FrameSchedulerImpl* frame_scheduler) {
     const TaskType task_type = GetTaskType();
     if (task_type == TaskType::kExperimentalWebScheduling) {
-      return frame_scheduler
-          ->CreateWebSchedulingTaskQueue(
-              WebSchedulingPriority::kUserVisiblePriority)
-          ->GetTaskRunner();
+      test_web_scheduling_task_queues_.push_back(
+          frame_scheduler->CreateWebSchedulingTaskQueue(
+              WebSchedulingPriority::kUserVisiblePriority));
+      return test_web_scheduling_task_queues_.back()->GetTaskRunner();
     }
     return frame_scheduler->GetTaskRunner(task_type);
   }
@@ -673,6 +674,13 @@ class FrameSchedulerImplTestWithIntensiveWakeUpThrottling
       return kIntensiveThrottledWakeUpInterval;
     return kDefaultThrottledWakeUpInterval;
   }
+
+ private:
+  // Store web scheduling task queues that are created for tests so
+  // they do not get destroyed. Destroying them before their tasks finish
+  // running will break throttling.
+  Vector<std::unique_ptr<WebSchedulingTaskQueue>>
+      test_web_scheduling_task_queues_;
 };
 
 class FrameSchedulerImplTestWithIntensiveWakeUpThrottlingPolicyOverride
@@ -2871,15 +2879,19 @@ TEST_F(FrameSchedulerImplTest, ThrottledJSTimerTasksRunTime) {
 
   std::map<TaskType, std::vector<base::TimeTicks>> run_times;
 
+  // Create the web scheduler task queue outside of the scope of the for loop.
+  // This is necessary because otherwise the queue is deleted before tasks run,
+  // and this breaks throttling.
+  std::unique_ptr<WebSchedulingTaskQueue> web_scheduling_task_queue =
+      frame_scheduler_->CreateWebSchedulingTaskQueue(
+          WebSchedulingPriority::kUserVisiblePriority);
+
   // Post tasks with each Javascript Timer Task Type and with a
   // WebSchedulingTaskQueue.
   for (TaskType task_type : kJavaScriptTimerTaskTypes) {
     const scoped_refptr<base::SingleThreadTaskRunner> task_runner =
         task_type == TaskType::kExperimentalWebScheduling
-            ? frame_scheduler_
-                  ->CreateWebSchedulingTaskQueue(
-                      WebSchedulingPriority::kUserVisiblePriority)
-                  ->GetTaskRunner()
+            ? web_scheduling_task_queue->GetTaskRunner()
             : frame_scheduler_->GetTaskRunner(task_type);
 
     // Note: Taking the address of an element in |run_times| is safe because
@@ -3129,7 +3141,6 @@ TEST_P(FrameSchedulerImplTestWithIntensiveWakeUpThrottling,
                 FROM_HERE, base::BindOnce(&RecordRunTime, &run_times),
                 kDefaultThrottledWakeUpInterval * (i + 1));
           }
-          page_scheduler_->OnTitleOrFaviconUpdated();
         }),
         kDefaultThrottledWakeUpInterval);
 
@@ -4087,6 +4098,29 @@ TEST_F(FrameSchedulerImplThrottleForegroundTimersEnabledTest,
                   start + base::TimeDelta::FromMilliseconds(1000),
                   start + base::TimeDelta::FromMilliseconds(1000),
                   start + base::TimeDelta::FromMilliseconds(1000)));
+}
+
+class FrameSchedulerImplDisablePrioritizedPostMessageForwarding
+    : public FrameSchedulerImplTest {
+ public:
+  FrameSchedulerImplDisablePrioritizedPostMessageForwarding()
+      : FrameSchedulerImplTest({kDisablePrioritizedPostMessageForwarding}, {}) {
+  }
+};
+
+TEST_F(FrameSchedulerImplTest, PostMessageForwardingHasControlPriority) {
+  auto task_queue = GetTaskQueue(TaskType::kInternalPostMessageForwarding);
+
+  EXPECT_EQ(TaskQueue::QueuePriority::kVeryHighPriority,
+            task_queue->GetTaskQueue()->GetQueuePriority());
+}
+
+TEST_F(FrameSchedulerImplDisablePrioritizedPostMessageForwarding,
+       PostMessageForwardingHasNormalPriority) {
+  auto task_queue = GetTaskQueue(TaskType::kInternalPostMessageForwarding);
+
+  EXPECT_EQ(TaskQueue::QueuePriority::kNormalPriority,
+            task_queue->GetTaskQueue()->GetQueuePriority());
 }
 
 }  // namespace frame_scheduler_impl_unittest

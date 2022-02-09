@@ -6,6 +6,7 @@ import("//build/apple/compile_entitlements.gni")
 import("//build/apple/tweak_info_plist.gni")
 import("//build/config/ios/ios_sdk.gni")
 import("//build/config/ios/rules.gni")
+import("//build/ios/extension_bundle_data.gni")
 import("//ios/build/chrome_build.gni")
 import("//ios/build/config.gni")
 import("//ios/chrome/features.gni")
@@ -69,7 +70,7 @@ source_set("unit_tests") {
     "//ios/chrome/test:test_support",
     "//ios/public/provider/chrome/browser:browser",
     "//ios/public/provider/chrome/browser:test_support",
-    "//ios/public/provider/chrome/browser/distribution",
+    "//ios/public/provider/chrome/browser/app_distribution:app_distribution_api",
     "//ios/testing:block_swizzler",
     "//ios/third_party/material_components_ios",
     "//ios/web/public/test:test",
@@ -150,10 +151,28 @@ source_set("content_suggestions_scheduler_app_state_agent") {
   deps = [
     "//components/ntp_snippets",
     "//components/previous_session_info",
-    "//ios/chrome/app/application_delegate:app_state_header",
+    "//ios/chrome/app/application_delegate:observing_app_state_agent",
     "//ios/chrome/browser/metrics",
     "//ios/chrome/browser/ntp_snippets",
+  ]
+}
+
+source_set("credential_provider_migrator_app_agent") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "credential_provider_migrator_app_agent.h",
+    "credential_provider_migrator_app_agent.mm",
+  ]
+  deps = [
+    "//components/keyed_service/core",
+    "//ios/chrome/app/application_delegate:app_state_header",
+    "//ios/chrome/app/application_delegate:observing_app_state_agent",
+    "//ios/chrome/browser/credential_provider",
+    "//ios/chrome/browser/passwords:store_factory",
+    "//ios/chrome/browser/ui/main:browser_interface_provider",
     "//ios/chrome/browser/ui/main:scene_state_header",
+    "//ios/chrome/common/app_group",
+    "//ios/chrome/common/credential_provider",
   ]
 }
 
@@ -165,11 +184,10 @@ source_set("app_metrics_app_state_agent") {
   ]
   deps = [
     "//base",
-    "//ios/chrome/app/application_delegate:app_state_header",
     "//ios/chrome/app/application_delegate:application_delegate_internal",
+    "//ios/chrome/app/application_delegate:observing_app_state_agent",
     "//ios/chrome/browser/metrics",
     "//ios/chrome/browser/ui/main:scene",
-    "//ios/chrome/browser/ui/main:scene_state_header",
   ]
 }
 
@@ -267,6 +285,7 @@ source_set("app_internal") {
     ":app_metrics_app_state_agent",
     ":blocking_scene_commands",
     ":content_suggestions_scheduler_app_state_agent",
+    ":credential_provider_migrator_app_agent",
     ":enterprise_app_agent",
     ":first_run_app_state_agent",
     ":mode",
@@ -372,7 +391,7 @@ source_set("app_internal") {
     "//ios/chrome/common/app_group:main_app",
     "//ios/net",
     "//ios/public/provider/chrome/browser",
-    "//ios/public/provider/chrome/browser/distribution",
+    "//ios/public/provider/chrome/browser/app_distribution:app_distribution_api",
     "//ios/public/provider/chrome/browser/mailto",
     "//ios/public/provider/chrome/browser/signin",
     "//ios/public/provider/chrome/browser/user_feedback",
@@ -544,46 +563,35 @@ ios_app_bundle("chrome") {
 }
 
 if (current_toolchain == default_toolchain) {
-  if (ios_enable_content_widget_extension) {
-    bundle_data("content_widget_extension_bundle") {
-      public_deps = [ "//ios/chrome/content_widget_extension" ]
-      sources = [ "$root_out_dir/content_widget_extension.appex" ]
-      outputs = [ "{{bundle_contents_dir}}/PlugIns/{{source_file_part}}" ]
+  if (ios_enable_search_widget_extension) {
+    extension_bundle_data("search_widget_extension_bundle") {
+      extension_target =
+          "//ios/chrome/search_widget_extension(${current_toolchain}_13_0)"
     }
   }
 
-  if (ios_enable_search_widget_extension) {
-    bundle_data("search_widget_extension_bundle") {
-      public_deps = [ "//ios/chrome/search_widget_extension" ]
-      sources = [ "$root_out_dir/search_widget_extension.appex" ]
-      outputs = [ "{{bundle_contents_dir}}/PlugIns/{{source_file_part}}" ]
+  if (ios_enable_content_widget_extension) {
+    extension_bundle_data("content_widget_extension_bundle") {
+      extension_target =
+          "//ios/chrome/content_widget_extension(${current_toolchain}_13_0)"
     }
   }
 
   if (ios_enable_share_extension) {
-    bundle_data("share_extension_bundle") {
-      public_deps = [ "//ios/chrome/share_extension" ]
-      sources = [ "$root_out_dir/share_extension.appex" ]
-      outputs = [ "{{bundle_contents_dir}}/PlugIns/{{source_file_part}}" ]
+    extension_bundle_data("share_extension_bundle") {
+      extension_target = "//ios/chrome/share_extension"
     }
   }
 
   if (ios_enable_credential_provider_extension) {
-    bundle_data("credential_provider_extension_bundle") {
-      public_deps = [ "//ios/chrome/credential_provider_extension" ]
-      sources = [ "$root_out_dir/credential_provider_extension.appex" ]
-      outputs = [ "{{bundle_contents_dir}}/PlugIns/{{source_file_part}}" ]
+    extension_bundle_data("credential_provider_extension_bundle") {
+      extension_target = "//ios/chrome/credential_provider_extension"
     }
   }
 
   if (ios_enable_widget_kit_extension) {
-    bundle_data("widget_kit_extension_bundle") {
-      _widget_extension_target =
-          "//ios/chrome/widget_kit_extension(${current_toolchain}_14_0)"
-      public_deps = [ _widget_extension_target ]
-      sources = [ get_label_info(_widget_extension_target, "root_out_dir") +
-                  "/widget_kit_extension.appex" ]
-      outputs = [ "{{bundle_contents_dir}}/PlugIns/{{source_file_part}}" ]
+    extension_bundle_data("widget_kit_extension_bundle") {
+      extension_target = "//ios/chrome/widget_kit_extension"
     }
   }
 }

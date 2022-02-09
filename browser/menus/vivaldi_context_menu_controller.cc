@@ -12,7 +12,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/prefs/pref_service.h"
-#include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/context_menu_params.h"
 #include "extensions/api/menubar_menu/menubar_menu_api.h"
@@ -28,15 +27,10 @@ namespace vivaldi {
 #define ICON_SIZE 16
 
 ContextMenuController::ContextMenuController(
-    content::BrowserContext* browser_context,
-    content::WebContents* web_contents,
     content::WebContents* window_web_contents,
     VivaldiRenderViewContextMenu* rv_context_menu,
     std::unique_ptr<Params> params)
-  :browser_context_(browser_context),
-   web_contents_(web_contents),
-   window_web_contents_(window_web_contents),
-   browser_(FindBrowserForEmbedderWebContents(web_contents)),
+  : window_web_contents_(window_web_contents),
    rv_context_menu_(rv_context_menu),
    with_developer_tools_(!rv_context_menu_ ||
                          rv_context_menu_->SupportsInspectTools()),
@@ -74,11 +68,15 @@ ContextMenuController::ContextMenuController(
     rv_context_menu_->SetMenuDelegate(this);
   }
 
-  show_shortcuts_ = browser_->profile()->GetPrefs()->GetBoolean(
+  show_shortcuts_ = GetProfile()->GetPrefs()->GetBoolean(
       vivaldiprefs::kKeyboardShortcutsEnable);
 }
 
 ContextMenuController::~ContextMenuController() {}
+
+Profile* ContextMenuController::GetProfile() {
+  return Profile::FromBrowserContext(window_web_contents_->GetBrowserContext());
+}
 
 bool ContextMenuController::Show() {
   using Origin = extensions::vivaldi::context_menu::Origin;
@@ -96,7 +94,7 @@ bool ContextMenuController::Show() {
     menu_->SetParentView(rv_context_menu_->parent_view());
   }
 
-  extensions::MenubarMenuAPI::SendOpen(browser_context_, 0);
+  extensions::MenubarMenuAPI::SendOpen(GetProfile(), 0);
 
   // Populate model.
   InitModel();
@@ -240,7 +238,8 @@ void ContextMenuController::PopulateModel(const Element& child,
     int id = container.id + IDC_VIV_MENU_FIRST + 1;
     switch (container.content) {
       case context_menu::CONTAINER_CONTENT_PWA:
-        pwa_controller_.reset(new PWAMenuController(web_contents_));
+        pwa_controller_ = std::make_unique<PWAMenuController>(
+            FindBrowserForEmbedderWebContents(window_web_contents_));
         pwa_controller_->PopulateModel(GetContainerModel(
             container, id, menu_model));
         break;
@@ -347,7 +346,7 @@ void ContextMenuController::LoadFavicon(int command_id,
                                         const std::string& url) {
   if (!favicon_service_) {
     favicon_service_ = FaviconServiceFactory::GetForProfile(
-        browser_->profile(), ServiceAccessType::EXPLICIT_ACCESS);
+        GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
     if (!favicon_service_)
       return;
   }
@@ -418,15 +417,16 @@ bool ContextMenuController::GetAcceleratorForCommandId(
 
 void ContextMenuController::VivaldiCommandIdHighlighted(int command_id) {
    auto it = id_to_url_map_.find(command_id);
-    extensions::MenubarMenuAPI::SendHover(browser_context_,
-      it != id_to_url_map_.end() ? *it->second : "");
+   extensions::MenubarMenuAPI::SendHover(
+       GetProfile(), it != id_to_url_map_.end() ? *it->second : "");
 }
 
 void ContextMenuController::ExecuteCommand(int command_id, int event_flags) {
   if (developertools_controller_->HandleCommand(command_id)) {
   } else if (pwa_controller_ && pwa_controller_->HandleCommand(command_id)) {
   } else {
-    extensions::MenubarMenuAPI::SendAction(browser_context_, command_id, event_flags);
+    extensions::MenubarMenuAPI::SendAction(GetProfile(), command_id,
+                                           event_flags);
   }
 }
 
@@ -487,7 +487,7 @@ void ContextMenuController::MenuClosed(ui::SimpleMenuModel* source) {
 }
 
 void ContextMenuController::Delete() {
-  extensions::MenubarMenuAPI::SendClose(browser_context_);
+  extensions::MenubarMenuAPI::SendClose(GetProfile());
   delete this;
 }
 

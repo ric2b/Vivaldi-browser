@@ -27,7 +27,10 @@ update_target("//extensions/renderer:renderer") {
     "//vivaldi/extensions/renderer/vivaldi_utilities_hook_delegate.h",
   ]
 
-  deps += [ "//vivaldi/extensions:resources" ]
+  deps += [
+    "//components/reputation/core:proto",
+    "//vivaldi/extensions:resources",
+  ]
 }
 
 update_template_instance("//chrome/common/extensions/api:api_features") {

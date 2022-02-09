@@ -1517,14 +1517,8 @@ WebMediaPlayerMS::GetMediaStreamType() {
   return absl::nullopt;
 }
 
-VivaldiMediaElementEventDelegate*
-WebMediaPlayerMS::GetMediaElementEventDelegate() {
-  return vivaldi_media_element_event_delegate_.get();
-}
-
-void WebMediaPlayerMS::SetMediaElementEventDelegate(
-    std::unique_ptr<VivaldiMediaElementEventDelegate> delegate) {
-  vivaldi_media_element_event_delegate_ = std::move(delegate);
+WebLocalFrame* WebMediaPlayerMS::VivaldiGetOwnerWebFrame() {
+  return internal_frame_->web_frame();
 }
 
 }  // namespace blink

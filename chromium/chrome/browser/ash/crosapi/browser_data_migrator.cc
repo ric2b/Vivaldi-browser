@@ -10,6 +10,7 @@
 #include "ash/constants/ash_switches.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/feature_list.h"
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
@@ -49,22 +50,19 @@ const char* const kCopyUserDataPaths[] = {"First Run"};
 // Flag values for `switches::kForceBrowserDataMigrationForTesting`.
 const char kBrowserDataMigrationForceSkip[] = "force-skip";
 const char kBrowserDataMigrationForceMigration[] = "force-migration";
+// The size of disk space that should be kept free after migration. This is
+// important since crypotohome conducts an aggressive disk cleanup if free disk
+// space becomes less than 768MB. The buffer is rounded up to 1GB.
+const int64_t kBuffer = (int64_t)1024 * 1024 * 1024;
 
-// Copies `item` to location pointed by `dest`. Returns true on success and
-// false on failure.
-bool CopyTargetItem(const BrowserDataMigrator::TargetItem& item,
-                    const base::FilePath& dest) {
-  if (item.is_directory) {
-    if (base::CopyDirectory(item.path, dest, true /* recursive */))
-      return true;
-  } else {
-    if (base::CopyFile(item.path, dest))
-      return true;
-  }
+// Enable this to turn on profile migration for non-googlers. Currently the
+// feature is only limited to googlers only.
+const base::Feature kLacrosProfileMigrationForAnyUser{
+    "LacrosProfileMigrationForAnyUser", base::FEATURE_DISABLED_BY_DEFAULT};
 
-  PLOG(ERROR) << "Copy failed for " << item.path;
-  return false;
-}
+// Emergency switch to turn off profile migration via Finch.
+const base::Feature kLacrosProfileMigrationForceOff{
+    "LacrosProfileMigrationForceOff", base::FEATURE_DISABLED_BY_DEFAULT};
 
 void OnRestartRequestResponse(bool result) {
   if (!result) {
@@ -120,8 +118,16 @@ void BrowserDataMigrator::MaybeRestartToMigrate(
     return;
   }
 
-  // Browser data migration is only available for Googlers at the moment.
-  if (!gaia::IsGoogleInternalAccountEmail(account_id.GetUserEmail()))
+  //  Currently we turn on profile migration only for Googlers.
+  //  `kLacrosProfileMigrationForAnyUser` can be enabled to allow testing with
+  //  non-googler accounts.
+  if (!gaia::IsGoogleInternalAccountEmail(account_id.GetUserEmail()) &&
+      !base::FeatureList::IsEnabled(kLacrosProfileMigrationForAnyUser))
+    return;
+
+  // Emergency switch to turn off profile migration. Turn this on via Finch in
+  // case profile migration needs to be turned off after launch.
+  if (base::FeatureList::IsEnabled(kLacrosProfileMigrationForceOff))
     return;
 
   const std::string user_id_hash = user_context.GetUserIDHash();
@@ -244,6 +250,11 @@ BrowserDataMigrator::MigrationResult BrowserDataMigrator::MigrateInternal() {
     return {data_wipe_result, ResultValue::kFailed};
   }
 
+  if (!IsMigrationSmallEnough(target_info)) {
+    RecordStatus(FinalStatus::kSizeLimitExceeded, &target_info);
+    return {data_wipe_result, ResultValue::kFailed};
+  }
+
   if (!CopyToTmpDir(target_info)) {
     if (base::PathExists(tmp_dir_)) {
       base::DeletePathRecursively(tmp_dir_);
@@ -292,6 +303,23 @@ void BrowserDataMigrator::MigrateInternalFinishedUIThread(
   std::move(callback).Run();
 }
 
+// Copies `item` to location pointed by `dest`. Returns true on success and
+// false on failure.
+bool BrowserDataMigrator::CopyTargetItem(
+    const BrowserDataMigrator::TargetItem& item,
+    const base::FilePath& dest) const {
+  if (item.is_directory) {
+    if (CopyDirectory(item.path, dest))
+      return true;
+  } else {
+    if (base::CopyFile(item.path, dest))
+      return true;
+  }
+
+  PLOG(ERROR) << "Copy failed for " << item.path;
+  return false;
+}
+
 BrowserDataMigrator::TargetInfo BrowserDataMigrator::GetTargetInfo() const {
   TargetInfo target_info;
 
@@ -307,13 +335,13 @@ BrowserDataMigrator::TargetInfo BrowserDataMigrator::GetTargetInfo() const {
     }
 
     const base::FileEnumerator::FileInfo& info = enumerator.GetInfo();
+    // Only copy a file or a dir i.e. skip other types like symlink since
+    // copying those might introdue a security risk.
     if (S_ISREG(info.stat().st_mode)) {
       target_info.profile_data_items.emplace_back(
           TargetItem{entry, TargetItem::ItemType::kFile});
       target_info.total_byte_count += info.GetSize();
-    } else {
-      // Treat symlink the same as directory since even if it points to a file,
-      // both `ComputeDirectorySize()` and `CopyDirectory()` can be used.
+    } else if (S_ISDIR(info.stat().st_mode)) {
       target_info.profile_data_items.emplace_back(
           TargetItem{entry, TargetItem::ItemType::kDirectory});
       target_info.total_byte_count += base::ComputeDirectorySize(entry);
@@ -337,11 +365,55 @@ bool BrowserDataMigrator::HasEnoughDiskSpace(
     const TargetInfo& target_info) const {
   const int64_t free_disk_space =
       base::SysInfo::AmountOfFreeDiskSpace(from_dir_);
-  if (free_disk_space < target_info.total_byte_count) {
+  if (free_disk_space < target_info.total_byte_count + kBuffer) {
     LOG(ERROR) << "Aborting migration. Need " << target_info.total_byte_count
                << " bytes but only have " << free_disk_space << " bytes left.";
     return false;
   }
+
+  return true;
+}
+
+// static
+bool BrowserDataMigrator::IsMigrationSmallEnough(
+    const TargetInfo& target_info) {
+  const int64_t max_migration_size = (int64_t)4 * 1024 * 1024 * 1024;
+  if (target_info.total_byte_count > max_migration_size) {
+    LOG(ERROR) << "Aborting migration because the data size is too large for "
+                  "migration: "
+               << target_info.total_byte_count << " bytes.";
+    return false;
+  }
+
+  return true;
+}
+
+bool BrowserDataMigrator::CopyDirectory(const base::FilePath& from_path,
+                                        const base::FilePath& to_path) const {
+  if (!base::PathExists(to_path) && !base::CreateDirectory(to_path)) {
+    PLOG(ERROR) << "CreateDirectory() failed for " << to_path.value();
+    return false;
+  }
+
+  base::FileEnumerator enumerator(from_path, false /* recursive */,
+                                  base::FileEnumerator::FILES |
+                                      base::FileEnumerator::DIRECTORIES |
+                                      base::FileEnumerator::SHOW_SYM_LINKS);
+  for (base::FilePath entry = enumerator.Next(); !entry.empty();
+       entry = enumerator.Next()) {
+    const base::FileEnumerator::FileInfo& info = enumerator.GetInfo();
+
+    // Only copy a file or a dir i.e. skip other types like symlink since
+    // copying those might introdue a security risk.
+    if (S_ISREG(info.stat().st_mode)) {
+      if (!base::CopyFile(entry, to_path.Append(entry.BaseName())))
+        return false;
+    } else if (S_ISDIR(info.stat().st_mode)) {
+      if (!CopyDirectory(entry, to_path.Append(entry.BaseName())))
+        return false;
+    }
+  }
+
   return true;
 }
 

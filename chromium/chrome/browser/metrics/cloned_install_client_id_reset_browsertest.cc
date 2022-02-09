@@ -68,7 +68,7 @@ IN_PROC_BROWSER_TEST_F(ClonedInstallClientIdResetBrowserTest,
 }
 
 // Test is flaky on Mac (https://crbug.com/1175077).
-#if defined(OS_MAC)
+#if defined(OS_MAC) || defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_TestClonedInstallClientIdReset \
   DISABLED_TestClonedInstallClientIdReset
 #else

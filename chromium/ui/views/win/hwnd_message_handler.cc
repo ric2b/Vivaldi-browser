@@ -2931,12 +2931,8 @@ void HWNDMessageHandler::OnWindowPosChanging(WINDOWPOS* window_pos) {
     window_pos->flags &= ~SWP_SHOWWINDOW;
   }
 
-  if (window_pos->flags & SWP_SHOWWINDOW) {
-    delegate_->HandleVisibilityChanging(true);
-  } else if (window_pos->flags & SWP_HIDEWINDOW) {
+  if (window_pos->flags & SWP_HIDEWINDOW)
     SetDwmFrameExtension(DwmFrameState::kOff);
-    delegate_->HandleVisibilityChanging(false);
-  }
 
   SetMsgHandled(FALSE);
 }

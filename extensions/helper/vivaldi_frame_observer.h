@@ -5,10 +5,13 @@
 
 #include <string>
 
-#include "content/browser/host_zoom_map_impl.h" // nogncheck
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
-#include "content/public/browser/render_frame_host.h"
+
+namespace content {
+class HostZoomMap;
+}
 
 namespace vivaldi {
 
@@ -20,28 +23,9 @@ class VivaldiFrameObserver
  public:
   ~VivaldiFrameObserver() override;
 
-  void GetFocusedElementInfo(std::string* tagname,
-                             std::string* type,
-                             bool* editable,
-                             std::string* role);
-
  private:
   explicit VivaldiFrameObserver(content::WebContents* contents);
   friend class content::WebContentsUserData<VivaldiFrameObserver>;
-
-  bool OnMessageReceived(const IPC::Message& message,
-                         content::RenderFrameHost* render_frame_host) override;
-  void OnDidUpdateFocusedElementInfo(std::string tagname,
-                                     std::string type,
-                                     bool editable,
-                                     std::string role);
-  void OnFocusedNodeChanged(bool editable, gfx::Rect node_bounds);
-
-  // This gets returned by GetFocusedElementInfo()
-  std::string focused_element_tagname_;
-  std::string focused_element_type_;
-  bool focused_element_editable_ = false;
-  std::string focused_element_role_;
 
   // Keep track of the HostZoomMap we're currently subscribed to.
   content::HostZoomMap* host_zoom_map_;
@@ -53,6 +37,7 @@ class VivaldiFrameObserver
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiFrameObserver);
 };
+
 }  // namespace vivaldi
 
 #endif  //  EXTENSIONS_HELPER_VIVALDI_FRAME_OBSERVER_H_

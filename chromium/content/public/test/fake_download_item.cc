@@ -207,6 +207,10 @@ FakeDownloadItem::GetDownloadSchedule() const {
   return download_schedule_;
 }
 
+::network::mojom::CredentialsMode FakeDownloadItem::GetCredentialsMode() const {
+  return ::network::mojom::CredentialsMode::kInclude;
+}
+
 void FakeDownloadItem::SetIsDone(bool is_done) {
   is_done_ = is_done;
 }
@@ -246,6 +250,14 @@ int FakeDownloadItem::PercentComplete() const {
 
 void FakeDownloadItem::SetDummyFilePath(const base::FilePath& file_path) {
   dummy_file_path = file_path;
+}
+
+void FakeDownloadItem::SetIsDangerous(bool is_dangerous) {
+  is_dangerous_ = is_dangerous;
+}
+
+void FakeDownloadItem::SetIsMixedContent(bool is_mixed_content) {
+  is_mixed_content_ = is_mixed_content;
 }
 
 bool FakeDownloadItem::GetOpenWhenComplete() const {
@@ -450,13 +462,11 @@ const download::DownloadItemRerouteInfo& FakeDownloadItem::GetRerouteInfo()
 }
 
 bool FakeDownloadItem::IsDangerous() const {
-  NOTREACHED();
-  return false;
+  return is_dangerous_;
 }
 
 bool FakeDownloadItem::IsMixedContent() const {
-  NOTREACHED();
-  return false;
+  return is_mixed_content_;
 }
 
 download::DownloadDangerType FakeDownloadItem::GetDangerType() const {

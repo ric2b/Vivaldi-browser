@@ -215,6 +215,11 @@ AutoUpdateSetAutoInstallUpdatesFunction::Run() {
   return RespondNow(Error("Not implemented"));
 }
 
+ExtensionFunction::ResponseAction
+AutoUpdateGetLastCheckTimeFunction::Run() {
+  return RespondNow(Error("Not implemented"));
+}
+
 ExtensionFunction::ResponseAction AutoUpdateGetUpdateStatusFunction::Run() {
   auto on_pending_update_result =
       [](scoped_refptr<AutoUpdateGetUpdateStatusFunction> f,

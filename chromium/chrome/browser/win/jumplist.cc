@@ -862,34 +862,31 @@ void JumpList::CreateNewJumpListAndNotifyOS(
   if (!begin_success)
     return;
 
-  // Record the desired number of icons created in this JumpList update.
-  int icons_created = 0;
-
   URLIconCache most_visited_icons_next;
   URLIconCache recently_closed_icons_next;
   URLIconCache vivaldi_speed_dial_icons_next;
 
   // Update the icons for "Most Visisted" category of the JumpList if needed.
   if (most_visited_should_update) {
-    icons_created += UpdateIconFiles(
-        most_visited_icon_dir, most_visited_pages, kMostVisitedItems,
-        &update_transaction->most_visited_icons, &most_visited_icons_next);
+    UpdateIconFiles(most_visited_icon_dir, most_visited_pages,
+                    kMostVisitedItems, &update_transaction->most_visited_icons,
+                    &most_visited_icons_next);
   }
 
   // Update the icons for "Recently Closed" category of the JumpList if needed.
   if (recently_closed_should_update) {
-    icons_created += UpdateIconFiles(
-        recently_closed_icon_dir, recently_closed_pages, kRecentlyClosedItems,
-        &update_transaction->recently_closed_icons,
-        &recently_closed_icons_next);
+    UpdateIconFiles(recently_closed_icon_dir, recently_closed_pages,
+                    kRecentlyClosedItems,
+                    &update_transaction->recently_closed_icons,
+                    &recently_closed_icons_next);
   }
 
   // Update the icons for "Speed Dials" category of the JumpList if needed.
   if (vivaldi_speed_dials_should_update) {
-    icons_created += UpdateIconFiles(
-      vivaldi_speed_dials_icon_dir, vivaldi_speed_dials, kVivaldiSpeedDialItems,
-      &update_transaction->vivaldi_speed_dial_icons,
-      &vivaldi_speed_dial_icons_next);
+    UpdateIconFiles(vivaldi_speed_dials_icon_dir, vivaldi_speed_dials,
+                    kVivaldiSpeedDialItems,
+                    &update_transaction->vivaldi_speed_dial_icons,
+                    &vivaldi_speed_dial_icons_next);
   }
   base::ElapsedTimer add_custom_category_timer;
 

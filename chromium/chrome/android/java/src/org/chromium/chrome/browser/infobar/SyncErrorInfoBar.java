@@ -39,6 +39,12 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.concurrent.TimeUnit;
 
+// Vivaldi
+import android.content.Intent;
+import org.chromium.base.ApplicationStatus;
+import org.chromium.build.BuildConfig;
+import org.vivaldi.browser.sync.VivaldiSyncActivity;
+
 /**
  * An {@link InfoBar} that shows sync errors and prompts the user to open settings page.
  */
@@ -166,6 +172,13 @@ public class SyncErrorInfoBar
     private void accept() {
         SyncService.get().removeSyncStateChangedListener(this);
         recordHistogram(mType, SyncErrorInfoBarAction.BUTTON_CLICKED);
+
+        // Vivaldi
+        if (BuildConfig.IS_VIVALDI) {
+            ApplicationStatus.getLastTrackedFocusedActivity().startActivity(
+                    new Intent(getContext(), VivaldiSyncActivity.class));
+            return;
+        }
 
         switch (mType) {
             case SyncErrorInfoBarType.NOT_SHOWN:

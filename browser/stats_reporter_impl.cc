@@ -5,11 +5,11 @@
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/json/values_util.h"
 #include "base/rand_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/task/thread_pool.h"
-#include "base/util/values/values_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "components/embedder_support/user_agent_utils.h"
@@ -367,36 +367,36 @@ bool StatsReporterImpl::GeneratePingRequest(
       os_profile_reporting_data.user_id = *unique_user_id;
 
     os_profile_reporting_data.next_pings.daily = ValidateTime(
-        util::ValueToTime(
+        base::ValueToTime(
             os_profile_reporting_data_json->FindKey(kNextDailyPingKey)),
         now, kMaxDailyPingDelay);
 
     os_profile_reporting_data.next_pings.weekly = ValidateTime(
-        util::ValueToTime(
+        base::ValueToTime(
             os_profile_reporting_data_json->FindKey(kNextWeeklyPingKey)),
         now, kMaxWeeklyPingDelay);
 
     os_profile_reporting_data.next_pings.monthly = ValidateTime(
-        util::ValueToTime(
+        base::ValueToTime(
             os_profile_reporting_data_json->FindKey(kNextMonthlyPingKey)),
         now, kMaxMonthlyPingDelay);
 
     os_profile_reporting_data.next_pings.trimestrial = ValidateTime(
-        util::ValueToTime(
+        base::ValueToTime(
             os_profile_reporting_data_json->FindKey(kNextTrimestrialPingKey)),
         now, kMaxTrimestrialPingDelay);
 
     os_profile_reporting_data.next_pings.semestrial = ValidateTime(
-        util::ValueToTime(
+        base::ValueToTime(
             os_profile_reporting_data_json->FindKey(kNextSemestrialPingKey)),
         now, kMaxSemestrialPingDelay);
 
     os_profile_reporting_data.next_pings.yearly = ValidateTime(
-        util::ValueToTime(
+        base::ValueToTime(
             os_profile_reporting_data_json->FindKey(kNextYearlyPingKey)),
         now, kMaxYearlyPingDelay);
 
-    absl::optional<base::Time> installation_time = util::ValueToTime(
+    absl::optional<base::Time> installation_time = base::ValueToTime(
         os_profile_reporting_data_json->FindKey(kInstallationTimeKey));
     if (installation_time)
       os_profile_reporting_data.installation_time = *installation_time;
@@ -440,7 +440,7 @@ bool StatsReporterImpl::GeneratePingRequest(
       os_profile_reporting_data_json->SetStringKey(kUniqueUserIdKey, user_id);
       os_profile_reporting_data_json->SetKey(
           kInstallationTimeKey,
-          util::TimeToValue(local_state_reporting_data.installation_time));
+          base::TimeToValue(local_state_reporting_data.installation_time));
       os_profile_reporting_data.installation_time =
           local_state_reporting_data.installation_time;
       break;
@@ -463,7 +463,7 @@ bool StatsReporterImpl::GeneratePingRequest(
            os_profile_reporting_data.installation_time.is_null())) {
         os_profile_reporting_data_json->SetKey(
             kInstallationTimeKey,
-            util::TimeToValue(local_state_reporting_data.installation_time));
+            base::TimeToValue(local_state_reporting_data.installation_time));
         os_profile_reporting_data.installation_time =
             local_state_reporting_data.installation_time;
       }
@@ -648,17 +648,17 @@ bool StatsReporterImpl::GeneratePingRequest(
                                                  kDescriptionText);
 
     os_profile_reporting_data_json->SetKey(
-        kNextDailyPingKey, util::TimeToValue(new_next_pings.daily));
+        kNextDailyPingKey, base::TimeToValue(new_next_pings.daily));
     os_profile_reporting_data_json->SetKey(
-        kNextWeeklyPingKey, util::TimeToValue(new_next_pings.weekly));
+        kNextWeeklyPingKey, base::TimeToValue(new_next_pings.weekly));
     os_profile_reporting_data_json->SetKey(
-        kNextMonthlyPingKey, util::TimeToValue(new_next_pings.monthly));
+        kNextMonthlyPingKey, base::TimeToValue(new_next_pings.monthly));
     os_profile_reporting_data_json->SetKey(
-        kNextTrimestrialPingKey, util::TimeToValue(new_next_pings.trimestrial));
+        kNextTrimestrialPingKey, base::TimeToValue(new_next_pings.trimestrial));
     os_profile_reporting_data_json->SetKey(
-        kNextSemestrialPingKey, util::TimeToValue(new_next_pings.semestrial));
+        kNextSemestrialPingKey, base::TimeToValue(new_next_pings.semestrial));
     os_profile_reporting_data_json->SetKey(
-        kNextYearlyPingKey, util::TimeToValue(new_next_pings.yearly));
+        kNextYearlyPingKey, base::TimeToValue(new_next_pings.yearly));
     os_profile_reporting_data_json->SetIntKey(kPingsSinceLastMonthKey,
                                               new_pings_since_last_month);
   }

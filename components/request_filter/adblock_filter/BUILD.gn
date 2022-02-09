@@ -76,7 +76,6 @@ source_set("adblock_filter") {
     "mojom",
     "//base:base",
     "//base:i18n",
-    "//base/util/values:values_util",
     "//components/keyed_service/content",
     "//components/url_pattern_index",
     "//content/public/browser",

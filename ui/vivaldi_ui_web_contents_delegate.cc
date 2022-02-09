@@ -13,7 +13,6 @@
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
-#include "chrome/browser/ui/color_chooser.h"
 #include "chrome/common/pref_names.h"
 #include "components/printing/browser/print_composite_client.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
@@ -25,7 +24,6 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension_messages.h"
-#include "renderer/vivaldi_render_messages.h"
 #include "third_party/blink/public/common/input/web_gesture_event.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_native_app_window_views.h"
@@ -113,6 +111,7 @@ bool VivaldiUIWebContentsDelegate::PreHandleGestureEvent(
   return blink::WebInputEvent::IsPinchGestureEventType(event.GetType());
 }
 
+#if defined(OS_ANDROID)
 std::unique_ptr<content::ColorChooser>
 VivaldiUIWebContentsDelegate::OpenColorChooser(
     content::WebContents* web_contents,
@@ -120,6 +119,7 @@ VivaldiUIWebContentsDelegate::OpenColorChooser(
     const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions) {
   return chrome::ShowColorChooser(web_contents, initial_color);
 }
+#endif
 
 void VivaldiUIWebContentsDelegate::RunFileChooser(
     content::RenderFrameHost* render_frame_host,
@@ -148,17 +148,12 @@ void VivaldiUIWebContentsDelegate::RequestMediaAccessPermission(
 }
 
 bool VivaldiUIWebContentsDelegate::CheckMediaAccessPermission(
-  content::RenderFrameHost* render_frame_host,
-  const GURL& security_origin,
-  blink::mojom::MediaStreamType type) {
-  const extensions::Extension* extension =
-      extensions::ExtensionRegistry::Get(window_->GetProfile())
-          ->enabled_extensions()
-          .GetByID(security_origin.host());
-
+    content::RenderFrameHost* render_frame_host,
+    const GURL& security_origin,
+    blink::mojom::MediaStreamType type) {
   return MediaCaptureDevicesDispatcher::GetInstance()
       ->CheckMediaAccessPermission(render_frame_host, security_origin, type,
-                                   extension);
+                                   window_->extension());
 }
 
 // If we should ever need to play PIP videos in our UI, this code enables
@@ -241,14 +236,15 @@ void VivaldiUIWebContentsDelegate::RenderFrameCreated(
               for (base::DictionaryValue::Iterator setting(*settings_dict);
                    !setting.IsAtEnd(); setting.Advance()) {
                 if (setting.key() == "zoom_level") {
-                  double zoom_level = 0;
-                  if (setting.value().GetAsDouble(&zoom_level)) {
+                  const absl::optional<double> zoom_level =
+                      setting.value().GetIfDouble();
+                  if (zoom_level.has_value()) {
                     content::HostZoomMap* zoom_map =
                         content::HostZoomMap::GetForWebContents(
                             window_->web_contents());
                     DCHECK(zoom_map);
                     zoom_map->SetZoomLevelForHost(::vivaldi::kVivaldiAppId,
-                      zoom_level);
+                      zoom_level.value());
                   }
                   break;
                 }
@@ -309,7 +305,7 @@ void VivaldiUIWebContentsDelegate::DidFinishNavigation(
       navigation_handle->GetRenderFrameHost());
   DCHECK(host);
   if (host->GetParent() == nullptr) {
-    host->Send(new VivaldiFrameHostMsg_ResumeParser(host->routing_id()));
+    host->GetVivaldiFrameService()->ResumeParser();
   }
   // will run the callback set in WindowPrivateCreateFunction and then remove
   // it.

@@ -13,6 +13,7 @@
     <color name="default_text_color_link_disabled">@color/default_text_color_link_disabled_light</color>
     <color name="default_text_color_error">@color/default_text_color_error_light</color>
     <color name="default_text_color_on_accent1">@color/default_text_color_on_accent1_dark</color>
+    <color name="default_text_color_on_accent1_disabled">@color/default_text_color_disabled_light</color>
 
     <!-- Common icon colors for drawables. -->
     <color name="default_icon_color">@color/default_icon_color_light</color>
@@ -44,6 +45,9 @@
 
     <!-- Bottom sheet colors -->
     <color name="sheet_bg_color">@color/default_bg_color_dark_elev_4</color>
+
+    <!-- Dialog colors -->
+    <color name="dialog_bg_color">@color/dialog_bg_color_dark</color>
 
     <!-- Snackbar colors -->
     <color name="snackbar_background_color">@color/default_bg_color_dark_elev_4</color>

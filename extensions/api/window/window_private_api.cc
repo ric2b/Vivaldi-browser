@@ -367,6 +367,7 @@ ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
 
   Browser* browser;
   std::string error;
+  bool was_fullscreen;
   if (!windows_util::GetBrowserFromWindowID(
           this, params->window_id, WindowController::GetAllWindowFilter(),
           &browser, &error)) {
@@ -380,24 +381,31 @@ ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
   static_cast<VivaldiBrowserWindow*>(browser->window())->SetWindowState(
       show_state);
 
-  bool was_fullscreen = browser->window()->IsFullscreen();
-  if (show_state != ui::SHOW_STATE_FULLSCREEN &&
-      show_state != ui::SHOW_STATE_DEFAULT)
-    browser->extension_window_controller()->SetFullscreenMode(
-        false, extension()->url());
-
   switch (show_state) {
     case ui::SHOW_STATE_MINIMIZED:
+      was_fullscreen = browser->window()->IsFullscreen();
       browser->extension_window_controller()->window()->Minimize();
+      if (was_fullscreen) {
+        browser->extension_window_controller()->SetFullscreenMode(
+            false, extension()->url());
+      }
       break;
     case ui::SHOW_STATE_MAXIMIZED:
+      // NOTE(bjorgvin@vivaldi.com): VB-82933 SetFullscreenMode has to be after
+      // Maximize on macOS.
+      was_fullscreen = browser->window()->IsFullscreen();
       browser->extension_window_controller()->window()->Maximize();
+      if (was_fullscreen) {
+        browser->extension_window_controller()->SetFullscreenMode(
+            false, extension()->url());
+      }
       break;
     case ui::SHOW_STATE_FULLSCREEN:
       browser->extension_window_controller()->SetFullscreenMode(
           true, extension()->url());
       break;
     case ui::SHOW_STATE_NORMAL:
+      was_fullscreen = browser->window()->IsFullscreen();
       if (was_fullscreen) {
         browser->extension_window_controller()->SetFullscreenMode(
             false, extension()->url());

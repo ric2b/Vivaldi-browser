@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "ash/accelerators/accelerator_history_impl.h"
+#include "ash/accelerators/accelerator_notifications.h"
 #include "ash/accelerators/accelerator_table.h"
 #include "ash/accelerators/pre_target_accelerator_handler.h"
 #include "ash/accessibility/accessibility_controller_impl.h"
@@ -38,13 +39,15 @@
 #include "ash/system/brightness_control_delegate.h"
 #include "ash/system/keyboard_brightness_control_delegate.h"
 #include "ash/system/power/power_button_controller_test_api.h"
+#include "ash/system/status_area_widget_test_helper.h"
+#include "ash/system/unified/unified_system_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test_media_client.h"
-#include "ash/test_screenshot_delegate.h"
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_item.h"
 #include "ash/wm/overview/overview_test_util.h"
+#include "ash/wm/splitview/split_view_metrics_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
 #include "ash/wm/test_session_state_animator.h"
@@ -250,6 +253,17 @@ class MockNewWindowDelegate : public testing::NiceMock<TestNewWindowDelegate> {
               (override));
 };
 
+class MockAcceleratorObserver
+    : public testing::NiceMock<AcceleratorController::Observer> {
+ public:
+  // AcceleratorController::Observer:
+  MOCK_METHOD(void, OnActionPerformed, (AcceleratorAction action), (override));
+  MOCK_METHOD(void,
+              OnAcceleratorControllerWillBeDestroyed,
+              (AcceleratorController * controller),
+              (override));
+};
+
 }  // namespace
 
 // Note AcceleratorControllerTest can't be in the anonymous namespace because
@@ -318,11 +332,8 @@ class AcceleratorControllerTest : public AshTestBase {
   }
 
   void TriggerRotateScreenShortcut() {
-    ui::test::EventGenerator* generator = GetEventGenerator();
-    generator->PressKey(ui::VKEY_BROWSER_REFRESH,
-                        ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
-    generator->ReleaseKey(ui::VKEY_BROWSER_REFRESH,
-                          ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+    PressAndReleaseKey(ui::VKEY_BROWSER_REFRESH,
+                       ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
     if (IsConfirmationDialogOpen()) {
       AcceptConfirmationDialog();
       base::RunLoop().RunUntilIdle();
@@ -568,14 +579,14 @@ TEST_F(AcceleratorControllerTest, WindowSnap) {
 
   {
     controller_->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_LEFT, {});
-    gfx::Rect expected_bounds =
-        GetDefaultLeftSnappedWindowBoundsInParent(window.get());
+    gfx::Rect expected_bounds = GetDefaultSnappedWindowBoundsInParent(
+        window.get(), SnapViewType::kPrimary);
     EXPECT_EQ(expected_bounds.ToString(), window->bounds().ToString());
   }
   {
     controller_->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_RIGHT, {});
-    gfx::Rect expected_bounds =
-        GetDefaultRightSnappedWindowBoundsInParent(window.get());
+    gfx::Rect expected_bounds = GetDefaultSnappedWindowBoundsInParent(
+        window.get(), SnapViewType::kSecondary);
     EXPECT_EQ(expected_bounds.ToString(), window->bounds().ToString());
   }
   {
@@ -606,6 +617,16 @@ TEST_F(AcceleratorControllerTest, WindowSnap) {
     EXPECT_TRUE(window_state->IsMinimized());
     window_state->Restore();
     window_state->Activate();
+
+    controller_->PerformActionIfEnabled(TOGGLE_FULLSCREEN, {});
+    EXPECT_TRUE(window_state->IsFullscreen());
+    controller_->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_LEFT, {});
+    EXPECT_TRUE(window_state->IsSnapped());
+    EXPECT_FALSE(window_state->IsFullscreen());
+    controller_->PerformActionIfEnabled(TOGGLE_FULLSCREEN, {});
+    controller_->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_RIGHT, {});
+    EXPECT_TRUE(window_state->IsSnapped());
+    EXPECT_FALSE(window_state->IsFullscreen());
   }
   {
     controller_->PerformActionIfEnabled(WINDOW_MINIMIZE, {});
@@ -624,8 +645,8 @@ TEST_F(AcceleratorControllerTest, TestRepeatedSnap) {
   // Snap right.
   controller_->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_RIGHT, {});
   gfx::Rect normal_bounds = window_state->GetRestoreBoundsInParent();
-  gfx::Rect expected_bounds =
-      GetDefaultRightSnappedWindowBoundsInParent(window.get());
+  gfx::Rect expected_bounds = GetDefaultSnappedWindowBoundsInParent(
+      window.get(), SnapViewType::kSecondary);
   EXPECT_EQ(expected_bounds.ToString(), window->bounds().ToString());
   EXPECT_TRUE(window_state->IsSnapped());
   // Snap right again ->> becomes normal.
@@ -638,7 +659,8 @@ TEST_F(AcceleratorControllerTest, TestRepeatedSnap) {
   // Snap left.
   controller_->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_LEFT, {});
   EXPECT_TRUE(window_state->IsSnapped());
-  expected_bounds = GetDefaultLeftSnappedWindowBoundsInParent(window.get());
+  expected_bounds = GetDefaultSnappedWindowBoundsInParent(
+      window.get(), SnapViewType::kPrimary);
   EXPECT_EQ(expected_bounds.ToString(), window->bounds().ToString());
   // Snap left again ->> becomes normal.
   controller_->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_LEFT, {});
@@ -797,20 +819,62 @@ TEST_F(AcceleratorControllerTestWithClamshellSplitView, WindowSnapUma) {
        WindowStateType::kMaximized);
 }
 
+TEST_F(AcceleratorControllerTestWithClamshellSplitView,
+       WindowSnapOrientationUma) {
+  UpdateDisplay("800x600");
+  std::unique_ptr<aura::Window> window(
+      CreateTestWindowInShellWithBounds(gfx::Rect(5, 5, 20, 20)));
+  WindowState* window_state = WindowState::Get(window.get());
+  std::unique_ptr<aura::Window> window2(
+      CreateTestWindowInShellWithBounds(gfx::Rect(5, 5, 20, 20)));
+  WindowState* window_state2 = WindowState::Get(window2.get());
+  base::HistogramTester histogram_tester;
+  constexpr char kSnapWindowDeviceOrientationHistogram[] =
+      "Ash.Window.Snap.DeviceOrientation";
+  histogram_tester.ExpectBucketCount(
+      kSnapWindowDeviceOrientationHistogram,
+      SplitViewMetricsController::DeviceOrientation::kLandscape, 0);
+
+  window_state->Activate();
+  controller_->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_LEFT, {});
+  gfx::Rect expected_bounds = GetDefaultSnappedWindowBoundsInParent(
+      window.get(), SnapViewType::kPrimary);
+  EXPECT_EQ(expected_bounds.ToString(), window->bounds().ToString());
+  histogram_tester.ExpectBucketCount(
+      kSnapWindowDeviceOrientationHistogram,
+      SplitViewMetricsController::DeviceOrientation::kLandscape, 1);
+  histogram_tester.ExpectBucketCount(
+      kSnapWindowDeviceOrientationHistogram,
+      SplitViewMetricsController::DeviceOrientation::kPortrait, 0);
+
+  controller_->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_RIGHT, {});
+  histogram_tester.ExpectBucketCount(
+      kSnapWindowDeviceOrientationHistogram,
+      SplitViewMetricsController::DeviceOrientation::kLandscape, 2);
+
+  histogram_tester.ExpectBucketCount(
+      kSnapWindowDeviceOrientationHistogram,
+      SplitViewMetricsController::DeviceOrientation::kPortrait, 0);
+
+  window_state2->Activate();
+  UpdateDisplay("800x600/l");
+  controller_->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_LEFT, {});
+  histogram_tester.ExpectBucketCount(
+      kSnapWindowDeviceOrientationHistogram,
+      SplitViewMetricsController::DeviceOrientation::kPortrait, 1);
+}
+
 TEST_F(AcceleratorControllerTest, RotateScreen) {
   display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
   display::Display::Rotation initial_rotation =
       GetActiveDisplayRotation(display.id());
-  ui::test::EventGenerator* generator = GetEventGenerator();
   AccessibilityControllerImpl* accessibility_controller =
       Shell::Get()->accessibility_controller();
 
   EXPECT_FALSE(accessibility_controller
                    ->HasDisplayRotationAcceleratorDialogBeenAccepted());
-  generator->PressKey(ui::VKEY_BROWSER_REFRESH,
-                      ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
-  generator->ReleaseKey(ui::VKEY_BROWSER_REFRESH,
-                        ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+  PressAndReleaseKey(ui::VKEY_BROWSER_REFRESH,
+                     ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
   // Dialog should be open.
   EXPECT_TRUE(IsConfirmationDialogOpen());
   // Cancel on the dialog should have no effect.
@@ -825,10 +889,8 @@ TEST_F(AcceleratorControllerTest, RotateScreen) {
   EXPECT_EQ(initial_rotation, rotation_after_cancel);
 
   // Use short cut again.
-  generator->PressKey(ui::VKEY_BROWSER_REFRESH,
-                      ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
-  generator->ReleaseKey(ui::VKEY_BROWSER_REFRESH,
-                        ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+  PressAndReleaseKey(ui::VKEY_BROWSER_REFRESH,
+                     ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
   EXPECT_TRUE(IsConfirmationDialogOpen());
   AcceptConfirmationDialog();
   base::RunLoop().RunUntilIdle();
@@ -1033,15 +1095,12 @@ TEST_F(AcceleratorControllerTest, AutoRepeat) {
 }
 
 TEST_F(AcceleratorControllerTest, Previous) {
-  ui::test::EventGenerator* generator = GetEventGenerator();
-  generator->PressKey(ui::VKEY_VOLUME_MUTE, ui::EF_NONE);
-  generator->ReleaseKey(ui::VKEY_VOLUME_MUTE, ui::EF_NONE);
+  PressAndReleaseKey(ui::VKEY_VOLUME_MUTE, ui::EF_NONE);
 
   EXPECT_EQ(ui::VKEY_VOLUME_MUTE, GetPreviousAccelerator().key_code());
   EXPECT_EQ(ui::EF_NONE, GetPreviousAccelerator().modifiers());
 
-  generator->PressKey(ui::VKEY_TAB, ui::EF_CONTROL_DOWN);
-  generator->ReleaseKey(ui::VKEY_TAB, ui::EF_CONTROL_DOWN);
+  PressAndReleaseKey(ui::VKEY_TAB, ui::EF_CONTROL_DOWN);
 
   EXPECT_EQ(ui::VKEY_TAB, GetPreviousAccelerator().key_code());
   EXPECT_EQ(ui::EF_CONTROL_DOWN, GetPreviousAccelerator().modifiers());
@@ -1136,30 +1195,6 @@ TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
   EXPECT_TRUE(ProcessInController(
       ui::Accelerator(ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_NONE)));
 
-  // The "Take Screenshot", "Take Partial Screenshot", volume, brightness, and
-  // keyboard brightness accelerators are only defined on ChromeOS.
-  if (!features::IsCaptureModeEnabled()) {
-    TestScreenshotDelegate* delegate = GetScreenshotDelegate();
-    delegate->set_can_take_screenshot(false);
-    EXPECT_TRUE(ProcessInController(
-        ui::Accelerator(ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_CONTROL_DOWN)));
-    EXPECT_TRUE(
-        ProcessInController(ui::Accelerator(ui::VKEY_SNAPSHOT, ui::EF_NONE)));
-    EXPECT_TRUE(ProcessInController(ui::Accelerator(
-        ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN)));
-
-    delegate->set_can_take_screenshot(true);
-    EXPECT_EQ(0, delegate->handle_take_screenshot_count());
-    EXPECT_TRUE(ProcessInController(
-        ui::Accelerator(ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_CONTROL_DOWN)));
-    EXPECT_EQ(1, delegate->handle_take_screenshot_count());
-    EXPECT_TRUE(
-        ProcessInController(ui::Accelerator(ui::VKEY_SNAPSHOT, ui::EF_NONE)));
-    EXPECT_EQ(2, delegate->handle_take_screenshot_count());
-    EXPECT_TRUE(ProcessInController(ui::Accelerator(
-        ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN)));
-    EXPECT_EQ(2, delegate->handle_take_screenshot_count());
-  }
   const ui::Accelerator volume_mute(ui::VKEY_VOLUME_MUTE, ui::EF_NONE);
   const ui::Accelerator volume_down(ui::VKEY_VOLUME_DOWN, ui::EF_NONE);
   const ui::Accelerator volume_up(ui::VKEY_VOLUME_UP, ui::EF_NONE);
@@ -1332,6 +1367,23 @@ TEST_F(AcceleratorControllerTest, GlobalAcceleratorsToggleAppList) {
   GetAppListTestHelper()->CheckVisibility(true);
 }
 
+TEST_F(AcceleratorControllerTest, GlobalAcceleratorsToggleQuickSettings) {
+  UnifiedSystemTray* tray =
+      StatusAreaWidgetTestHelper::GetStatusAreaWidget()->unified_system_tray();
+
+  auto* generator = GetEventGenerator();
+
+  // Pressing accelerator once should show the quick settings bubble.
+  generator->PressKey(ui::VKEY_S, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(tray->IsBubbleShown());
+
+  // Pressing accelerator a second time should dismiss the bubble.
+  generator->PressKey(ui::VKEY_S, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(tray->IsBubbleShown());
+}
+
 TEST_F(AcceleratorControllerTest, GlobalAcceleratorsToggleAppListFullscreen) {
   base::HistogramTester histogram_tester;
 
@@ -1395,9 +1447,7 @@ TEST_F(AcceleratorControllerTest, GlobalAcceleratorsToggleAppListFullscreen) {
                                     ++toggle_count_total);
   histogram_tester.ExpectBucketCount("Apps.AppListShowSource", kSearchKey,
                                      ++toggle_count_regular);
-  ui::test::EventGenerator* generator = GetEventGenerator();
-  generator->PressKey(ui::VKEY_0, ui::EF_NONE);
-  generator->ReleaseKey(ui::VKEY_0, ui::EF_NONE);
+  PressAndReleaseKey(ui::VKEY_0);
   base::RunLoop().RunUntilIdle();
   GetAppListTestHelper()->CheckVisibility(true);
   GetAppListTestHelper()->CheckState(AppListViewState::kHalf);
@@ -1755,11 +1805,6 @@ TEST_F(AcceleratorControllerTest, ToggleCapsLockAccelerators) {
   // 6. Toggle CapsLock shortcut should still work after the partial screenshot
   // shortcut is used. (https://crbug.com/920030)
   {
-    TestScreenshotDelegate* delegate = GetScreenshotDelegate();
-    delegate->set_can_take_screenshot(true);
-
-    EXPECT_EQ(0, delegate->handle_take_partial_screenshot_count());
-
     // Press Ctrl+Shift+F5 then release to enter the partial screenshot session.
     const ui::Accelerator press_partial_screenshot_shortcut(
         ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN);
@@ -1775,13 +1820,9 @@ TEST_F(AcceleratorControllerTest, ToggleCapsLockAccelerators) {
     generator->PressLeftButton();
     generator->MoveMouseTo(10, 10);
     generator->ReleaseLeftButton();
-    if (features::IsCaptureModeEnabled()) {
-      auto* controller = CaptureModeController::Get();
-      EXPECT_TRUE(controller->IsActive());
-      EXPECT_EQ(CaptureModeSource::kRegion, controller->source());
-    } else {
-      EXPECT_EQ(1, delegate->handle_take_partial_screenshot_count());
-    }
+    auto* capture_mode_controller = CaptureModeController::Get();
+    EXPECT_TRUE(capture_mode_controller->IsActive());
+    EXPECT_EQ(CaptureModeSource::kRegion, capture_mode_controller->source());
 
     // Press Search, Press Alt, Release Search, Release Alt. CapsLock should be
     // triggered.
@@ -1941,65 +1982,41 @@ TEST_F(AcceleratorControllerTest, DisallowedAtModalWindow) {
   //  when a modal window is open
   //
   // Screenshot
-  if (!features::IsCaptureModeEnabled()) {
-    TestScreenshotDelegate* delegate = GetScreenshotDelegate();
-    delegate->set_can_take_screenshot(false);
-    EXPECT_TRUE(ProcessInController(
-        ui::Accelerator(ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_CONTROL_DOWN)));
-    EXPECT_TRUE(
-        ProcessInController(ui::Accelerator(ui::VKEY_SNAPSHOT, ui::EF_NONE)));
-    EXPECT_TRUE(ProcessInController(ui::Accelerator(
-        ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN)));
-    delegate->set_can_take_screenshot(true);
-    EXPECT_EQ(0, delegate->handle_take_screenshot_count());
-    EXPECT_TRUE(ProcessInController(
-        ui::Accelerator(ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_CONTROL_DOWN)));
-    EXPECT_EQ(1, delegate->handle_take_screenshot_count());
-    EXPECT_TRUE(
-        ProcessInController(ui::Accelerator(ui::VKEY_SNAPSHOT, ui::EF_NONE)));
-    EXPECT_EQ(2, delegate->handle_take_screenshot_count());
-    EXPECT_TRUE(ProcessInController(ui::Accelerator(
-        ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN)));
-    EXPECT_EQ(2, delegate->handle_take_screenshot_count());
-  } else {
-    auto* controller = CaptureModeController::Get();
+  auto* controller = CaptureModeController::Get();
+  // Control + shift + F5 opens capture mode to take a region screenshot.
+  EXPECT_TRUE(ProcessInController(ui::Accelerator(
+      ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN)));
+  EXPECT_TRUE(controller->IsActive());
+  EXPECT_EQ(CaptureModeSource::kRegion, controller->source());
+  controller->Stop();
 
-    // Control + shift + F5 opens capture mode to take a region screenshot.
-    EXPECT_TRUE(ProcessInController(ui::Accelerator(
-        ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN)));
-    EXPECT_TRUE(controller->IsActive());
-    EXPECT_EQ(CaptureModeSource::kRegion, controller->source());
-    controller->Stop();
+  // Control + alt + F5 opens capture mode to take a window screenshot.
+  EXPECT_TRUE(ProcessInController(ui::Accelerator(
+      ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_ALT_DOWN | ui::EF_CONTROL_DOWN)));
+  EXPECT_TRUE(controller->IsActive());
+  EXPECT_EQ(CaptureModeSource::kWindow, controller->source());
+  controller->Stop();
 
-    // Control + alt + F5 opens capture mode to take a window screenshot.
-    EXPECT_TRUE(ProcessInController(ui::Accelerator(
-        ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_ALT_DOWN | ui::EF_CONTROL_DOWN)));
-    EXPECT_TRUE(controller->IsActive());
-    EXPECT_EQ(CaptureModeSource::kWindow, controller->source());
-    controller->Stop();
+  // Snapshot key opens capture mode with the last type, and closes it if it
+  // is already open.
+  EXPECT_TRUE(
+      ProcessInController(ui::Accelerator(ui::VKEY_SNAPSHOT, ui::EF_NONE)));
+  EXPECT_TRUE(controller->IsActive());
+  EXPECT_EQ(CaptureModeSource::kWindow, controller->source());
+  EXPECT_TRUE(
+      ProcessInController(ui::Accelerator(ui::VKEY_SNAPSHOT, ui::EF_NONE)));
+  ASSERT_FALSE(controller->IsActive());
 
-    // Snapshot key opens capture mode with the last type, and closes it if it
-    // is already open.
-    EXPECT_TRUE(
-        ProcessInController(ui::Accelerator(ui::VKEY_SNAPSHOT, ui::EF_NONE)));
-    EXPECT_TRUE(controller->IsActive());
-    EXPECT_EQ(CaptureModeSource::kWindow, controller->source());
-    EXPECT_TRUE(
-        ProcessInController(ui::Accelerator(ui::VKEY_SNAPSHOT, ui::EF_NONE)));
-    ASSERT_FALSE(controller->IsActive());
-
-    // Control + F5 takes a screenshot of all displays without opening capture
-    // mode. The loop will timeout if a screenshot was not successfully taken
-    // and saved.
-    EXPECT_TRUE(ProcessInController(
-        ui::Accelerator(ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_CONTROL_DOWN)));
-    EXPECT_FALSE(controller->IsActive());
-    base::RunLoop run_loop;
-    CaptureModeTestApi().SetOnCaptureFileSavedCallback(
-        base::BindLambdaForTesting(
-            [&run_loop](const base::FilePath& path) { run_loop.Quit(); }));
-    run_loop.Run();
-  }
+  // Control + F5 takes a screenshot of all displays without opening capture
+  // mode. The loop will timeout if a screenshot was not successfully taken
+  // and saved.
+  EXPECT_TRUE(ProcessInController(
+      ui::Accelerator(ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_CONTROL_DOWN)));
+  EXPECT_FALSE(controller->IsActive());
+  base::RunLoop run_loop;
+  CaptureModeTestApi().SetOnCaptureFileSavedCallback(base::BindLambdaForTesting(
+      [&run_loop](const base::FilePath& path) { run_loop.Quit(); }));
+  run_loop.Run();
 
   // Brightness
   const ui::Accelerator brightness_down(ui::VKEY_BRIGHTNESS_DOWN, ui::EF_NONE);
@@ -2145,6 +2162,10 @@ TEST_F(AcceleratorControllerTest, TestToggleHighContrast) {
 }
 
 TEST_F(AcceleratorControllerTest, CalculatorKey) {
+  auto observer = std::make_unique<MockAcceleratorObserver>();
+  auto* accelerator_controller = ash::AcceleratorController::Get();
+  accelerator_controller->AddObserver(observer.get());
+
   // Verify that the launch calculator key (VKEY_MEDIA_LAUNCH_APP2) is
   // registered.
   ui::Accelerator accelerator(ui::VKEY_MEDIA_LAUNCH_APP2, ui::EF_NONE);
@@ -2153,7 +2174,11 @@ TEST_F(AcceleratorControllerTest, CalculatorKey) {
   // Verify that the delegate to open the app is called.
   EXPECT_CALL(*new_window_delegate_, OpenCalculator)
       .WillOnce(testing::Return());
+  EXPECT_CALL(*observer, OnActionPerformed)
+      .WillOnce(
+          [](AcceleratorAction action) { EXPECT_EQ(OPEN_CALCULATOR, action); });
   EXPECT_TRUE(ProcessInController(accelerator));
+  accelerator_controller->RemoveObserver(observer.get());
 }
 
 // Tests the IME mode change key.
@@ -2313,9 +2338,7 @@ TEST_F(AcceleratorControllerStartupNotificationTest,
 
   // Notification should be shown at login.
   SimulateUserLogin("user1@email.com");
-  auto* notification = message_center()->FindVisibleNotificationById(
-      kStartupNewShortcutNotificationId);
-  EXPECT_TRUE(notification);
+  EXPECT_TRUE(FindShortcutsChangedNotificationForTest());
 }
 
 TEST_F(AcceleratorControllerStartupNotificationTest,
@@ -2325,9 +2348,7 @@ TEST_F(AcceleratorControllerStartupNotificationTest,
 
   // Notification should not be shown at login.
   SimulateUserLogin("user1@email.com");
-  auto* notification = message_center()->FindVisibleNotificationById(
-      kStartupNewShortcutNotificationId);
-  EXPECT_FALSE(notification);
+  EXPECT_FALSE(FindShortcutsChangedNotificationForTest());
 }
 
 TEST_F(AcceleratorControllerStartupNotificationTest,
@@ -2337,9 +2358,7 @@ TEST_F(AcceleratorControllerStartupNotificationTest,
 
   // Notification should not be shown at login.
   SimulateUserLogin("user1@email.com", user_manager::USER_TYPE_GUEST);
-  auto* notification = message_center()->FindVisibleNotificationById(
-      kStartupNewShortcutNotificationId);
-  EXPECT_FALSE(notification);
+  EXPECT_FALSE(FindShortcutsChangedNotificationForTest());
 }
 
 TEST_F(AcceleratorControllerStartupNotificationTest,
@@ -2350,9 +2369,7 @@ TEST_F(AcceleratorControllerStartupNotificationTest,
   SimulateNewUserFirstLogin("user1@email.com");
 
   // Notification should not be shown at a new user's first login.
-  auto* notification = message_center()->FindVisibleNotificationById(
-      kStartupNewShortcutNotificationId);
-  EXPECT_FALSE(notification);
+  EXPECT_FALSE(FindShortcutsChangedNotificationForTest());
 }
 
 TEST_F(AcceleratorControllerStartupNotificationTest,
@@ -2362,9 +2379,7 @@ TEST_F(AcceleratorControllerStartupNotificationTest,
 
   // Notification should be shown at login.
   SimulateUserLogin("user1@email.com");
-  auto* notification = message_center()->FindVisibleNotificationById(
-      kStartupNewShortcutNotificationId);
-  EXPECT_TRUE(notification);
+  EXPECT_TRUE(FindShortcutsChangedNotificationForTest());
 
   // Reset the notifications.
   message_center()->RemoveAllNotifications(
@@ -2372,9 +2387,7 @@ TEST_F(AcceleratorControllerStartupNotificationTest,
 
   // Login again and there should not be another notification.
   SimulateUserLogin("user1@email.com");
-  notification = message_center()->FindVisibleNotificationById(
-      kStartupNewShortcutNotificationId);
-  EXPECT_FALSE(notification);
+  EXPECT_FALSE(FindShortcutsChangedNotificationForTest());
 }
 
 TEST_F(AcceleratorControllerStartupNotificationTest,
@@ -2384,9 +2397,7 @@ TEST_F(AcceleratorControllerStartupNotificationTest,
 
   // Notification should be shown at first login.
   SimulateUserLogin("user1@email.com");
-  auto* notification = message_center()->FindVisibleNotificationById(
-      kStartupNewShortcutNotificationId);
-  EXPECT_TRUE(notification);
+  EXPECT_TRUE(FindShortcutsChangedNotificationForTest());
 
   // Reset the notifications.
   message_center()->RemoveAllNotifications(
@@ -2394,9 +2405,7 @@ TEST_F(AcceleratorControllerStartupNotificationTest,
 
   // Switch to user 2, and also should be shown at first login.
   SimulateUserLogin("user2@email.com");
-  notification = message_center()->FindVisibleNotificationById(
-      kStartupNewShortcutNotificationId);
-  EXPECT_TRUE(notification);
+  EXPECT_TRUE(FindShortcutsChangedNotificationForTest());
 
   // Reset the notifications.
   message_center()->RemoveAllNotifications(
@@ -2405,15 +2414,11 @@ TEST_F(AcceleratorControllerStartupNotificationTest,
   // Switch back to to user 1, and it should not be shown.
   auto* session = GetSessionControllerClient();
   session->SwitchActiveUser(AccountId::FromUserEmail("user1@email.com"));
-  notification = message_center()->FindVisibleNotificationById(
-      kStartupNewShortcutNotificationId);
-  EXPECT_FALSE(notification);
+  EXPECT_FALSE(FindShortcutsChangedNotificationForTest());
 
   // Switch again to user 2, and it should not be shown.
   session->SwitchActiveUser(AccountId::FromUserEmail("user2@email.com"));
-  notification = message_center()->FindVisibleNotificationById(
-      kStartupNewShortcutNotificationId);
-  EXPECT_FALSE(notification);
+  EXPECT_FALSE(FindShortcutsChangedNotificationForTest());
 }
 
 TEST_F(AcceleratorControllerStartupNotificationTest,
@@ -2423,8 +2428,7 @@ TEST_F(AcceleratorControllerStartupNotificationTest,
 
   // Notification should be shown at login.
   SimulateUserLogin("user1@email.com");
-  auto* notification = message_center()->FindVisibleNotificationById(
-      kStartupNewShortcutNotificationId);
+  auto* notification = FindShortcutsChangedNotificationForTest();
   EXPECT_TRUE(notification);
 
   // Setup the expectation that the learn more button opens this shortcut
@@ -2448,8 +2452,7 @@ TEST_F(AcceleratorControllerStartupNotificationTest,
 
   // Notification should be shown at login.
   SimulateUserLogin("user1@email.com");
-  auto* notification = message_center()->FindVisibleNotificationById(
-      kStartupNewShortcutNotificationId);
+  auto* notification = FindShortcutsChangedNotificationForTest();
   EXPECT_TRUE(notification);
 
   // Setup the expectation that clicking the message body will show the

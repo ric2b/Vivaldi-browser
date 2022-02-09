@@ -19,6 +19,7 @@
     <color name="default_text_color_link_disabled">@color/default_text_color_link_disabled_dark</color>
     <color name="default_text_color_error">@color/default_text_color_error_dark</color>
     <color name="default_text_color_on_accent1">@color/default_text_color_on_accent1_light</color>
+    <color name="default_text_color_on_accent1_disabled">@color/default_text_color_disabled_dark</color>
 
     <!-- Common icon colors for drawables. -->
     <color name="default_icon_color">@color/default_icon_color_dark</color>
@@ -48,8 +49,10 @@
     <color name="legacy_bg_color_elev_1">@color/legacy_bg_color_light_elev_1</color>
     <color name="legacy_bg_color_elev_4">@color/legacy_bg_color_light_elev_4</color>
 
-    <!-- Popup colors -->
-    <color name="popup_bg_color">@color/default_bg_color</color>
+    <!-- Dialog colors -->
+    <color name="dialog_bg_color">@color/dialog_bg_color_light</color>
+    <color name="dialog_bg_color_light">@color/default_bg_color_light</color>
+    <color name="dialog_bg_color_dark">@color/default_bg_color_dark_elev_3</color>
 
     <!-- Snackbar colors -->
     <color name="snackbar_background_color">@color/default_bg_color</color>

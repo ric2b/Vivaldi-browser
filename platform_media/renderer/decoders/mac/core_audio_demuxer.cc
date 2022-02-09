@@ -12,6 +12,7 @@
 
 #include "base/callback_helpers.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/task_runner_util.h"
@@ -282,8 +283,7 @@ void CoreAudioDemuxer::AudioPacketsProc(
   if (err == noErr) {
     int64_t duration = 0;
     int64_t ds_size = 0;
-    demuxer->data_source_->GetSize(&ds_size);
-    if (demuxer->bit_rate_ > 0) {
+    if (demuxer->data_source_->GetSize(&ds_size) && demuxer->bit_rate_ > 0) {
       // some audio files gives bit_rate in 1000*bits/s, but others gives bits/s
       // According to the ISO standard, decoders are only required to be able
       // to decode streams up to 320, so it should be safe to calculate like

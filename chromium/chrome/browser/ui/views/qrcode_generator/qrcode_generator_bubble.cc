@@ -20,6 +20,8 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/services/qrcode_generator/public/cpp/qrcode_generator_service.h"
+#include "chrome/services/qrcode_generator/public/mojom/qrcode_generator.mojom.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/download_request_utils.h"
@@ -111,6 +113,7 @@ QRCodeGeneratorBubble::~QRCodeGeneratorBubble() = default;
 void QRCodeGeneratorBubble::Show() {
   chrome::RecordDialogCreation(chrome::DialogIdentifier::QR_CODE_GENERATOR);
   textfield_url_->SetText(base::ASCIIToUTF16(url_.possibly_invalid_spec()));
+  textfield_url_->SelectAll(false);
   UpdateQRContent();
   ShowForReason(USER_GESTURE);
 }

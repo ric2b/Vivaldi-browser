@@ -74,7 +74,8 @@ MailClientDatabase::MailClientDatabase()
            // Set the cache size. The page size, plus a little extra, times this
            // value, tells us how much memory the cache will use maximum.
            // 1000 * 4kB = 4MB
-           .cache_size = 1000}) {}
+           .cache_size = 1000,
+           .enable_virtual_tables_discouraged = true}) {}
 
 MailClientDatabase::~MailClientDatabase() {}
 

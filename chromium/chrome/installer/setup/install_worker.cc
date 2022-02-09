@@ -60,6 +60,10 @@
 #include "chrome/installer/util/util_constants.h"
 #include "chrome/installer/util/work_item_list.h"
 
+#if BUILDFLAG(USE_GOOGLE_UPDATE_INTEGRATION)
+#include "chrome/installer/setup/channel_override_work_item.h"
+#endif
+
 #include "installer/util/vivaldi_install_util.h"
 #include "installer/util/vivaldi_setup_util.h"
 
@@ -702,18 +706,22 @@ bool AppendPostInstallTasks(const InstallParams& install_params,
                                            post_install_task_list);
   }
 
+#if BUILDFLAG(USE_GOOGLE_UPDATE_INTEGRATION)
   // Add a best-effort item to create the ClientStateMedium key for system-level
   // installs. This is ordinarily done by Google Update prior to running
   // Chrome's installer. Do it here as well so that the key exists for manual
   // installs.
-#if BUILDFLAG(USE_GOOGLE_UPDATE_INTEGRATION)
   if (installer_state.system_install()) {
     const std::wstring path = install_static::GetClientStateMediumKeyPath();
     post_install_task_list
         ->AddCreateRegKeyWorkItem(HKEY_LOCAL_MACHINE, path, KEY_WOW64_32KEY)
         ->set_best_effort(true);
   }
-#endif
+
+  // Apply policy-driven channel selection to the "ap" value for subsequent
+  // update checks even if the policy is cleared.
+  AddChannelSelectionWorkItems(installer_state, post_install_task_list);
+#endif  // BUILDFLAG(USE_GOOGLE_UPDATE_INTEGRATION)
 
   return true;
 }
@@ -1044,6 +1052,23 @@ void AddChannelWorkItems(HKEY root,
                                     google_update::kRegChannelField);
   }
 }
+
+#if BUILDFLAG(USE_GOOGLE_UPDATE_INTEGRATION)
+void AddChannelSelectionWorkItems(const InstallerState& installer_state,
+                                  WorkItemList* list) {
+  const auto& install_details = install_static::InstallDetails::Get();
+
+  // Nothing to do if the channel wasn't selected via the command line switch.
+  if (install_details.channel_origin() !=
+      install_static::ChannelOrigin::kPolicy) {
+    return;
+  }
+
+  auto item = std::make_unique<ChannelOverrideWorkItem>();
+  item->set_best_effort(true);
+  list->AddWorkItem(item.release());
+}
+#endif  // BUILDFLAG(USE_GOOGLE_UPDATE_INTEGRATION)
 
 void AddFinalizeUpdateWorkItems(const base::Version& new_version,
                                 const InstallerState& installer_state,

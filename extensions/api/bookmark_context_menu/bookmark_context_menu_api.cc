@@ -5,7 +5,6 @@
 
 #include "base/lazy_instance.h"
 #include "base/strings/utf_string_conversions.h"
-#include "browser/menus/vivaldi_menu_enums.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -13,9 +12,11 @@
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/api/menubar_menu/menubar_menu_api.h"
-#include "extensions/browser/extension_function_dispatcher.h"
-#include "extensions/tools/vivaldi_tools.h"
 #include "ui/base/accelerators/accelerator.h"
+
+#include "browser/menus/vivaldi_menu_enums.h"
+#include "extensions/tools/vivaldi_tools.h"
+#include "ui/vivaldi_browser_window.h"
 
 namespace extensions {
 
@@ -64,6 +65,12 @@ ExtensionFunction::ResponseAction BookmarkContextMenuShowFunction::Run() {
 
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  VivaldiBrowserWindow* window =
+      VivaldiBrowserWindow::FromId(params->properties.window_id);
+  if (!window) {
+    return RespondNow(Error("No such window"));
+  }
 
   ::vivaldi::BookmarkSorter::SortField sortField;
   switch (params->properties.sort_field) {
@@ -132,13 +139,10 @@ ExtensionFunction::ResponseAction BookmarkContextMenuShowFunction::Run() {
     sibling->tweak_separator = false;
   }
 
-  content::WebContents* web_contents = dispatcher()->GetAssociatedWebContents();
-  if (web_contents) {
-    ::vivaldi::ConvertContainerRectToScreen(web_contents,
-        *bookmark_menu_container_);
-  }
+  ::vivaldi::ConvertContainerRectToScreen(window->web_contents(),
+                                          *bookmark_menu_container_);
 
-  std::string error = Open(params->properties.id);
+  std::string error = Open(window->web_contents(), params->properties.id);
   if (!error.empty()) {
     return RespondNow(Error(error));
   }
@@ -147,12 +151,9 @@ ExtensionFunction::ResponseAction BookmarkContextMenuShowFunction::Run() {
   return RespondLater();
 }
 
-std::string BookmarkContextMenuShowFunction::Open(const std::string& id) {
-  content::WebContents* web_contents = dispatcher()->GetAssociatedWebContents();
-  if (!web_contents) {
-    return "No WebContents";
-  }
-
+std::string BookmarkContextMenuShowFunction::Open(
+    content::WebContents* web_contents,
+    const std::string& id) {
   int64_t node_id;
   if (!base::StringToInt64(id, &node_id)) {
     return "id is not a valid int64 - " + id;

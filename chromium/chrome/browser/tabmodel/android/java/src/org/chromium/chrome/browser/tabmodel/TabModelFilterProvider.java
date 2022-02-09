@@ -120,6 +120,13 @@ public class TabModelFilterProvider implements TabModelSelectorObserver {
         markTabStateInitialized();
     }
 
+    /**
+     * Reset the internal filter list to allow initialization again.
+     */
+    public void resetTabModelFilterListForTesting() {
+        mTabModelFilterList = Collections.emptyList();
+    }
+
     /** Vivaldi: Wrapper which can specifically receive a |TabGroupModelFilter|. */
     public TabModelFilter getTabModelFilter(boolean isIncognito, boolean asGroupFilter) {
         return getTabModelFilter(isIncognito);

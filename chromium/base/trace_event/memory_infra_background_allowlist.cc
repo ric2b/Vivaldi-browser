@@ -21,6 +21,7 @@ namespace {
 // little processor and memory overhead.
 // TODO(ssid): Some dump providers do not create ownership edges on background
 // dump. So, the effective size will not be correct.
+// clang-format off
 const char* const kDumpProviderAllowlist[] = {
     "android::ResourceManagerImpl",
     "AutocompleteController",
@@ -77,8 +78,13 @@ const char* const kDumpProviderAllowlist[] = {
 // A list of string names that are allowed for the memory allocator dumps in
 // background mode.
 const char* const kAllocatorDumpNameAllowlist[] = {
+    // Some of the blink values vary based on compile time flags. The compile
+    // timeflags are not in base, so all are listed here.
+    "blink_gc/main/allocated_objects",
     "blink_gc/main/heap",
     "blink_gc/workers/heap/worker_0x?",
+    "blink_gc/workers/worker_0x?/heap",
+    "blink_gc/workers/worker_0x?/allocated_objects",
     "blink_objects/AdSubframe",
     "blink_objects/ArrayBufferContents",
     "blink_objects/AudioHandler",
@@ -402,6 +408,7 @@ const char* const kAllocatorDumpNameAllowlist[] = {
     "sync/0x?/model_type/WORKSPACE_DESK",
     "sync/0x?/model_type/NOTES",
     "tab_restore/service_helper_0x?/entries",
+    "tab_restore/service_helper_0x?/entries/group_0x?",
     "tab_restore/service_helper_0x?/entries/tab_0x?",
     "tab_restore/service_helper_0x?/entries/window_0x?",
     "tracing/heap_profiler_blink_gc/AllocationRegister",
@@ -409,6 +416,7 @@ const char* const kAllocatorDumpNameAllowlist[] = {
     "tracing/heap_profiler_partition_alloc/AllocationRegister",
     nullptr  // End of list marker.
 };
+// clang-format on
 
 const char* const* g_dump_provider_allowlist = kDumpProviderAllowlist;
 const char* const* g_allocator_dump_name_allowlist =

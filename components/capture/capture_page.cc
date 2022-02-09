@@ -9,18 +9,18 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/task/post_task.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/codec/png_codec.h"
-
-#include "renderer/vivaldi_render_messages.h"
 
 namespace vivaldi {
 
@@ -48,8 +48,6 @@ void OnCopySurfaceDone(float device_scale_factor,
 }
 
 }  // namespace
-
-int CapturePage::s_callback_id = 0;
 
 CapturePage::CapturePage() : weak_ptr_factory_(this) {}
 
@@ -101,26 +99,24 @@ void CapturePage::Capture(content::WebContents* contents,
   capture_page->CaptureImpl(contents, params, std::move(callback));
 }
 
-void CapturePage::CaptureImpl(content::WebContents* contents,
+void CapturePage::CaptureImpl(content::WebContents* web_contents,
                               const CaptureParams& input_params,
                               DoneCallback callback) {
   DCHECK(!callback.is_null());
   capture_callback_ = std::move(callback);
-  callback_id_ = ++s_callback_id;
-  once_per_contents_ = input_params.once_per_contents;
   target_size_ = input_params.target_size;
+  client_id_ = input_params.client_id;
 
-  VivaldiViewMsg_RequestThumbnailForFrame_Params param;
-  param.callback_id = callback_id_;
-  param.rect = input_params.rect;
-  param.full_page = input_params.full_page;
-  param.target_size = input_params.target_size;
-  param.client_id = input_params.client_id;
+  WebContentsObserver::Observe(web_contents);
 
-  WebContentsObserver::Observe(contents);
-
-  contents->GetMainFrame()->Send(new VivaldiViewMsg_RequestThumbnailForFrame(
-      contents->GetMainFrame()->GetRoutingID(), param));
+  auto* rfhi =
+      static_cast<content::RenderFrameHostImpl*>(web_contents->GetMainFrame());
+  rfhi->GetVivaldiFrameService()->RequestThumbnailForFrame(
+      input_params.rect, input_params.full_page, input_params.target_size,
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+          base::BindOnce(&CapturePage::OnRequestThumbnailForFrameResponse,
+                         weak_ptr_factory_.GetWeakPtr()),
+          gfx::Size(), base::ReadOnlySharedMemoryRegion()));
 
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
@@ -147,34 +143,11 @@ void CapturePage::RenderViewHostChanged(content::RenderViewHost* old_host,
   RespondAndDelete();
 }
 
-bool CapturePage::OnMessageReceived(
-    const IPC::Message& message,
-    content::RenderFrameHost* render_frame_host) {
-  DCHECK(WebContentsObserver::web_contents());
-  bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP(CapturePage, message)
-    IPC_MESSAGE_HANDLER(VivaldiViewHostMsg_RequestThumbnailForFrame_ACK,
-                        OnRequestThumbnailForFrameResponse)
-    IPC_MESSAGE_UNHANDLED(handled = false)
-  IPC_END_MESSAGE_MAP()
-  return handled;
-}
-
 void CapturePage::OnRequestThumbnailForFrameResponse(
-    int callback_id,
-    gfx::Size image_size,
-    base::ReadOnlySharedMemoryRegion region,
-    int client_id) {
+    const gfx::Size& image_size,
+    base::ReadOnlySharedMemoryRegion region) {
   Result captured;
   do {
-    if (callback_id != callback_id_) {
-      if (!once_per_contents_)
-        return;
-      LOG(ERROR) << "unexpected callback id " << callback_id << " when "
-                 << callback_id_ << " was expected";
-      break;
-    }
-
     if (!region.IsValid() || image_size.IsEmpty()) {
       LOG(ERROR) << "no data from the renderer process";
       break;
@@ -198,7 +171,7 @@ void CapturePage::OnRequestThumbnailForFrameResponse(
     captured.region_ = std::move(region);
   } while (false);
 
-  captured.client_id_ = client_id;
+  captured.client_id_ = client_id_;
   RespondAndDelete(std::move(captured));
 }
 

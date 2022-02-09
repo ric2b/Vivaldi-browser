@@ -129,13 +129,13 @@ class NotesCodecTest : public testing::Test {
     *result_value = static_cast<base::DictionaryValue*>(child_value);
   }
 
-  base::Value* EncodeHelper(NotesModel* model, std::string* checksum) {
+  base::Value EncodeHelper(NotesModel* model, std::string* checksum) {
     NotesCodec encoder;
     // Computed and stored checksums should be empty.
     EXPECT_EQ("", encoder.computed_checksum());
     EXPECT_EQ("", encoder.stored_checksum());
 
-    std::unique_ptr<base::Value> value(encoder.Encode(model, ""));
+    base::Value value(encoder.Encode(model, ""));
     const std::string& computed_checksum = encoder.computed_checksum();
     const std::string& stored_checksum = encoder.stored_checksum();
 
@@ -145,7 +145,7 @@ class NotesCodecTest : public testing::Test {
     EXPECT_EQ(computed_checksum, stored_checksum);
 
     *checksum = computed_checksum;
-    return value.release();
+    return value;
   }
 
   bool Decode(NotesCodec* codec, NotesModel* model, const base::Value& value) {
@@ -208,14 +208,11 @@ class NotesCodecTest : public testing::Test {
 TEST_F(NotesCodecTest, ChecksumEncodeDecodeTest) {
   std::unique_ptr<NotesModel> model_to_encode(CreateTestModel1());
   std::string enc_checksum;
-  std::unique_ptr<base::Value> value(
-      EncodeHelper(model_to_encode.get(), &enc_checksum));
-
-  EXPECT_TRUE(value.get() != NULL);
+  base::Value value(EncodeHelper(model_to_encode.get(), &enc_checksum));
 
   std::string dec_checksum;
   std::unique_ptr<NotesModel> decoded_model(
-      DecodeHelper(*value.get(), enc_checksum, &dec_checksum, false));
+      DecodeHelper(value, enc_checksum, &dec_checksum, false));
 }
 
 TEST_F(NotesCodecTest, ChecksumEncodeIdenticalModelsTest) {
@@ -223,15 +220,11 @@ TEST_F(NotesCodecTest, ChecksumEncodeIdenticalModelsTest) {
   // as the data is the same.
   std::unique_ptr<NotesModel> model1(CreateTestModel1(1003));
   std::string enc_checksum1;
-  std::unique_ptr<base::Value> value1(
-      EncodeHelper(model1.get(), &enc_checksum1));
-  EXPECT_TRUE(value1.get() != NULL);
+  EncodeHelper(model1.get(), &enc_checksum1);
 
   std::unique_ptr<NotesModel> model2(CreateTestModel1(1003));
   std::string enc_checksum2;
-  std::unique_ptr<base::Value> value2(
-      EncodeHelper(model2.get(), &enc_checksum2));
-  EXPECT_TRUE(value2.get() != NULL);
+  EncodeHelper(model2.get(), &enc_checksum2);
 
   ASSERT_EQ(enc_checksum1, enc_checksum2);
 }
@@ -239,26 +232,23 @@ TEST_F(NotesCodecTest, ChecksumEncodeIdenticalModelsTest) {
 TEST_F(NotesCodecTest, ChecksumManualEditTest) {
   std::unique_ptr<NotesModel> model_to_encode(CreateTestModel1());
   std::string enc_checksum;
-  std::unique_ptr<base::Value> value(
-      EncodeHelper(model_to_encode.get(), &enc_checksum));
-
-  EXPECT_TRUE(value.get() != NULL);
+  base::Value value(EncodeHelper(model_to_encode.get(), &enc_checksum));
 
   // Change something in the encoded value before decoding it.
   base::DictionaryValue* child1_value;
-  GetNotesChildValue(value.get(), 0, &child1_value);
+  GetNotesChildValue(&value, 0, &child1_value);
   std::string title;
   ASSERT_TRUE(child1_value->GetString(NotesCodec::kSubjectKey, &title));
   child1_value->SetString(NotesCodec::kSubjectKey, title + "1");
 
   std::string dec_checksum;
   std::unique_ptr<NotesModel> decoded_model1(
-      DecodeHelper(*value.get(), enc_checksum, &dec_checksum, true));
+      DecodeHelper(value, enc_checksum, &dec_checksum, true));
 
   // Undo the change and make sure the checksum is same as original.
   child1_value->SetString(NotesCodec::kSubjectKey, title);
   std::unique_ptr<NotesModel> decoded_model2(
-      DecodeHelper(*value.get(), enc_checksum, &dec_checksum, false));
+      DecodeHelper(value, enc_checksum, &dec_checksum, false));
 }
 
 TEST_F(NotesCodecTest, ChecksumManualEditIDsTest) {
@@ -270,15 +260,12 @@ TEST_F(NotesCodecTest, ChecksumManualEditIDsTest) {
   ASSERT_GT(notes_child_count, 1);
 
   std::string enc_checksum;
-  std::unique_ptr<base::Value> value(
-      EncodeHelper(model_to_encode.get(), &enc_checksum));
-
-  EXPECT_TRUE(value.get() != NULL);
+  base::Value value(EncodeHelper(model_to_encode.get(), &enc_checksum));
 
   // Change IDs for all children of notes main node to be 1.
   base::DictionaryValue* child_value;
   for (int i = 0; i < notes_child_count; ++i) {
-    GetNotesChildValue(value.get(), i, &child_value);
+    GetNotesChildValue(&value, i, &child_value);
     std::string id;
     ASSERT_TRUE(child_value->GetString(NotesCodec::kIdKey, &id));
     child_value->SetString(NotesCodec::kIdKey, "1");
@@ -286,7 +273,7 @@ TEST_F(NotesCodecTest, ChecksumManualEditIDsTest) {
 
   std::string dec_checksum;
   std::unique_ptr<NotesModel> decoded_model(
-      DecodeHelper(*value.get(), enc_checksum, &dec_checksum, true));
+      DecodeHelper(value, enc_checksum, &dec_checksum, true));
 
   ExpectIDsUnique(decoded_model.get());
 
@@ -305,12 +292,11 @@ TEST_F(NotesCodecTest, ChecksumManualEditIDsTest) {
 TEST_F(NotesCodecTest, PersistIDsTest) {
   std::unique_ptr<NotesModel> model_to_encode(CreateTestModel3());
   NotesCodec encoder;
-  std::unique_ptr<base::Value> model_value(
-      encoder.Encode(model_to_encode.get(), ""));
+  base::Value model_value(encoder.Encode(model_to_encode.get(), ""));
 
   std::unique_ptr<NotesModel> decoded_model(CreateTestNotesModel());
   NotesCodec decoder;
-  ASSERT_TRUE(Decode(&decoder, decoded_model.get(), *model_value.get()));
+  ASSERT_TRUE(Decode(&decoder, decoded_model.get(), model_value));
   ASSERT_NO_FATAL_FAILURE(
       AssertModelsEqual(model_to_encode.get(), decoded_model.get()));
 
@@ -327,12 +313,11 @@ TEST_F(NotesCodecTest, PersistIDsTest) {
                          ASCIIToUTF16(CreateAutoIndexedContent()));
 
   NotesCodec encoder2;
-  std::unique_ptr<base::Value> model_value2(
-      encoder2.Encode(decoded_model.get(), ""));
+  base::Value model_value2(encoder2.Encode(decoded_model.get(), ""));
 
   std::unique_ptr<NotesModel> decoded_model2(CreateTestNotesModel());
   NotesCodec decoder2;
-  ASSERT_TRUE(Decode(&decoder2, decoded_model2.get(), *model_value2.get()));
+  ASSERT_TRUE(Decode(&decoder2, decoded_model2.get(), model_value2));
   ASSERT_NO_FATAL_FAILURE(
       AssertModelsEqual(decoded_model.get(), decoded_model2.get()));
 }

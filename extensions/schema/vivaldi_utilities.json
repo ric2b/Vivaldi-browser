@@ -192,6 +192,10 @@
             "description": "This is a file select dialog."
           },
           {
+            "name": "save_file",
+            "description": "This is a file select dialog, allowing to choose a nonexistent file for saving."
+          },
+          {
             "name": "folder",
             "description": "This is a folder select dialog."
           }
@@ -302,13 +306,12 @@
       {
         "name": "print",
         "type": "function",
-        "description": "Open print preview dialog for the given tab.",
+        "description": "Open print preview dialog.",
         "parameters": [
           {
+            "name": "windowId",
             "type": "integer",
-            "name": "tabId",
-            "description": "The tab id for the tab we want to print.",
-            "minimum": 0
+            "description": "WindowId of browser printing active tab."
           }
         ]
       },
@@ -430,6 +433,12 @@
         "description": "Select a single file and returns the file name.",
         "parameters": [
           {
+            "name": "title",
+            "type": "string",
+            "description": "Title of the file select dialog.",
+            "optional": true
+          },
+          {
             "name": "accepts",
             "type": "array",
             "description": "Extensions to filter file names on.",
@@ -437,9 +446,9 @@
             "items": { "$ref": "FileExtension" }
           },
           {
-            "name": "title",
+            "name": "defaultPath",
             "type": "string",
-            "description": "Title of the file select dialog.",
+            "description": "The file's default path and name.",
             "optional": true
           },
           {
@@ -681,7 +690,13 @@
         "name": "savePage",
         "type": "function",
         "description": "Saves web page.",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "tabId",
+            "type": "integer",
+            "description": "Id to of page being saved."
+          }
+        ],
         "returns_async": {
           "name": "callback",
           "optional": true,
@@ -693,7 +708,13 @@
         "name": "openPage",
         "type": "function",
         "description": "Open web page.",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer",
+            "description": "WindowId of browser opening a local file."
+          }
+        ],
         "returns_async": {
           "name": "callback",
           "optional": true,
@@ -703,25 +724,12 @@
       {
         "name": "broadcastMessage",
         "type": "function",
-        "description": "Broadcast urls to other windows. Works from regular to private windows as well.",
+        "description": "Broadcast a message to all windows. Works from regular to private windows as well.",
         "parameters": [
           {
-            "name": "windowId",
-            "type": "number"
-          },
-          {
-            "name": "action",
-            "$ref": "BroadcastAction"
-          },
-          {
-            "name": "prompt",
-            "type": "boolean",
-            "description": "Set to true to allow user intervention (if applicable)."
-          },
-          {
-            "name": "urls",
-            "type": "array",
-            "items": { "type": "string" }
+            "type": "any",
+            "name": "message",
+            "description": "The message to send."
           },
           {
             "type": "function",
@@ -896,7 +904,13 @@
         "name": "showPasswordDialog",
         "type": "function",
         "description": "Shows password manage dialog.",
-        "parameters": []
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId",
+            "description": "The window id the dialog belongs to."
+          }
+        ]
       },
       {
         "name": "setDialogPosition",
@@ -1110,6 +1124,11 @@
         "type": "function",
         "description": "Shows the Chromecast dialog.",
         "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer",
+            "description": "Window id where casting should start."
+          }
         ]
       },
       {
@@ -1167,6 +1186,100 @@
               "name": "result",
               "type": "string",
               "description": "Vivaldi's G API key."
+            }
+          ]
+        }
+      },
+      {
+        "name": "getGOAuthClientId",
+        "type": "function",
+        "description": "Returns G OAuth API client id.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "string",
+              "description": "Vivaldi's G OAuth API client id."
+            }
+          ]
+        }
+      },
+      {
+        "name": "getGOAuthClientSecret",
+        "type": "function",
+        "description": "Returns G OAuth API client secret.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "string",
+              "description": "Vivaldi's G OAuth API client secret."
+            }
+          ]
+        }
+      },
+      {
+        "name": "getCommandLineValue",
+        "type": "function",
+        "description": "Gets the command line value for the given named argument.",
+        "parameters": [
+          {
+            "name": "value",
+            "type": "string",
+            "description": "Name of the command line switch without initial dashes eg. translate-server-url."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "string",
+              "description": "The command line strings contents of the given command line, or empty if the command line did not have this named argument."
+            }
+          ]
+        }
+      },
+      {
+        "name": "osCrypt",
+        "type": "function",
+        "parameters": [
+          {
+            "name": "plain",
+            "type": "string",
+            "description": "The content to encrypt"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "encrypted",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      {
+        "name": "osDecrypt",
+        "type": "function",
+        "parameters": [
+          {
+            "name": "encrypted",
+            "type": "string",
+            "description": "The content to decrypt"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "plain",
+              "type": "string"
             }
           ]
         }
@@ -1248,24 +1361,9 @@
         "description": "Test.",
         "parameters": [
           {
-            "name": "windowId",
-            "type": "integer",
-            "description": "Id of window."
-          },
-          {
-            "name": "action",
-            "$ref": "BroadcastAction"
-          },
-          {
-            "name": "prompt",
-            "type": "boolean",
-            "description": "Set to true to allow user intervention (if applicable)."
-          },
-          {
-            "name": "urls",
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "List of urls to open."
+            "type": "any",
+            "name": "message",
+            "description": "The message to receive."
           }
         ]
       },

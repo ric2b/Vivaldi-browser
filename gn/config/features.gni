@@ -7,4 +7,8 @@ declare_args() {
   vivaldi_disable_widevine_verification = false
   # Google API key for Google tasks, calendar
   vivaldi_task_api_key = ""
+  # Google OAuth API client ID
+  vivaldi_oauth_client_id = ""
+  # Google OAuth API client secret
+  vivaldi_oauth_client_secret = ""
 }

@@ -13,8 +13,8 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/containers/contains.h"
+#include "base/cxx17_backports.h"
 #include "base/i18n/rtl.h"
-#include "base/numerics/ranges.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -1565,9 +1565,14 @@ gfx::Point TabDragController::GetAttachedDragPoint(
   const int x = attached_context_->AsView()->GetMirroredXInView(tab_loc.x()) -
                 mouse_offset_.x();
 
-  const int max_x = attached_context_->GetTabDragAreaWidth() -
-                    TabStrip::GetSizeNeededForViews(attached_views_);
-  return gfx::Point(base::ClampToRange(x, 0, max_x), 0);
+  // If the width needed for the `attached_views_` is greater than what is
+  // available in the tab drag area the attached drag point should simply be the
+  // beginning of the tab strip. Once attached the `attached_views_` will simply
+  // overflow as usual (see https://crbug.com/1250184).
+  const int max_x =
+      std::max(0, attached_context_->GetTabDragAreaWidth() -
+                      TabStrip::GetSizeNeededForViews(attached_views_));
+  return gfx::Point(base::clamp(x, 0, max_x), 0);
 }
 
 std::vector<TabSlotView*> TabDragController::GetViewsMatchingDraggedContents(

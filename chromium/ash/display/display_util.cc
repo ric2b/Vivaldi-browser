@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 
+#include "ash/display/display_configuration_controller.h"
 #include "ash/display/extended_mouse_warp_controller.h"
 #include "ash/display/null_mouse_warp_controller.h"
 #include "ash/display/unified_mouse_warp_controller.h"
@@ -205,6 +206,72 @@ std::u16string GetDisplayErrorNotificationMessageForTest() {
       return notification->message();
   }
   return std::u16string();
+}
+
+OrientationLockType GetDisplayNaturalOrientation(
+    const display::Display& display) {
+  const display::ManagedDisplayInfo& info =
+      Shell::Get()->display_manager()->GetDisplayInfo(display.id());
+  const gfx::Size size = info.GetSizeInPixelWithPanelOrientation();
+  return size.width() > size.height() ? OrientationLockType::kLandscape
+                                      : OrientationLockType::kPortrait;
+}
+
+OrientationLockType RotationToOrientation(OrientationLockType natural,
+                                          display::Display::Rotation rotation) {
+  if (natural == OrientationLockType::kLandscape) {
+    // To be consistent with Android, the rotation of the primary portrait
+    // on naturally landscape device is 270.
+    switch (rotation) {
+      case display::Display::ROTATE_0:
+        return OrientationLockType::kLandscapePrimary;
+      case display::Display::ROTATE_90:
+        return OrientationLockType::kPortraitSecondary;
+      case display::Display::ROTATE_180:
+        return OrientationLockType::kLandscapeSecondary;
+      case display::Display::ROTATE_270:
+        return OrientationLockType::kPortraitPrimary;
+    }
+  } else {  // Natural portrait
+    switch (rotation) {
+      case display::Display::ROTATE_0:
+        return OrientationLockType::kPortraitPrimary;
+      case display::Display::ROTATE_90:
+        return OrientationLockType::kLandscapePrimary;
+      case display::Display::ROTATE_180:
+        return OrientationLockType::kPortraitSecondary;
+      case display::Display::ROTATE_270:
+        return OrientationLockType::kLandscapeSecondary;
+    }
+  }
+  NOTREACHED();
+  return OrientationLockType::kAny;
+}
+
+bool IsPrimaryOrientation(OrientationLockType type) {
+  return type == OrientationLockType::kLandscapePrimary ||
+         type == OrientationLockType::kPortraitPrimary;
+}
+
+bool IsLandscapeOrientation(OrientationLockType type) {
+  return type == OrientationLockType::kLandscape ||
+         type == OrientationLockType::kLandscapePrimary ||
+         type == OrientationLockType::kLandscapeSecondary;
+}
+
+bool IsPortraitOrientation(OrientationLockType type) {
+  return type == OrientationLockType::kPortrait ||
+         type == OrientationLockType::kPortraitPrimary ||
+         type == OrientationLockType::kPortraitSecondary;
+}
+
+bool IsDisplayLayoutHorizontal(const display::Display& display) {
+  DCHECK(display.is_valid());
+  const display::Display::Rotation rotation =
+      Shell::Get()->display_configuration_controller()->GetTargetRotation(
+          display.id());
+  return IsLandscapeOrientation(
+      RotationToOrientation(GetDisplayNaturalOrientation(display), rotation));
 }
 
 }  // namespace ash

@@ -49,7 +49,7 @@ class NotificationRow {
   EventID event_id;
   std::u16string name;
   std::u16string description;
-  int period;
+  base::Time period;
   int delay;
   base::Time when;
 };

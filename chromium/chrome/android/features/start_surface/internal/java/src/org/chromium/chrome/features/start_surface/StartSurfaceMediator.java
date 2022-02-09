@@ -52,6 +52,7 @@ import org.chromium.chrome.browser.omnibox.OmniboxStub;
 import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.Pref;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
@@ -61,6 +62,7 @@ import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
 import org.chromium.chrome.start_surface.R;
 import org.chromium.components.prefs.PrefService;
+import org.chromium.content_public.browser.BrowserStartupController;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.util.ColorUtils;
 
@@ -261,12 +263,6 @@ class StartSurfaceMediator
                     if (mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE) {
                         mPropertyModel.set(BOTTOM_BAR_HEIGHT, bottomControlsHeight);
                     }
-                }
-
-                @Override
-                public void onAndroidVisibilityChanged(int visibility) {
-                    // TODO(crbug/1223069): Remove this workaround for default method desugaring in
-                    // D8 causing AbstractMethodErrors in some cases once fixed upstream.
                 }
             };
 
@@ -665,6 +661,11 @@ class StartSurfaceMediator
     public void finishedShowing() {
         for (StartSurface.OverviewModeObserver observer : mObservers) {
             observer.finishedShowing();
+        }
+
+        if (BrowserStartupController.getInstance().isFullBrowserStarted()
+                && StartSurfaceConfiguration.WARM_UP_RENDERER.getValue()) {
+            StartSurfaceConfigurationJni.get().warmupRenderer(Profile.getLastUsedRegularProfile());
         }
     }
 

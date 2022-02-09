@@ -16,7 +16,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "components/sync/base/unique_position.h"
-#include "components/sync/engine/entity_data.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "sync/vivaldi_hash_util.h"
 
@@ -70,53 +69,84 @@ std::string InferGuidForLegacyNote(
   return guid;
 }
 
+sync_pb::UniquePosition GetUniquePositionFromSyncEntity(
+    const sync_pb::SyncEntity& update_entity) {
+  if (update_entity.has_unique_position()) {
+    return update_entity.unique_position();
+  }
+
+  std::string suffix;
+  if (update_entity.has_originator_cache_guid() &&
+      update_entity.has_originator_client_item_id()) {
+    suffix =
+        GenerateSyncableNotesHash(update_entity.originator_cache_guid(),
+                                  update_entity.originator_client_item_id());
+  } else {
+    suffix = UniquePosition::RandomSuffix();
+  }
+
+  if (update_entity.has_position_in_parent()) {
+    return UniquePosition::FromInt64(update_entity.position_in_parent(), suffix)
+        .ToProto();
+  }
+
+  if (update_entity.has_insert_after_item_id()) {
+    return UniquePosition::FromInt64(0, suffix).ToProto();
+  }
+
+  // No positioning information whatsoever, which should be unreachable today.
+  // For future-compatibility in case the fields in SyncEntity get removed,
+  // let's use a random position, which is better than dropping the whole
+  // update.
+  return UniquePosition::InitialPosition(suffix).ToProto();
+}
+
 }  // namespace
 
-void AdaptUniquePositionForNote(const sync_pb::SyncEntity& update_entity,
-                                EntityData* data) {
-  DCHECK(data);
-
-  // Tombstones don't need positioning information.
-  if (update_entity.deleted()) {
-    return;
+bool AdaptUniquePositionForNote(const sync_pb::SyncEntity& update_entity,
+                                sync_pb::EntitySpecifics* specifics) {
+  DCHECK(specifics);
+  // Nothing to do if the field is set or if it's a deletion.
+  if (specifics->notes().has_unique_position() || update_entity.deleted()) {
+    return false;
   }
 
   // Permanent folders don't need positioning information.
   if (update_entity.folder() &&
       !update_entity.server_defined_unique_tag().empty()) {
+    return false;
+  }
+
+  *specifics->mutable_notes()->mutable_unique_position() =
+      GetUniquePositionFromSyncEntity(update_entity);
+  return true;
+}
+
+void AdaptTypeForNote(const sync_pb::SyncEntity& update_entity,
+                      sync_pb::EntitySpecifics* specifics) {
+  DCHECK(specifics);
+  // Nothing to do if the note is known not to be normal or if it's a deletion.
+  if (specifics->notes().special_node_type() !=
+          sync_pb::NotesSpecifics::NORMAL ||
+      update_entity.deleted()) {
     return;
   }
-
-  if (update_entity.has_unique_position()) {
-    data->unique_position =
-        UniquePosition::FromProto(update_entity.unique_position());
-  } else if (update_entity.has_position_in_parent() ||
-             update_entity.has_insert_after_item_id()) {
-    bool missing_originator_fields = false;
-    if (!update_entity.has_originator_cache_guid() ||
-        !update_entity.has_originator_client_item_id()) {
-      DLOG(ERROR) << "Update is missing requirements for note position.";
-      missing_originator_fields = true;
+  DCHECK(specifics->has_notes());
+  // For legacy data, SyncEntity.folder is always populated.
+  if (update_entity.has_folder()) {
+    if (update_entity.folder()) {
+      specifics->mutable_notes()->set_special_node_type(
+          sync_pb::NotesSpecifics::FOLDER);
     }
-
-    std::string suffix = missing_originator_fields
-                             ? UniquePosition::RandomSuffix()
-                             : GenerateSyncableNotesHash(
-                                   update_entity.originator_cache_guid(),
-                                   update_entity.originator_client_item_id());
-
-    if (update_entity.has_position_in_parent()) {
-      data->unique_position =
-          UniquePosition::FromInt64(update_entity.position_in_parent(), suffix);
-    } else {
-      // If update_entity has insert_after_item_id, use 0 index.
-      DCHECK(update_entity.has_insert_after_item_id());
-      data->unique_position = UniquePosition::FromInt64(0, suffix);
-    }
-  } else {
-    DLOG(ERROR) << "Missing required position information in update: "
-                << update_entity.id_string();
+    return;
   }
+  // Remaining cases should be unreachable today. In case SyncEntity.folder gets
+  // removed in the future, with legacy data still being around prior to M94,
+  // infer folderness based on the present of field |content| (only populated
+  // for normal notes).
+  if (!specifics->notes().has_content())
+    specifics->mutable_notes()->set_special_node_type(
+        sync_pb::NotesSpecifics::FOLDER);
 }
 
 void AdaptTitleForNote(const sync_pb::SyncEntity& update_entity,
@@ -129,6 +159,7 @@ void AdaptTitleForNote(const sync_pb::SyncEntity& update_entity,
     // SyncEntity so this hack is not needed at all.
     return;
   }
+  DCHECK(specifics->has_notes());
   // Legacy clients populate the name field in the SyncEntity instead of the
   // title field in the NotesSpecifics.
   if (!specifics->notes().has_legacy_canonicalized_title() &&
@@ -138,19 +169,20 @@ void AdaptTitleForNote(const sync_pb::SyncEntity& update_entity,
   }
 }
 
-bool AdaptGuidForNote(const sync_pb::SyncEntity& update_entity,
+void AdaptGuidForNote(const sync_pb::SyncEntity& update_entity,
                       sync_pb::EntitySpecifics* specifics) {
   DCHECK(specifics);
   // Tombstones and permanent entities don't have a GUID.
   if (update_entity.deleted() ||
       !update_entity.server_defined_unique_tag().empty()) {
-    return false;
+    return;
   }
+  DCHECK(specifics->has_notes());
   // Legacy clients don't populate the guid field in the NotesSpecifics, so
   // we use the originator_client_item_id instead, if it is a valid GUID.
   // Otherwise, we leave the field empty.
   if (specifics->notes().has_guid()) {
-    return false;
+    return;
   }
   if (base::IsValidGUID(update_entity.originator_client_item_id())) {
     // Notes created around 2016, between [M44..M52) use an uppercase GUID
@@ -163,14 +195,12 @@ bool AdaptGuidForNote(const sync_pb::SyncEntity& update_entity,
              update_entity.originator_client_item_id().empty()) {
     // There's no GUID that could be inferred from empty originator
     // information.
-    return false;
   } else {
     specifics->mutable_notes()->set_guid(
         InferGuidForLegacyNote(update_entity.originator_cache_guid(),
                                update_entity.originator_client_item_id()));
     DCHECK(base::IsValidGUIDOutputString(specifics->notes().guid()));
   }
-  return true;
 }
 
 std::string InferGuidForLegacyNoteForTesting(

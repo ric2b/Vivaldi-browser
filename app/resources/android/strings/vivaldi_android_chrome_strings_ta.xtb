@@ -2,40 +2,55 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ta">
 <translation id="1397811292916898096"><ph name="PRODUCT_NAME" /> மூலம் தேட</translation>
+<translation id="1598449788754183301">சாதாரண/தனியார் தாவல்களை மாற்ற</translation>
 <translation id="1644574205037202324">வரலாறு</translation>
 <translation id="17513872634828108">தாவல்களைத் திறக்க</translation>
 <translation id="1829244130665387512">இந்தப் பக்கத்தில்</translation>
 <translation id="1910514478706885609">புதிய தாவல் அடுக்கில் திறக்கவும்</translation>
+<translation id="2038563949887743358">கணினி தளத்திற்கான கோரிக்கையை இயக்கு</translation>
 <translation id="2306442503286132111"><ph name="FOLDER_NAME" /> இல் புத்தககுறி சேமிக்கப்பட்டது</translation>
+<translation id="2433507940547922241">தோற்றம்</translation>
 <translation id="2501278716633472235">செல்ல</translation>
 <translation id="2633278372998075009">தனிப்பட்ட தாவல்கள்</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> புக்மார்க்}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> புக்மார்க்குகள்}}</translation>
+<translation id="3076631378407175873">பதிப்புரிமை <ph name="YEAR" /> Vivaldi Technologies. அனைத்து உரிமைகளும் ஒதுக்கப்பட்டது.</translation>
 <translation id="3234355010754616171">புதிய தனிப்பட்ட தாவல்</translation>
 <translation id="3377025655491224618">தனிப்பட்ட தாவல்</translation>
 <translation id="3504699618187058974">தாவல்களை அடுக்க</translation>
 <translation id="3518985090088779359">ஏற்றுக்கொண்டு தொடரவும்</translation>
+<translation id="3700829948786686853">விவால்டிக்கு வரவேற்கிறோம்</translation>
 <translation id="3719826155360621982">முகப்புப்பக்கம்</translation>
 <translation id="385051799172605136">பின்னால்</translation>
 <translation id="4121750346708795461">இந்த பயன்பாட்டைப் பயன்படுத்துவதன் மூலம், விவால்டியின் <ph name="BEGIN_LINK1" /> இறுதி பயனர் உரிம ஒப்பந்தம் <ph name="END_LINK1" /> மற்றும் <ph name="BEGIN_LINK2" />தனியுரிமைக் கொள்கை<ph name="END_LINK2" />.</translation>
 <translation id="4243710787042215766">தனிப்பட்ட தாவலில் திறக்க</translation>
 <translation id="4526803704855831732">தனிப்பட்ட தாவல்கள்</translation>
 <translation id="4759238208242260848">பதிவிறக்கங்கள்</translation>
+<translation id="4865987431642283918">சாதனத்தின் இயல்பு மொழி</translation>
 <translation id="4883379392681899581">தனிப்பட்ட பயன்முறையை விலக</translation>
+<translation id="4943872375798546930">முடிவுகள் இல்லை</translation>
 <translation id="49576331685473090">உள்ளடக்க தடுப்பான்</translation>
+<translation id="5118676864324397542"><ph name="APP_NAME" /> இன் சேமிப்பகம்</translation>
 <translation id="5186185447130319458">தனிப்பட்ட</translation>
+<translation id="5233638681132016545">புதிய தாவல்</translation>
 <translation id="572328651809341494">சமீபத்திய தாவல்கள்</translation>
+<translation id="5840488417521835756">பக்கத்தை விட்டு விலகாமலே இணையதளங்களில் உள்ள தலைப்புகள் குறித்து அறிந்துகொள்ளலாம். "தேடுவதற்குத் தட்டு" அம்சமானது சொல்லையும் அதன் சூழலையும் Vivaldi தேடலுக்கு அனுப்புவதோடு வரையறைகள், படங்கள், தேடல் முடிவுகள், பிற விவரங்கள் ஆகியவற்றை வழங்குகிறது.
+
+உங்கள் தேடல் வார்த்தையைத் திருத்த, நீண்ட நேரம் அழுத்தித் தேர்ந்தெடுக்கவும். துல்லியமாகத் தேட, பேனலைக் கடைசி வரை மேலே ஸ்லைடு செய்து, தேடல் பெட்டியைத் தட்டவும்.</translation>
 <translation id="6150320133806434356">புத்தககுறி சேமிக்கப்பட்டது</translation>
 <translation id="6336451774241870485">புதிய தனிப்பட்ட தாவல்</translation>
 <translation id="6585139692466700358">விவால்டியின் மொழிபெயர்ப்பு சேவையைப் பயன்படுத்தி பிற மொழிகளில் பக்கங்களை மொழிபெயர்க்க சலுகை</translation>
+<translation id="6593061639179217415">கணினி தளம்</translation>
 <translation id="6610147964972079463">தனிப்பட்ட தாவல்களை மூடு</translation>
 <translation id="706339621163631076">விவால்டி தனியுரிமை அறிக்கை</translation>
 <translation id="732145680195464316"><ph name="PRODUCT_NAME" /> இல் புத்தககுறி சேமிக்கப்பட்டது</translation>
 <translation id="7427132068601343474">விவால்டியைப் பற்றி</translation>
 <translation id="7465104139234185284">அனைத்து தனிப்பட்ட தாவல்களையும் மூடு</translation>
 <translation id="7519434535192513364">விவால்டியில் கூகிள் இயல்புநிலை தேடுபொறியாக அமைக்கப்பட்டால் மட்டுமே கிடைக்கும் ஒரு அம்சமாகும் (Tap to Search). இது தேர்ந்தெடுக்கப்பட்ட வார்த்தையையும் தற்போதைய பக்கத்தையும் சூழலாக கூகிள் தேடலுக்கு அனுப்புகிறது. நீங்கள் அதை <ph name="BEGIN_LINK" /> அமைவுகள் <ph name="END_LINK" /> இல் முடக்கலாம்.</translation>
+<translation id="804786196054284061">இறுதி பயனர் உரிம ஒப்பந்தம்</translation>
 <translation id="85991616550051997">முகப்பு பக்கத்திற்கு செல்லவும</translation>
 <translation id="8820817407110198400">புத்தககுறி</translation>
+<translation id="9063523880881406963">கணினி தளத்திற்கான கோரிக்கையை முடக்கு</translation>
 <translation id="9080642952018487277">தனிப்பட்ட பயன்முறையில் நுழையவும்</translation>
 </translationbundle>

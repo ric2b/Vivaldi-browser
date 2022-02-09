@@ -13,6 +13,10 @@
 #include "notes/notes_model_observer.h"
 #include "url/gurl.h"
 
+namespace sync_pb {
+class EntitySpecifics;
+}
+
 namespace syncer {
 class UniquePosition;
 }
@@ -27,10 +31,9 @@ class SyncedNoteTracker;
 class NotesModelObserverImpl : public vivaldi::NotesModelObserver {
  public:
   // |note_tracker_| must not be null and must outlive this object.
-  NotesModelObserverImpl(
-      const base::RepeatingClosure& nudge_for_commit_closure,
-      base::OnceClosure on_notes_model_being_deleted_closure,
-      SyncedNoteTracker* note_tracker);
+  NotesModelObserverImpl(const base::RepeatingClosure& nudge_for_commit_closure,
+                         base::OnceClosure on_notes_model_being_deleted_closure,
+                         SyncedNoteTracker* note_tracker);
   ~NotesModelObserverImpl() override;
 
   //  vivaldi::NotesModelObserver:

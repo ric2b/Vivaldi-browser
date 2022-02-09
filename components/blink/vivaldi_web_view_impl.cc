@@ -41,7 +41,7 @@ void WebViewImpl::SetImagesEnabled(const bool images_enabled) {
     HTMLCollection* images = document->images();
     size_t sourceLength = images->length();
     for (size_t i = 0; i < sourceLength; ++i) {
-      Element* element = images->item(i);
+      Element* element = images->item(static_cast<unsigned>(i));
       if (element) {
         auto* imageElement = DynamicTo<HTMLImageElement>(*element);
 

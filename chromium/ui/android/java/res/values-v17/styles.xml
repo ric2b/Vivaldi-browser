@@ -8,7 +8,7 @@
 
 <resources xmlns:tools="http://schemas.android.com/tools">
     <style name="DropdownPopupWindow" parent="@android:style/Widget.ListPopupWindow">
-        <item name="android:popupBackground">@drawable/popup_bg_tinted</item>
+        <item name="android:popupBackground">@drawable/dialog_bg_tinted</item>
     </style>
 
     <!-- Buttons -->
@@ -345,7 +345,7 @@
         <item name="android:textColor">@color/blue_when_enabled_dark</item>
     </style>
     <style name="TextAppearance.Button.Text.Filled" parent="TextAppearance.TextAccentMediumThick">
-        <item name="android:textColor">@color/default_text_color_on_accent1</item>
+        <item name="android:textColor">@color/default_text_color_on_accent1_list</item>
     </style>
     <style name="TextAppearance.Button.Text.Inverse" parent="TextAppearance.TextAccentMediumThick"
         tools:ignore="UnusedResources">

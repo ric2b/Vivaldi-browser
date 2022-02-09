@@ -64,6 +64,8 @@ def HostArch():
     host_arch = 'ia32'
   elif host_arch in ['x86_64', 'amd64']:
     host_arch = 'x64'
+  elif host_arch == 'arm64' or host_arch.startswith('aarch64'):
+    host_arch = 'arm64'
   elif host_arch.startswith('arm'):
     host_arch = 'arm'
   elif host_arch.startswith('aarch64'):
@@ -76,6 +78,8 @@ def HostArch():
     host_arch = 'ppc'
   elif host_arch.startswith('s390'):
     host_arch = 's390'
+
+  return host_arch
 
 def ProcessGNDefinesItems(items):
   """Converts a list of strings to a list of key-value pairs."""

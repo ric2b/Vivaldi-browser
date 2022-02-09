@@ -12,13 +12,17 @@ static_library("app_helper") {
 
 static_library("helper") {
   deps = [
-    #"//content/browser",
     "//content/public/browser:browser",
   ]
+  public_deps = [
+    "//vivaldi/renderer/mojo:frame_host_service",
+  ]
   sources = [
-    "../helper/vivaldi_frame_observer.cc",
-    "../helper/vivaldi_frame_observer.h",
-    "../helper/vivaldi_init_helpers.cc",
-    "../helper/vivaldi_init_helpers.h",
+    "vivaldi_frame_host_service_impl.cc",
+    "vivaldi_frame_host_service_impl.h",
+    "vivaldi_frame_observer.cc",
+    "vivaldi_frame_observer.h",
+    "vivaldi_init_helpers.cc",
+    "vivaldi_init_helpers.h",
   ]
 }

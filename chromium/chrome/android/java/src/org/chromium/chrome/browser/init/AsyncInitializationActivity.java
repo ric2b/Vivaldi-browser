@@ -169,7 +169,7 @@ public abstract class AsyncInitializationActivity
     @Override
     public final void setContentViewAndLoadLibrary(Runnable onInflationCompleteCallback) {
         boolean enableInstantStart =
-                TabUiFeatureUtilities.supportInstantStart(isTablet()) && !mHadWarmStart;
+                TabUiFeatureUtilities.supportInstantStart(isTablet(), this) && !mHadWarmStart;
         mOnInflationCompleteCallback = onInflationCompleteCallback;
         if (enableInstantStart) {
             triggerLayoutInflation();
@@ -229,7 +229,7 @@ public abstract class AsyncInitializationActivity
             mFirstDrawComplete = true;
             StartSurfaceConfiguration.recordHistogram(FIRST_DRAW_COMPLETED_TIME_MS_UMA,
                     SystemClock.elapsedRealtime() - getOnCreateTimestampMs(),
-                    TabUiFeatureUtilities.supportInstantStart(isTablet()));
+                    TabUiFeatureUtilities.supportInstantStart(isTablet(), this));
             if (!mStartupDelayed) {
                 onFirstDrawComplete();
             }

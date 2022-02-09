@@ -2,25 +2,24 @@
 
 update_target("//chrome/renderer:renderer") {
   sources += [
-    "//vivaldi/renderer/vivaldi_render_frame_observer.cc",
-    "//vivaldi/renderer/vivaldi_render_frame_observer.h",
-    "//vivaldi/renderer/vivaldi_spatial_navigation.cc",
-    "//vivaldi/renderer/vivaldi_spatial_navigation.h",
-    "//vivaldi/renderer/tabs_private_service.cc",
-    "//vivaldi/renderer/tabs_private_service.h",
+    "//vivaldi/renderer/vivaldi_frame_service_impl.cc",
+    "//vivaldi/renderer/vivaldi_frame_service_impl.h",
+    "//vivaldi/renderer/vivaldi_render_frame_blink_proxy_impl.cc",
+    "//vivaldi/renderer/vivaldi_render_frame_blink_proxy_impl.h",
   ]
 }
 
 update_template_instance("//third_party/blink/renderer/core:core") {
   sources += [
-    "//vivaldi/renderer/vivaldi_snapshot_page.cc",
-    "//vivaldi/renderer/vivaldi_snapshot_page.h",
+    "//vivaldi/renderer/blink/vivaldi_render_frame_blink_proxy.cc",
+    "//vivaldi/renderer/blink/vivaldi_render_frame_blink_proxy.h",
+    "//vivaldi/renderer/blink/vivaldi_snapshot_page.cc",
+    "//vivaldi/renderer/blink/vivaldi_snapshot_page.h",
+    "//vivaldi/renderer/blink/vivaldi_spatial_navigation.cc",
+    "//vivaldi/renderer/blink/vivaldi_spatial_navigation.h",
   ]
-}
-
-update_target("//content/renderer:renderer") {
-  sources += [
-    "//vivaldi/renderer/vivaldi_media_element_event_sender.cc",
-    "//vivaldi/renderer/vivaldi_media_element_event_sender.h",
+  public_deps += [
+    "//vivaldi/renderer/mojo:frame_host_service_blink",
+    "//vivaldi/components/request_filter/adblock_filter/mojom:mojom_blink"
   ]
 }

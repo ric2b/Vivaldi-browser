@@ -55,7 +55,6 @@ update_template_instance("//third_party/blink/renderer/core:core") {
   sources += [
     "//vivaldi/components/blink/vivaldi_add_search_context_menu.cc",
     "//vivaldi/components/blink/vivaldi_add_search_context_menu.h",
-    "//vivaldi/components/blink/vivaldi_web_local_frame_impl.cc",
     "//vivaldi/components/blink/vivaldi_web_settings_impl.cc",
     "//vivaldi/components/blink/vivaldi_web_view_impl.cc",
   ]
@@ -78,6 +77,7 @@ update_target("//content/browser:browser") {
   ]
   deps += [
     "//components/viz/service",
+    "//vivaldi/renderer/mojo:frame_service",
   ]
 }
 
@@ -225,6 +225,17 @@ if (is_mac) {
 update_target("//third_party/blink/public:blink_headers") {
   sources += [
     "//vivaldi/components/request_filter/adblock_filter/renderer/blink/web_cosmetic_filter_client.h",
+  ]
+}
+
+update_template_instance(
+    "//third_party/blink/renderer/modules/peerconnection:peerconnection") {
+  sources += [
+    "//vivaldi/components/request_filter/adblock_filter/renderer/blink/web_cosmetic_filter_client.cc",
+    "//vivaldi/components/request_filter/adblock_filter/renderer/blink/web_cosmetic_filter_client.h",
+  ]
+  public_deps += [
+    "//vivaldi/components/request_filter/adblock_filter/mojom:mojom_blink"
   ]
 }
 

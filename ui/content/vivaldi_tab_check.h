@@ -21,7 +21,7 @@ class CONTENT_EXPORT VivaldiTabCheck {
 
   static bool IsVivaldiTab(content::WebContents* web_contents);
 
-  // Get Vivaldi tab that holds the given web_cntents or null if none.
+  // Get Vivaldi tab that holds the given web_contents or null if none.
   static content::WebContents* GetOuterVivaldiTab(
       content::WebContents* web_contents);
 

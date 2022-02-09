@@ -24,8 +24,11 @@ import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.ViewUtils;
 
+// Vivaldi
+import android.content.Intent;
+
 import org.vivaldi.browser.common.VivaldiUtils;
-import org.vivaldi.browser.preferences.VivaldiSyncActivity;
+import org.vivaldi.browser.sync.VivaldiSyncActivity;
 import org.vivaldi.browser.sync.VivaldiSyncService;
 import org.vivaldi.browser.vivaldi_account_manager.VivaldiAccountManager;
 
@@ -217,7 +220,9 @@ public class RecentTabsPage
                     view = LayoutInflater.from(mActivity).inflate(
                             R.layout.sign_in_for_sync_tabs, null);
                     view.findViewById(R.id.no_sync_sign_in_button)
-                            .setOnClickListener(v -> VivaldiSyncActivity.start(mView.getContext()));
+                            .setOnClickListener(v ->
+                                    mView.getContext().startActivity(new Intent(
+                                            mView.getContext(), VivaldiSyncActivity.class)));
                     if (mView.indexOfChild(view) == -1) mView.addView(view);
                 }
                 if (VivaldiAccountManager.get().getSimplifiedState()
@@ -308,12 +313,6 @@ public class RecentTabsPage
     public void onControlsOffsetChanged(int topOffset, int topControlsMinHeightOffset,
             int bottomOffset, int bottomControlsMinHeightOffset, boolean needsAnimate) {
         updateMargins();
-    }
-
-    @Override
-    public void onAndroidVisibilityChanged(int visibility) {
-        // TODO(crbug/1223069): Remove this workaround for default method desugaring in D8 causing
-        // AbstractMethodErrors in some cases once fixed upstream.
     }
 
     private void updateMargins() {

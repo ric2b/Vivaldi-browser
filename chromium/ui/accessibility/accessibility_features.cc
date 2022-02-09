@@ -8,6 +8,10 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_features.h"
+#endif
+
 namespace features {
 
 // Enable recognizing "aria-virtualcontent" as a valid aria property.
@@ -93,7 +97,7 @@ bool IsIChromeAccessibleEnabled() {
 }
 
 const base::Feature kSelectiveUIAEnablement{"SelectiveUIAEnablement",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Returns true if accessibility will be selectively enabled depending on the
 // UIA APIs that are called, allowing non-screenreader usage to enable less of
@@ -137,15 +141,6 @@ bool IsSwitchAccessPointScanningEnabled() {
       ::features::kEnableSwitchAccessPointScanning);
 }
 
-const base::Feature kExperimentalAccessibilityDictationListening{
-    "ExperimentalAccessibilityDictationListening",
-    base::FEATURE_ENABLED_BY_DEFAULT};
-
-bool IsExperimentalAccessibilityDictationListeningEnabled() {
-  return base::FeatureList::IsEnabled(
-      ::features::kExperimentalAccessibilityDictationListening);
-}
-
 const base::Feature kExperimentalAccessibilityDictationOffline{
     "ExperimentalAccessibilityDictationOffline",
     base::FEATURE_DISABLED_BY_DEFAULT};
@@ -155,8 +150,14 @@ bool IsExperimentalAccessibilityDictationOfflineEnabled() {
       ::features::kExperimentalAccessibilityDictationOffline);
 }
 
+bool IsDictationOfflineAvailableAndEnabled() {
+  return base::FeatureList::IsEnabled(
+             ash::features::kOnDeviceSpeechRecognition) &&
+         IsExperimentalAccessibilityDictationOfflineEnabled();
+}
+
 const base::Feature kEnhancedNetworkVoices{"EnhancedNetworkVoices",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
 bool IsEnhancedNetworkVoicesEnabled() {
   return base::FeatureList::IsEnabled(::features::kEnhancedNetworkVoices);

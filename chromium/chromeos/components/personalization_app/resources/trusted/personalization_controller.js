@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import {isNonEmptyArray} from '../common/utils.js';
-import {beginLoadImagesForCollectionsAction, beginLoadLocalImageDataAction, beginSelectImageAction, setCollectionsAction, setImagesForCollectionAction, setLocalImageDataAction, setLocalImagesAction, setSelectedImageAction} from './personalization_actions.js';
+import {beginLoadImagesForCollectionsAction, beginLoadLocalImageDataAction, beginLoadSelectedImageAction, beginSelectImageAction, beginUpdateDailyRefreshImageAction, endSelectImageAction, setCollectionsAction, setDailyRefreshCollectionIdAction, setImagesForCollectionAction, setLocalImageDataAction, setLocalImagesAction, setSelectedImageAction, setUpdatedDailyRefreshImageAction} from './personalization_actions.js';
 import {PersonalizationStore} from './personalization_store.js';
 
 /**
@@ -91,17 +91,6 @@ async function getAllLocalImageThumbnails(provider, store) {
 }
 
 /**
- * Get the currently set wallpaper.
- * @param {!chromeos.personalizationApp.mojom.WallpaperProviderInterface}
- *     provider
- * @param {!PersonalizationStore} store
- */
-export async function getCurrentWallpaper(provider, store) {
-  const {image} = await provider.getCurrentWallpaper();
-  store.dispatch(setSelectedImageAction(image));
-}
-
-/**
  * @param {!chromeos.personalizationApp.mojom.WallpaperImage |
  *     !chromeos.personalizationApp.mojom.LocalImage} image
  * @param {!chromeos.personalizationApp.mojom.WallpaperProviderInterface}
@@ -109,8 +98,12 @@ export async function getCurrentWallpaper(provider, store) {
  * @param {!PersonalizationStore} store
  */
 export async function selectWallpaper(image, provider, store) {
-  const oldImage = store.data.selected;
+  // Batch these changes together to reduce polymer churn as multiple state
+  // fields change quickly.
+  store.beginBatchUpdate();
   store.dispatch(beginSelectImageAction(image));
+  store.dispatch(beginLoadSelectedImageAction());
+  store.endBatchUpdate();
   const {success} = await (() => {
     if (image.assetId) {
       return provider.selectWallpaper(image.assetId);
@@ -121,10 +114,16 @@ export async function selectWallpaper(image, provider, store) {
       return {success: false};
     }
   })();
+  store.beginBatchUpdate();
+  store.dispatch(endSelectImageAction(image, success));
   if (!success) {
     console.warn('Error setting wallpaper');
+    store.dispatch(setSelectedImageAction(store.data.currentSelected));
   }
-  getCurrentWallpaper(provider, store);
+  store.endBatchUpdate();
+
+  // Cleared Daily Refresh state should be reflected in UI.
+  getDailyRefreshCollectionId(provider, store);
 }
 
 /**
@@ -134,8 +133,48 @@ export async function selectWallpaper(image, provider, store) {
  * @param {!PersonalizationStore} store
  */
 export async function setCustomWallpaperLayout(layout, provider, store) {
+  store.dispatch(beginLoadSelectedImageAction());
   await provider.setCustomWallpaperLayout(layout);
-  getCurrentWallpaper(provider, store);
+}
+
+/**
+ * @param {string} collectionId
+ * @param {!chromeos.personalizationApp.mojom.WallpaperProviderInterface}
+ *     provider
+ * @param {!PersonalizationStore} store
+ */
+export async function setDailyRefreshCollectionId(
+    collectionId, provider, store) {
+  await provider.setDailyRefreshCollectionId(collectionId);
+  // Dispatch action to highlight enabled daily refresh.
+  getDailyRefreshCollectionId(provider, store);
+}
+
+/**
+ * Get the daily refresh collection id. It can be empty if daily refresh is not
+ * enabled.
+ * @param {!chromeos.personalizationApp.mojom.WallpaperProviderInterface}
+ *     provider
+ * @param {!PersonalizationStore} store
+ */
+export async function getDailyRefreshCollectionId(provider, store) {
+  const {collectionId} = await provider.getDailyRefreshCollectionId();
+  store.dispatch(setDailyRefreshCollectionIdAction(collectionId));
+}
+
+/**
+ * Refresh the wallpaper. Noop if daily refresh is not enabled.
+ * @param {!chromeos.personalizationApp.mojom.WallpaperProviderInterface}
+ *     provider
+ * @param {!PersonalizationStore} store
+ */
+export async function updateDailyRefreshWallpaper(provider, store) {
+  store.dispatch(beginUpdateDailyRefreshImageAction());
+  store.dispatch(beginLoadSelectedImageAction());
+  const {success} = await provider.updateDailyRefreshWallpaper();
+  if (success) {
+    store.dispatch(setUpdatedDailyRefreshImageAction());
+  }
 }
 
 /**

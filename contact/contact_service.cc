@@ -44,10 +44,7 @@ using base::Time;
 
 using contact::ContactBackend;
 namespace contact {
-namespace {
 
-static const char* kContactThreadName = "Vivaldi_ContactThread";
-}
 // Sends messages from the db backend to us on the main thread. This must be a
 // separate class from the contact service so that it can hold a reference to
 // the contact service (otherwise we would have to manually AddRef and
@@ -92,43 +89,28 @@ class ContactService::ContactBackendDelegate
 };
 
 ContactService::ContactService()
-    : thread_(variations::GetVariationParamValue("BrowserScheduler",
-                                                 "RedirectContactService") ==
-                      "true"
-                  ? nullptr
-                  : new base::Thread(kContactThreadName)),
-      backend_loaded_(false),
-      weak_ptr_factory_(this) {}
+    : backend_loaded_(false), weak_ptr_factory_(this) {}
 
 ContactService::~ContactService() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  // Shutdown the backend. This does nothing if Cleanup was already invoked.
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  Cleanup();
 }
 
-void ContactService::Shutdown() {}
+void ContactService::Shutdown() {
+  Cleanup();
+}
 
 bool ContactService::Init(
     bool no_db,
     const ContactDatabaseParams& contact_database_params) {
-  TRACE_EVENT0("browser,startup", "ContactService::Init")
-  SCOPED_UMA_HISTOGRAM_TIMER("Contact.ContactServiceInitTime");
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!backend_task_runner_);
 
-  if (thread_) {
-    base::Thread::Options options;
-    options.timer_slack = base::TIMER_SLACK_MAXIMUM;
-    if (!thread_->StartWithOptions(std::move(options))) {
-      Cleanup();
-      return false;
-    }
-    backend_task_runner_ = thread_->task_runner();
-  } else {
-    backend_task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
-        {base::TaskPriority::USER_BLOCKING,
-         base::TaskShutdownBehavior::BLOCK_SHUTDOWN, base::MayBlock(),
-         base::WithBaseSyncPrimitives()});
-  }
+  backend_task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
+      {base::MayBlock(), base::WithBaseSyncPrimitives(),
+       base::TaskPriority::USER_BLOCKING,
+       base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
 
   // Create the contact backend.
   scoped_refptr<ContactBackend> backend(new ContactBackend(
@@ -144,36 +126,36 @@ bool ContactService::Init(
 }
 
 void ContactService::ScheduleTask(base::OnceClosure task) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK(backend_task_runner_);
 
   backend_task_runner_->PostTask(FROM_HERE, std::move(task));
 }
 
 void ContactService::AddObserver(ContactModelObserver* observer) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   observers_.AddObserver(observer);
 }
 
 void ContactService::RemoveObserver(ContactModelObserver* observer) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   observers_.RemoveObserver(observer);
 }
 
 void ContactService::OnDBLoaded() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   backend_loaded_ = true;
   NotifyContactServiceLoaded();
 }
 
 void ContactService::NotifyContactServiceLoaded() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   for (ContactModelObserver& observer : observers_)
     observer.OnContactServiceLoaded(this);
 }
 
 void ContactService::Cleanup() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!backend_task_runner_) {
     // We've already cleaned up.
     return;
@@ -185,45 +167,15 @@ void ContactService::Cleanup() {
 
   // Unload the backend.
   if (contact_backend_.get()) {
-    // The backend's destructor must run on the contact thread since it is not
-    // threadsafe. So this thread must not be the last thread holding a
-    // reference to the backend, or a crash could happen.
-    //
-    // We have a reference to the contact backend. There is also an extra
-    // reference held by our delegate installed in the backend, which
-    // ContactBackend::Closing will release. This means if we scheduled a call
-    // to ContactBackend::Closing and *then* released our backend reference,
-    // there will be a race between us and the backend's Closing function to see
-    // who is the last holder of a reference. If the backend thread's Closing
-    // manages to run before we release our backend refptr, the last reference
-    // will be held by this thread and the destructor will be called from here.
-    //
-    // Therefore, we create a closure to run the Closing operation first. This
-    // holds a reference to the backend. Then we release our reference, then we
-    // schedule the task to run. After the task runs, it will delete its
-    // reference from the contact thread, ensuring everything works properly.
-    //
-    contact_backend_->AddRef();
-    base::RepeatingClosure closing_task =
-        base::BindRepeating(&ContactBackend::Closing, contact_backend_);
-    ScheduleTask(closing_task);
-    closing_task.Reset();
-    backend_task_runner_->ReleaseSoon(FROM_HERE, std::move(contact_backend_));
+    ScheduleTask(
+        base::BindOnce(&ContactBackend::Closing, std::move(contact_backend_)));
   }
 
   // Clear |backend_task_runner_| to make sure it's not used after Cleanup().
   backend_task_runner_ = nullptr;
-
-  // Join the background thread, if any.
-  thread_.reset();
 }
 
-void ContactService::NotifyContactServiceBeingDeleted() {
-  // TODO(arnar): Add
-  /* DCHECK(thread_checker_.CalledOnValidThread());
-  for (ContactServiceObserver& observer : observers_)
-    observer.ContactServiceBeingDeleted(this);*/
-}
+void ContactService::NotifyContactServiceBeingDeleted() {}
 
 void ContactService::OnContactCreated(const ContactRow& row) {
   for (ContactModelObserver& observer : observers_) {
@@ -248,7 +200,7 @@ base::CancelableTaskTracker::TaskId ContactService::CreateContact(
     ContactCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<ContactResults> query_results =
       std::shared_ptr<ContactResults>(new ContactResults());
@@ -265,7 +217,7 @@ base::CancelableTaskTracker::TaskId ContactService::CreateContacts(
     CreateContactsCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<CreateContactsResult> create_results =
       std::shared_ptr<CreateContactsResult>(new CreateContactsResult());
@@ -282,7 +234,7 @@ base::CancelableTaskTracker::TaskId ContactService::AddProperty(
     ContactCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<ContactResults> query_results =
       std::shared_ptr<ContactResults>(new ContactResults());
@@ -299,7 +251,7 @@ base::CancelableTaskTracker::TaskId ContactService::AddEmailAddress(
     ContactCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<ContactResults> query_results =
       std::shared_ptr<ContactResults>(new ContactResults());
@@ -345,7 +297,7 @@ base::CancelableTaskTracker::TaskId ContactService::UpdateProperty(
     ContactCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<ContactResults> query_results =
       std::shared_ptr<ContactResults>(new ContactResults());
@@ -362,7 +314,7 @@ base::CancelableTaskTracker::TaskId ContactService::RemoveProperty(
     ContactCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<ContactResults> query_results =
       std::shared_ptr<ContactResults>(new ContactResults());
@@ -378,7 +330,7 @@ base::CancelableTaskTracker::TaskId ContactService::GetAllContacts(
     QueryContactCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<ContactQueryResults> query_results =
       std::shared_ptr<ContactQueryResults>(new ContactQueryResults());
@@ -394,7 +346,7 @@ base::CancelableTaskTracker::TaskId ContactService::GetAllEmailAddresses(
     QueryEmailAddressesCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<contact::EmailAddressRows> query_results =
       std::shared_ptr<EmailAddressRows>(new EmailAddressRows());
@@ -413,7 +365,7 @@ base::CancelableTaskTracker::TaskId ContactService::UpdateContact(
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
 
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<ContactResults> update_results =
       std::shared_ptr<ContactResults>(new ContactResults());
@@ -431,7 +383,7 @@ base::CancelableTaskTracker::TaskId ContactService::DeleteContact(
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
 
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::shared_ptr<ContactResults> delete_results =
       std::shared_ptr<ContactResults>(new ContactResults());

@@ -38,7 +38,6 @@ import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.os.Build;
-import android.support.test.filters.MediumTest;
 import android.text.TextUtils;
 import android.view.View;
 import android.widget.ImageView;
@@ -49,6 +48,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.test.espresso.contrib.RecyclerViewActions;
 import androidx.test.espresso.matcher.BoundedMatcher;
 import androidx.test.espresso.matcher.ViewMatchers;
+import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 
 import org.hamcrest.Description;
@@ -693,7 +693,8 @@ public class InstantStartTest {
         StartSurfaceTestUtils.createTabStateFile(new int[] {123});
         mActivityTestRule.startMainActivityFromLauncher();
 
-        Assert.assertTrue(TabUiFeatureUtilities.supportInstantStart(false));
+        Assert.assertTrue(
+                TabUiFeatureUtilities.supportInstantStart(false, mActivityTestRule.getActivity()));
         Assert.assertTrue(CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START));
         Assert.assertFalse(ReturnToChromeExperimentsUtil.isStartSurfaceHomepageEnabled());
 
@@ -716,12 +717,14 @@ public class InstantStartTest {
         // clang-format on
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> ChromeAccessibilityUtil.get().setAccessibilityEnabledForTesting(true));
-        Assert.assertTrue(DeviceClassManager.enableAccessibilityLayout());
 
         StartSurfaceTestUtils.createTabStateFile(new int[] {123});
         mActivityTestRule.startMainActivityFromLauncher();
+        Assert.assertTrue(
+                DeviceClassManager.enableAccessibilityLayout(mActivityTestRule.getActivity()));
 
-        Assert.assertFalse(TabUiFeatureUtilities.supportInstantStart(false));
+        Assert.assertFalse(
+                TabUiFeatureUtilities.supportInstantStart(false, mActivityTestRule.getActivity()));
         Assert.assertTrue(CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START));
         Assert.assertTrue(ReturnToChromeExperimentsUtil.isStartSurfaceHomepageEnabled());
 
@@ -748,7 +751,8 @@ public class InstantStartTest {
         // make sure BaseSwitches.ENABLE_LOW_END_DEVICE_MODE can be applied.
         SysUtils.resetForTesting();
 
-        Assert.assertFalse(TabUiFeatureUtilities.supportInstantStart(false));
+        Assert.assertFalse(
+                TabUiFeatureUtilities.supportInstantStart(false, mActivityTestRule.getActivity()));
     }
 
     @Test
@@ -1088,6 +1092,7 @@ public class InstantStartTest {
         ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
     @CommandLineFlags.Add({"force-fieldtrials=Study/Group", IMMEDIATE_RETURN_PARAMS +
         "/start_surface_variation/single/omnibox_focused_on_new_tab/true"})
+    @DisabledTest(message = "https://crbug.com/1192559")
     public void testNewTabFromLauncher() throws IOException {
         // clang-format on
         testNewTabFromLauncherImpl();
@@ -1263,7 +1268,8 @@ public class InstantStartTest {
         StartSurfaceTestUtils.createThumbnailBitmapAndWriteToFile(0);
         TabAttributeCache.setTitleForTesting(0, "Google");
 
-        HomepageManager.getInstance().setPrefHomepageEnabled(false);
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> HomepageManager.getInstance().setPrefHomepageEnabled(false));
         Assert.assertFalse(HomepageManager.isHomepageEnabled());
 
         // Launches new Tab from the launcher icon and verifies that a NTP is created and showing.
@@ -1283,7 +1289,8 @@ public class InstantStartTest {
         StartSurfaceTestUtils.createThumbnailBitmapAndWriteToFile(0);
         TabAttributeCache.setTitleForTesting(0, "Google");
 
-        HomepageManager.getInstance().setPrefHomepageEnabled(false);
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> HomepageManager.getInstance().setPrefHomepageEnabled(false));
         Assert.assertFalse(HomepageManager.isHomepageEnabled());
 
         // Launches Chrome and verifies that the Tab switcher is showing.
@@ -1306,7 +1313,8 @@ public class InstantStartTest {
         StartSurfaceTestUtils.createThumbnailBitmapAndWriteToFile(0);
         TabAttributeCache.setTitleForTesting(0, "Google");
 
-        HomepageManager.getInstance().setPrefHomepageEnabled(false);
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> HomepageManager.getInstance().setPrefHomepageEnabled(false));
         Assert.assertFalse(HomepageManager.isHomepageEnabled());
 
         // Launches Chrome and verifies that the last visited Tab is showing.

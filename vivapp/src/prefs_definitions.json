@@ -522,6 +522,11 @@
         "default": false,
         "syncable": false
       },
+      "last_notification_time": {
+        "type": "double",
+        "default": 0.0,
+        "syncable": false
+      },
       "display": {
         "density": {
           "type": "enum",
@@ -650,7 +655,24 @@
             "text": 1,
             "imageandtext": 2
           }
+        },
+        "selected_pane": {
+          "type": "enum",
+          "default": "accounts",
+          "syncable": false,
+          "description": "Calendar status popup last selected pane",
+          "enum_values": {
+            "accounts": 0,
+            "notifications": 1,
+            "logs": 2
+          }
         }
+      },
+      "refresh_tokens": {
+        "description": "Store encrypted oauth refresh-token per account using OAuth authentication for reconnecting on restart",
+        "type": "dictionary",
+        "default": {},
+        "syncable": false
       }
     },
     "clear_private_data": {
@@ -710,7 +732,7 @@
       "panel": {
         "editor_height": {
           "type": "integer",
-          "default": 180,
+          "default": 216,
           "syncable": true
         },
         "sorting": {
@@ -1003,6 +1025,12 @@
         "default": [],
         "syncable": true
       },
+      "refresh_tokens": {
+        "description": "Store encrypted oauth refresh-token per account using OAuth authentication for reconnecting on restart",
+        "type": "dictionary",
+        "default": {},
+        "syncable": false
+      },
       "send_or_queue": {
         "description": "Should button in Mail Composer Send directly or Queue to Outbox?",
         "type": "enum",
@@ -1053,6 +1081,17 @@
             "image": 0,
             "text": 1,
             "imageandtext": 2
+          }
+        },
+        "selected_pane": {
+          "type": "enum",
+          "default": "accounts",
+          "syncable": false,
+          "description": "Mail status popup last selected pane",
+          "enum_values": {
+            "accounts": 0,
+            "messages": 1,
+            "logs": 2
           }
         }
       },
@@ -1428,6 +1467,12 @@
           "width": 34,
           "panelVisible": false
         },
+        "syncable": false
+      },
+      "version": {
+        "description": "Last upgrade of default panels. Format is browser version",
+        "type": "string",
+        "default": "",
         "syncable": false
       },
       "window": {
@@ -1968,6 +2013,7 @@
         "syncable": false
       },
       "is_using_separate_encryption_password": {
+        "description": "[DEPRECATED 2021/9]",
         "type": "enum",
         "enum_values": {
           "unknown": 0,
@@ -3068,6 +3114,10 @@
     },
     "kSafeBrowsingEnabled": {
       "path": "safebrowsing.enabled",
+      "type": "boolean"
+    },
+    "kSavingBrowserHistoryDisabled": {
+      "path": "history.saving_disabled",
       "type": "boolean"
     },
     "kURLsToRestoreOnStartup": {

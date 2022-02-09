@@ -15,6 +15,14 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content" >
 
+        <!-- Vivaldi: Container for the tab group toolbar -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginTop="@dimen/control_container_height"
+            android:id="@+id/tab_group_ui_top_container"/>
+        <!-- /Vivaldi -->
+
         <ViewStub
             android:id="@+id/toolbar_stub"
             android:layout_width="match_parent"

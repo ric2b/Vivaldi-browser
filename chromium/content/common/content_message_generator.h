@@ -15,9 +15,3 @@
 #error "Failed to include content/common/gin_java_bridge_messages.h"
 #endif
 #endif  // defined(OS_ANDROID)
-
-#undef RENDER_VIVALDI_RENDER_MESSAGES_H_
-#include "renderer/vivaldi_render_messages.h"
-#ifndef RENDER_VIVALDI_RENDER_MESSAGES_H_
-#error "Failed to include renderer/vivaldi_render_messages.h"
-#endif

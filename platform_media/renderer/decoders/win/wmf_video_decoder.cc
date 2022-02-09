@@ -10,19 +10,18 @@
 namespace media {
 
 WMFVideoDecoder::WMFVideoDecoder(
-    const scoped_refptr<base::SingleThreadTaskRunner>& task_runner)
-    : impl_(task_runner) {
-}
+    scoped_refptr<base::SequencedTaskRunner> task_runner)
+    : impl_(std::move(task_runner)) {}
 
-WMFVideoDecoder::~WMFVideoDecoder() {
-}
+WMFVideoDecoder::~WMFVideoDecoder() {}
 
-void WMFVideoDecoder::Initialize(const VideoDecoderConfig& config,
-                                 bool low_delay,
-                                 CdmContext* cdm_context,
-                                 InitCB init_cb,
-                                 const OutputCB& output_cb,
-                                 const WaitingCB& waiting_for_decryption_key_cb) {
+void WMFVideoDecoder::Initialize(
+    const VideoDecoderConfig& config,
+    bool low_delay,
+    CdmContext* cdm_context,
+    InitCB init_cb,
+    const OutputCB& output_cb,
+    const WaitingCB& waiting_for_decryption_key_cb) {
   impl_.Initialize(config, std::move(init_cb), output_cb);
 }
 
@@ -35,7 +34,6 @@ void WMFVideoDecoder::Reset(base::OnceClosure closure) {
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
   impl_.Reset(std::move(closure));
 }
-
 
 VideoDecoderType WMFVideoDecoder::GetDecoderType() const {
   return VideoDecoderType::kVivWMFDecoder;

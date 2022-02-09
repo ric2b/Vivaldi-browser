@@ -12,6 +12,10 @@
 
 namespace enterprise_connectors {
 
+extern const char kBoxEnterpriseIdFieldName[];
+extern const char kBoxLoginFieldName[];
+extern const char kBoxNameFieldName[];
+
 struct BoxApiCallResponse;
 
 // Helper for making Box API calls.
@@ -47,9 +51,10 @@ class BoxApiCallFlow : public OAuth2ApiCallFlow {
   using ParseResult = data_decoder::DataDecoder::ValueOrError;
 
  protected:
+  void OnFailureJsonParsed(int http_error, ParseResult result);
+  // Called in OnFailureJsonParsed() to send the failure back.
   virtual void ProcessFailure(Response response) = 0;
 
-  void OnFailureJsonParsed(int http_error, ParseResult result);
   base::WeakPtrFactory<BoxApiCallFlow> weak_factory_{this};
 };
 
@@ -125,11 +130,35 @@ class BoxCreateUpstreamFolderApiCallFlow : public BoxApiCallFlow {
 
  private:
   // Callback for JsonParser that extracts folder id in ProcessApiCallSuccess().
-  void OnSuccessJsonParsed(ParseResult result);
+  void OnSuccessJsonParsed(int network_response_code, ParseResult result);
 
   // Callback from the uploader to report success, http_code, folder_id.
   TaskCallback callback_;
   base::WeakPtrFactory<BoxCreateUpstreamFolderApiCallFlow> weak_factory_{this};
+};
+
+// Helper for performing preflight checks before uploading a file.
+class BoxGetCurrentUserApiCallFlow : public BoxApiCallFlow {
+ public:
+  explicit BoxGetCurrentUserApiCallFlow(
+      base::OnceCallback<void(Response, base::Value)> callback);
+  ~BoxGetCurrentUserApiCallFlow() override;
+
+  // BoxApiCallFlow interface.
+  GURL CreateApiCallUrl() override;
+  bool IsExpectedSuccessCode(int code) const override;
+  void ProcessApiCallSuccess(const network::mojom::URLResponseHead* head,
+                             std::unique_ptr<std::string> body) override;
+  void ProcessFailure(Response response) override;
+
+ private:
+  // Callback for JsonParser that extracts enterprise_id in
+  // ProcessApiCallSuccess().
+  void OnJsonParsed(ParseResult result);
+
+  // Callback from the controller to report success, http_code, folder_id.
+  base::OnceCallback<void(Response, base::Value)> callback_;
+  base::WeakPtrFactory<BoxGetCurrentUserApiCallFlow> weak_factory_{this};
 };
 
 // Helper for performing preflight checks before uploading a file.
@@ -167,6 +196,7 @@ class BoxWholeFileUploadApiCallFlow : public BoxApiCallFlow {
   using TaskCallback = base::OnceCallback<void(Response, const std::string&)>;
   BoxWholeFileUploadApiCallFlow(TaskCallback callback,
                                 const std::string& folder_id,
+                                const std::string& mime_type,
                                 const base::FilePath& target_file_name,
                                 const base::FilePath& local_file_path);
   ~BoxWholeFileUploadApiCallFlow() override;
@@ -186,13 +216,9 @@ class BoxWholeFileUploadApiCallFlow : public BoxApiCallFlow {
                              std::unique_ptr<std::string> body) override;
   void ProcessFailure(Response response) override;
 
-  void SetFileReadForTesting(std::string content, std::string mime_type);
+  void SetFileReadForTesting(std::string content);
 
  private:
-  struct FileRead {
-    std::string content;
-    std::string mime;
-  };
   // Post a task to ThreadPool to read the local file, forward the
   // parameters from Start() into OnFileRead(), which is the callback that then
   // kicks off OAuth2CallFlow::Start() after file content is read.
@@ -204,20 +230,19 @@ class BoxWholeFileUploadApiCallFlow : public BoxApiCallFlow {
   void OnFileRead(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       const std::string& access_token,
-      absl::optional<FileRead> file_read);
+      absl::optional<std::string> file_content);
 
   // Task posted to ThreadPool to read the local file. Return type is
   // base::Optional in case file is read successfully but the file content is
   // really empty.
-  static absl::optional<FileRead> ReadFile(
-      const base::FilePath& path,
-      const base::FilePath& target_file_name);
+  static absl::optional<std::string> ReadFile(const base::FilePath& path);
 
   const std::string folder_id_;
+  const std::string mime_type_;
   const base::FilePath target_file_name_;
   const base::FilePath local_file_path_;
   const std::string multipart_boundary_;
-  FileRead file_read_;
+  std::string file_content_;
 
   // Callback from the uploader to report success.
   TaskCallback callback_;

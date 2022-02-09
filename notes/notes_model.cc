@@ -505,6 +505,7 @@ void NotesModel::Remove(const NoteNode* node) {
 }
 
 void NotesModel::RemoveAllUserNotes() {
+  DCHECK(loaded_);
   for (auto& observer : observers_)
     observer.OnWillRemoveAllNotes(this);
 

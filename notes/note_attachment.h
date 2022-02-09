@@ -27,8 +27,8 @@ class NoteAttachment {
   NoteAttachment(NoteAttachment&&);
   NoteAttachment& operator=(NoteAttachment&&);
 
-  std::unique_ptr<base::Value> Encode(NotesCodec* checksummer) const;
-  static std::unique_ptr<NoteAttachment> Decode(const base::DictionaryValue*,
+  base::Value Encode(NotesCodec* checksummer) const;
+  static std::unique_ptr<NoteAttachment> Decode(const base::Value&,
                                                 NotesCodec* checksummer);
 
   const std::string& content() const { return content_; }

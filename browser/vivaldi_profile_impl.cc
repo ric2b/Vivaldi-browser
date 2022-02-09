@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/strings/string_split.h"
 #include "base/version.h"
+#include "browser/vivaldi_runtime_feature.h"
 #include "calendar/calendar_model_loaded_observer.h"
 #include "calendar/calendar_service_factory.h"
 #include "chrome/browser/browser_process.h"
@@ -39,7 +40,6 @@
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "extensions/api/features/vivaldi_runtime_feature.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #endif
 
@@ -78,7 +78,7 @@ class VivaldiProfileObserver : public ProfileObserver {
         base::BindRepeating(&VivaldiProfileObserver::OnPrefsChange,
                             base::Unretained(this)));
     prefs_registrar_->Add(
-        prefs::kOfferTranslateEnabled,
+        translate::prefs::kOfferTranslateEnabled,
         base::BindRepeating(&VivaldiProfileObserver::OnPrefsChange,
                             base::Unretained(this)));
   }
@@ -105,13 +105,13 @@ class VivaldiProfileObserver : public ProfileObserver {
     if (prefs == vivaldiprefs::kTranslateEnabled) {
       bool translate_enabled =
           pref_service->GetBoolean(vivaldiprefs::kTranslateEnabled);
-      pref_service->SetBoolean(prefs::kOfferTranslateEnabled,
+      pref_service->SetBoolean(translate::prefs::kOfferTranslateEnabled,
                                translate_enabled);
-    } else if (prefs == prefs::kOfferTranslateEnabled) {
+    } else if (prefs == translate::prefs::kOfferTranslateEnabled) {
       // Also handle if the user uses chrome://settings to disable translation
       // offers.
       bool translate_enabled =
-          pref_service->GetBoolean(prefs::kOfferTranslateEnabled);
+          pref_service->GetBoolean(translate::prefs::kOfferTranslateEnabled);
       pref_service->SetBoolean(vivaldiprefs::kTranslateEnabled,
                                translate_enabled);
     }
@@ -143,7 +143,7 @@ void PerformUpdates(Profile* profile) {
     if (last_seen_version.components()[0] == 3 &&
         (version.components()[0] == 4 ||
          (version.components()[0] == 3 && version.components()[1] == 9))) {
-      pref_service->SetBoolean(prefs::kOfferTranslateEnabled, true);
+      pref_service->SetBoolean(translate::prefs::kOfferTranslateEnabled, true);
       pref_service->SetBoolean(vivaldiprefs::kTranslateEnabled, true);
     }
   }

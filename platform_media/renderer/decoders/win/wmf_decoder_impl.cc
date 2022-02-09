@@ -16,6 +16,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/memory/free_deleter.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/win/windows_version.h"
 #include "media/base/audio_buffer.h"
@@ -72,14 +73,14 @@ GUID AudioCodecToAudioSubtypeGUID(AudioCodec codec) {
 
 template <DemuxerStream::Type StreamType>
 WMFDecoderImpl<StreamType>::WMFDecoderImpl(
-    const scoped_refptr<base::SingleThreadTaskRunner>& task_runner)
-    : task_runner_(task_runner), output_sample_size_(0) {}
+    scoped_refptr<base::SequencedTaskRunner> task_runner)
+    : task_runner_(std::move(task_runner)), output_sample_size_(0) {}
 
 template <DemuxerStream::Type StreamType>
 void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
                                             InitCB init_cb,
                                             const OutputCB& output_cb) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   if (!IsValidConfig(config)) {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -116,9 +117,9 @@ void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
 template <DemuxerStream::Type StreamType>
 void WMFDecoderImpl<StreamType>::Decode(scoped_refptr<DecoderBuffer> buffer,
                                         DecodeCB decode_cb) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
-  debug_buffer_logger_.Log(buffer);
+  debug_buffer_logger_.Log(*buffer);
 
   if (buffer->end_of_stream()) {
     VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " (EOS)";
@@ -154,7 +155,7 @@ void WMFDecoderImpl<StreamType>::Decode(scoped_refptr<DecoderBuffer> buffer,
 template <DemuxerStream::Type StreamType>
 void WMFDecoderImpl<StreamType>::Reset(base::OnceClosure closure) {
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   // Transform needs to be reset, skip this and seeking may fail.
   decoder_->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0);
@@ -268,9 +269,8 @@ WMFDecoderImpl<StreamType>::CreateWMFDecoder(const DecoderConfig& config) {
   if (!library)
     return decoder;
 
-  auto* const get_class_object =
-      reinterpret_cast<decltype(DllGetClassObject)*>(::GetProcAddress(
-          library, "DllGetClassObject"));
+  auto* const get_class_object = reinterpret_cast<decltype(DllGetClassObject)*>(
+      ::GetProcAddress(library, "DllGetClassObject"));
   if (!get_class_object) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Error while retrieving class object getter function.";
@@ -364,25 +364,49 @@ bool WMFDecoderImpl<DemuxerStream::AUDIO>::SetInputMediaType() {
   }
 
   if (config_.codec() == AudioCodec::kCodecAAC) {
-    hr = media_type->SetUINT32(MF_MT_AAC_PAYLOAD_TYPE, 0x1);
-    if (FAILED(hr)) {
-      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                   << " Error while setting AAC payload type.";
-      return false;
+    // For details of media_type attributes see
+    // http://msdn.microsoft.com/en-us/library/windows/desktop/dd742784%28v=vs.85%29.aspx
+
+    // For ChunkDemuxer the payload contains adts_sequence() headers, for FFmpeg
+    // it is raw which is the default.
+    if (!config_.platform_media_ffmpeg_demuxer_) {
+      hr = media_type->SetUINT32(MF_MT_AAC_PAYLOAD_TYPE, 0x1);
+      if (FAILED(hr)) {
+        LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                     << " Error while setting AAC payload type.";
+        return false;
+      }
     }
 
-    // AAC decoder requires setting up HEAACWAVEINFO as a MF_MT_USER_DATA,
+    // AAC decoder requires setting up HEAACWAVEFORMAT as a MF_MT_USER_DATA,
     // without this decoder fails to work (e.g. ProcessOutput returns
     // repeatedly with mysterious MF_E_TRANSFORM_STREAM_CHANGE status).
-    // mt_user_data size is 12 = size of relevant fields of HEAACWAVEINFO
-    // structure, see
-    // http://msdn.microsoft.com/en-us/library/windows/desktop/dd742784%28v=vs.85%29.aspx
-    uint8_t mt_user_data[12] = {1};  // Set input type to adts.
-    hr = media_type->SetBlob(MF_MT_USER_DATA, mt_user_data,
-                             sizeof(mt_user_data));
+    size_t format_size = offsetof(HEAACWAVEFORMAT, pbAudioSpecificConfig);
+    if (config_.platform_media_ffmpeg_demuxer_) {
+      format_size += config_.extra_data().size();
+    }
+    std::unique_ptr<HEAACWAVEFORMAT, base::FreeDeleter> wave_format(
+        static_cast<HEAACWAVEFORMAT*>(malloc(format_size)));
+    memset(wave_format.get(), 0, format_size);
+    if (!config_.platform_media_ffmpeg_demuxer_) {
+      // Set input type to adts.
+      wave_format->wfInfo.wPayloadType = 1;
+    } else {
+      // Keep wPayloadType at 0 to indicate raw data and set
+      // AudioSpecificConfig() from the extra data.
+      memcpy(wave_format->pbAudioSpecificConfig, config_.extra_data().data(),
+             config_.extra_data().size());
+    }
+    // The blob must be set to the portion of HEAACWAVEFORMAT starting from
+    // wfInfo.wPayloadType.
+    hr = media_type->SetBlob(
+        MF_MT_USER_DATA,
+        reinterpret_cast<const uint8_t*>(&wave_format->wfInfo.wPayloadType),
+        format_size - offsetof(HEAACWAVEFORMAT, wfInfo.wPayloadType));
     if (FAILED(hr)) {
       LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                   << " Error while setting AAC AudioSpecificConfig().";
+                   << " SetBlob(MF_MT_USER_DAT) failed, hresult=0x" << std::hex
+                   << hr;
       return false;
     }
   }
@@ -631,11 +655,11 @@ HRESULT WMFDecoderImpl<StreamType>::ProcessInput(
 template <>
 void WMFDecoderImpl<DemuxerStream::AUDIO>::RecordInput(
     const scoped_refptr<DecoderBuffer>& input) {
-  // We use AudioDiscardHelper to calculate output audio timestamps and discard
-  // output buffers per the instructions in DecoderBuffer.  AudioDiscardHelper
-  // needs both the output buffers and the corresponsing input buffers to do
-  // its work, so we need to queue the input buffers to cover the case when
-  // Decode() doesn't produce output immediately.
+  // We use AudioDiscardHelper to calculate output audio timestamps and
+  // discard output buffers per the instructions in DecoderBuffer.
+  // AudioDiscardHelper needs both the output buffers and the corresponsing
+  // input buffers to do its work, so we need to queue the input buffers to
+  // cover the case when Decode() doesn't produce output immediately.
   queued_input_.push_back(input);
 }
 
@@ -708,7 +732,8 @@ HRESULT WMFDecoderImpl<StreamType>::ProcessOutput() {
       // For some reason we need to set up output media type again.
       if (!SetOutputMediaType())
         return MF_E_UNEXPECTED;
-      // This kind of change will probably prevent us from getting more output.
+      // This kind of change will probably prevent us from getting more
+      // output.
       break;
   }
 
@@ -740,10 +765,10 @@ bool WMFDecoderImpl<StreamType>::ProcessOutputLoop() {
     const HRESULT hr = ProcessOutput();
     if (FAILED(hr)) {
       // If ProcessOutput fails with MF_E_TRANSFORM_NEED_MORE_INPUT or
-      // MF_E_TRANSFORM_STREAM_CHANGE, it means it failed to get any output, but
-      // still this is not a decoding error - the decoder just needs more input
-      // data or reconfiguration on stream format change, so those errors do not
-      // mean that ProcessOutputLoop failed.
+      // MF_E_TRANSFORM_STREAM_CHANGE, it means it failed to get any output,
+      // but still this is not a decoding error - the decoder just needs more
+      // input data or reconfiguration on stream format change, so those
+      // errors do not mean that ProcessOutputLoop failed.
       if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT)
         return true;
 

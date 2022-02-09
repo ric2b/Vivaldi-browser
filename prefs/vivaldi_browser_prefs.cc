@@ -400,7 +400,7 @@ void AddChromiumProperties(base::Value* value,
     LOG(FATAL) << "Expected a dictionary at '" << current_path << "'";
   }
 
-  for (const auto& pref : chromium_prefs->DictItems()) {
+  for (const auto pref : chromium_prefs->DictItems()) {
     if (!pref.second.is_dict()) {
       LOG(FATAL) << "Expected a dictionary at '" << current_path << "."
                  << pref.first << "'";

@@ -15,7 +15,7 @@
 #include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
-#include "chrome/browser/subresource_filter/chrome_content_subresource_filter_throttle_manager_factory.h"
+#include "chrome/browser/subresource_filter/chrome_content_subresource_filter_web_contents_helper_factory.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
@@ -108,10 +108,10 @@ void AdverseAdFilterTestHarness::SetUp() {
           web_contents()));
 
   VivaldiSubresourceFilterAdblockingThrottleManager::
-    CreateSubresourceFilterThrottleManagerForWebContents(
+      CreateSubresourceFilterWebContentsHelper(
   web_contents());
 
-  CreateSubresourceFilterThrottleManagerForWebContents(web_contents());
+  CreateSubresourceFilterWebContentsHelper(web_contents());
 
   base::RunLoop().RunUntilIdle();
 }

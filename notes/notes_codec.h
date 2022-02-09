@@ -8,6 +8,7 @@
 
 #include <set>
 #include <string>
+#include <vector>
 
 #include "base/guid.h"
 #include "base/hash/md5.h"
@@ -15,8 +16,6 @@
 #include "notes/notes_model.h"
 
 namespace base {
-class DictionaryValue;
-class ListValue;
 class Value;
 }  // namespace base
 
@@ -34,19 +33,16 @@ class NotesCodec {
   NotesCodec();
   ~NotesCodec();
 
-  // Encodes the model to a JSON value. It's up to the caller to delete the
-  // returned object. This is invoked to encode the contents of the notes
-  // model and is currently a convenience to invoking Encode that takes the
-  // notes node and other folder node.
-  std::unique_ptr<base::Value> Encode(NotesModel* model,
-                                      const std::string& sync_metadata_str);
+  // Encodes the model to a JSON value. This is invoked to encode the contents
+  // of the notes model and is currently a convenience to invoking Encode that
+  // takes the notes node and other folder node.
+  base::Value Encode(NotesModel* model, const std::string& sync_metadata_str);
 
-  // Encodes the notes folder returning the JSON value. It's
-  // up to the caller to delete the returned object.
-  std::unique_ptr<base::Value> Encode(const NoteNode* notes_node,
-                                      const NoteNode* other_notes_node,
-                                      const NoteNode* trash_notes_node,
-                                      const std::string& sync_metadata_str);
+  // Encodes the notes folder returning the JSON value.
+  base::Value Encode(const NoteNode* notes_node,
+                     const NoteNode* other_notes_node,
+                     const NoteNode* trash_notes_node,
+                     const std::string& sync_metadata_str);
 
   // Decodes the previously encoded value to the specified nodes as well as
   // setting |max_node_id| to the greatest node id. Returns true on success,
@@ -104,9 +100,8 @@ class NotesCodec {
  private:
   // Encodes node and all its children into a Value object and returns it.
   // The caller takes ownership of the returned object.
-  std::unique_ptr<base::Value> EncodeNode(
-      const NoteNode* node,
-      const std::vector<const NoteNode*>* extra_nodes);
+  base::Value EncodeNode(const NoteNode* node,
+                         const std::vector<const NoteNode*>* extra_nodes);
 
   // Helper to perform decoding.
   bool DecodeHelper(NoteNode* notes_node,
@@ -130,7 +125,7 @@ class NotesCodec {
   // created appropriately by way of DecodeChildren. If node is NULL a new
   // node is created and added to parent (parent must then be non-NULL),
   // otherwise node is used.
-  bool DecodeNode(const base::DictionaryValue& value,
+  bool DecodeNode(const base::Value& value,
                   NoteNode* parent,
                   NoteNode* node,
                   NoteNode* child_other_node,

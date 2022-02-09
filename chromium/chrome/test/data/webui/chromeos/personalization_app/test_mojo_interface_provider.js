@@ -4,7 +4,7 @@
 
 import {unguessableTokenToString} from 'chrome://personalization/common/utils.js';
 import {assertTrue} from '../../chai_assert.js';
-import {TestBrowserProxy} from '../../test_browser_proxy.m.js';
+import {TestBrowserProxy} from '../../test_browser_proxy.js';
 
 /**
  * @implements {chromeos.personalizationApp.mojom.WallpaperProviderInterface}
@@ -17,8 +17,11 @@ export class TestWallpaperProvider extends TestBrowserProxy {
       'fetchImagesForCollection',
       'getLocalImages',
       'getLocalImageThumbnail',
-      'getCurrentWallpaper',
+      'setWallpaperObserver',
       'selectWallpaper',
+      'setDailyRefreshCollectionId',
+      'getDailyRefreshCollectionId',
+      'updateDailyRefreshWallpaper',
     ]);
 
     /**
@@ -77,14 +80,30 @@ export class TestWallpaperProvider extends TestBrowserProxy {
 
     /**
      * @public
-     * @type {!chromeos.personalizationApp.mojom.CurrentWallpaper}
+     * @type {?chromeos.personalizationApp.mojom.CurrentWallpaper}
      */
-    this.currentWallpaper = this.images_[1];
+    this.currentWallpaper = {
+      attribution: ['Image 0'],
+      layout: chromeos.personalizationApp.mojom.WallpaperLayout.kCenter,
+      key: '1',
+      type: chromeos.personalizationApp.mojom.WallpaperType.kOnline,
+      url: {url: 'https://images.googleusercontent.com/0'},
+    };
 
     /** @public */
     this.selectWallpaperResponse = true;
 
+    /** @public */
     this.selectLocalImageResponse = true;
+
+    /** @public */
+    this.updateDailyRefreshWallpaperResponse = true;
+
+    /**
+     * @public
+     * @type {?chromeos.personalizationApp.mojom.WallpaperObserverInterface}
+     */
+    this.wallpaperObserverRemote = null;
   }
 
   /**
@@ -131,9 +150,10 @@ export class TestWallpaperProvider extends TestBrowserProxy {
   }
 
   /** @override */
-  getCurrentWallpaper() {
-    this.methodCalled('getCurrentWallpaper');
-    return Promise.resolve({image: this.currentWallpaper});
+  setWallpaperObserver(remote) {
+    this.methodCalled('setWallpaperObserver');
+    this.wallpaperObserverRemote = remote;
+    this.wallpaperObserverRemote.onWallpaperChanged(this.currentWallpaper);
   }
 
   /** @override */
@@ -151,6 +171,23 @@ export class TestWallpaperProvider extends TestBrowserProxy {
   /** @override */
   setCustomWallpaperLayout(layout) {
     this.methodCalled('selectCustomWallpaperLayout', layout);
+  }
+
+  /** @override */
+  setDailyRefreshCollectionId(collectionId) {
+    this.methodCalled('setDailyRefreshCollectionId', collectionId);
+  }
+
+  /** @override */
+  getDailyRefreshCollectionId() {
+    this.methodCalled('getDailyRefreshCollectionId');
+    return Promise.resolve({collectionId: this.collections_[0].id});
+  }
+
+  /** @override */
+  updateDailyRefreshWallpaper() {
+    this.methodCalled('updateDailyRefreshWallpaper');
+    return Promise.resolve({success: this.updateDailyRefreshWallpaperResponse});
   }
 
   /**

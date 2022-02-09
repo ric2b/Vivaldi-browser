@@ -73,7 +73,8 @@ class BrowserDataMigrator {
     kCopyFailed = 5,
     kMoveFailed = 6,
     kDataWipeFailed = 7,
-    kMaxValue = kDataWipeFailed
+    kSizeLimitExceeded = 8,
+    kMaxValue = kSizeLimitExceeded
   };
 
   enum class ResultValue {
@@ -113,6 +114,7 @@ class BrowserDataMigrator {
   FRIEND_TEST_ALL_PREFIXES(BrowserDataMigratorTest,
                            IsMigrationRequiredOnWorker);
   FRIEND_TEST_ALL_PREFIXES(BrowserDataMigratorTest, GetTargetInfo);
+  FRIEND_TEST_ALL_PREFIXES(BrowserDataMigratorTest, CopyDirectory);
   FRIEND_TEST_ALL_PREFIXES(BrowserDataMigratorTest, RecordStatus);
   FRIEND_TEST_ALL_PREFIXES(BrowserDataMigratorTest, Migrate);
 
@@ -136,6 +138,18 @@ class BrowserDataMigrator {
   // Compares space available under `from_dir_` against total byte size that
   // needs to be copied.
   bool HasEnoughDiskSpace(const TargetInfo& target_info) const;
+  // TODO(crbug.com/1248318):Remove this arbitrary cap for migration once a long
+  // term solution is found. Temporarily limit the migration size to 4GB until
+  // the slow migration speed issue is resolved.
+  static bool IsMigrationSmallEnough(const TargetInfo& target_info);
+  // Copies `item` to location pointed by `dest`. Returns true on success and
+  // false on failure.
+  bool CopyTargetItem(const BrowserDataMigrator::TargetItem& item,
+                      const base::FilePath& dest) const;
+  // Copies the contents of `from_path` to `to_path` recursively. Unlike
+  // `base::CopyDirectory()` it skips symlinks.
+  bool CopyDirectory(const base::FilePath& from_path,
+                     const base::FilePath& to_path) const;
   // Copies files from `from_dir_` to `tmp_dir_`.
   bool CopyToTmpDir(const TargetInfo& target_info) const;
   // Moves `tmp_dir_` to `to_dir_`.

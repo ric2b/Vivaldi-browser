@@ -22,14 +22,15 @@ namespace extensions {
 namespace context_menu = vivaldi::context_menu;
 
 // static
-void ContextMenuAPI::RequestMenu(content::BrowserContext* browser_context,
-                        int window_id,
-                        int document_id,
-                        const vivaldi::context_menu::DocumentParams& request) {
+void ContextMenuAPI::RequestMenu(
+    content::BrowserContext* browser_context,
+    int window_id,
+    int document_id,
+    const vivaldi::context_menu::DocumentParams& request) {
   ::vivaldi::BroadcastEvent(
-    context_menu::OnDocumentMenu::kEventName,
-    context_menu::OnDocumentMenu::Create(window_id, document_id, request),
-    browser_context);
+      context_menu::OnDocumentMenu::kEventName,
+      context_menu::OnDocumentMenu::Create(window_id, document_id, request),
+      browser_context);
 }
 
 namespace context_menu = vivaldi::context_menu;
@@ -41,9 +42,11 @@ ExtensionFunction::ResponseAction ContextMenuShowFunction::Run() {
   auto params = context_menu::Show::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  content::WebContents* web_contents = GetSenderWebContents();
-  if (!web_contents)
-    return RespondNow(Error("Missing WebContents"));
+  VivaldiBrowserWindow* window =
+      VivaldiBrowserWindow::FromId(params->properties.window_id);
+  if (!window) {
+    return RespondNow(Error("No such window"));
+  }
 
   ::vivaldi::VivaldiRenderViewContextMenu* rv_context_menu = nullptr;
   if (params->properties.document_id >= 0) {
@@ -64,19 +67,7 @@ ExtensionFunction::ResponseAction ContextMenuShowFunction::Run() {
     }
   }
 
-  // We need a web contents that can be used to determine menu position.
-  // The sender web contents will with reusable react code be the same
-  // for all windows. We have to locate the proper web contents to use.
-  Browser* browser = ::vivaldi::FindBrowserByWindowId(
-      params->properties.window_id);
-  VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromBrowser(browser);
-  if (!window)
-    return RespondNow(Error("Missing browser window"));
-  content::WebContents* window_web_contents = window->web_contents();
-  if (!window_web_contents)
-    return RespondNow(Error("Missing WebContents"));
-
-  if (web_contents->IsShowingContextMenu()) {
+  if (window->web_contents()->IsShowingContextMenu()) {
     return RespondNow(
         Error("Attempt to show a Vivaldi context menu while Chromium "
               "context menu is running. Check that oncontextmenu is set "
@@ -84,13 +75,9 @@ ExtensionFunction::ResponseAction ContextMenuShowFunction::Run() {
   }
 
   // The controller deletes itself
-  ::vivaldi::ContextMenuController* controller = new
-      ::vivaldi::ContextMenuController(
-          browser_context(),
-          web_contents,
-          window_web_contents,
-          rv_context_menu,
-          std::move(params));
+  ::vivaldi::ContextMenuController* controller =
+      new ::vivaldi::ContextMenuController(window->web_contents(),
+                                           rv_context_menu, std::move(params));
   controller->Show();
   return RespondNow(ArgumentList(context_menu::Show::Results::Create()));
 }

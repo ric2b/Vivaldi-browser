@@ -452,10 +452,10 @@ ExtensionFunction::ResponseAction PrefsSetSiteToNeverTranslateFunction::Run() {
   // Setting it when it's already set is a soft failure.
   bool success = params->block != ui_delegate->IsSiteOnNeverPromptList();
 
-  if (!ui_delegate->CanAddToNeverPromptList()) {
+  if (!ui_delegate->CanAddSiteToNeverPromptList()) {
     success = false;
   } else {
-    ui_delegate->SetNeverPrompt(params->block);
+    ui_delegate->SetNeverPromptSite(params->block);
   }
   return RespondNow(ArgumentList(Results::Create(success)));
 }
@@ -490,7 +490,6 @@ ExtensionFunction::ResponseAction PrefsResetTranslationPrefsFunction::Run() {
   translate_prefs->ResetToDefaults();
 
   prefs->ClearPref(language::prefs::kSelectedLanguages);
-  prefs->ClearPref(language::prefs::kFluentLanguages);
 
   return RespondNow(NoArguments());
 }

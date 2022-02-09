@@ -9,6 +9,8 @@
 
 #include <string>
 
+#include "components/sync/protocol/notes_specifics.pb.h"
+
 namespace base {
 class GUID;
 }  // namespace base
@@ -19,8 +21,8 @@ class NoteNode;
 }  // namespace vivaldi
 
 namespace sync_pb {
-class NotesSpecifics;
 class EntitySpecifics;
+class UniquePosition;
 }  // namespace sync_pb
 
 namespace syncer {
@@ -41,7 +43,8 @@ bool IsNoteEntityReuploadNeeded(const syncer::EntityData& remote_entity_data);
 
 sync_pb::EntitySpecifics CreateSpecificsFromNoteNode(
     const vivaldi::NoteNode* node,
-    vivaldi::NotesModel* mode);
+    vivaldi::NotesModel* model,
+    const sync_pb::UniquePosition& unique_position);
 
 // Creates a note node under the given parent node from the given specifics.
 // Returns the newly created node. Callers must verify that
@@ -50,7 +53,6 @@ const vivaldi::NoteNode* CreateNoteNodeFromSpecifics(
     const sync_pb::NotesSpecifics& specifics,
     const vivaldi::NoteNode* parent,
     size_t index,
-    bool is_folder,
     vivaldi::NotesModel* model);
 
 // Updates the note node |node| with the data in |specifics|. Callers must
@@ -58,6 +60,12 @@ const vivaldi::NoteNode* CreateNoteNodeFromSpecifics(
 void UpdateNoteNodeFromSpecifics(const sync_pb::NotesSpecifics& specifics,
                                  const vivaldi::NoteNode* node,
                                  vivaldi::NotesModel* model);
+
+// Convnience function that returns NotesSpecifics::NORMAL,
+// NotesSpecifics::SEPARATOR or NotesSpecifics::FOLDER based on whether the
+// input node is a separator or a folder. |node| must not be null.
+sync_pb::NotesSpecifics::VivaldiSpecialNotesType GetProtoTypeFromNoteNode(
+    const vivaldi::NoteNode* node);
 
 // Replaces |node| with a NoteNode of equal properties and original node
 // creation timestamp but a different GUID, set to |guid|, which must be a
@@ -68,12 +76,10 @@ const vivaldi::NoteNode* ReplaceNoteNodeGUID(const vivaldi::NoteNode* node,
                                              const base::GUID& guid,
                                              vivaldi::NotesModel* model);
 
-// Checks if a note specifics represents a valid note. |is_folder| is
-// whether this specifics is for a folder. Valid specifics must not be empty,
-// non-folders must contains a valid url, and all keys in the meta_info must be
-// unique.
-bool IsValidNotesSpecifics(const sync_pb::NotesSpecifics& specifics,
-                           bool is_folder);
+// Checks if a note specifics represents a valid note. Valid specifics must not
+// be empty, non-folders must contains a valid url, and all keys in the
+// meta_info must be unique.
+bool IsValidNotesSpecifics(const sync_pb::NotesSpecifics& specifics);
 
 // Returns the inferred GUID for given remote update's originator information.
 base::GUID InferGuidFromLegacyOriginatorId(
@@ -92,6 +98,8 @@ bool HasExpectedNoteGuid(const sync_pb::NotesSpecifics& specifics,
 // logic can likely be cleaned up after a few milestones.
 void MaybeFixGuidInSpecificsDueToPastBug(const SyncedNoteTracker& tracker,
                                          syncer::EntityData* update_entity);
+
+std::string BugGuid();
 
 }  // namespace sync_notes
 

@@ -10,7 +10,7 @@
 
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
-#include "base/util/values/values_util.h"
+#include "base/json/values_util.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
@@ -200,7 +200,7 @@ void VivaldiInvalidationService::OnInvalidation(base::Value invalidation) {
 
   std::string* client_id = invalidation.FindStringKey(kClientIdKey);
   absl::optional<int64_t> version =
-      util::ValueToInt64(invalidation.FindKey(kVersionKey));
+      base::ValueToInt64(invalidation.FindKey(kVersionKey));
   std::string* type = invalidation.FindStringKey(kTypeKey);
 
   if (client_id && version && type && *client_id != client_id_) {

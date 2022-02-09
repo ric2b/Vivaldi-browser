@@ -31,11 +31,27 @@ bool IsPermanentType(NoteNode::Type type) {
 }
 }  // namespace
 
-const char NoteNode::kRootNodeGuid[] = "00000000-0000-4000-a000-000000000001";
-const char NoteNode::kMainNodeGuid[] = "00000000-0000-4000-a000-000000000002";
+// Below predefined GUIDs for permanent note folders, determined via named
+// GUIDs/UUIDs. Do NOT modify them as they may be exposed via Sync. For
+// reference, here's the python script to produce them:
+// > import uuid
+// > vivaldi_namespace = uuid.uuid5(uuid.NAMESPACE_DNS, "vivaldi.com")
+// > notes_namespace = uuid.uuid5(vivaldi_namespace, "notes")
+// > root_guid = uuid.uuid5(notes_namespace, "root")
+// > main_guid = uuid.uuid5(notes_namespace, "main")
+// > other_guid = uuid.uuid5(notes_namespace, "other")
+// > trash_guid = uuid.uuid5(notes_namespace, "trash")
+
+const char NoteNode::kRootNodeGuid[] = "ef3daefb-7b28-5cbc-8397-e3394dbeac45";
+const char NoteNode::kMainNodeGuid[] = "0709f24e-6a69-55df-ba1c-eff0c6762616";
 const char NoteNode::kOtherNotesNodeGuid[] =
-    "00000000-0000-4000-a000-000000000003";
-const char NoteNode::kTrashNodeGuid[] = "00000000-0000-4000-a000-000000000004";
+    "7f81b917-0763-5232-a83d-c24704bc9d57";
+const char NoteNode::kTrashNodeGuid[] = "572928d8-654d-55c0-8d54-d469f838e392";
+
+// This value is the result of exercising sync's function
+// syncer::InferGuidForLegacyNote() with an empty input.
+const char NoteNode::kBannedGuidDueToPastSyncBug[] =
+    "da39a3ee-5e6b-fb0d-b255-bfef95601890";
 
 NoteNode::NoteNode(int64_t id, const base::GUID& guid, Type type)
     : NoteNode(id, guid, type, false) {

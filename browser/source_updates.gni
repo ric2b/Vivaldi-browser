@@ -133,7 +133,15 @@ update_target("//chrome/common:constants") {
 update_target("//content/public/browser:browser_sources") {
   sources += [
     "//vivaldi/browser/renderer_host/devtools/protocol/vivaldi_emulation_handler.cc",
+    "//vivaldi/browser/vivaldi_child_process_flags.cc",
+    "//vivaldi/browser/vivaldi_child_process_flags.h",
   ]
+  if (!is_android) {
+    sources += [
+      "//vivaldi/browser/vivaldi_runtime_feature.cc",
+      "//vivaldi/browser/vivaldi_runtime_feature.h",
+    ]
+  }
 }
 
 if (!is_android) {

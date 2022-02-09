@@ -112,6 +112,10 @@
         "description": "Open a specific named session.",
         "parameters": [
           {
+            "name": "windowId",
+            "type": "integer"
+          },
+          {
             "type": "string",
             "name": "name",
             "description": "Name of the session to open."

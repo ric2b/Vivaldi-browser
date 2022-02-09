@@ -11,43 +11,41 @@
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "chrome/browser/extensions/api/tabs/tabs_api.h"
 #include "chrome/browser/ui/tabs/tab_change_type.h"
-#include "components/content/vivaldi_content_delegates.h"
 #include "components/content_settings/core/common/content_settings.h"
-#include "components/translate/content/browser/content_translate_driver.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "components/sessions/core/session_id.h"
+#include "components/translate/content/browser/content_translate_driver.h"
 #include "components/zoom/zoom_observer.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
-#include "content/public/browser/web_contents_receiver_set.h"
 #include "content/public/common/drop_data.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_event_histogram_value.h"
 #include "extensions/browser/extension_function.h"
-#include "extensions/schema/tabs_private.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
-#include "renderer/mojo/vivaldi_tabs_private.mojom.h"
-#include "renderer/tabs_private_service.h"
-#include "renderer/vivaldi_render_messages.h"
 #include "third_party/blink/public/mojom/page/drag.mojom.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
+#include "components/content/vivaldi_content_delegates.h"
+#include "extensions/schema/tabs_private.h"
+#include "renderer/mojo/vivaldi_frame_service.mojom.h"
 
-typedef base::OnceCallback<void(
-    std::vector<::vivaldi::mojom::AccessKeyPtr>)>
-    JSAccessKeysCallback;
+using JSAccessKeysCallback =
+    base::OnceCallback<void(std::vector<::vivaldi::mojom::AccessKeyPtr>)>;
 
-typedef base::OnceCallback<void(
-    std::vector<::vivaldi::mojom::SpatnavRectPtr>)>
-    JSSpatialNavigationRectsCallback;
+using JSSpatialNavigationRectsCallback =
+    base::OnceCallback<void(std::vector<::vivaldi::mojom::SpatnavRectPtr>)>;
 
-typedef base::OnceCallback<void(int64_t, int64_t)>
-    JSScrollPositionCallback;
+using JSScrollPositionCallback = base::OnceCallback<void(int64_t, int64_t)>;
 
-typedef base::OnceCallback<void(const std::string&)>
-    JSDetermineTextLanguageCallback;
+using JSDetermineTextLanguageCallback =
+    base::OnceCallback<void(const std::string&)>;
+
+using JSElementInfoCallback = base::OnceCallback<
+    void(const std::string&, const std::string&, bool, const std::string&)>;
 
 namespace extensions {
 
@@ -116,7 +114,7 @@ class VivaldiPrivateTabObserver
                              content::RenderViewHost* new_host) override;
   void WebContentsDestroyed() override;
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
-                             const GURL& validated_url) override;
+                     const GURL& validated_url) override;
   void WebContentsDidDetach() override;
   void WebContentsDidAttach() override;
   void BeforeUnloadFired(bool proceed,
@@ -129,13 +127,13 @@ class VivaldiPrivateTabObserver
 
   // translate::ContentTranslateDriver::Observer implementation
   void OnPageTranslated(const std::string& original_lang,
-    const std::string& translated_lang,
-    translate::TranslateErrors::Type error_type) override;
+                        const std::string& translated_lang,
+                        translate::TranslateErrors::Type error_type) override;
   void OnIsPageTranslatedChanged(content::WebContents* source) override;
 
   // translate::TranslateDriver::LanguageDetectionObserver
   void OnLanguageDetermined(
-    const translate::LanguageDetectionDetails& details) override;
+      const translate::LanguageDetectionDetails& details) override;
 
   // Overridden from vivaldi_content::TabActivationDelegate:
   void ActivateTab(content::WebContents* contents) override;
@@ -168,8 +166,9 @@ class VivaldiPrivateTabObserver
   void SetZoomLevelForTab(double new_level, double old_level);
 
   void GetAccessKeys(JSAccessKeysCallback callback);
-  void AccessKeysReceived(JSAccessKeysCallback callback,
-    std::vector<::vivaldi::mojom::AccessKeyPtr> access_keys);
+  void AccessKeysReceived(
+      JSAccessKeysCallback callback,
+      std::vector<::vivaldi::mojom::AccessKeyPtr> access_keys);
 
   void AccessKeyAction(std::string);
 
@@ -182,6 +181,7 @@ class VivaldiPrivateTabObserver
   void ScrollPositionReceived(JSScrollPositionCallback callback,
                               int64_t x,
                               int64_t y);
+
   void DetermineTextLanguage(const std::string& text,
                              JSDetermineTextLanguageCallback callback);
   void DetermineTextLanguageDone(JSDetermineTextLanguageCallback callback,
@@ -189,17 +189,16 @@ class VivaldiPrivateTabObserver
 
   // If a page is accessing a resource controlled by a permission this will
   // fire.
-  void OnPermissionAccessed(ContentSettingsType type, std::string origin,
+  void OnPermissionAccessed(ContentSettingsType type,
+                            std::string origin,
                             ContentSetting content_setting);
 
-private:
+ private:
   friend class content::WebContentsUserData<VivaldiPrivateTabObserver>;
 
   void SaveZoomLevelToExtData(double zoom_level);
 
   void OnPrefsChanged(const std::string& path);
-
-  void MojoConnectionDestroyed();
 
   // Show images for all pages loaded in this tab. Default is true.
   bool show_images_ = true;
@@ -219,14 +218,10 @@ private:
   // The tab is muted.
   bool mute_ = false;
 
-  // Used for all mojo communication, initialized in RenderFrameCreated
-  mojo::AssociatedRemote<::vivaldi::mojom::VivaldiTabsPrivate>
-      tabs_private_service_;
-
   // We want to communicate changes in some prefs to the renderer right away.
   PrefChangeRegistrar prefs_registrar_;
 
-  base::WeakPtrFactory<VivaldiPrivateTabObserver> weak_ptr_factory_;
+  base::WeakPtrFactory<VivaldiPrivateTabObserver> weak_ptr_factory_{this};
 
   // Replacement for WEB_CONTENTS_USER_DATA_KEY_DECL() to use an external key
   // from the content.
@@ -310,7 +305,8 @@ class TabsPrivateStartDragFunction : public ExtensionFunction {
  private:
   ResponseAction Run() override;
 
-  void OnCaptureDone(bool success,
+  void OnCaptureDone(SessionID::id_type window_id,
+                     bool success,
                      float device_scale_factor,
                      const SkBitmap& bitmap);
 
@@ -360,7 +356,7 @@ class TabsPrivateGetScrollPositionFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("tabsPrivate.getScrollPosition",
                              TABSPRIVATE_GETSCROLLPOSITION)
 
- TabsPrivateGetScrollPositionFunction() = default;
+  TabsPrivateGetScrollPositionFunction() = default;
 
  protected:
   ~TabsPrivateGetScrollPositionFunction() override = default;

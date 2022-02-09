@@ -57,6 +57,9 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
   static const char kManagedNodeGuid[];
   static const char kVivaldiTrashNodeGuid[];
 
+  // A bug in sync caused some problematic GUIDs to be produced.
+  static const char kBannedGuidDueToPastSyncBug[];
+
   // Creates a new node with |id|, |guid| and |url|.
   BookmarkNode(int64_t id, const base::GUID& guid, const GURL& url);
 

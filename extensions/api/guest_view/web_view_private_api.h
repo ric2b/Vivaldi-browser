@@ -11,6 +11,7 @@
 
 #include "extensions/browser/extension_function.h"
 #include "extensions/schema/web_view_private.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "ui/vivaldi_skia_utils.h"
 
 namespace extensions {
@@ -98,6 +99,24 @@ class WebViewPrivateGetPageHistoryFunction
   DISALLOW_COPY_AND_ASSIGN(WebViewPrivateGetPageHistoryFunction);
 };
 
+class WebViewPrivateGetFocusedElementInfoFunction
+  : public VivaldiWebViewWithGuestFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("webViewPrivate.getFocusedElementInfo",
+                             WEBVIEWINTERNAL_GETFOCUSEDELEMENTINFO)
+  WebViewPrivateGetFocusedElementInfoFunction();
+
+ private:
+  ~WebViewPrivateGetFocusedElementInfoFunction() override;
+  ResponseAction Run() override;
+  void FocusedElementInfoReceived(const std::string& tagname,
+                                  const std::string& type,
+                                  bool editable,
+                                  const std::string& role);
+
+  DISALLOW_COPY_AND_ASSIGN(WebViewPrivateGetFocusedElementInfoFunction);
+};
+
 class WebViewPrivateAllowBlockedInsecureContentFunction
     : public VivaldiWebViewWithGuestFunction {
  public:
@@ -109,19 +128,6 @@ class WebViewPrivateAllowBlockedInsecureContentFunction
   ~WebViewPrivateAllowBlockedInsecureContentFunction() override = default;
   ResponseAction Run() override;
   DISALLOW_COPY_AND_ASSIGN(WebViewPrivateAllowBlockedInsecureContentFunction);
-};
-
-class WebViewPrivateGetFocusedElementInfoFunction
-    : public VivaldiWebViewWithGuestFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("webViewPrivate.getFocusedElementInfo",
-                             WEBVIEWINTERNAL_GETFOCUSEDELEMENTINFO)
-  WebViewPrivateGetFocusedElementInfoFunction() = default;
-
- private:
-  ~WebViewPrivateGetFocusedElementInfoFunction() override = default;
-  ResponseAction Run() override;
-  DISALLOW_COPY_AND_ASSIGN(WebViewPrivateGetFocusedElementInfoFunction);
 };
 
 class WebViewPrivateSendRequestFunction

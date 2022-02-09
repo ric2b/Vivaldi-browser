@@ -27,7 +27,6 @@ import org.chromium.base.task.AsyncTask;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.AfterStartupTaskUtils;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.ChromeActivitySessionTracker;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
@@ -64,6 +63,7 @@ import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.notifications.channels.ChannelsUpdater;
 import org.chromium.chrome.browser.offlinepages.measurements.OfflineMeasurementsBackgroundTask;
 import org.chromium.chrome.browser.omnibox.voice.AssistantVoiceSearchService;
+import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridgeFactory;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.photo_picker.DecoderService;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
@@ -73,9 +73,10 @@ import org.chromium.chrome.browser.query_tiles.QueryTileUtils;
 import org.chromium.chrome.browser.quickactionsearchwidget.QuickActionSearchWidgetProvider;
 import org.chromium.chrome.browser.rlz.RevenueStats;
 import org.chromium.chrome.browser.searchwidget.SearchWidgetProvider;
-import org.chromium.chrome.browser.share.clipboard.ClipboardImageFileProvider;
 import org.chromium.chrome.browser.sharing.shared_clipboard.SharedClipboardShareActivity;
-import org.chromium.chrome.browser.signin.SigninHelperProvider;
+import org.chromium.chrome.browser.signin.SigninCheckerProvider;
+import org.chromium.chrome.browser.tab.state.ShoppingPersistedTabData;
+import org.chromium.chrome.browser.util.AfterStartupTaskUtils;
 import org.chromium.chrome.browser.webapps.WebApkVersionManager;
 import org.chromium.chrome.browser.webapps.WebappRegistry;
 import org.chromium.components.background_task_scheduler.BackgroundTaskSchedulerFactory;
@@ -83,11 +84,13 @@ import org.chromium.components.browser_ui.contacts_picker.ContactsPickerDialog;
 import org.chromium.components.browser_ui.photo_picker.DecoderServiceHost;
 import org.chromium.components.browser_ui.photo_picker.PhotoPickerDelegateBase;
 import org.chromium.components.browser_ui.photo_picker.PhotoPickerDialog;
+import org.chromium.components.browser_ui.share.ClipboardImageFileProvider;
 import org.chromium.components.browser_ui.share.ShareImageFileUtils;
 import org.chromium.components.browser_ui.util.ConversionUtils;
 import org.chromium.components.content_capture.PlatformContentCaptureController;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.minidump_uploader.CrashFileManager;
+import org.chromium.components.optimization_guide.proto.HintsProto;
 import org.chromium.components.signin.AccountManagerFacadeImpl;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.version_info.Channel;
@@ -250,7 +253,10 @@ public class ProcessInitializationHandler {
 
         if (VersionConstants.CHANNEL == Channel.CANARY
                 || VersionConstants.CHANNEL == Channel.DEFAULT) {
-            QuickActionSearchWidgetProvider.initialize();
+            // Changing the widget enabled state, which is only required during the experimentation
+            // phase, can trigger disk access. This can be removed when the QuickActionSearchWidget
+            // launches.
+            PostTask.postTask(TaskTraits.BEST_EFFORT, QuickActionSearchWidgetProvider::initialize);
         }
 
         HistoryDeletionBridge.getInstance().addObserver(new ContentCaptureHistoryDeletionObserver(
@@ -358,7 +364,7 @@ public class ProcessInitializationHandler {
         deferredStartupHandler.addDeferredTask(new Runnable() {
             @Override
             public void run() {
-                SigninHelperProvider.get().onMainActivityStart();
+                SigninCheckerProvider.get().onMainActivityStart();
                 RevenueStats.getInstance();
             }
         });
@@ -423,6 +429,16 @@ public class ProcessInitializationHandler {
                                 ContextUtils.getApplicationContext()));
         deferredStartupHandler.addDeferredTask(
                 () -> GlobalAppLocaleController.getInstance().recordOverrideLanguageMetrics());
+        deferredStartupHandler.addDeferredTask(() -> {
+            // OptimizationTypes which we give a guarantee will be registered when we pass the
+            // onDeferredStartup() signal to OptimizationGuide.
+            List<HintsProto.OptimizationType> registeredTypesAllowList = new ArrayList<>();
+            registeredTypesAllowList.addAll(
+                    ShoppingPersistedTabData.getShoppingHintsToRegisterOnDeferredStartup());
+            new OptimizationGuideBridgeFactory(registeredTypesAllowList)
+                    .create()
+                    .onDeferredStartup();
+        });
     }
 
     private void initChannelsAsync() {

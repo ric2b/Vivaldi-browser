@@ -119,6 +119,17 @@ const char* LowLatencyStylusLibraryTypeToString(
   return "";
 }
 
+const char* DnsQueryToString(mojom::ArcDnsQuery query) {
+  switch (query) {
+    case mojom::ArcDnsQuery::OTHER_HOST_NAME:
+      return "Other";
+    case mojom::ArcDnsQuery::ANDROID_API_HOST_NAME:
+      return "AndroidApi";
+  }
+  NOTREACHED();
+  return "";
+}
+
 }  // namespace
 
 // static
@@ -356,6 +367,15 @@ void ArcMetricsService::ReportAppKill(mojom::AppKillPtr app_kill) {
   }
 }
 
+void ArcMetricsService::ReportDnsQueryResult(mojom::ArcDnsQuery query,
+                                             bool success) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  std::string metric_name =
+      base::StrCat({"Arc.Net.DnsQuery.", DnsQueryToString(query)});
+  VLOG(1) << metric_name << ": " << success;
+  base::UmaHistogramBoolean(metric_name, success);
+}
+
 void ArcMetricsService::NotifyLowMemoryKill() {
   for (auto& obs : app_kill_observers_)
     obs.OnArcLowMemoryKill();
@@ -561,6 +581,13 @@ absl::optional<base::TimeTicks> ArcMetricsService::GetArcStartTimeFromEvents(
   }
   return absl::nullopt;
 }
+
+void ArcMetricsService::ReportMemoryPressureArcVmKills(int count,
+                                                       int estimated_freed_kb) {
+  for (auto& obs : app_kill_observers_)
+    obs.OnArcMemoryPressureKill(count, estimated_freed_kb);
+}
+
 ArcMetricsService::ProcessObserver::ProcessObserver(
     ArcMetricsService* arc_metrics_service)
     : arc_metrics_service_(arc_metrics_service) {}

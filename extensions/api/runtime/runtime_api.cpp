@@ -17,6 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
+#include "browser/vivaldi_runtime_feature.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
@@ -24,17 +25,17 @@
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/profiles/profile_statistics.h"
 #include "chrome/browser/profiles/profile_statistics_factory.h"
+#include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/profile_picker.h"
 #include "chrome/browser/ui/webui/profile_helper.h"
 #if defined(OS_MAC)
-#include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_paths.h"
+#include "chrome/common/chrome_paths_internal.h"
 #endif  // defined(OS_MAC)
 #include "chrome/common/pref_names.h"
 #include "components/download/public/background_service/background_download_service.h"
@@ -45,12 +46,11 @@
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "extensions/api/features/vivaldi_runtime_feature.h"
 #include "extensions/api/window/window_private_api.h"
 #include "extensions/schema/runtime_private.h"
 #include "extensions/tools/vivaldi_tools.h"
-#include "prefs/vivaldi_pref_names.h"
 #include "prefs/vivaldi_gen_prefs.h"
+#include "prefs/vivaldi_pref_names.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/devtools/devtools_connector.h"
@@ -78,9 +78,9 @@ class ProfileStorageObserver : public ProfileAttributesStorage::Observer {
   void OnProfileAuthInfoChanged(const base::FilePath& profile_path) override;
   void OnProfileAvatarChanged(const base::FilePath& profile_path) override;
   void OnProfileHighResAvatarLoaded(
-    const base::FilePath& profile_path) override;
+      const base::FilePath& profile_path) override;
   void OnProfileSigninRequiredChanged(
-    const base::FilePath& profile_path) override;
+      const base::FilePath& profile_path) override;
   void OnProfileIsOmittedChanged(const base::FilePath& profile_path) override;
 
   void UpdateProfiles();
@@ -182,18 +182,22 @@ RuntimePrivateGetAllFeatureFlagsFunction::Run() {
   using vivaldi::runtime_private::FeatureFlagInfo;
 
   std::vector<FeatureFlagInfo> results;
-  const vivaldi_runtime_feature::EntryMap* entries =
-      vivaldi_runtime_feature::GetAll(browser_context());
-  if (entries) {
-    for (auto& entry : *entries) {
-      FeatureFlagInfo flag;
-      flag.name = entry.first;
-      flag.friendly_name = entry.second.friendly_name;
-      flag.description = entry.second.description;
-      flag.value = entry.second.enabled;
-      flag.locked = entry.second.force_value;
-      results.push_back(std::move(flag));
-    }
+  const vivaldi_runtime_feature::FeatureMap& feature_map =
+      vivaldi_runtime_feature::GetAllFeatures();
+  const vivaldi_runtime_feature::EnabledSet* enabled_set =
+      vivaldi_runtime_feature::GetEnabled(browser_context());
+  for (auto& i : feature_map) {
+    if (i.second.inactive)
+      continue;
+    const std::string& name = i.first;
+    const vivaldi_runtime_feature::Feature& feature = i.second;
+    FeatureFlagInfo flag;
+    flag.name = name;
+    flag.friendly_name = feature.friendly_name;
+    flag.description = feature.description;
+    flag.locked = feature.forced.has_value();
+    flag.value = enabled_set && enabled_set->contains(name);
+    results.push_back(std::move(flag));
   }
   return RespondNow(ArgumentList(Results::Create(results)));
 }
@@ -277,7 +281,7 @@ ExtensionFunction::ResponseAction
 RuntimePrivateCloseGuestSessionFunction::Run() {
   namespace Results = vivaldi::runtime_private::CloseGuestSession::Results;
 
-  Profile *profile = Profile::FromBrowserContext(browser_context());
+  Profile* profile = Profile::FromBrowserContext(browser_context());
   profiles::CloseProfileWindows(profile);
 
   return RespondNow(ArgumentList(Results::Create(true)));
@@ -289,7 +293,7 @@ RuntimePrivateOpenProfileSelectionWindowFunction::Run() {
       vivaldi::runtime_private::OpenProfileSelectionWindow::Results;
 
   // If this is a guest session, close all the guest browser windows.
-  Profile *profile = Profile::FromBrowserContext(browser_context());
+  Profile* profile = Profile::FromBrowserContext(browser_context());
   if (profile->IsGuestSession()) {
     profiles::CloseProfileWindows(profile);
   } else {
@@ -310,7 +314,7 @@ ExtensionFunction::ResponseAction RuntimePrivateGetUserProfilesFunction::Run() {
   bool active_only = params->active_only ? *params->active_only : false;
 
   // Find the active entry.
-  Profile *profile = Profile::FromBrowserContext(browser_context());
+  Profile* profile = Profile::FromBrowserContext(browser_context());
   ProfileAttributesEntry* active_entry =
       storage.GetProfileAttributesWithPath(profile->GetPath());
 
@@ -341,8 +345,8 @@ ExtensionFunction::ResponseAction RuntimePrivateGetUserProfilesFunction::Run() {
       std::string custom_avatar = ::vivaldi::GetImagePathFromProfilePath(
           vivaldiprefs::kVivaldiProfileImagePath, profile.path);
       if (!custom_avatar.empty()) {
-        // We set the path here, then convert it to base64 in a separate operation
-        // below.
+        // We set the path here, then convert it to base64 in a separate
+        // operation below.
         profile.custom_avatar = custom_avatar;
         has_custom_avatars = true;
       }
@@ -357,7 +361,7 @@ ExtensionFunction::ResponseAction RuntimePrivateGetUserProfilesFunction::Run() {
       // We'll add a "fake" profile here.
       profile.active = true;
       profile.guest = true;
-      profile.name = "Guest"; // Translated on the js side.
+      profile.name = "Guest";  // Translated on the js side.
 
       profiles.push_back(std::move(profile));
     }
@@ -419,10 +423,10 @@ void RuntimePrivateGetUserProfilesFunction::ProcessImagesOnWorkerThread(
     profile.custom_avatar.swap(image_data);
   }
   content::GetUIThreadTaskRunner({})->PostTask(
-    FROM_HERE,
-    base::BindOnce(
-      &RuntimePrivateGetUserProfilesFunction::FinishProcessImagesOnUIThread, this,
-      std::move(profiles)));
+      FROM_HERE,
+      base::BindOnce(
+          &RuntimePrivateGetUserProfilesFunction::FinishProcessImagesOnUIThread,
+          this, std::move(profiles)));
 }
 
 void RuntimePrivateGetUserProfilesFunction::FinishProcessImagesOnUIThread(
@@ -444,7 +448,7 @@ RuntimePrivateOpenNamedProfileFunction::Run() {
   ProfileManager* manager = g_browser_process->profile_manager();
   ProfileAttributesStorage& storage = manager->GetProfileAttributesStorage();
   std::vector<ProfileAttributesEntry*> entries =
-    storage.GetAllProfilesAttributes();
+      storage.GetAllProfilesAttributes();
 
   for (auto* entry : entries) {
     if (entry->GetPath().AsUTF8Unsafe() == params->profile_path) {
@@ -474,7 +478,8 @@ RuntimePrivateGetUserProfileImagesFunction::Run() {
   std::vector<vivaldi::runtime_private::UserProfileImage> images;
   size_t placeholder_index = profiles::GetPlaceholderAvatarIndex();
 
-  for (size_t index = 0; index < profiles::GetDefaultAvatarIconCount(); index++) {
+  for (size_t index = 0; index < profiles::GetDefaultAvatarIconCount();
+       index++) {
     if (index == placeholder_index) {
       // Placeholder, skip it.
       continue;
@@ -482,7 +487,7 @@ RuntimePrivateGetUserProfileImagesFunction::Run() {
     vivaldi::runtime_private::UserProfileImage image;
 
     image.name = l10n_util::GetStringUTF8(
-      profiles::GetDefaultAvatarLabelResourceIDAtIndex(index));
+        profiles::GetDefaultAvatarLabelResourceIDAtIndex(index));
     image.index = index;
     // Avatar is served via a chrome://theme/ url.
     image.image = profiles::GetDefaultAvatarIconUrl(index);
@@ -526,7 +531,7 @@ RuntimePrivateUpdateActiveProfileFunction::Run() {
     if (params->create_desktop_icon.get()) {
       if (ProfileShortcutManager::IsFeatureEnabled()) {
         ProfileShortcutManager* shortcut_manager =
-          g_browser_process->profile_manager()->profile_shortcut_manager();
+            g_browser_process->profile_manager()->profile_shortcut_manager();
         DCHECK(shortcut_manager);
 
         if (*params->create_desktop_icon.get()) {
@@ -551,8 +556,7 @@ RuntimePrivateGetProfileDefaultsFunction::Run() {
   return RespondNow(ArgumentList(Results::Create(name)));
 }
 
-ExtensionFunction::ResponseAction
-RuntimePrivateCreateProfileFunction::Run() {
+ExtensionFunction::ResponseAction RuntimePrivateCreateProfileFunction::Run() {
   using vivaldi::runtime_private::CreateProfile::Params;
   namespace Results = vivaldi::runtime_private::CreateProfile::Results;
 
@@ -593,13 +597,6 @@ void RuntimePrivateCreateProfileFunction::OnProfileCreated(
       CreateShortcutAndShowSuccess(create_shortcut, profile);
       break;
     }
-    case Profile::CREATE_STATUS_CANCELED:
-    case Profile::CREATE_STATUS_REMOTE_FAIL:
-    case Profile::MAX_CREATE_STATUS: {
-      NOTREACHED();
-      Respond(ArgumentList(Results::Create(false)));
-      break;
-    }
   }
 }
 
@@ -610,7 +607,7 @@ void RuntimePrivateCreateProfileFunction::CreateShortcutAndShowSuccess(
     DCHECK(ProfileShortcutManager::IsFeatureEnabled());
     if (ProfileShortcutManager::IsFeatureEnabled()) {
       ProfileShortcutManager* shortcut_manager =
-        g_browser_process->profile_manager()->profile_shortcut_manager();
+          g_browser_process->profile_manager()->profile_shortcut_manager();
       DCHECK(shortcut_manager);
       if (shortcut_manager)
         shortcut_manager->CreateProfileShortcut(profile->GetPath());
@@ -660,8 +657,8 @@ RuntimePrivateGetProfileStatisticsFunction::Run() {
   base::FilePath profile_path =
       base::FilePath::FromUTF8Unsafe(params->profile_path);
 
-  Profile* profile = g_browser_process->profile_manager()->
-    GetProfileByPath(profile_path);
+  Profile* profile =
+      g_browser_process->profile_manager()->GetProfileByPath(profile_path);
 
   if (profile) {
     GatherStatistics(profile);
@@ -705,8 +702,8 @@ void RuntimePrivateGetProfileStatisticsFunction::GetProfileStatsCallback(
   }
 }
 
-// MaybeScheduleProfileForDeletion does not consistently call the callback, so we
-// can't rely on it being called.
+// MaybeScheduleProfileForDeletion does not consistently call the callback, so
+// we can't rely on it being called.
 namespace runtime_api {
 void DeleteProfileCallback(std::unique_ptr<ScopedKeepAlive> keep_alive,
                            Profile* profile) {
@@ -714,8 +711,7 @@ void DeleteProfileCallback(std::unique_ptr<ScopedKeepAlive> keep_alive,
 }
 }  // namespace runtime_api
 
-ExtensionFunction::ResponseAction
-RuntimePrivateDeleteProfileFunction::Run() {
+ExtensionFunction::ResponseAction RuntimePrivateDeleteProfileFunction::Run() {
   namespace Results = vivaldi::runtime_private::DeleteProfile::Results;
   using vivaldi::runtime_private::DeleteProfile::Params;
 
@@ -723,7 +719,7 @@ RuntimePrivateDeleteProfileFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   base::FilePath profile_path =
-    base::FilePath::FromUTF8Unsafe(params->profile_path);
+      base::FilePath::FromUTF8Unsafe(params->profile_path);
 
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   Profile* profile = profile_manager->GetProfile(profile_path);
@@ -753,7 +749,7 @@ RuntimePrivateHasDesktopShortcutFunction::Run() {
 #if defined(OS_WIN)
   if (ProfileShortcutManager::IsFeatureEnabled()) {
     ProfileShortcutManager* shortcut_manager =
-      g_browser_process->profile_manager()->profile_shortcut_manager();
+        g_browser_process->profile_manager()->profile_shortcut_manager();
     DCHECK(shortcut_manager);
     Profile* profile = Profile::FromBrowserContext(browser_context());
     shortcut_manager->HasProfileShortcuts(

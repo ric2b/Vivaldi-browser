@@ -133,6 +133,21 @@
         ]
       },
       {
+        "name": "getLastCheckTime",
+        "type": "function",
+        "description": "Get the date & time we last checked for an update. Returns milliseconds since epoch.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "type": "number",
+              "name": "result"
+            }
+          ]
+        }
+      },
+      {
         "name": "getUpdateStatus",
         "type": "function",
         "description": "Get a status of an update operation if any",
@@ -181,6 +196,12 @@
             "description": "The version of the update or an empty string if not known"
           }
         ]
+      },
+      {
+        "name": "onUpdaterDidNotFindUpdate",
+        "type": "function",
+        "description": "Fired if checkForUpdates did not find an update.",
+        "parameters": []
       },
       {
         "name": "onWillDownloadUpdate",

@@ -268,7 +268,7 @@ class VIZ_SERVICE_EXPORT OverlayProcessorUsingStrategy
 
   struct ProposedCandidateKeyHasher {
     std::size_t operator()(const ProposedCandidateKey& k) const {
-      return base::Hash(&k, sizeof(k));
+      return base::FastHash(base::as_bytes(base::make_span(&k, sizeof(k))));
     }
   };
 

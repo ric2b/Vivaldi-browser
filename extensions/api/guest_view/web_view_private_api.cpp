@@ -14,28 +14,31 @@
 #include "base/task/thread_pool.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/sessions/content/session_tab_helper.h"
-#include "content/browser/browser_plugin/browser_plugin_guest.h" // nogncheck
-#include "content/browser/renderer_host/dip_util.h" // nogncheck
-#include "content/browser/web_contents/web_contents_impl.h" // nogncheck
+#include "content/browser/browser_plugin/browser_plugin_guest.h"  // nogncheck
+#include "content/browser/renderer_host/dip_util.h"               // nogncheck
+#include "content/browser/web_contents/web_contents_impl.h"       // nogncheck
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
-#include "components/datasource/vivaldi_data_source_api.h"
-#include "extensions/api/history/history_private_api.h"
-#include "extensions/api/tabs/tabs_private_api.h"
-#include "extensions/helper/vivaldi_frame_observer.h"
-#include "extensions/schema/web_view_private.h"
-#include "renderer/vivaldi_render_messages.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "skia/ext/image_operations.h"
 #include "skia/ext/platform_canvas.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/scrollbar_size.h"
 #include "ui/gfx/skbitmap_operations.h"
+
+#include "components/datasource/vivaldi_data_source_api.h"
+#include "extensions/api/history/history_private_api.h"
+#include "extensions/api/tabs/tabs_private_api.h"
+#include "extensions/helper/vivaldi_frame_observer.h"
+#include "extensions/schema/web_view_private.h"
+#include "renderer/mojo/vivaldi_frame_service.mojom.h"
 
 using content::BrowserPluginGuest;
 using content::RenderViewHost;
@@ -51,15 +54,14 @@ namespace vivaldi {
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-bool VivaldiWebViewWithGuestFunction::PreRunValidation(
-    std::string* error) {
+bool VivaldiWebViewWithGuestFunction::PreRunValidation(std::string* error) {
   if (!ExtensionFunction::PreRunValidation(error))
     return false;
 
-  int instance_id = 0;
-  EXTENSION_FUNCTION_PRERUN_VALIDATE(args_->GetInteger(0, &instance_id));
+  absl::optional<int> instance_id = args_->GetList()[0].GetIfInt();
+  EXTENSION_FUNCTION_PRERUN_VALIDATE(instance_id.has_value());
   guest_ = WebViewGuest::From(render_frame_host()->GetProcess()->GetID(),
-                              instance_id);
+                              instance_id.value());
 
   if (!guest_) {
     *error = "Could not find guest";
@@ -227,15 +229,20 @@ ExtensionFunction::ResponseAction WebViewPrivateGetPageHistoryFunction::Run() {
   return RespondNow(ArgumentList(Results::Create(currentEntryIndex, history)));
 }
 
-ExtensionFunction::ResponseAction
-WebViewPrivateAllowBlockedInsecureContentFunction::Run() {
-  using vivaldi::web_view_private::AllowBlockedInsecureContent::Params;
+WebViewPrivateGetFocusedElementInfoFunction::
+    WebViewPrivateGetFocusedElementInfoFunction() {}
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
-  EXTENSION_FUNCTION_VALIDATE(params);
+WebViewPrivateGetFocusedElementInfoFunction::
+    ~WebViewPrivateGetFocusedElementInfoFunction() {}
 
-  guest_->AllowRunningInsecureContent();
-  return  RespondNow(NoArguments());
+void WebViewPrivateGetFocusedElementInfoFunction::FocusedElementInfoReceived(
+    const std::string& tagname,
+    const std::string& type,
+    bool editable,
+    const std::string& role) {
+  namespace Results = vivaldi::web_view_private::GetFocusedElementInfo::Results;
+
+  return Respond(ArgumentList(Results::Create(tagname, type, editable, role)));
 }
 
 ExtensionFunction::ResponseAction
@@ -246,28 +253,44 @@ WebViewPrivateGetFocusedElementInfoFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  ::vivaldi::VivaldiFrameObserver* frame_observer = nullptr;
-
   // A plugin like the PDF viewer will have its own embedded web contents,
   // so we need to explicitly get the focused one.
   WebContents *web_contents = guest_->web_contents();
   if (web_contents) {
     content::WebContentsImpl* impl =
         static_cast<content::WebContentsImpl*>(web_contents);
-    web_contents = impl->GetFocusedWebContents()->GetAsWebContents();
-    frame_observer =
-        ::vivaldi::VivaldiFrameObserver::FromWebContents(web_contents);
+    web_contents = impl->GetFocusedWebContents();
   }
 
-  std::string tagname = "";
-  std::string type = "";
-  bool editable = false;
-  std::string role = "";
-  if (frame_observer) {
-    frame_observer->GetFocusedElementInfo(&tagname, &type, &editable, &role);
+  if (!web_contents) {
+    return RespondNow(ArgumentList(Results::Create("", "", false, "")));
   }
-  return RespondNow(
-      ArgumentList(Results::Create(tagname, type, editable, role)));
+
+  content::RenderFrameHost* render_frame_host = web_contents->GetFocusedFrame();
+  if (!render_frame_host) {
+    render_frame_host = web_contents->GetMainFrame();
+  }
+
+  auto* rfhi = static_cast<content::RenderFrameHostImpl*>(render_frame_host);
+  rfhi->GetVivaldiFrameService()->GetFocusedElementInfo(
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+          base::BindOnce(&WebViewPrivateGetFocusedElementInfoFunction::
+                             FocusedElementInfoReceived,
+                         this),
+          "", "", false, ""));
+
+  return RespondLater();
+}
+
+ExtensionFunction::ResponseAction
+WebViewPrivateAllowBlockedInsecureContentFunction::Run() {
+  using vivaldi::web_view_private::AllowBlockedInsecureContent::Params;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  guest_->AllowRunningInsecureContent();
+  return RespondNow(NoArguments());
 }
 
 ExtensionFunction::ResponseAction WebViewPrivateSendRequestFunction::Run() {

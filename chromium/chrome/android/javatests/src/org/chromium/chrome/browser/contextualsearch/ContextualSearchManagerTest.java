@@ -19,7 +19,6 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.graphics.Point;
 import android.os.Build;
-import android.os.Build.VERSION_CODES;
 import android.os.SystemClock;
 import android.support.test.InstrumentationRegistry;
 import android.text.TextUtils;
@@ -126,9 +125,11 @@ import org.chromium.url.GURL;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
@@ -328,11 +329,14 @@ public class ContextualSearchManagerTest {
         mLatestSlowResolveSearch = null;
         if (mActionTester != null) mActionTester.tearDown();
         InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> forgetHistograms());
+        FeatureList.setTestFeatures(null);
+        CompositorAnimationHandler.setTestingMode(false);
     }
 
     private class ContextualSearchManagerTestHost implements ContextualSearchTestHost {
         @Override
         public void triggerNonResolve(String nodeId) throws TimeoutException {
+            // TODO(donnd): remove support for the LiteralSearchTap Feature.
             if (mPolicy.isLiteralSearchTapEnabled()) {
                 clickWordNode(nodeId);
             } else if (!mPolicy.canResolveLongpress()) {
@@ -1454,10 +1458,10 @@ public class ContextualSearchManagerTest {
                         "Search.ContextualSearch.All.Searches", relatedSearchesCount));
         Assert.assertEquals(
                 "Failed to log the correct count of Related Searches suggestions clicked in the "
-                        + "Search.RelatedSearches.NumberOfSuggestionsClicked histogram!",
-                1,
+                        + "Search.RelatedSearches.NumberOfSuggestionsClicked2 histogram!",
+                relatedSearchesCount,
                 RecordHistogram.getHistogramTotalCountForTesting(
-                        "Search.RelatedSearches.NumberOfSuggestionsClicked"));
+                        "Search.RelatedSearches.NumberOfSuggestionsClicked2"));
         Assert.assertEquals("Failed to log all the right Related Searches chips as clicked in the "
                         + "Search.RelatedSearches.SelectedCarouselIndex histogram!",
                 relatedSearchesCount,
@@ -1540,7 +1544,7 @@ public class ContextualSearchManagerTest {
         RecordHistogram.forgetHistogramForTesting("Search.ContextualSearch.All.ResultsSeen");
         RecordHistogram.forgetHistogramForTesting("Search.ContextualSearch.All.Searches");
         RecordHistogram.forgetHistogramForTesting(
-                "Search.RelatedSearches.NumberOfSuggestionsClicked");
+                "Search.RelatedSearches.NumberOfSuggestionsClicked2");
         RecordHistogram.forgetHistogramForTesting("Search.RelatedSearches.SelectedCarouselIndex");
         RecordHistogram.forgetHistogramForTesting("Search.RelatedSearches.SelectedSuggestionIndex");
         RecordHistogram.forgetHistogramForTesting("Search.RelatedSearches.CTR");
@@ -1550,6 +1554,17 @@ public class ContextualSearchManagerTest {
         RecordHistogram.forgetHistogramForTesting("Search.RelatedSearches.CarouselScrollAndClick");
         RecordHistogram.forgetHistogramForTesting(
                 "Search.RelatedSearches.CarouselLastVisibleItemPosition");
+    }
+
+    /**
+     * Returns whether all the supported gestures for opted-in users trigger a Resolve request,
+     * aka intelligent search.
+     */
+    private boolean isConfigurationForResolvingGesturesOnly() {
+        // The current interpretation of the ability to resolve Longpress (which is forced by the
+        // Translations Feature as well as the LongpressResolve Feature) preserves a resolving Tap
+        // so there is no non-resolving gesture for opted-in users.
+        return mPolicy.canResolveLongpress();
     }
 
     //============================================================================================
@@ -1660,6 +1675,7 @@ public class ContextualSearchManagerTest {
     @Feature({"ContextualSearch"})
     @ParameterAnnotations.UseMethodParameter(FeatureParamProvider.class)
     public void testNonResolveTrigger(@EnabledFeature int enabledFeature) throws Exception {
+        if (isConfigurationForResolvingGesturesOnly()) return;
         triggerNonResolve("states");
 
         Assert.assertNull(mFakeServer.getSearchTermRequested());
@@ -1857,7 +1873,7 @@ public class ContextualSearchManagerTest {
         longPressNode("intelligence");
         Assert.assertEquals("Intelligence", getSelectedText());
         waitForPanelToPeek();
-        assertLoadedNoUrl();  // No load after long-press until opening panel.
+        assertLoadedNoUrl(); // No load (preload) after long-press until opening panel.
         clickNode("question-mark");
         waitForPanelToCloseAndSelectionEmpty();
         Assert.assertTrue(TextUtils.isEmpty(getSelectedText()));
@@ -2128,7 +2144,8 @@ public class ContextualSearchManagerTest {
                 tabCreatedHelper.notifyCalled();
             }
         };
-        sActivityTestRule.getActivity().getTabModelSelector().addObserver(observer);
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> sActivityTestRule.getActivity().getTabModelSelector().addObserver(observer));
         // Track User Actions
         mActionTester = new UserActionTester();
 
@@ -2160,7 +2177,9 @@ public class ContextualSearchManagerTest {
         assertUserActionRecorded("ContextualSearch.TabPromotion");
 
         // -------- CLEAN UP ---------
-        sActivityTestRule.getActivity().getTabModelSelector().removeObserver(observer);
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            sActivityTestRule.getActivity().getTabModelSelector().removeObserver(observer);
+        });
     }
 
     //============================================================================================
@@ -2528,8 +2547,9 @@ public class ContextualSearchManagerTest {
     @ParameterAnnotations.UseMethodParameter(FeatureParamProvider.class)
     public void testNotifyObserversAfterNonResolve(@EnabledFeature int enabledFeature)
             throws Exception {
+        if (isConfigurationForResolvingGesturesOnly()) return;
         TestContextualSearchObserver observer = new TestContextualSearchObserver();
-        mManager.addObserver(observer);
+        TestThreadUtils.runOnUiThreadBlocking(() -> mManager.addObserver(observer));
         triggerNonResolve("states");
         Assert.assertEquals(1, observer.getShowCount());
         Assert.assertEquals(0, observer.getHideCount());
@@ -2537,7 +2557,7 @@ public class ContextualSearchManagerTest {
         tapBasePageToClosePanel();
         Assert.assertEquals(1, observer.getShowCount());
         Assert.assertEquals(1, observer.getHideCount());
-        mManager.removeObserver(observer);
+        TestThreadUtils.runOnUiThreadBlocking(() -> mManager.removeObserver(observer));
     }
 
     /**
@@ -2555,7 +2575,7 @@ public class ContextualSearchManagerTest {
         // Mark the user undecided so we won't allow sending surroundings.
         mPolicy.overrideDecidedStateForTesting(false);
         TestContextualSearchObserver observer = new TestContextualSearchObserver();
-        mManager.addObserver(observer);
+        TestThreadUtils.runOnUiThreadBlocking(() -> mManager.addObserver(observer));
         triggerNonResolve("states");
         Assert.assertEquals(1, observer.getShowRedactedCount());
         Assert.assertEquals(1, observer.getShowCount());
@@ -2565,7 +2585,7 @@ public class ContextualSearchManagerTest {
         Assert.assertEquals(1, observer.getShowRedactedCount());
         Assert.assertEquals(1, observer.getShowCount());
         Assert.assertEquals(1, observer.getHideCount());
-        mManager.removeObserver(observer);
+        TestThreadUtils.runOnUiThreadBlocking(() -> mManager.removeObserver(observer));
     }
 
     /**
@@ -2580,7 +2600,7 @@ public class ContextualSearchManagerTest {
     public void testNotifyObserversAfterResolve(@EnabledFeature int enabledFeature)
             throws Exception {
         TestContextualSearchObserver observer = new TestContextualSearchObserver();
-        mManager.addObserver(observer);
+        TestThreadUtils.runOnUiThreadBlocking(() -> mManager.addObserver(observer));
         simulateResolveSearch("states");
         Assert.assertEquals(1, observer.getShowCount());
         Assert.assertEquals(0, observer.getHideCount());
@@ -2588,7 +2608,7 @@ public class ContextualSearchManagerTest {
         tapBasePageToClosePanel();
         Assert.assertEquals(1, observer.getShowCount());
         Assert.assertEquals(1, observer.getHideCount());
-        mManager.removeObserver(observer);
+        TestThreadUtils.runOnUiThreadBlocking(() -> mManager.removeObserver(observer));
     }
 
     /**
@@ -2618,7 +2638,7 @@ public class ContextualSearchManagerTest {
     public void testNotifyObserversOnClearSelectionAfterLongpress(
             @EnabledFeature int enabledFeature) throws Exception {
         TestContextualSearchObserver observer = new TestContextualSearchObserver();
-        mManager.addObserver(observer);
+        TestThreadUtils.runOnUiThreadBlocking(() -> mManager.addObserver(observer));
         longPressNode("states");
         Assert.assertEquals(0, observer.getHideCount());
 
@@ -2631,7 +2651,7 @@ public class ContextualSearchManagerTest {
         waitForPanelToClose();
         Assert.assertEquals(1, observer.getShowCount());
         Assert.assertEquals(1, observer.getHideCount());
-        mManager.removeObserver(observer);
+        TestThreadUtils.runOnUiThreadBlocking(() -> mManager.removeObserver(observer));
     }
 
     /**
@@ -3378,6 +3398,7 @@ public class ContextualSearchManagerTest {
     public void testNetworkDisconnectedDeactivatesSearch(@EnabledFeature int enabledFeature)
             throws Exception {
         setOnlineStatusAndReload(false);
+        // We use the longpress gesture here because unlike Tap it's never suppressed.
         longPressNodeWithoutWaiting("states");
         waitForSelectActionBarVisible();
         // Verify the panel didn't open.  It should open by now if CS has not been disabled.
@@ -3504,7 +3525,7 @@ public class ContextualSearchManagerTest {
     @ParameterAnnotations.UseMethodParameter(FeatureParamProvider.class)
     @DisableIf.Build(sdk_is_greater_than = Build.VERSION_CODES.O, message = "crbug.com/1075895")
     @DisabledTest(message = "Flaky https://crbug.com/1127796")
-    public void testQuickActionUrl_Longpress(@EnabledFeature int enabledFeature) throws Exception {
+    public void testQuickActionUrl(@EnabledFeature int enabledFeature) throws Exception {
         final String testUrl = mTestServer.getURL("/chrome/test/data/android/google.html");
 
         // Simulate a resolving search to show the Bar, then set the quick action data.
@@ -3767,7 +3788,7 @@ public class ContextualSearchManagerTest {
             throws Exception {
         mPolicy.overrideDecidedStateForTesting(true);
         TestContextualSearchObserver observer = new TestContextualSearchObserver();
-        mManager.addObserver(observer);
+        TestThreadUtils.runOnUiThreadBlocking(() -> mManager.addObserver(observer));
 
         simulateSlowResolveSearch("states");
         simulateSlowResolveFinished();
@@ -3777,7 +3798,7 @@ public class ContextualSearchManagerTest {
         Assert.assertEquals("United States".length(), observer.getLastShownLength());
         Assert.assertEquals(2, observer.getShowCount());
         Assert.assertEquals(1, observer.getHideCount());
-        mManager.removeObserver(observer);
+        TestThreadUtils.runOnUiThreadBlocking(() -> mManager.removeObserver(observer));
     }
 
     /** Asserts that the given value is either 1 or 2.  Helpful for flaky tests. */
@@ -3796,7 +3817,7 @@ public class ContextualSearchManagerTest {
         FeatureList.setTestFeatures(ENABLE_NONE);
 
         TestContextualSearchObserver observer = new TestContextualSearchObserver();
-        mManager.addObserver(observer);
+        TestThreadUtils.runOnUiThreadBlocking(() -> mManager.addObserver(observer));
 
         clickWordNode("search");
         Assert.assertEquals(1, observer.getShowCount());
@@ -3810,7 +3831,7 @@ public class ContextualSearchManagerTest {
         // tests.  See crbug.com/776541.
         assertValueIs1or2(observer.getShowCount());
         Assert.assertEquals(1, observer.getHideCount());
-        mManager.removeObserver(observer);
+        TestThreadUtils.runOnUiThreadBlocking(() -> mManager.removeObserver(observer));
     }
 
     /**
@@ -3916,10 +3937,8 @@ public class ContextualSearchManagerTest {
     @Test
     @SmallTest
     @Feature({"ContextualSearch"})
-    @DisableIf.Build(sdk_is_less_than = VERSION_CODES.O,
-            message = "Flaky < P, https://crbug.com/1048827; Flaky on P, crbug.com/1181088")
-    public void
-    testLongpressExtendingSelectionExactResolve() throws Exception {
+    @DisabledTest(message = "https://crbug.com/1048827, https://crbug.com/1181088")
+    public void testLongpressExtendingSelectionExactResolve() throws Exception {
         // Enabling Translations implicitly enables Longpress too.
         FeatureList.setTestFeatures(ENABLE_TRANSLATIONS);
 
@@ -3958,7 +3977,6 @@ public class ContextualSearchManagerTest {
     @SmallTest
     @Feature({"ContextualSearch"})
     public void testRelatedSearchesItemNotSelected() throws Exception {
-        FeatureList.setTestFeatures(ENABLE_RELATED_SEARCHES_IN_PANEL);
         mPolicy.overrideAllowSendingPageUrlForTesting(true);
         FakeResolveSearch fakeSearch = simulateResolveSearch("intelligence");
         Assert.assertFalse("Related Searches should have been requested but were not!",
@@ -3979,7 +3997,6 @@ public class ContextualSearchManagerTest {
     @Feature({"ContextualSearch"})
     @DisableIf.Build(sdk_is_greater_than = Build.VERSION_CODES.O, message = "crbug.com/1182040")
     public void testRelatedSearchesItemSelected() throws Exception {
-        FeatureList.setTestFeatures(ENABLE_RELATED_SEARCHES_IN_PANEL);
         mFakeServer.reset();
         FakeResolveSearch fakeSearch = simulateResolveSearch("intelligence");
         ResolvedSearchTerm resolvedSearchTerm = fakeSearch.getResolvedSearchTerm();
@@ -3989,12 +4006,12 @@ public class ContextualSearchManagerTest {
         tapPeekingBarToExpandAndAssert();
 
         // Select a Related Searches suggestion.
-        RelatedSearchesControl relatedSearchesControl = mPanel.getRelatedSearchesInContentControl();
+        RelatedSearchesControl relatedSearchesControl = mPanel.getRelatedSearchesInBarControl();
         final int chipToSelect = 2;
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> relatedSearchesControl.selectChipForTest(chipToSelect));
         Assert.assertEquals("The Related Searches query was not shown in the Bar!",
-                "Related Search 3", mPanel.getSearchBarControl().getSearchTerm());
+                "Selection Related 3", mPanel.getSearchBarControl().getSearchTerm());
 
         // Collapse the panel back to the peeking state
         peekPanel();
@@ -4123,6 +4140,38 @@ public class ContextualSearchManagerTest {
         // Close the panel
         closePanel();
         // TODO(donnd): Validate UMA metrics once we log in-bar selections.
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"ContextualSearch"})
+    public void testRelatedSearchesInBarForDefinitionCard() throws Exception {
+        CompositorAnimationHandler.setTestingMode(true);
+        FeatureList.setTestFeatures(ENABLE_RELATED_SEARCHES_IN_BAR);
+        mFakeServer.reset();
+        // Do a normal search without Related Searches or Definition cards.
+        simulateResolveSearch("search");
+        float normalHeight = mPanel.getHeight();
+
+        // Simulate a response that includes both a definition and Related Searches
+        List<String> inBarSuggestions = new ArrayList<String>();
+        inBarSuggestions.add("Related Suggestion 1");
+        inBarSuggestions.add("Related Suggestion 2");
+        TestThreadUtils.runOnUiThreadBlocking(
+                ()
+                        -> mPanel.onSearchTermResolved("obscure · əbˈskyo͝or", null, null,
+                                QuickActionCategory.NONE, CardTag.CT_DEFINITION, inBarSuggestions,
+                                false /* showDefaultSearchInBar */,
+                                null /* relatedSearchesInContent */,
+                                false /* showDefaultSearchInContent */));
+        boolean didPanelGetTaller = mPanel.getHeight() > normalHeight;
+        Assert.assertTrue(
+                "Related Searches should show in a taller Bar when there's a definition card, "
+                        + "but they did not!",
+                didPanelGetTaller);
+        // Clean up
+        closePanel();
+        CompositorAnimationHandler.setTestingMode(false);
     }
 
     // --------------------------------------------------------------------------------------------

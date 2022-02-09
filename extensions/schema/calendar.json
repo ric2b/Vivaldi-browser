@@ -138,9 +138,9 @@
             "description": "When this notification should fire. In milliseconds since the epoch."
           },
           "period": {
-            "type": "integer",
+            "type": "number",
             "optional": true,
-            "description": "If not null, the notification will repeat and will fire again in period minutes."
+            "description": "If not null, when the notification will fire. In milliseconds since the epoch."
           },
           "delay": {
             "type": "integer",
@@ -1476,9 +1476,9 @@
                 "description": "When the notification should fire. In milliseconds since the epoch."
               },
               "period": {
-                "type": "integer",
+                "type": "number",
                 "optional": true,
-                "description": "If not null, the notification will repeat and will fire again in period minutes."
+                "description": "If not null, when the notification will fire. In milliseconds since the epoch."
               },
               "delay": {
                 "type": "integer",
@@ -1529,9 +1529,9 @@
                 "description": "When the notification should fire. In milliseconds since the epoch."
               },
               "period": {
-                "type": "integer",
+                "type": "number",
                 "optional": true,
-                "description": "If not null, the notification will repeat and will fire again in period minutes."
+                "description": "If not null, when the notification will fire. In milliseconds since the epoch."
               },
               "delay": {
                 "type": "integer",

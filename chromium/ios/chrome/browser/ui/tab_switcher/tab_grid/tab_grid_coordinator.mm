@@ -24,6 +24,7 @@
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_interaction_controller.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/commands/bookmarks_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
@@ -164,6 +165,7 @@
                      forProtocol:@protocol(ApplicationSettingsCommands)];
     [_dispatcher startDispatchingToTarget:browsingDataCommandEndpoint
                               forProtocol:@protocol(BrowsingDataCommands)];
+
     _regularBrowser = regularBrowser;
     _incognitoBrowser = incognitoBrowser;
 
@@ -212,6 +214,10 @@
                            browser:incognitoBrowser
                           delegate:self];
     [self.incognitoSnackbarCoordinator start];
+
+    [incognitoBrowser->GetCommandDispatcher()
+        startDispatchingToTarget:[self bookmarkInteractionController]
+                     forProtocol:@protocol(BookmarksCommands)];
   }
 
   if ([self isThumbStripEnabled]) {
@@ -250,6 +256,8 @@
 - (void)stopChildCoordinatorsWithCompletion:(ProceduralBlock)completion {
   // A modal may be presented on top of the Recent Tabs or tab grid.
   [self.baseViewController dismissModals];
+  self.baseViewController.tabGridMode = TabGridModeNormal;
+
   [self.actionSheetCoordinator stop];
   self.actionSheetCoordinator = nil;
   [self.sharingCoordinator stop];
@@ -687,6 +695,13 @@
                                                      delegate:self];
   [self.incognitoSnackbarCoordinator start];
 
+  [_regularBrowser->GetCommandDispatcher()
+      startDispatchingToTarget:[self bookmarkInteractionController]
+                   forProtocol:@protocol(BookmarksCommands)];
+  [_incognitoBrowser->GetCommandDispatcher()
+      startDispatchingToTarget:[self bookmarkInteractionController]
+                   forProtocol:@protocol(BookmarksCommands)];
+
   SceneState* sceneState =
       SceneStateBrowserAgent::FromBrowser(self.regularBrowser)->GetSceneState();
   [sceneState addObserver:self];
@@ -726,6 +741,7 @@
   // TODO(crbug.com/845192) : RecentTabsTableViewController behaves like a
   // coordinator and that should be factored out.
   [self.baseViewController.remoteTabsViewController dismissModals];
+  self.baseViewController.remoteTabsViewController.browser = nil;
   [self.remoteTabsMediator disconnect];
   self.remoteTabsMediator = nil;
   [self.actionSheetCoordinator stop];
@@ -1024,6 +1040,12 @@
   } else {
     [self.regularTabsMediator closeItemWithID:identifier];
   }
+}
+
+- (void)selectTabs {
+  base::RecordAction(
+      base::UserMetricsAction("MobileTabGridTabContextMenuSelectTabs"));
+  self.baseViewController.tabGridMode = TabGridModeSelection;
 }
 
 - (void)removeSessionAtTableSectionWithIdentifier:(NSInteger)sectionIdentifier {

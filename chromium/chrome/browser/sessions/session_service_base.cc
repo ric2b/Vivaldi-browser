@@ -657,6 +657,7 @@ void SessionServiceBase::ScheduleCommand(
       !is_closing_command) {
     ScheduleResetCommands();
   }
+  DidScheduleCommand();
 }
 
 bool SessionServiceBase::ShouldTrackChangesToWindow(
@@ -674,8 +675,10 @@ bool SessionServiceBase::ShouldTrackBrowser(Browser* browser) const {
   // Never track app popup windows that do not have a trusted source (i.e.
   // popup windows spawned by an app). If this logic changes, be sure to also
   // change SessionRestoreImpl::CreateRestoredBrowser().
-  if (browser->deprecated_is_app() && !browser->is_trusted_source())
+  if ((browser->is_type_app() || browser->is_type_app_popup()) &&
+      !browser->is_trusted_source()) {
     return false;
+  }
 
   if (vivaldi::IsVivaldiRunning() && !ShouldTrackVivaldiBrowser(browser)) {
     return false;

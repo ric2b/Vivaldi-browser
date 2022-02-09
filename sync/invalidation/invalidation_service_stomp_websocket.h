@@ -9,6 +9,8 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/websocket.mojom.h"
 

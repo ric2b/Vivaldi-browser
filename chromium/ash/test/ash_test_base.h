@@ -28,6 +28,7 @@
 #include "ui/aura/client/window_types.h"
 #include "ui/aura/env.h"
 #include "ui/display/display.h"
+#include "ui/events/event_constants.h"
 #include "ui/events/test/event_generator.h"
 
 namespace aura {
@@ -70,7 +71,6 @@ class AmbientAshTestHelper;
 class AppListTestHelper;
 class AshTestHelper;
 class Shelf;
-class TestScreenshotDelegate;
 class TestShellDelegate;
 class TestSystemTrayClient;
 class UnifiedSystemTray;
@@ -189,6 +189,9 @@ class AshTestBase : public testing::Test {
   bool TestIfMouseWarpsAt(ui::test::EventGenerator* event_generator,
                           const gfx::Point& point_in_screen);
 
+  // Presses and releases a key to simulate typing one character.
+  void PressAndReleaseKey(ui::KeyboardCode key_code, int flags = ui::EF_NONE);
+
   // Moves the mouse to the center of the view and generates a left button click
   // event.
   void SimulateMouseClickAt(ui::test::EventGenerator* event_generator,
@@ -227,8 +230,6 @@ class AshTestBase : public testing::Test {
                    const std::string& path,
                    const base::Value& value);
 
-  TestScreenshotDelegate* GetScreenshotDelegate();
-
   TestSessionControllerClient* GetSessionControllerClient();
 
   TestSystemTrayClient* GetSystemTrayClient();
@@ -243,8 +244,19 @@ class AshTestBase : public testing::Test {
 
   // Simulates a user sign-in. It creates a new user session, adds it to
   // existing user sessions and makes it the active user session.
+  //
+  // For convenience |user_email| is used to create an |AccountId|. For testing
+  // behavior where |AccountId|s are compared, prefer the method of the same
+  // name that takes an |AccountId| created with a valid storage key instead.
+  // See the documentation for|AccountId::GetUserEmail| for discussion.
   void SimulateUserLogin(
       const std::string& user_email,
+      user_manager::UserType user_type = user_manager::USER_TYPE_REGULAR);
+
+  // Simulates a user sign-in. It creates a new user session, adds it to
+  // existing user sessions and makes it the active user session.
+  void SimulateUserLogin(
+      const AccountId& account_id,
       user_manager::UserType user_type = user_manager::USER_TYPE_REGULAR);
 
   // Simular to SimulateUserLogin but for a newly created user first ever login.

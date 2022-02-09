@@ -41,6 +41,10 @@ class COMPONENT_EXPORT(APP_UPDATE) AppRegistryCache {
     virtual void OnAppUpdate(const AppUpdate& update) = 0;
 
     // Called when the publisher for |app_type| has finished initiating apps.
+    // Note that this will not be called for app types initialized prior to this
+    // observer being registered. Observers should call
+    // AppRegistryCache::GetInitializedAppTypes() at the time of starting
+    // observation to get a set of the app types which have been initialized.
     virtual void OnAppTypeInitialized(apps::mojom::AppType app_type) {}
 
     // Called when the AppRegistryCache object (the thing that this observer
@@ -148,7 +152,7 @@ class COMPONENT_EXPORT(APP_UPDATE) AppRegistryCache {
   // false (and not call f). The AppUpdate argument to f has the same semantics
   // as for ForEachApp, above.
   //
-  // f must be synchronous, and if it asynchronously calls ForEachApp again,
+  // f must be synchronous, and if it asynchronously calls ForOneApp again,
   // it's not guaranteed to see a consistent state.
   template <typename FunctionType>
   bool ForOneApp(const std::string& app_id, FunctionType f) {
@@ -169,7 +173,10 @@ class COMPONENT_EXPORT(APP_UPDATE) AppRegistryCache {
     return false;
   }
 
-  bool IsAppTypeInitialized(apps::mojom::AppType app_type);
+  // Returns the set of app types that have so far been initialized.
+  const std::set<apps::mojom::AppType>& GetInitializedAppTypes() const;
+
+  bool IsAppTypeInitialized(apps::mojom::AppType app_type) const;
 
  private:
   void DoOnApps(std::vector<apps::mojom::AppPtr> deltas);

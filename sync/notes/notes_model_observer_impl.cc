@@ -10,6 +10,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/engine/commit_and_get_updates_types.h"
+#include "components/sync/protocol/entity_specifics.pb.h"
 #include "notes/note_node.h"
 #include "notes/notes_model.h"
 #include "sync/notes/note_specifics_conversions.h"
@@ -60,10 +61,11 @@ void NotesModelObserverImpl::NotesNodeMoved(vivaldi::NotesModel* model,
   const syncer::UniquePosition unique_position =
       ComputePosition(*new_parent, new_index, sync_id);
 
-  sync_pb::EntitySpecifics specifics = CreateSpecificsFromNoteNode(node, model);
+  sync_pb::EntitySpecifics specifics =
+      CreateSpecificsFromNoteNode(node, model, unique_position.ToProto());
 
   note_tracker_->Update(entity, entity->metadata()->server_version(),
-                        modification_time, unique_position, specifics);
+                        modification_time, specifics);
   // Mark the entity that it needs to be committed.
   note_tracker_->IncrementSequenceNumber(entity);
   nudge_for_commit_closure_.Run();
@@ -77,7 +79,8 @@ void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* model,
   const syncer::UniquePosition unique_position =
       ComputePosition(*parent, index, node->guid().AsLowercaseString());
 
-  sync_pb::EntitySpecifics specifics = CreateSpecificsFromNoteNode(node, model);
+  sync_pb::EntitySpecifics specifics =
+      CreateSpecificsFromNoteNode(node, model, unique_position.ToProto());
 
   // It is possible that a created note was restored after deletion and
   // the tombstone was not committed yet. In that case the existing entity
@@ -95,11 +98,11 @@ void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* model,
     CHECK(!entity->note_node()) << "Added note with duplicate GUID";
     note_tracker_->UndeleteTombstoneForNoteNode(entity, node);
     note_tracker_->Update(entity, entity->metadata()->server_version(),
-                          creation_time, unique_position, specifics);
+                          creation_time, specifics);
   } else {
     entity = note_tracker_->Add(node, node->guid().AsLowercaseString(),
                                 syncer::kUncommittedVersion, creation_time,
-                                unique_position, specifics);
+                                specifics);
   }
 
   // Mark the entity that it needs to be committed.
@@ -164,7 +167,8 @@ void NotesModelObserverImpl::NotesNodeChanged(vivaldi::NotesModel* model,
     return;
   }
 
-  sync_pb::EntitySpecifics specifics = CreateSpecificsFromNoteNode(node, model);
+  sync_pb::EntitySpecifics specifics = CreateSpecificsFromNoteNode(
+      node, model, entity->metadata()->unique_position());
 
   // TODO(crbug.com/516866): The below CHECKs are added to debug some crashes.
   // Should be removed after figuring out the reason for the crash.
@@ -173,11 +177,8 @@ void NotesModelObserverImpl::NotesNodeChanged(vivaldi::NotesModel* model,
     // the data. We could hit this code path without having actual changes
     return;
   }
-  note_tracker_->Update(
-      entity, entity->metadata()->server_version(),
-      /*modification_time=*/base::Time::Now(),
-      syncer::UniquePosition::FromProto(entity->metadata()->unique_position()),
-      specifics);
+  note_tracker_->Update(entity, entity->metadata()->server_version(),
+                        /*modification_time=*/base::Time::Now(), specifics);
   // Mark the entity that it needs to be committed.
   note_tracker_->IncrementSequenceNumber(entity);
   nudge_for_commit_closure_.Run();
@@ -219,10 +220,10 @@ void NotesModelObserverImpl::NotesNodeChildrenReordered(
                    : syncer::UniquePosition::After(position, suffix);
 
     const sync_pb::EntitySpecifics specifics =
-        CreateSpecificsFromNoteNode(child.get(), model);
+        CreateSpecificsFromNoteNode(child.get(), model, position.ToProto());
 
     note_tracker_->Update(entity, entity->metadata()->server_version(),
-                          modification_time, position, specifics);
+                          modification_time, specifics);
     // Mark the entity that it needs to be committed.
     note_tracker_->IncrementSequenceNumber(entity);
   }

@@ -46,7 +46,7 @@ class VivaldiSyncServiceImpl : public syncer::SyncServiceImpl {
  private:
   friend class VivaldiSyncUIHelper;
 
-  void ShutdownImpl(syncer::ShutdownReason reason) override;
+  void ResetEngine(syncer::ShutdownReason reason) override;
   void OnEngineInitialized(
       const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>&
           debug_info_listener,

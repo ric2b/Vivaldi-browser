@@ -44,7 +44,6 @@
 #include "browser/vivaldi_browser_finder.h"
 #include "components/datasource/vivaldi_data_source_api.h"
 #include "extensions/tools/vivaldi_tools.h"
-#include "renderer/vivaldi_render_messages.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
@@ -259,6 +258,12 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureUIFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);
 
+  VivaldiBrowserWindow* window =
+      VivaldiBrowserWindow::FromId(params->params.window_id);
+  if (!window) {
+    return RespondNow(Error("No such window"));
+  }
+
   if (params->params.save_file_pattern) {
     format_.save_file_pattern = *params->params.save_file_pattern;
   }
@@ -285,12 +290,8 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureUIFunction::Run() {
     format_.copy_to_clipboard = *params->params.copy_to_clipboard;
   }
 
-  content::WebContents* web_contents = GetSenderWebContents();
-  Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(web_contents);
-  if (!browser)
-    return RespondNow(Error("Missing Browser"));
   content::WebContents* tab =
-      browser->tab_strip_model()->GetActiveWebContents();
+      window->browser()->tab_strip_model()->GetActiveWebContents();
   if (tab) {
     format_.url = tab->GetVisibleURL();
     format_.title = base::UTF16ToUTF8(tab->GetTitle());
@@ -298,9 +299,9 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureUIFunction::Run() {
 
   gfx::RectF rect(params->params.pos_x, params->params.pos_y,
                   params->params.width, params->params.height);
-  ::vivaldi::FromUICoordinates(web_contents, &rect);
+  ::vivaldi::FromUICoordinates(window->web_contents(), &rect);
   ::vivaldi::CapturePage::CaptureVisible(
-      web_contents, rect,
+      window->web_contents(), rect,
       base::BindOnce(&ThumbnailsCaptureUIFunction::OnCaptureDone, this));
   return did_respond() ? AlreadyResponded() : RespondLater();
 }

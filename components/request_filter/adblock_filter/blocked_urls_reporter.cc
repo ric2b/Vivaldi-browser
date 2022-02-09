@@ -31,7 +31,7 @@ void BlockedUrlsReporter::OnTrackerInfosUpdated(const RuleSource& source,
     return tracker.second.empty();
   });
 
-  for (const auto& tracker : new_tracker_infos.DictItems()) {
+  for (const auto tracker : new_tracker_infos.DictItems()) {
     tracker_infos[tracker.first][source.id] = tracker.second.Clone();
   }
 }

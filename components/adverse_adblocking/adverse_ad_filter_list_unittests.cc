@@ -39,7 +39,7 @@ class VivaldiSubresourceFilterTest
     AdverseAdFilterTestHarness::SetUp();
 
     VivaldiSubresourceFilterAdblockingThrottleManager::
-        CreateSubresourceFilterThrottleManagerForWebContents(web_contents());
+        CreateSubresourceFilterWebContentsHelper(web_contents());
     browser_content_client_.reset(new VivaldiContentBrowserClient);
     content::SetBrowserClientForTesting(browser_content_client_.get());
 

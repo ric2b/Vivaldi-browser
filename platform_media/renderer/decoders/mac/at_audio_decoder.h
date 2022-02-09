@@ -17,7 +17,6 @@
 
 #include "base/mac/scoped_typeref.h"
 #include "media/base/audio_decoder.h"
-#include "platform_media/renderer/decoders/mac/at_codec_helper.h"
 #include "platform_media/renderer/decoders/debug_buffer_logger.h"
 
 namespace base {
@@ -36,8 +35,9 @@ class AudioDiscardHelper;
 // dedicated implementations of ATCodecHelper.
 class MEDIA_EXPORT ATAudioDecoder : public AudioDecoder {
  public:
-  explicit ATAudioDecoder(
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
+  struct FormatDetection;
+
+  explicit ATAudioDecoder(scoped_refptr<base::SequencedTaskRunner> task_runner);
   ~ATAudioDecoder() override;
 
   // AudioDecoder implementation.
@@ -47,37 +47,25 @@ class MEDIA_EXPORT ATAudioDecoder : public AudioDecoder {
                   InitCB init_cb,
                   const OutputCB& output_cb,
                   const WaitingCB& waiting_for_decryption_key_cb) override;
-  void Decode(scoped_refptr<DecoderBuffer> buffer,
-              DecodeCB decode_cb) override;
+  void Decode(scoped_refptr<DecoderBuffer> buffer, DecodeCB decode_cb) override;
   void Reset(base::OnceClosure closure) override;
 
  private:
-  using ScopedAudioChannelLayoutPtr =
-      ATCodecHelper::ScopedAudioChannelLayoutPtr;
-
-  struct ScopedAudioConverterRefTraits {
-    static AudioConverterRef Retain(AudioConverterRef converter);
-    static void Release(AudioConverterRef converter);
-    static AudioConverterRef InvalidValue();
-  };
-  using ScopedAudioConverterRef =
-      base::ScopedTypeRef<AudioConverterRef, ScopedAudioConverterRefTraits>;
-
   bool InitializeConverter(const AudioStreamBasicDescription& input_format,
-                           ScopedAudioChannelLayoutPtr input_channel_layout);
+                           const std::vector<uint8_t>& full_extra_data);
+  void CloseConverter();
 
-  bool ConvertAudio(const scoped_refptr<DecoderBuffer>& input,
-                    size_t header_size,
-                    size_t max_output_frame_count);
+  bool DetectFormat(scoped_refptr<DecoderBuffer> buffer);
+  bool ConvertAudio(scoped_refptr<DecoderBuffer> buffer);
 
   void ResetTimestampState();
 
-  const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  const scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
   AudioDecoderConfig config_;
-  std::unique_ptr<ATCodecHelper> codec_helper_;
+  std::unique_ptr<FormatDetection> format_detection_;
   AudioStreamBasicDescription output_format_;
-  ScopedAudioConverterRef converter_;
+  AudioConverterRef converter_ = nullptr;
   std::deque<scoped_refptr<DecoderBuffer>> queued_input_;
   std::unique_ptr<AudioDiscardHelper> discard_helper_;
   OutputCB output_cb_;

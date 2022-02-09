@@ -125,12 +125,24 @@ UIColor* BackgroundColor() {
 
 - (void)presentSuggestedPasswords:(NSArray<id<Credential>>*)suggested
                      allPasswords:(NSArray<id<Credential>>*)all
+                    showSearchBar:(BOOL)showSearchBar
             showNewPasswordOption:(BOOL)showNewPasswordOption {
   self.suggestedPasswords = suggested;
   self.allPasswords = all;
   self.showNewPasswordOption = showNewPasswordOption;
   [self.tableView reloadData];
   [self.tableView layoutIfNeeded];
+
+  // Remove or add the search controller depending on whether there are
+  // passwords to search.
+  if (showSearchBar) {
+    self.navigationItem.searchController = self.searchController;
+  } else {
+    if (self.navigationItem.searchController.isActive) {
+      self.navigationItem.searchController.active = NO;
+    }
+    self.navigationItem.searchController = nil;
+  }
 }
 
 - (void)setTopPrompt:(NSString*)prompt {
@@ -245,6 +257,7 @@ UIColor* BackgroundColor() {
     didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
   if ([self isIndexPathNewPasswordRow:indexPath]) {
     [self.delegate newPasswordWasSelected];
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
     return;
   }
   UpdateUMACountForKey(app_group::kCredentialExtensionPasswordUseCount);
@@ -339,7 +352,7 @@ UIColor* BackgroundColor() {
 - (BOOL)isSuggestedPasswordSection:(int)section {
   int sections = [self numberOfSections];
   if ((sections == 2 && section == 0) ||
-      (sections == 1 && self.suggestedPasswords.count)) {
+      (sections == 1 && [self numberOfRowsInSuggestedPasswordSection])) {
     return YES;
   } else {
     return NO;

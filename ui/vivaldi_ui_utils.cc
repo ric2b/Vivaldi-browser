@@ -82,8 +82,8 @@ VivaldiBrowserWindow* GetActiveAppWindow() {
 
 VivaldiBrowserWindow* GetLastActiveMainWindow() {
   BrowserList* browser_list = BrowserList::GetInstance();
-  for (auto i = browser_list->begin_last_active();
-        i != browser_list->end_last_active(); ++i) {
+  for (auto i = browser_list->begin_browsers_ordered_by_activation();
+       i != browser_list->end_browsers_ordered_by_activation(); ++i) {
     VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromBrowser(*i);
     if (window && IsMainVivaldiBrowserWindow(window))
       return window;

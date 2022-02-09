@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2017-2021 Vivaldi Technologies AS. All rights reserved
 
 // Defines all the command-line switches used by Vivaldi.
 
@@ -13,6 +13,10 @@ const char kAutoTestMode[] = "auto-test-mode";
 const char kDebugVivaldi[] = "debug-vivaldi";
 const char kDisableVivaldi[] = "disable-vivaldi";
 const char kRunningVivaldi[] = "running-vivaldi";
+
+// Disable platform media IPC demuxer and rely instead on FmpegDemuxer and
+// individual codecs to work together.
+const char kVivaldiDisableIPCDemuxer[] = "disable-ipc-demuxer";
 
 // Use this on Mac to force a particular media pipeline implementation. The
 // alloweed values are player to force older AVPlayer based code and reader to
@@ -37,5 +41,11 @@ const char kLaunchUpdater[] = "launch-updater";
 // This will delay exit with a minute to be able to test the dialog that opens
 // on startup if Vivaldi is already running.
 const char kTestAlreadyRunningDialog[] = "test-already-running-dialog";
+
+// Alternative language list url for translations.
+const char kTranslateLanguageListUrl[] = "translate-language-list-url";
+
+// Alternative translation server url.
+const char kTranslateServerUrl[] = "translate-server-url";
 
 }  // namespace switches

@@ -18,8 +18,9 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/memory_usage_estimator.h"
 #include "components/sync/base/time.h"
-#include "components/sync/base/unique_position.h"
 #include "components/sync/engine/entity_data.h"
+#include "components/sync/protocol/entity_specifics.pb.h"
+#include "components/sync/protocol/notes_model_metadata.pb.h"
 #include "components/sync/protocol/proto_memory_estimations.h"
 #include "components/sync_bookmarks/switches.h"
 #include "notes/note_node.h"
@@ -74,15 +75,11 @@ bool SyncedNoteTracker::Entity::IsUnsynced() const {
   return metadata_->sequence_number() > metadata_->acked_sequence_number();
 }
 
-bool SyncedNoteTracker::Entity::MatchesDataIgnoringParent(
+bool SyncedNoteTracker::Entity::MatchesDataPossiblyIncludingParent(
     const syncer::EntityData& data) const {
   if (metadata_->is_deleted() || data.is_deleted()) {
     // In case of deletion, no need to check the specifics.
     return metadata_->is_deleted() == data.is_deleted();
-  }
-  if (!syncer::UniquePosition::FromProto(metadata_->unique_position())
-           .Equals(data.unique_position)) {
-    return false;
   }
   return MatchesSpecificsHash(data.specifics);
 }
@@ -129,7 +126,7 @@ std::unique_ptr<SyncedNoteTracker> SyncedNoteTracker::CreateEmpty(
     sync_pb::ModelTypeState model_type_state) {
   // base::WrapUnique() used because the constructor is private.
   return base::WrapUnique(new SyncedNoteTracker(
-      std::move(model_type_state), /*notes_full_title_reuploaded=*/false,
+      std::move(model_type_state), /*notes_reuploaded=*/false,
       /*last_sync_time=*/base::Time::Now()));
 }
 
@@ -144,21 +141,20 @@ SyncedNoteTracker::CreateFromNotesModelAndMetadata(
     return nullptr;
   }
 
-  // When the reupload feature is enabled and disabled again, there may occur
-  // new entities which weren't reuploaded.
-  const bool notes_full_title_reuploaded =
-      model_metadata.notes_full_title_reuploaded() &&
-      base::FeatureList::IsEnabled(switches::kSyncReuploadBookmarkFullTitles);
-
   // If the field is not present, |last_sync_time| will be initialized with the
   // Unix epoch.
   const base::Time last_sync_time =
       syncer::ProtoTimeToTime(model_metadata.last_sync_time());
 
+  // When the reupload feature is enabled and disabled again, there may occur
+  // new entities which weren't reuploaded.
+  const bool notes_reuploaded =
+      model_metadata.notes_hierarchy_fields_reuploaded() &&
+      base::FeatureList::IsEnabled(switches::kSyncReuploadBookmarks);
+
   // base::WrapUnique() used because the constructor is private.
-  auto tracker = base::WrapUnique(
-      new SyncedNoteTracker(model_metadata.model_type_state(),
-                            notes_full_title_reuploaded, last_sync_time));
+  auto tracker = base::WrapUnique(new SyncedNoteTracker(
+      model_metadata.model_type_state(), notes_reuploaded, last_sync_time));
 
   bool is_not_corrupted = tracker->InitEntitiesFromModelAndMetadata(
       model, std::move(model_metadata));
@@ -172,8 +168,8 @@ SyncedNoteTracker::CreateFromNotesModelAndMetadata(
 
 SyncedNoteTracker::~SyncedNoteTracker() = default;
 
-void SyncedNoteTracker::SetNotesFullTitleReuploaded() {
-  notes_full_title_reuploaded_ = true;
+void SyncedNoteTracker::SetNotesReuploaded() {
+  notes_reuploaded_ = true;
 }
 
 const SyncedNoteTracker::Entity* SyncedNoteTracker::GetEntityForSyncId(
@@ -209,10 +205,12 @@ const SyncedNoteTracker::Entity* SyncedNoteTracker::Add(
     const std::string& sync_id,
     int64_t server_version,
     base::Time creation_time,
-    const syncer::UniquePosition& unique_position,
     const sync_pb::EntitySpecifics& specifics) {
   DCHECK_GT(specifics.ByteSize(), 0);
   DCHECK(note_node);
+  DCHECK(specifics.has_notes());
+  DCHECK(note_node->is_permanent_node() ||
+         specifics.notes().has_unique_position());
 
   // Note that this gets computed for permanent nodes too.
   syncer::ClientTagHash client_tag_hash =
@@ -226,7 +224,7 @@ const SyncedNoteTracker::Entity* SyncedNoteTracker::Add(
   metadata->set_modification_time(syncer::TimeToProtoTime(creation_time));
   metadata->set_sequence_number(0);
   metadata->set_acked_sequence_number(0);
-  *metadata->mutable_unique_position() = unique_position.ToProto();
+  *metadata->mutable_unique_position() = specifics.notes().unique_position();
   metadata->set_client_tag_hash(client_tag_hash.value());
   HashSpecifics(specifics, metadata->mutable_specifics_hash());
   auto entity = std::make_unique<Entity>(note_node, std::move(metadata));
@@ -248,17 +246,18 @@ const SyncedNoteTracker::Entity* SyncedNoteTracker::Add(
 void SyncedNoteTracker::Update(const Entity* entity,
                                int64_t server_version,
                                base::Time modification_time,
-                               const syncer::UniquePosition& unique_position,
                                const sync_pb::EntitySpecifics& specifics) {
   DCHECK_GT(specifics.ByteSize(), 0);
   DCHECK(entity);
+  DCHECK(specifics.has_notes());
+  DCHECK(specifics.notes().has_unique_position());
 
   Entity* mutable_entity = AsMutableEntity(entity);
   mutable_entity->metadata()->set_server_version(server_version);
   mutable_entity->metadata()->set_modification_time(
       syncer::TimeToProtoTime(modification_time));
   *mutable_entity->metadata()->mutable_unique_position() =
-      unique_position.ToProto();
+      specifics.notes().unique_position();
   HashSpecifics(specifics,
                 mutable_entity->metadata()->mutable_specifics_hash());
   // TODO(crbug.com/516866): in case of conflict, the entity might exist in
@@ -320,6 +319,8 @@ void SyncedNoteTracker::Remove(const Entity* entity) {
 
 void SyncedNoteTracker::IncrementSequenceNumber(const Entity* entity) {
   DCHECK(entity);
+  DCHECK(!entity->note_node() || !entity->note_node()->is_permanent_node());
+
   // TODO(crbug.com/516866): Update base hash specifics here if the entity is
   // not already out of sync.
   AsMutableEntity(entity)->metadata()->set_sequence_number(
@@ -328,7 +329,7 @@ void SyncedNoteTracker::IncrementSequenceNumber(const Entity* entity) {
 
 sync_pb::NotesModelMetadata SyncedNoteTracker::BuildNoteModelMetadata() const {
   sync_pb::NotesModelMetadata model_metadata;
-  model_metadata.set_notes_full_title_reuploaded(notes_full_title_reuploaded_);
+  model_metadata.set_notes_hierarchy_fields_reuploaded(notes_reuploaded_);
   model_metadata.set_last_sync_time(syncer::TimeToProtoTime(last_sync_time_));
 
   for (const std::pair<const std::string, std::unique_ptr<Entity>>& pair :
@@ -415,10 +416,10 @@ SyncedNoteTracker::GetEntitiesWithLocalChanges(size_t max_entries) const {
 }
 
 SyncedNoteTracker::SyncedNoteTracker(sync_pb::ModelTypeState model_type_state,
-                                     bool notes_full_title_reuploaded,
+                                     bool notes_reuploaded,
                                      base::Time last_sync_time)
     : model_type_state_(std::move(model_type_state)),
-      notes_full_title_reuploaded_(notes_full_title_reuploaded),
+      notes_reuploaded_(notes_reuploaded),
       last_sync_time_(last_sync_time) {}
 
 bool SyncedNoteTracker::InitEntitiesFromModelAndMetadata(
@@ -599,9 +600,8 @@ SyncedNoteTracker::ReorderUnsyncedEntitiesExceptDeletions(
 }
 
 bool SyncedNoteTracker::ReuploadNotesOnLoadIfNeeded() {
-  if (notes_full_title_reuploaded_ ||
-      !base::FeatureList::IsEnabled(
-          switches::kSyncReuploadBookmarkFullTitles)) {
+  if (notes_reuploaded_ ||
+      !base::FeatureList::IsEnabled(switches::kSyncReuploadBookmarks)) {
     return false;
   }
   for (const auto& sync_id_and_entity : sync_id_to_entities_map_) {
@@ -614,7 +614,6 @@ bool SyncedNoteTracker::ReuploadNotesOnLoadIfNeeded() {
     }
     IncrementSequenceNumber(entity);
   }
-  SetNotesFullTitleReuploaded();
   return true;
 }
 
@@ -671,12 +670,11 @@ void SyncedNoteTracker::UpdateUponCommitResponse(
     return;
   }
 
-  UpdateSyncIdForLocalCreationIfNeeded(mutable_entity, sync_id);
+  UpdateSyncIdIfNeeded(mutable_entity, sync_id);
 }
 
-void SyncedNoteTracker::UpdateSyncIdForLocalCreationIfNeeded(
-    const Entity* entity,
-    const std::string& sync_id) {
+void SyncedNoteTracker::UpdateSyncIdIfNeeded(const Entity* entity,
+                                             const std::string& sync_id) {
   DCHECK(entity);
 
   const std::string old_id = entity->metadata()->server_id();

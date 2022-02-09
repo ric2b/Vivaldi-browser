@@ -300,7 +300,12 @@ bool InitializeVideoToolboxInternal() {
           /*require_hardware=*/true, /*is_hbd=*/false, &callback, &session,
           &configured_size)) {
     DVLOG(1) << "Hardware H264 decoding with VideoToolbox is not supported";
+
+    // NOTE(igor@vivaldi.com): Software-only decoding on Mac is OK as we do not
+    // have access to other software-only decoders.
+#if !defined(USE_SYSTEM_PROPRIETARY_CODECS)
     return false;
+#endif
   }
 
   session.reset();
@@ -1484,9 +1489,17 @@ bool VTVideoDecodeAccelerator::ProcessFrame(const Frame& frame) {
 
     // Request new pictures.
     picture_size_ = frame.image_size;
+
     // TODO(https://crbug.com/1210994): Remove XRGB support, and expose only
     // PIXEL_FORMAT_NV12 and PIXEL_FORMAT_YUV420P10.
     picture_format_ = PIXEL_FORMAT_XRGB;
+    if (base::FeatureList::IsEnabled(kMultiPlaneVideoToolboxSharedImages)) {
+      // TODO(https://crbug.com/1233228): The UV planes of P010 frames cannot
+      // be represented in the current gfx::BufferFormat.
+      if (config_.profile != VP9PROFILE_PROFILE2)
+        picture_format_ = PIXEL_FORMAT_NV12;
+    }
+
     DVLOG(3) << "ProvidePictureBuffers(" << kNumPictureBuffers
              << frame.image_size.ToString() << ")";
     client_->ProvidePictureBuffers(kNumPictureBuffers, picture_format_, 1,

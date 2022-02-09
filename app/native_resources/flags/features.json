@@ -10,10 +10,11 @@
       "description": "Allow for CSS modifications set in appearance in settings.",
       "internal_value": false
     },
-    "install_pwa": {
-      "friendly_name": "Menu entries for installing Progressive Web Apps.",
-      "description": "Enables menu entries to do installation of Progressive Web Apps.",
-      "internal_value": true
+    "disable_ipc_demuxer": {
+      "friendly_name": "Always try hardware-assisted decoding of proprietary video formats.",
+      "description": "Assume that the system has hardware to assist decoding of proprietary video formats and always try to use it. Changes will take effect after restarting Vivaldi.",
+      "internal_value": false,
+      "os": "mac"
     }
   }
 }

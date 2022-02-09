@@ -13,10 +13,10 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_process_host.h"
-#include "extraparts/media_renderer_host_message_filter.h"
-#include "extraparts/vivaldi_browser_main_extra_parts.h"
+//#include "extraparts/media_renderer_host_message_filter.h"
 
 #include "browser/translate/vivaldi_translate_frame_binder.h"
+#include "extraparts/vivaldi_browser_main_extra_parts.h"
 
 VivaldiContentBrowserClient::VivaldiContentBrowserClient()
     : ChromeContentBrowserClient() {}
@@ -76,14 +76,6 @@ bool VivaldiContentBrowserClient::CanCommitURL(
     return true;
 
   return ChromeContentBrowserClient::CanCommitURL(process_host, url);
-}
-
-void VivaldiContentBrowserClient::RenderProcessWillLaunch(
-    content::RenderProcessHost* host) {
-  ChromeContentBrowserClient::RenderProcessWillLaunch(host);
-  int id = host->GetID();
-  Profile* profile = Profile::FromBrowserContext(host->GetBrowserContext());
-  host->AddFilter(new vivaldi::MediaRendererHostMessageFilter(id, profile));
 }
 
 #endif  // !OS_ANDROID

@@ -17,18 +17,6 @@
 #include "media/video/gpu_memory_buffer_video_frame_pool.h"
 #include "media/video/gpu_video_accelerator_factories.h"
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#if defined(OS_MAC)
-#include "platform_media/renderer/decoders/mac/at_audio_decoder.h"
-#include "platform_media/renderer/decoders/mac/viv_video_decoder.h"
-#endif
-#if defined(OS_WIN)
-#include "media/base/win/mf_helpers.h"
-#include "platform_media/renderer/decoders/win/wmf_audio_decoder.h"
-#include "platform_media/renderer/decoders/win/wmf_video_decoder.h"
-#endif
-#endif
-
 namespace media {
 
 #if defined(OS_ANDROID)
@@ -63,17 +51,6 @@ DefaultRendererFactory::CreateAudioDecoders(
   // Create our audio decoders and renderer.
   std::vector<std::unique_ptr<AudioDecoder>> audio_decoders;
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#if defined(OS_MAC)
-  audio_decoders.push_back(std::make_unique<ATAudioDecoder>(media_task_runner));
-#elif defined(OS_WIN)
-  //    RETURN_ON_FAILURE(InitializeMediaFoundation(),
-  //                      "Could not initialize Media Foundation", {});
-  audio_decoders.push_back(
-      std::make_unique<WMFAudioDecoder>(media_task_runner));
-#endif
-#endif
-
   decoder_factory_->CreateAudioDecoders(media_task_runner, media_log_,
                                         &audio_decoders);
   return audio_decoders;
@@ -91,19 +68,6 @@ DefaultRendererFactory::CreateVideoDecoders(
   decoder_factory_->CreateVideoDecoders(
       media_task_runner, gpu_factories, media_log_,
       std::move(request_overlay_info_cb), target_color_space, &video_decoders);
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#if defined(OS_MAC)
-  video_decoders.push_back(
-    VivVideoDecoder::Create(media_task_runner, media_log_));
-#endif // OS_MAC
-#if defined(OS_WIN)
-//  RETURN_ON_FAILURE(InitializeMediaFoundation(),
-//                    "Could not initialize Media Foundation", {});
-  video_decoders.push_back(
-      std::make_unique<WMFVideoDecoder>(media_task_runner));
-#endif // OS_WIN
-#endif // USE_SYSTEM_PROPRIETARY_CODECS
 
   return video_decoders;
 }

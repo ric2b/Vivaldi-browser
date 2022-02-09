@@ -113,7 +113,7 @@ public class TabListSceneLayer extends SceneLayer {
 
             if (ChromeApplicationImpl.isVivaldi()) urlBarBackgroundId = R.drawable.vivaldi_location_bar;
 
-            int defaultThemeColor = ChromeColors.getDefaultThemeColor(res, useIncognitoColors);
+            int defaultThemeColor = ChromeColors.getDefaultThemeColor(context, useIncognitoColors);
 
             int closeButtonColor = useIncognitoColors
                     ? Color.WHITE

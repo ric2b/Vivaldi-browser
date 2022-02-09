@@ -2,7 +2,7 @@
 
 #include "browser/stats_reporter_impl.h"
 
-#include "base/util/values/values_util.h"
+#include "base/json/values_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace vivaldi {
@@ -45,29 +45,29 @@ void ExpectReportingDataMatch(
               *pings_since_last_month ==
                   local_reporting_data.pings_since_last_month);
   absl::optional<base::Time> next_daily_ping =
-      util::ValueToTime(os_reporting_data.FindKey("next_daily_ping"));
+      base::ValueToTime(os_reporting_data.FindKey("next_daily_ping"));
   EXPECT_TRUE(next_daily_ping &&
               *next_daily_ping == local_reporting_data.next_pings.daily);
   absl::optional<base::Time> next_weekly_ping =
-      util::ValueToTime(os_reporting_data.FindKey("next_weekly_ping"));
+      base::ValueToTime(os_reporting_data.FindKey("next_weekly_ping"));
   EXPECT_TRUE(next_weekly_ping &&
               *next_weekly_ping == local_reporting_data.next_pings.weekly);
   absl::optional<base::Time> next_monthly_ping =
-      util::ValueToTime(os_reporting_data.FindKey("next_monthly_ping"));
+      base::ValueToTime(os_reporting_data.FindKey("next_monthly_ping"));
   EXPECT_TRUE(next_monthly_ping &&
               *next_monthly_ping == local_reporting_data.next_pings.monthly);
   absl::optional<base::Time> next_trimestrial_ping =
-      util::ValueToTime(os_reporting_data.FindKey("next_trimestrial_ping"));
+      base::ValueToTime(os_reporting_data.FindKey("next_trimestrial_ping"));
   EXPECT_TRUE(next_trimestrial_ping &&
               *next_trimestrial_ping ==
                   local_reporting_data.next_pings.trimestrial);
   absl::optional<base::Time> next_semestrial_ping =
-      util::ValueToTime(os_reporting_data.FindKey("next_semestrial_ping"));
+      base::ValueToTime(os_reporting_data.FindKey("next_semestrial_ping"));
   EXPECT_TRUE(next_semestrial_ping &&
               *next_semestrial_ping ==
                   local_reporting_data.next_pings.semestrial);
   absl::optional<base::Time> next_yearly_ping =
-      util::ValueToTime(os_reporting_data.FindKey("next_yearly_ping"));
+      base::ValueToTime(os_reporting_data.FindKey("next_yearly_ping"));
   EXPECT_TRUE(next_yearly_ping &&
               *next_yearly_ping == local_reporting_data.next_pings.yearly);
 }
@@ -213,25 +213,25 @@ TEST(StatsReporterTest, RejectEarlyAttempt) {
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 2);
   os_profile_reporting_data_json->SetKey(
       "installation_time",
-      util::TimeToValue(local_state_reporting_data.installation_time));
+      base::TimeToValue(local_state_reporting_data.installation_time));
   os_profile_reporting_data_json->SetKey(
       "next_daily_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.daily));
+      base::TimeToValue(local_state_reporting_data.next_pings.daily));
   os_profile_reporting_data_json->SetKey(
       "next_weekly_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.weekly));
+      base::TimeToValue(local_state_reporting_data.next_pings.weekly));
   os_profile_reporting_data_json->SetKey(
       "next_monthly_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.monthly));
+      base::TimeToValue(local_state_reporting_data.next_pings.monthly));
   os_profile_reporting_data_json->SetKey(
       "next_trimestrial_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.trimestrial));
+      base::TimeToValue(local_state_reporting_data.next_pings.trimestrial));
   os_profile_reporting_data_json->SetKey(
       "next_semestrial_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.semestrial));
+      base::TimeToValue(local_state_reporting_data.next_pings.semestrial));
   os_profile_reporting_data_json->SetKey(
       "next_yearly_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.yearly));
+      base::TimeToValue(local_state_reporting_data.next_pings.yearly));
 
   std::string request_url;
   std::string body;
@@ -285,25 +285,25 @@ TEST(StatsReporterTest, NewInstallation) {
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 2);
   os_profile_reporting_data_json->SetKey(
       "installation_time",
-      util::TimeToValue(time - base::TimeDelta::FromDays(5)));
+      base::TimeToValue(time - base::TimeDelta::FromDays(5)));
   os_profile_reporting_data_json->SetKey(
       "next_daily_ping",
-      util::TimeToValue(time + base::TimeDelta::FromHours(2)));
+      base::TimeToValue(time + base::TimeDelta::FromHours(2)));
   os_profile_reporting_data_json->SetKey(
       "next_weekly_ping",
-      util::TimeToValue(time + base::TimeDelta::FromDays(2)));
+      base::TimeToValue(time + base::TimeDelta::FromDays(2)));
   os_profile_reporting_data_json->SetKey(
       "next_monthly_ping",
-      util::TimeToValue(time + base::TimeDelta::FromDays(23)));
+      base::TimeToValue(time + base::TimeDelta::FromDays(23)));
   os_profile_reporting_data_json->SetKey(
       "next_trimestrial_ping",
-      util::TimeToValue(time + base::TimeDelta::FromDays(84)));
+      base::TimeToValue(time + base::TimeDelta::FromDays(84)));
   os_profile_reporting_data_json->SetKey(
       "next_semestrial_ping",
-      util::TimeToValue(time + base::TimeDelta::FromDays(176)));
+      base::TimeToValue(time + base::TimeDelta::FromDays(176)));
   os_profile_reporting_data_json->SetKey(
       "next_yearly_ping",
-      util::TimeToValue(time + base::TimeDelta::FromDays(360)));
+      base::TimeToValue(time + base::TimeDelta::FromDays(360)));
 
   std::string request_url;
   std::string body;
@@ -396,25 +396,25 @@ TEST(StatsReporterTest, MovedStandalone) {
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 6);
   os_profile_reporting_data_json->SetKey(
       "installation_time",
-      util::TimeToValue(time - base::TimeDelta::FromDays(365)));
+      base::TimeToValue(time - base::TimeDelta::FromDays(365)));
   os_profile_reporting_data_json->SetKey(
       "next_daily_ping",
-      util::TimeToValue(time + base::TimeDelta::FromHours(7)));
+      base::TimeToValue(time + base::TimeDelta::FromHours(7)));
   os_profile_reporting_data_json->SetKey(
       "next_weekly_ping",
-      util::TimeToValue(time + base::TimeDelta::FromDays(5)));
+      base::TimeToValue(time + base::TimeDelta::FromDays(5)));
   os_profile_reporting_data_json->SetKey(
       "next_monthly_ping",
-      util::TimeToValue(time + base::TimeDelta::FromDays(30)));
+      base::TimeToValue(time + base::TimeDelta::FromDays(30)));
   os_profile_reporting_data_json->SetKey(
       "next_trimestrial_ping",
-      util::TimeToValue(time + base::TimeDelta::FromDays(90)));
+      base::TimeToValue(time + base::TimeDelta::FromDays(90)));
   os_profile_reporting_data_json->SetKey(
       "next_semestrial_ping",
-      util::TimeToValue(time + base::TimeDelta::FromDays(180)));
+      base::TimeToValue(time + base::TimeDelta::FromDays(180)));
   os_profile_reporting_data_json->SetKey(
       "next_yearly_ping",
-      util::TimeToValue(time + base::TimeDelta::FromDays(360)));
+      base::TimeToValue(time + base::TimeDelta::FromDays(360)));
 
   std::string request_url;
   std::string body;
@@ -532,25 +532,25 @@ TEST(StatsReporterTest, IgnoreLegacyUserId) {
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 2);
   os_profile_reporting_data_json->SetKey(
       "installation_time",
-      util::TimeToValue(local_state_reporting_data.installation_time));
+      base::TimeToValue(local_state_reporting_data.installation_time));
   os_profile_reporting_data_json->SetKey(
       "next_daily_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.daily));
+      base::TimeToValue(local_state_reporting_data.next_pings.daily));
   os_profile_reporting_data_json->SetKey(
       "next_weekly_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.weekly));
+      base::TimeToValue(local_state_reporting_data.next_pings.weekly));
   os_profile_reporting_data_json->SetKey(
       "next_monthly_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.monthly));
+      base::TimeToValue(local_state_reporting_data.next_pings.monthly));
   os_profile_reporting_data_json->SetKey(
       "next_trimestrial_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.trimestrial));
+      base::TimeToValue(local_state_reporting_data.next_pings.trimestrial));
   os_profile_reporting_data_json->SetKey(
       "next_semestrial_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.semestrial));
+      base::TimeToValue(local_state_reporting_data.next_pings.semestrial));
   os_profile_reporting_data_json->SetKey(
       "next_yearly_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.yearly));
+      base::TimeToValue(local_state_reporting_data.next_pings.yearly));
 
   std::string request_url;
   std::string body;
@@ -612,25 +612,25 @@ TEST(StatsReporterTest, DifferentPingsSinceLastMonth) {
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 7);
   os_profile_reporting_data_json->SetKey(
       "installation_time",
-      util::TimeToValue(time - base::TimeDelta::FromDays(365)));
+      base::TimeToValue(time - base::TimeDelta::FromDays(365)));
   os_profile_reporting_data_json->SetKey(
       "next_daily_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.daily));
+      base::TimeToValue(local_state_reporting_data.next_pings.daily));
   os_profile_reporting_data_json->SetKey(
       "next_weekly_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.weekly));
+      base::TimeToValue(local_state_reporting_data.next_pings.weekly));
   os_profile_reporting_data_json->SetKey(
       "next_monthly_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.monthly));
+      base::TimeToValue(local_state_reporting_data.next_pings.monthly));
   os_profile_reporting_data_json->SetKey(
       "next_trimestrial_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.trimestrial));
+      base::TimeToValue(local_state_reporting_data.next_pings.trimestrial));
   os_profile_reporting_data_json->SetKey(
       "next_semestrial_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.semestrial));
+      base::TimeToValue(local_state_reporting_data.next_pings.semestrial));
   os_profile_reporting_data_json->SetKey(
       "next_yearly_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.yearly));
+      base::TimeToValue(local_state_reporting_data.next_pings.yearly));
 
   std::string request_url;
   std::string body;
@@ -693,24 +693,24 @@ TEST(StatsReporterTest, OsMonthlyPingAhead) {
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 0);
   os_profile_reporting_data_json->SetKey(
       "installation_time",
-      util::TimeToValue(time - base::TimeDelta::FromDays(365)));
+      base::TimeToValue(time - base::TimeDelta::FromDays(365)));
   os_profile_reporting_data_json->SetKey("next_daily_ping",
-                                         util::TimeToValue(time));
+                                         base::TimeToValue(time));
   os_profile_reporting_data_json->SetKey(
       "next_weekly_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.weekly));
+      base::TimeToValue(local_state_reporting_data.next_pings.weekly));
   os_profile_reporting_data_json->SetKey(
       "next_monthly_ping",
-      util::TimeToValue(time + base::TimeDelta::FromDays(30)));
+      base::TimeToValue(time + base::TimeDelta::FromDays(30)));
   os_profile_reporting_data_json->SetKey(
       "next_trimestrial_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.trimestrial));
+      base::TimeToValue(local_state_reporting_data.next_pings.trimestrial));
   os_profile_reporting_data_json->SetKey(
       "next_semestrial_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.semestrial));
+      base::TimeToValue(local_state_reporting_data.next_pings.semestrial));
   os_profile_reporting_data_json->SetKey(
       "next_yearly_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.yearly));
+      base::TimeToValue(local_state_reporting_data.next_pings.yearly));
 
   std::string request_url;
   std::string body;
@@ -773,25 +773,25 @@ TEST(StatsReporterTest, LongRun) {
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 20);
   os_profile_reporting_data_json->SetKey(
       "installation_time",
-      util::TimeToValue(local_state_reporting_data.installation_time));
+      base::TimeToValue(local_state_reporting_data.installation_time));
   os_profile_reporting_data_json->SetKey(
       "next_daily_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.daily));
+      base::TimeToValue(local_state_reporting_data.next_pings.daily));
   os_profile_reporting_data_json->SetKey(
       "next_weekly_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.weekly));
+      base::TimeToValue(local_state_reporting_data.next_pings.weekly));
   os_profile_reporting_data_json->SetKey(
       "next_monthly_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.monthly));
+      base::TimeToValue(local_state_reporting_data.next_pings.monthly));
   os_profile_reporting_data_json->SetKey(
       "next_trimestrial_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.trimestrial));
+      base::TimeToValue(local_state_reporting_data.next_pings.trimestrial));
   os_profile_reporting_data_json->SetKey(
       "next_semestrial_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.semestrial));
+      base::TimeToValue(local_state_reporting_data.next_pings.semestrial));
   os_profile_reporting_data_json->SetKey(
       "next_yearly_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.yearly));
+      base::TimeToValue(local_state_reporting_data.next_pings.yearly));
 
   std::string request_url;
   std::string body;
@@ -1136,25 +1136,25 @@ TEST(StatsReporterTest, CorrectMonthSemestrialPing) {
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 10);
   os_profile_reporting_data_json->SetKey(
       "installation_time",
-      util::TimeToValue(local_state_reporting_data.installation_time));
+      base::TimeToValue(local_state_reporting_data.installation_time));
   os_profile_reporting_data_json->SetKey(
       "next_daily_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.daily));
+      base::TimeToValue(local_state_reporting_data.next_pings.daily));
   os_profile_reporting_data_json->SetKey(
       "next_weekly_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.weekly));
+      base::TimeToValue(local_state_reporting_data.next_pings.weekly));
   os_profile_reporting_data_json->SetKey(
       "next_monthly_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.monthly));
+      base::TimeToValue(local_state_reporting_data.next_pings.monthly));
   os_profile_reporting_data_json->SetKey(
       "next_trimestrial_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.trimestrial));
+      base::TimeToValue(local_state_reporting_data.next_pings.trimestrial));
   os_profile_reporting_data_json->SetKey(
       "next_semestrial_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.semestrial));
+      base::TimeToValue(local_state_reporting_data.next_pings.semestrial));
   os_profile_reporting_data_json->SetKey(
       "next_yearly_ping",
-      util::TimeToValue(local_state_reporting_data.next_pings.yearly));
+      base::TimeToValue(local_state_reporting_data.next_pings.yearly));
 
   std::string request_url;
   std::string body;

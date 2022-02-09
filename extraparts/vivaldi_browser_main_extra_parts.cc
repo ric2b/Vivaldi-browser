@@ -10,6 +10,7 @@
 #include "base/path_service.h"
 #include "browser/stats_reporter.h"
 #include "browser/translate/vivaldi_translate_client.h"
+#include "browser/vivaldi_runtime_feature.h"
 #include "calendar/calendar_service_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -28,7 +29,6 @@
 #include "contact/contact_service_factory.h"
 #include "content/public/browser/web_ui_controller_factory.h"
 #include "content/public/common/content_switches.h"
-#include "extensions/api/features/vivaldi_runtime_feature.h"
 #include "extensions/buildflags/buildflags.h"
 #include "notes/notes_factory.h"
 #include "ui/lazy_load_service_factory.h"
@@ -93,10 +93,10 @@ void VivaldiBrowserMainExtraParts::
   vivaldi::NotesModelFactory::GetInstance();
   calendar::CalendarServiceFactory::GetInstance();
   contact::ContactServiceFactory::GetInstance();
+  vivaldi_runtime_feature::Init();
 #endif
   VivaldiDataSourcesAPI::InitFactory();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  vivaldi_runtime_feature::Init();
   extensions::AutoUpdateAPI::Init();
   extensions::BookmarkContextMenuAPI::GetFactoryInstance();
   extensions::CalendarAPI::GetFactoryInstance();

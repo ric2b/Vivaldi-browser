@@ -45,7 +45,7 @@ class TabListContainerViewBinder {
         } else if (IS_INCOGNITO == propertyKey) {
             if (!ChromeApplicationImpl.isVivaldi())
             view.setBackgroundColor(ChromeColors.getPrimaryBackgroundColor(
-                    view.getResources(), model.get(IS_INCOGNITO)));
+                    view.getContext(), model.get(IS_INCOGNITO)));
         } else if (VISIBILITY_LISTENER == propertyKey) {
             view.setVisibilityListener(model.get(VISIBILITY_LISTENER));
         } else if (INITIAL_SCROLL_INDEX == propertyKey) {

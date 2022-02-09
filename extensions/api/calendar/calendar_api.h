@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 
+#include "base/scoped_observation.h"
 #include "calendar/calendar_model_observer.h"
 #include "calendar/calendar_service.h"
 #include "calendar/calendar_type.h"
@@ -31,16 +32,15 @@ using vivaldi::calendar::CalendarEvent;
 // events to the extension system.
 class CalendarEventRouter : public CalendarModelObserver {
  public:
-  explicit CalendarEventRouter(Profile* profile);
+  explicit CalendarEventRouter(Profile* profile,
+                               CalendarService* calendar_service);
   ~CalendarEventRouter() override;
 
  private:
   // Helper to actually dispatch an event to extension listeners.
-  void DispatchEvent(const std::string& event_name,
+  void DispatchEvent(Profile* profile,
+                     const std::string& event_name,
                      std::vector<base::Value> event_args);
-
-  content::BrowserContext* browser_context_;
-  CalendarService* model_;
 
   // CalendarModelObserver
   void OnEventCreated(CalendarService* service,
@@ -71,6 +71,10 @@ class CalendarEventRouter : public CalendarModelObserver {
 
   void ExtensiveCalendarChangesBeginning(CalendarService* model) override;
   void ExtensiveCalendarChangesEnded(CalendarService* model) override;
+
+  Profile* profile_;
+  base::ScopedObservation<calendar::CalendarService, CalendarModelObserver>
+      calendar_service_observation_{this};
 
   DISALLOW_COPY_AND_ASSIGN(CalendarEventRouter);
 };

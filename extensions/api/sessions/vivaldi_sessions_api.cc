@@ -33,6 +33,7 @@
 #include "content/public/browser/navigation_entry.h"
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/schema/vivaldi_sessions.h"
+#include "ui/vivaldi_browser_window.h"
 
 using extensions::vivaldi::sessions_private::SessionOpenOptions;
 
@@ -217,6 +218,12 @@ ExtensionFunction::ResponseAction SessionsPrivateOpenFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
+  VivaldiBrowserWindow* window =
+      VivaldiBrowserWindow::FromId(params->window_id);
+  if (!window) {
+    return RespondNow(Error("No such window"));
+  }
+
   base::ThreadRestrictions::ScopedAllowIO allow_io;
 
   ::vivaldi::SessionOptions opts;
@@ -224,7 +231,7 @@ ExtensionFunction::ResponseAction SessionsPrivateOpenFunction::Run() {
     opts.openInNewWindow_ = params->options->open_in_new_window;
   }
 
-  Profile* profile = Profile::FromBrowserContext(browser_context());
+  Profile* profile = window->GetProfile();
 
   // TODO(igor@vivaldi.com): consider switching to lastError error reporting.
   int error_code = SessionErrorCodes::kErrorFileMissing;
@@ -232,16 +239,9 @@ ExtensionFunction::ResponseAction SessionsPrivateOpenFunction::Run() {
   do {
     if (!base::PathExists(path))
       break;
-    content::WebContents* web_contents = GetSenderWebContents();
-    if (!web_contents)
-      break;
-    Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(
-        web_contents->GetOutermostWebContents());
-    if (!browser)
-      break;
 
     ::vivaldi::VivaldiSessionService service(profile);
-    if (!service.Load(path, browser, opts))
+    if (!service.Load(path, window->browser(), opts))
       break;
 
     error_code = SessionErrorCodes::kNoError;

@@ -26,10 +26,9 @@ namespace media {
 // A VideoDecoder that calls the macOS VideoToolbox to decode h.264 media
 class VivVideoDecoder : public VideoDecoder {
  public:
-
-  static std::unique_ptr<VideoDecoder>
-  Create(scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_,
-         MediaLog* media_log);
+  static std::unique_ptr<VideoDecoder> Create(
+      scoped_refptr<base::SequencedTaskRunner> task_runner,
+      MediaLog* media_log);
 
   ~VivVideoDecoder() override;
   static void DestroyAsync(std::unique_ptr<VivVideoDecoder>);
@@ -37,8 +36,8 @@ class VivVideoDecoder : public VideoDecoder {
   // media::VideoDecoder implementation.
   VideoDecoderType GetDecoderType() const override;
   void Output(void* source_frame_refcon,
-          OSStatus status,
-          CVImageBufferRef image_buffer);
+              OSStatus status,
+              CVImageBufferRef image_buffer);
   void Initialize(const VideoDecoderConfig& config,
                   bool low_delay,
                   CdmContext* cdm_context,
@@ -50,13 +49,11 @@ class VivVideoDecoder : public VideoDecoder {
   int GetMaxDecodeRequests() const override;
 
  private:
-  VivVideoDecoder(
-      scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_,
-      MediaLog* media_log);
+  VivVideoDecoder(scoped_refptr<base::SequencedTaskRunner> task_runner,
+                  MediaLog* media_log);
 
   bool FinishDelayedFrames();
-  void WriteToMediaLog(MediaLogMessageLevel level,
-                       const std::string& message);
+  void WriteToMediaLog(MediaLogMessageLevel level, const std::string& message);
   void NotifyEndOfBitstreamBuffer(int32_t bitstream_buffer_id);
 
   // VideoToolbox
@@ -95,11 +92,10 @@ class VivVideoDecoder : public VideoDecoder {
   // NotifyError() before returning false.
   bool ConfigureDecoder();
 
-  scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_;
+  scoped_refptr<base::SequencedTaskRunner> task_runner_;
   MediaLog* media_log_;
 
   bool has_error_ = false;
-
 
   InitCB init_cb_;
   OutputCB output_cb_;
@@ -160,7 +156,6 @@ class VivVideoDecoder : public VideoDecoder {
                     const std::unique_ptr<Frame>& rhs) const;
   };
 
-
   void DecodeTask(scoped_refptr<DecoderBuffer> buffer, Frame* frame);
   void DecodeDone(Frame* frame);
 
@@ -200,7 +195,8 @@ class VivVideoDecoder : public VideoDecoder {
   // Queue of decoded frames in presentation order.
   std::priority_queue<std::unique_ptr<Frame>,
                       std::vector<std::unique_ptr<Frame>>,
-                      FrameOrder> reorder_queue_;
+                      FrameOrder>
+      reorder_queue_;
 
   // Frames that have not yet been decoded, keyed by bitstream ID; maintains
   // ownership of Frame objects while they flow through VideoToolbox.

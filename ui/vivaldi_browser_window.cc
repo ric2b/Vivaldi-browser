@@ -39,7 +39,6 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/browser_window_state.h"
-#include "chrome/browser/ui/color_chooser.h"
 #include "chrome/browser/ui/find_bar/find_bar.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
@@ -61,6 +60,7 @@
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/browser/color_chooser.h"
 #include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/navigation_handle.h"
@@ -83,7 +83,6 @@
 #include "extensions/schema/vivaldi_utilities.h"
 #include "extensions/schema/window_private.h"
 #include "extensions/tools/vivaldi_tools.h"
-#include "renderer/vivaldi_render_messages.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "ui/devtools/devtools_connector.h"
 //#include "ui/gfx/geometry/rect.h"
@@ -256,6 +255,16 @@ VivaldiBrowserWindow* VivaldiBrowserWindow::FromBrowser(
   if (!browser || !browser->is_vivaldi())
     return nullptr;
   return static_cast<VivaldiBrowserWindow*>(browser->window());
+}
+
+VivaldiBrowserWindow* VivaldiBrowserWindow::FromId(SessionID::id_type window_id) {
+  Browser* browser = vivaldi::FindBrowserByWindowId(window_id);
+  VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromBrowser(browser);
+  if (window && !window->web_contents()) {
+    // Window is about to be destroyed, do not return it.
+    window = nullptr;
+  }
+  return window;
 }
 
 // static
@@ -1278,6 +1287,14 @@ VivaldiBrowserWindow::GetAutofillBubbleHandler() {
     autofill_bubble_handler_ = std::make_unique<VivaldiAutofillBubbleHandler>();
   }
   return autofill_bubble_handler_.get();
+}
+
+sharing_hub::ScreenshotCapturedBubble*
+VivaldiBrowserWindow::ShowScreenshotCapturedBubble(
+    content::WebContents* contents,
+    const gfx::Image& image,
+    sharing_hub::ScreenshotCapturedBubbleController* controller) {
+  return nullptr;
 }
 
 qrcode_generator::QRCodeGeneratorBubbleView*

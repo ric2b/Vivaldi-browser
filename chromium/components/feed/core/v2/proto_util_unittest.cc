@@ -48,6 +48,13 @@ TEST(ProtoUtilTest, CreateClientInfo) {
   EXPECT_EQ("en-US", result.locale());
 }
 
+TEST(ProtoUtilTest, ClientInfoStartSurface) {
+  RequestMetadata request_metadata;
+  request_metadata.chrome_info.start_surface = true;
+  feedwire::ClientInfo result = CreateClientInfo(request_metadata);
+  EXPECT_TRUE(result.chrome_client_info().start_surface());
+}
+
 TEST(ProtoUtilTest, DefaultCapabilities) {
   feedwire::FeedRequest request =
       CreateFeedQueryRefreshRequest(kForYouStream,
@@ -69,8 +76,8 @@ TEST(ProtoUtilTest, DefaultCapabilities) {
           feedwire::Capability::MATERIAL_NEXT_BASELINE,
           feedwire::Capability::UI_THEME_V2,
           feedwire::Capability::UNDO_FOR_DISMISS_COMMAND,
-          feedwire::Capability::PREFETCH_METADATA,
-          feedwire::Capability::SHARE));
+          feedwire::Capability::PREFETCH_METADATA, feedwire::Capability::SHARE,
+          feedwire::Capability::CONTENT_LIFETIME));
 }
 
 TEST(ProtoUtilTest, HeartsEnabled) {
@@ -115,7 +122,8 @@ TEST(ProtoUtilTest, DisableCapabilitiesWithFinch) {
           feedwire::Capability::MATERIAL_NEXT_BASELINE,
           feedwire::Capability::UI_THEME_V2,
           feedwire::Capability::UNDO_FOR_DISMISS_COMMAND,
-          feedwire::Capability::PREFETCH_METADATA));
+          feedwire::Capability::PREFETCH_METADATA,
+          feedwire::Capability::CONTENT_LIFETIME));
 }
 
 TEST(ProtoUtilTest, NoticeCardAcknowledged) {

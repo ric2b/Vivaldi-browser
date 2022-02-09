@@ -65,7 +65,7 @@ TaskManagerView* g_task_manager_view = nullptr;
 
 TaskManagerView::~TaskManagerView() {
   // Delete child views now, while our table model still exists.
-  RemoveAllChildViews(true);
+  RemoveAllChildViews();
 }
 
 // static

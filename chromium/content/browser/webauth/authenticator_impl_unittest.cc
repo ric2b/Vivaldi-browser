@@ -97,6 +97,7 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chromeos/dbus/tpm_manager/tpm_manager_client.h"
 #include "chromeos/dbus/u2f/u2f_client.h"
 #endif
 
@@ -482,6 +483,7 @@ class AuthenticatorTestBase : public RenderViewHostTestHarness {
     RenderViewHostTestHarness::SetUp();
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+    chromeos::TpmManagerClient::InitializeFake();
     chromeos::U2FClient::InitializeFake();
 #endif
 
@@ -501,6 +503,7 @@ class AuthenticatorTestBase : public RenderViewHostTestHarness {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     chromeos::U2FClient::Shutdown();
+    chromeos::TpmManagerClient::Shutdown();
 #endif
 #if defined(OS_WIN)
     AuthenticatorEnvironmentImpl::GetInstance()
@@ -1677,7 +1680,9 @@ class TestWebAuthenticationDelegate : public WebAuthenticationDelegate {
   bool ShouldPermitIndividualAttestation(
       content::BrowserContext* browser_context,
       const std::string& relying_party_id) override {
-    return permit_individual_attestation;
+    return permit_individual_attestation ||
+           (permit_individual_attestation_for_rp_id.has_value() &&
+            relying_party_id == *permit_individual_attestation_for_rp_id);
   }
 
   bool SupportsResidentKeys(RenderFrameHost*) override {
@@ -1704,6 +1709,9 @@ class TestWebAuthenticationDelegate : public WebAuthenticationDelegate {
   // Indicates whether individual attestation should be permitted by the
   // delegate.
   bool permit_individual_attestation = false;
+
+  // A specific RP ID for which individual attestation will be permitted.
+  absl::optional<std::string> permit_individual_attestation_for_rp_id;
 
   // Indicates whether resident key operations should be permitted by the
   // delegate.
@@ -2024,7 +2032,6 @@ class AuthenticatorContentBrowserClientTest : public AuthenticatorImplTest {
  protected:
   TestAuthenticatorContentBrowserClient test_client_;
 
- private:
   static const char* AttestationConveyancePreferenceToString(
       AttestationConveyancePreference v) {
     switch (v) {
@@ -2502,6 +2509,46 @@ TEST_F(AuthenticatorContentBrowserClientTest,
   };
 
   RunTestCases(kTests);
+}
+
+TEST_F(AuthenticatorContentBrowserClientTest,
+       GoogleLegacyAppidSupportEnterpriseAttestation) {
+  // When the googleLegacyAppidSupport extension is used, individual attestation
+  // decisions should key off the AppId, not the RP ID.
+  constexpr char kGstaticAppId[] =
+      "https://www.gstatic.com/securitykey/origins.json";
+  test_client_.GetTestWebAuthenticationDelegate()
+      ->permit_individual_attestation_for_rp_id = kGstaticAppId;
+
+  const char kStandardCommonName[] = "U2F Attestation";
+  const char kIndividualCommonName[] = "Individual Cert";
+  virtual_device_factory_->mutable_state()->attestation_cert_common_name =
+      kStandardCommonName;
+  virtual_device_factory_->mutable_state()
+      ->individual_attestation_cert_common_name = kIndividualCommonName;
+
+  NavigateAndCommit(GURL("https://accounts.google.com"));
+
+  PublicKeyCredentialCreationOptionsPtr options =
+      GetTestPublicKeyCredentialCreationOptions();
+  options->relying_party.id = "google.com";
+  options->google_legacy_app_id_support = true;
+  options->attestation = ::device::AttestationConveyancePreference::
+      kEnterpriseIfRPListedOnAuthenticator;
+
+  auto result = AuthenticatorMakeCredential(std::move(options));
+  ASSERT_EQ(result.status, AuthenticatorStatus::SUCCESS);
+
+  const device::AuthenticatorData auth_data =
+      AuthDataFromMakeCredentialResponse(result.response);
+  absl::optional<Value> attestation_value =
+      Reader::Read(result.response->attestation_object);
+  ASSERT_TRUE(attestation_value);
+  ASSERT_TRUE(attestation_value->is_map());
+  const auto& attestation = attestation_value->GetMap();
+
+  ExpectMapHasKeyWithStringValue(attestation, "fmt", "fido-u2f");
+  ExpectCertificateContainingSubstring(attestation, kIndividualCommonName);
 }
 
 TEST_F(AuthenticatorContentBrowserClientTest, BlockedAttestation) {
@@ -3682,9 +3729,6 @@ TEST_F(AuthenticatorImplTest, ExcludeListBatching) {
 }
 
 TEST_F(AuthenticatorImplTest, GetPublicKey) {
-  device::VirtualCtap2Device::Config config;
-  config.support_invalid_for_testing_algorithm = true;
-  virtual_device_factory_->SetCtap2Config(config);
   NavigateAndCommit(GURL(kTestOrigin1));
 
   static constexpr struct {
@@ -3696,6 +3740,15 @@ TEST_F(AuthenticatorImplTest, GetPublicKey) {
       {device::CoseAlgorithmIdentifier::kEdDSA, EVP_PKEY_ED25519},
       {device::CoseAlgorithmIdentifier::kInvalidForTesting, absl::nullopt},
   };
+
+  std::vector<device::CoseAlgorithmIdentifier> advertised_algorithms;
+  for (const auto& test : kTests) {
+    advertised_algorithms.push_back(test.algo);
+  }
+
+  device::VirtualCtap2Device::Config config;
+  config.advertised_algorithms = std::move(advertised_algorithms);
+  virtual_device_factory_->SetCtap2Config(config);
 
   for (const auto& test : kTests) {
     PublicKeyCredentialCreationOptionsPtr options =
@@ -3735,7 +3788,7 @@ TEST_F(AuthenticatorImplTest, AlgorithmsOmitted) {
 
   device::VirtualCtap2Device::Config config;
   // Remove the algorithms field from the getInfo.
-  config.advertised_algorithms.emplace(absl::nullopt);
+  config.advertised_algorithms.clear();
   virtual_device_factory_->SetCtap2Config(config);
   NavigateAndCommit(GURL(kTestOrigin1));
 
@@ -3778,8 +3831,6 @@ TEST_F(AuthenticatorImplTest, AlgorithmsOmitted) {
 TEST_F(AuthenticatorImplTest, VirtualAuthenticatorPublicKeyAlgos) {
   // Exercise all the public key types in the virtual authenticator for create()
   // and get().
-  device::VirtualCtap2Device::Config config;
-  virtual_device_factory_->SetCtap2Config(config);
   NavigateAndCommit(GURL(kTestOrigin1));
 
   static const struct {
@@ -3790,6 +3841,15 @@ TEST_F(AuthenticatorImplTest, VirtualAuthenticatorPublicKeyAlgos) {
       {device::CoseAlgorithmIdentifier::kRs256, EVP_sha256()},
       {device::CoseAlgorithmIdentifier::kEdDSA, nullptr},
   };
+
+  std::vector<device::CoseAlgorithmIdentifier> advertised_algorithms;
+  for (const auto& test : kTests) {
+    advertised_algorithms.push_back(test.algo);
+  }
+
+  device::VirtualCtap2Device::Config config;
+  config.advertised_algorithms = std::move(advertised_algorithms);
+  virtual_device_factory_->SetCtap2Config(config);
 
   for (const auto& test : kTests) {
     SCOPED_TRACE(static_cast<int>(test.algo));
@@ -5057,7 +5117,6 @@ TEST_F(PINAuthenticatorImplTest, MakeCredentialNoSupportedAlgorithm) {
       // The first config is a CTAP2 device that doesn't support the
       // kInvalidForTesting algorithm. A dummy touch should be requested in this
       // case.
-      config.support_invalid_for_testing_algorithm = false;
       virtual_device_factory_->SetCtap2Config(config);
     } else if (i == 1) {
       device::VirtualCtap2Device::Config config;
@@ -5065,9 +5124,10 @@ TEST_F(PINAuthenticatorImplTest, MakeCredentialNoSupportedAlgorithm) {
       // algorithm. Since the PIN is set, we might convert the makeCredential
       // request to U2F, but shouldn't because the algorithm cannot be
       // represented in U2F.
-      config.support_invalid_for_testing_algorithm = true;
       config.u2f_support = true;
       config.pin_support = true;
+      config.advertised_algorithms = {
+          device::CoseAlgorithmIdentifier::kInvalidForTesting};
       virtual_device_factory_->mutable_state()->pin = kTestPIN;
       virtual_device_factory_->mutable_state()->pin_retries =
           device::kMaxPinRetries;

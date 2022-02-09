@@ -98,7 +98,9 @@ public class FeedSwipeRefreshLayout extends SwipeRefreshLayout implements Scroll
     public void showIPH(UserEducationHelper helper) {
         ViewGroup contentContainer = mActivity.findViewById(android.R.id.content);
         if (contentContainer == null) return;
-        View toolbarView = contentContainer.findViewById(org.chromium.chrome.R.id.toolbar);
+        // Only toolbar_container view appears in both NTP and start surface.
+        View toolbarView =
+                contentContainer.findViewById(org.chromium.chrome.R.id.toolbar_container);
         if (toolbarView == null) return;
         helper.requestShowIPH(new IPHCommandBuilder(getContext().getResources(),
                 FeatureConstants.FEED_SWIPE_REFRESH_FEATURE, R.string.feed_swipe_refresh_iph,
@@ -161,6 +163,16 @@ public class FeedSwipeRefreshLayout extends SwipeRefreshLayout implements Scroll
                     break;
                 }
             }
+        }
+    }
+
+    @Override
+    public void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        // If the view is gone, i.e. switching to tab switcher mode, reset any effect that is still
+        // in progress.
+        if (visibility == View.GONE) {
+            reset();
         }
     }
 

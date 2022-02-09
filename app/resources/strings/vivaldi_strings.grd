@@ -134,6 +134,9 @@
       <message name="IDS_ABOUT_VERSION_COPYRIGHT" desc="Copyright information on the about pages">
         Copyright <ph name="YEAR">{0,date,y}<ex>2016</ex></ph> Vivaldi Technologies AS. All rights reserved.
       </message>
+      <message name="IDS_APP_SHORTCUTS_SUBDIR_NAME" desc="Name for the Vivaldi Apps Start Menu folder name.">
+        Vivaldi Apps
+      </message>
       <if expr="is_win">
         <!-- Vivaldi installer -->
         <message name="IDS_INSTALL_MODE_ADVANCED" desc="Text of the installer mode toggle button (Advanced/Simple)">
@@ -212,6 +215,6 @@
           Copyright <ph name="YEAR">$1</ph> Vivaldi Technologies AS. All rights reserved. &lt;a&gt;Privacy Policy&lt;/a&gt;
         </message>
       </if>
-     </messages>
+    </messages>
   </release>
 </grit>

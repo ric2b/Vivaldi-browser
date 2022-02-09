@@ -4,8 +4,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "chrome/browser/profiles/profile.h"
-//#include "components/adverse_adblocking/vivaldi_subresource_filter_throttle.h"
-#include "chrome/browser/subresource_filter/chrome_content_subresource_filter_throttle_manager_factory.h"
+#include "chrome/browser/subresource_filter/chrome_content_subresource_filter_web_contents_helper_factory.h"
 
 #include "components/adverse_adblocking/vivaldi_subresource_filter_throttle_manager.h"
 #include "components/adverse_adblocking/adverse_ad_filter_list.h"
@@ -24,7 +23,7 @@ namespace vivaldi {
 void VivaldiAttachTabHelpers(WebContents* web_contents) {
   if (vivaldi::IsVivaldiRunning() || vivaldi::ForcedVivaldiRunning()) {
     VivaldiSubresourceFilterAdblockingThrottleManager::
-        CreateSubresourceFilterThrottleManagerForWebContents(
+        CreateSubresourceFilterWebContentsHelper(
       web_contents);
 
     AdverseAdFilterListService* adblock_list =
@@ -34,7 +33,7 @@ void VivaldiAttachTabHelpers(WebContents* web_contents) {
         web_contents)
         ->set_adblock_list(adblock_list);
 
-    CreateSubresourceFilterThrottleManagerForWebContents(web_contents);
+    CreateSubresourceFilterWebContentsHelper(web_contents);
 
   }
 #if BUILDFLAG(ENABLE_EXTENSIONS)

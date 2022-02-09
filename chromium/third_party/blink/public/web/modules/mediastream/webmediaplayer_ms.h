@@ -23,8 +23,6 @@
 #include "third_party/blink/public/platform/web_media_player.h"
 #include "third_party/blink/public/platform/web_surface_layer_bridge.h"
 
-class VivaldiMediaElementEventDelegate;
-
 namespace media {
 class GpuMemoryBufferVideoFramePool;
 class MediaLog;
@@ -199,9 +197,7 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
   GetVideoFramePresentationMetadata() override;
 
   // Vivaldi:
-  VivaldiMediaElementEventDelegate* GetMediaElementEventDelegate() override;
-  void SetMediaElementEventDelegate(
-      std::unique_ptr<VivaldiMediaElementEventDelegate> delegate);
+  WebLocalFrame* VivaldiGetOwnerWebFrame() override;
 
  private:
   friend class WebMediaPlayerMSTest;
@@ -361,10 +357,6 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
   base::TimeDelta compositor_last_time_;
   base::TimeDelta audio_initial_time_;
   base::TimeDelta audio_last_time_;
-
-  // Vivaldi:
-  std::unique_ptr<VivaldiMediaElementEventDelegate>
-      vivaldi_media_element_event_delegate_;
 
   base::WeakPtr<WebMediaPlayerMS> weak_this_;
   base::WeakPtrFactory<WebMediaPlayerMS> weak_factory_{this};

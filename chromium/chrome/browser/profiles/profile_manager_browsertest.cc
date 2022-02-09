@@ -36,8 +36,8 @@
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/password_manager/core/browser/password_form.h"
-#include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
+#include "components/password_manager/core/browser/password_store_interface.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
@@ -71,7 +71,6 @@ void ProfileCreationComplete(base::OnceClosure completion_callback,
                              Profile* profile,
                              Profile::CreateStatus status) {
   ASSERT_NE(status, Profile::CREATE_STATUS_LOCAL_FAIL);
-  ASSERT_NE(status, Profile::CREATE_STATUS_REMOTE_FAIL);
   // No browser should have been created for this profile yet.
   EXPECT_EQ(chrome::GetBrowserCount(profile), 0U);
   EXPECT_EQ(chrome::GetTotalBrowserCount(), 1U);
@@ -572,7 +571,13 @@ IN_PROC_BROWSER_TEST_P(ProfileManagerBrowserTest, SwitchToProfile) {
 
 // Prepares the setup for AddMultipleProfiles test, creates multiple browser
 // windows with multiple browser windows.
-IN_PROC_BROWSER_TEST_P(ProfileManagerBrowserTest, PRE_AddMultipleProfiles) {
+// TODO(crbug.com/1243925): Fix and re-enable.
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#define MAYBE_PRE_AddMultipleProfiles DISABLED_PRE_AddMultipleProfiles
+#else
+#define MAYBE_PRE_AddMultipleProfiles PRE_AddMultipleProfiles
+#endif
+IN_PROC_BROWSER_TEST_P(ProfileManagerBrowserTest, MAYBE_PRE_AddMultipleProfiles) {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
 
   ProfileAttributesStorage& storage =
@@ -609,7 +614,13 @@ IN_PROC_BROWSER_TEST_P(ProfileManagerBrowserTest, PRE_AddMultipleProfiles) {
   EXPECT_EQ(path_profile2, browser_list->get(1)->profile()->GetPath());
 }
 
-IN_PROC_BROWSER_TEST_P(ProfileManagerBrowserTest, AddMultipleProfiles) {
+// TODO(crbug.com/1243925): Fix and re-enable.
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#define MAYBE_AddMultipleProfiles DISABLED_AddMultipleProfiles
+#else
+#define MAYBE_AddMultipleProfiles AddMultipleProfiles
+#endif
+IN_PROC_BROWSER_TEST_P(ProfileManagerBrowserTest, MAYBE_AddMultipleProfiles) {
   // Verifies that the browser doesn't crash when it is restarted.
 }
 
@@ -696,9 +707,10 @@ IN_PROC_BROWSER_TEST_P(ProfileManagerBrowserTest, DeletePasswords) {
   form.password_value = u"my_password";
   form.blocked_by_user = false;
 
-  scoped_refptr<password_manager::PasswordStore> password_store =
-      PasswordStoreFactory::GetForProfile(
-          profile, ServiceAccessType::EXPLICIT_ACCESS).get();
+  scoped_refptr<password_manager::PasswordStoreInterface> password_store =
+      PasswordStoreFactory::GetInterfaceForProfile(
+          profile, ServiceAccessType::EXPLICIT_ACCESS)
+          .get();
   ASSERT_TRUE(password_store.get());
 
   password_store->AddLogin(form);

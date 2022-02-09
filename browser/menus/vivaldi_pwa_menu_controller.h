@@ -8,14 +8,6 @@
 
 class Browser;
 
-namespace content {
-class WebContents;
-}
-
-namespace extensions {
-class Extension;
-}
-
 namespace ui {
 class SimpleMenuModel;
 }
@@ -25,7 +17,7 @@ namespace vivaldi {
 // Menu controller that deals with Progressive Web Apps.
 class PWAMenuController {
  public:
-  PWAMenuController(content::WebContents* web_contents);
+  PWAMenuController(Browser* browser);
 
   void PopulateModel(ui::SimpleMenuModel* menu_model);
   bool HandleCommand(int command_id);
@@ -35,15 +27,8 @@ class PWAMenuController {
   bool IsItemForCommandIdDynamic(int command_id) const;
   std::u16string GetLabelForCommandId(int command_id) const;
 
-
-
  private:
-  bool HasFeature();
-  const extensions::Extension* GetExtension() const;
-
-  content::WebContents* web_contents_;
   Browser* browser_;
-  bool enabled_;
 };
 
 }  // vivaldi

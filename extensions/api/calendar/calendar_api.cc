@@ -160,7 +160,7 @@ Notification CreateNotification(const NotificationRow& row) {
       new std::string(base::UTF16ToUTF8(row.description)));
   notification.when = MilliSecondsFromTime(row.when);
   notification.delay.reset(new int(row.delay));
-  notification.period.reset(new int(row.period));
+  notification.period.reset(new double(MilliSecondsFromTime(row.period)));
 
   return notification;
 }
@@ -252,15 +252,14 @@ Account GetAccountType(const AccountRow& row) {
   return account;
 }
 
-CalendarEventRouter::CalendarEventRouter(Profile* profile)
-    : browser_context_(profile),
-      model_(CalendarServiceFactory::GetForProfile(profile)) {
-  model_->AddObserver(this);
+CalendarEventRouter::CalendarEventRouter(Profile* profile,
+                                         CalendarService* calendar_service)
+    : profile_(profile) {
+  DCHECK(profile);
+  calendar_service_observation_.Observe(calendar_service);
 }
 
-CalendarEventRouter::~CalendarEventRouter() {
-  model_->RemoveObserver(this);
-}
+CalendarEventRouter::~CalendarEventRouter() {}
 
 void CalendarEventRouter::ExtensiveCalendarChangesBeginning(
     CalendarService* model) {}
@@ -327,7 +326,7 @@ void CalendarEventRouter::OnEventCreated(CalendarService* service,
   std::unique_ptr<CalendarEvent> createdEvent = CreateVivaldiEvent(event);
 
   std::vector<base::Value> args = OnEventCreated::Create(*createdEvent);
-  DispatchEvent(OnEventCreated::kEventName, std::move(args));
+  DispatchEvent(profile_, OnEventCreated::kEventName, std::move(args));
 }
 
 void CalendarEventRouter::OnEventDeleted(CalendarService* service,
@@ -335,7 +334,7 @@ void CalendarEventRouter::OnEventDeleted(CalendarService* service,
   std::unique_ptr<CalendarEvent> deletedEvent = CreateVivaldiEvent(event);
 
   std::vector<base::Value> args = OnEventRemoved::Create(*deletedEvent);
-  DispatchEvent(OnEventRemoved::kEventName, std::move(args));
+  DispatchEvent(profile_, OnEventRemoved::kEventName, std::move(args));
 }
 
 void CalendarEventRouter::OnEventChanged(CalendarService* service,
@@ -343,7 +342,7 @@ void CalendarEventRouter::OnEventChanged(CalendarService* service,
   std::unique_ptr<CalendarEvent> changedEvent = CreateVivaldiEvent(event);
 
   std::vector<base::Value> args = OnEventChanged::Create(*changedEvent);
-  DispatchEvent(OnEventChanged::kEventName, std::move(args));
+  DispatchEvent(profile_, OnEventChanged::kEventName, std::move(args));
 }
 
 void CalendarEventRouter::OnEventTypeCreated(
@@ -351,7 +350,7 @@ void CalendarEventRouter::OnEventTypeCreated(
     const calendar::EventTypeRow& row) {
   EventType createdEvent = GetEventType(row);
   std::vector<base::Value> args = OnEventTypeCreated::Create(createdEvent);
-  DispatchEvent(OnEventTypeCreated::kEventName, std::move(args));
+  DispatchEvent(profile_, OnEventTypeCreated::kEventName, std::move(args));
 }
 
 void CalendarEventRouter::OnEventTypeDeleted(
@@ -359,7 +358,7 @@ void CalendarEventRouter::OnEventTypeDeleted(
     const calendar::EventTypeRow& row) {
   EventType deletedEvent = GetEventType(row);
   std::vector<base::Value> args = OnEventTypeRemoved::Create(deletedEvent);
-  DispatchEvent(OnEventTypeRemoved::kEventName, std::move(args));
+  DispatchEvent(profile_, OnEventTypeRemoved::kEventName, std::move(args));
 }
 
 void CalendarEventRouter::OnEventTypeChanged(
@@ -367,28 +366,28 @@ void CalendarEventRouter::OnEventTypeChanged(
     const calendar::EventTypeRow& row) {
   EventType changedEvent = GetEventType(row);
   std::vector<base::Value> args = OnEventTypeChanged::Create(changedEvent);
-  DispatchEvent(OnEventTypeChanged::kEventName, std::move(args));
+  DispatchEvent(profile_, OnEventTypeChanged::kEventName, std::move(args));
 }
 
 void CalendarEventRouter::OnCalendarCreated(CalendarService* service,
                                             const CalendarRow& row) {
   Calendar createCalendar = GetCalendarItem(row);
   std::vector<base::Value> args = OnCalendarCreated::Create(createCalendar);
-  DispatchEvent(OnCalendarCreated::kEventName, std::move(args));
+  DispatchEvent(profile_, OnCalendarCreated::kEventName, std::move(args));
 }
 
 void CalendarEventRouter::OnCalendarDeleted(CalendarService* service,
                                             const CalendarRow& row) {
   Calendar deletedCalendar = GetCalendarItem(row);
   std::vector<base::Value> args = OnCalendarChanged::Create(deletedCalendar);
-  DispatchEvent(OnCalendarRemoved::kEventName, std::move(args));
+  DispatchEvent(profile_, OnCalendarRemoved::kEventName, std::move(args));
 }
 
 void CalendarEventRouter::OnCalendarChanged(CalendarService* service,
                                             const CalendarRow& row) {
   Calendar changedCalendar = GetCalendarItem(row);
   std::vector<base::Value> args = OnCalendarChanged::Create(changedCalendar);
-  DispatchEvent(OnCalendarChanged::kEventName, std::move(args));
+  DispatchEvent(profile_, OnCalendarChanged::kEventName, std::move(args));
 }
 
 void CalendarEventRouter::OnNotificationChanged(
@@ -397,22 +396,25 @@ void CalendarEventRouter::OnNotificationChanged(
   Notification changedNotification = CreateNotification(row);
   std::vector<base::Value> args =
       OnNotificationChanged::Create(changedNotification);
-  DispatchEvent(OnNotificationChanged::kEventName, std::move(args));
+  DispatchEvent(profile_, OnNotificationChanged::kEventName, std::move(args));
 }
 
 void CalendarEventRouter::OnCalendarModified(CalendarService* service) {
   std::vector<base::Value> args;
-  DispatchEvent(OnCalendarDataChanged::kEventName, std::move(args));
+  DispatchEvent(profile_, OnCalendarDataChanged::kEventName, std::move(args));
 }
 
 // Helper to actually dispatch an event to extension listeners.
-void CalendarEventRouter::DispatchEvent(const std::string& event_name,
+void CalendarEventRouter::DispatchEvent(Profile* profile,
+                                        const std::string& event_name,
                                         std::vector<base::Value> event_args) {
-  EventRouter* event_router = EventRouter::Get(browser_context_);
-  if (event_router) {
-    event_router->BroadcastEvent(base::WrapUnique(
-        new extensions::Event(extensions::events::VIVALDI_EXTENSION_EVENT,
-                              event_name, std::move(event_args))));
+  if (profile && EventRouter::Get(profile)) {
+    EventRouter* event_router = EventRouter::Get(profile);
+    if (event_router) {
+      event_router->BroadcastEvent(base::WrapUnique(
+          new extensions::Event(extensions::events::VIVALDI_EXTENSION_EVENT,
+                                event_name, std::move(event_args))));
+    }
   }
 }
 
@@ -462,8 +464,11 @@ BrowserContextKeyedAPIFactory<CalendarAPI>* CalendarAPI::GetFactoryInstance() {
 }
 
 void CalendarAPI::OnListenerAdded(const EventListenerInfo& details) {
-  calendar_event_router_.reset(
-      new CalendarEventRouter(Profile::FromBrowserContext(browser_context_)));
+  Profile* profile = Profile::FromBrowserContext(browser_context_);
+
+  calendar_event_router_ = std::make_unique<CalendarEventRouter>(
+      profile, CalendarServiceFactory::GetForProfile(profile));
+
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
 }
 
@@ -1349,10 +1354,19 @@ ExtensionFunction::ResponseAction CalendarCreateNotificationFunction::Run() {
   }
 
   row.name = base::UTF8ToUTF16(params->create_notification.name);
-  row.description = base::UTF8ToUTF16(*params->create_notification.description);
   row.when = GetTime(params->create_notification.when);
-  row.delay = *params->create_notification.delay;
-  row.period = *params->create_notification.period;
+  if (params->create_notification.description.get()) {
+    row.description =
+        base::UTF8ToUTF16(*params->create_notification.description);
+  }
+
+  if (params->create_notification.delay.get()) {
+    row.delay = *params->create_notification.delay;
+  }
+
+  if (params->create_notification.period.get()) {
+    row.period = GetTime(*params->create_notification.period);
+  }
 
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
   model->CreateNotification(
@@ -1414,7 +1428,8 @@ ExtensionFunction::ResponseAction CalendarUpdateNotificationFunction::Run() {
   }
 
   if (params->changes.period) {
-    update_notification.notification_row.period = *params->changes.period;
+    update_notification.notification_row.period =
+        GetTime(*params->changes.period);
     update_notification.updateFields |= calendar::NOTIFICATION_PERIOD;
   }
 

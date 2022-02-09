@@ -104,7 +104,6 @@ class VivaldiTranslateClient
                        translate::TranslateErrors::Type error_type,
                        bool triggered_from_menu) override;
   bool IsTranslatableURL(const GURL& url) override;
-  void ShowReportLanguageDetectionErrorUI(const GURL& report_url) override;
 
   // TranslateDriver::LanguageDetectionObserver implementation.
   void OnLanguageDetermined(

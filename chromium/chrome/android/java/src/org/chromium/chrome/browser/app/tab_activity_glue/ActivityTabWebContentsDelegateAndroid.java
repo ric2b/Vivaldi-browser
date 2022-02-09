@@ -366,6 +366,8 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
     @Override
     public void enterFullscreenModeForTab(boolean prefersNavigationBar) {
         if (mFullscreenManager != null) {
+            // Vivaldi: We never show the navigation bar in fullscreen.
+            prefersNavigationBar = false;
             mFullscreenManager.onEnterFullscreen(mTab, new FullscreenOptions(prefersNavigationBar));
         }
     }

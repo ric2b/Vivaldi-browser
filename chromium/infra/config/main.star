@@ -10,7 +10,7 @@ load("//lib/branches.star", "branches")
 load("//project.star", "settings")
 
 lucicfg.check_version(
-    min = "1.27.0",
+    min = "1.28.0",
     message = "Update depot_tools",
 )
 
@@ -137,6 +137,17 @@ luci.realm(
         luci.binding(
             roles = "role/resultdb.invocationCreator",
             groups = "project-chromium-try-task-accounts",
+        ),
+    ],
+)
+
+luci.realm(
+    name = "webrtc",
+    bindings = [
+        # Allow WebRTC builders to create invocations in their own builds.
+        luci.binding(
+            roles = "role/resultdb.invocationCreator",
+            groups = "project-chromium-ci-task-accounts",
         ),
     ],
 )

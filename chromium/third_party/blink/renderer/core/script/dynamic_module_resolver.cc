@@ -260,7 +260,6 @@ void DynamicModuleResolver::Trace(Visitor* visitor) const {
 // href="https://html.spec.whatwg.org/C/#hostimportmoduledynamically(referencingscriptormodule,-specifier,-promisecapability)">
 void DynamicModuleResolver::ResolveDynamically(
     const ModuleRequest& module_request,
-    const KURL& referrer_resource_url,
     const ReferrerScriptInfo& referrer_info,
     ScriptPromiseResolver* promise_resolver) {
   DCHECK(modulator_->GetScriptState()->GetIsolate()->InContext())
@@ -272,11 +271,6 @@ void DynamicModuleResolver::ResolveDynamically(
 
   // <spec step="4.3">Set base URL to referencing script's base URL.</spec>
   KURL base_url = referrer_info.BaseURL();
-  if (base_url.IsNull()) {
-    // ReferrerScriptInfo::BaseURL returns null if it should defer to referrer
-    // resource url.
-    base_url = referrer_resource_url;
-  }
   if (base_url.IsNull()) {
     // The case where "referencing script" doesn't exist.
     //
@@ -338,29 +332,6 @@ void DynamicModuleResolver::ResolveDynamically(
 
     // <spec step="6.3">Return.</spec>
     return;
-  }
-
-  switch (referrer_info.GetBaseUrlSource()) {
-    case ReferrerScriptInfo::BaseUrlSource::kClassicScriptCORSSameOrigin:
-      if (!modulator_
-               ->ResolveModuleSpecifier(module_request.specifier, BlankURL())
-               .IsValid()) {
-        UseCounter::Count(
-            ExecutionContext::From(modulator_->GetScriptState()),
-            WebFeature::kDynamicImportModuleScriptRelativeClassicSameOrigin);
-      }
-      break;
-    case ReferrerScriptInfo::BaseUrlSource::kClassicScriptCORSCrossOrigin:
-      if (!modulator_
-               ->ResolveModuleSpecifier(module_request.specifier, BlankURL())
-               .IsValid()) {
-        UseCounter::Count(
-            ExecutionContext::From(modulator_->GetScriptState()),
-            WebFeature::kDynamicImportModuleScriptRelativeClassicCrossOrigin);
-      }
-      break;
-    case ReferrerScriptInfo::BaseUrlSource::kOther:
-      break;
   }
 
   // <spec step="4.4">Set fetch options to the descendant script fetch options

@@ -38,7 +38,7 @@ VivaldiSubresourceFilterAdblockingThrottleManager::FromWebContents(
 
 // static
 void VivaldiSubresourceFilterAdblockingThrottleManager::
-    CreateSubresourceFilterThrottleManagerForWebContents(
+    CreateSubresourceFilterWebContentsHelper(
         content::WebContents* web_contents) {
   VivaldiSubresourceFilterAdblockingThrottleManager::CreateForWebContents(
       web_contents);
@@ -65,7 +65,7 @@ void VivaldiSubresourceFilterAdblockingThrottleManager::
 
   auto* throttle_manager =
       subresource_filter::ContentSubresourceFilterThrottleManager::
-          FromWebContents(navigation_handle->GetWebContents());
+          FromNavigationHandle(*navigation_handle);
 
   if (throttle_manager)
     throttle_manager->MaybeAppendNavigationThrottles(navigation_handle,

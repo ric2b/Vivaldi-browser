@@ -51,6 +51,10 @@ NSURL* rel_notes_url_;
     GetItemVersion(item));
 }
 
+- (void)updaterDidNotFindUpdate:(SUUpdater *)updater {
+  extensions::AutoUpdateAPI::SendUpdaterDidNotFindUpdate();
+}
+
 - (void)updater:(SUUpdater*)updater
     willDownloadUpdate:(SUAppcastItem*)item
            withRequest:(NSMutableURLRequest*)request {

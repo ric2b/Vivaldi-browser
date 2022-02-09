@@ -25,6 +25,9 @@
         "type": "object",
         "description": "A structure containing parameters for the captureUI call.",
         "properties": {
+          "windowId": {
+            "type": "integer"
+          },
           "posX": {
             "type": "number",
             "description": "X offset inside the given app window in the UI coordinates."

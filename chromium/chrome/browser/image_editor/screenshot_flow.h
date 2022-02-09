@@ -71,8 +71,8 @@ class ScreenshotFlow : public ui::LayerDelegate, public ui::EventHandler {
 
  private:
   // ui:EventHandler:
+  void OnKeyEvent(ui::KeyEvent* event) override;
   void OnMouseEvent(ui::MouseEvent* event) override;
-  void OnKeyEvent(ui::KeyEvent* event) override {}
 
   // ui::LayerDelegate:
   void OnPaintLayer(const ui::PaintContext& context) override;
@@ -111,7 +111,7 @@ class ScreenshotFlow : public ui::LayerDelegate, public ui::EventHandler {
       ScreenshotFlow::CaptureMode::NOT_CAPTURING;
 
   // Web Contents that we are capturing.
-  content::WebContents* web_contents_ = nullptr;  // unowned.
+  base::WeakPtr<content::WebContents> web_contents_;
 
   // Callback provided to Start().
   ScreenshotCaptureCallback flow_callback_;

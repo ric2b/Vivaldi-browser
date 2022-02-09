@@ -12,6 +12,7 @@
 #include "components/shared_highlighting/core/common/shared_highlighting_features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_font_face_descriptors.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_mouse_event_init.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_arraybuffer_arraybufferview_string.h"
@@ -65,7 +66,7 @@ class TextFragmentHandlerTest : public SimTest,
 
   void RunAsyncMatchingTasks() {
     auto* scheduler =
-        ThreadScheduler::Current()->GetWebMainThreadSchedulerForTest();
+        blink::scheduler::WebThreadScheduler::MainThreadScheduler();
     blink::scheduler::RunIdleTasksForTesting(scheduler,
                                              base::BindOnce([]() {}));
     RunPendingTasks();
@@ -807,6 +808,9 @@ TEST_P(TextFragmentHandlerTest,
   EXPECT_EQ(1u, child_frame->GetDocument()->Markers().Markers().size());
   EXPECT_FALSE(HasTextFragmentHandler(child_frame));
 
+  child_frame->CreateTextFragmentHandler();
+  GetTextFragmentHandler().StartPreemptiveGenerationIfNeeded();
+
   mojo::Remote<mojom::blink::TextFragmentReceiver> remote;
   EXPECT_FALSE(remote.is_bound());
   child_frame->BindTextFragmentReceiver(remote.BindNewPipeAndPassReceiver());
@@ -897,6 +901,7 @@ TEST_P(TextFragmentHandlerTest,
   EXPECT_TRUE(HasTextFragmentHandler(GetDocument().GetFrame()));
   EXPECT_FALSE(remote.is_bound());
 
+  GetTextFragmentHandler().StartPreemptiveGenerationIfNeeded();
   GetDocument().GetFrame()->BindTextFragmentReceiver(
       remote.BindNewPipeAndPassReceiver());
 

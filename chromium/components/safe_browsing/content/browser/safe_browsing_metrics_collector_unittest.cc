@@ -7,16 +7,17 @@
 #include <utility>
 
 #include "base/base64.h"
+#include "base/json/values_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
-#include "base/util/values/values_util.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace safe_browsing {
 
@@ -59,8 +60,8 @@ class SafeBrowsingMetricsCollectorTest : public ::testing::Test {
   bool IsSortedInChronologicalOrder(const base::Value* ts) {
     return std::is_sorted(ts->GetList().begin(), ts->GetList().end(),
                           [](const base::Value& ts_a, const base::Value& ts_b) {
-                            return util::ValueToInt64(ts_a).value_or(0) <
-                                   util::ValueToInt64(ts_b).value_or(0);
+                            return base::ValueToInt64(ts_a).value_or(0) <
+                                   base::ValueToInt64(ts_b).value_or(0);
                           });
   }
 
@@ -612,6 +613,24 @@ TEST_F(SafeBrowsingMetricsCollectorTest, GetUserState) {
   pref_service_.SetManagedPref(prefs::kSafeBrowsingEnhanced,
                                std::make_unique<base::Value>(true));
   EXPECT_EQ(UserState::MANAGED, metrics_collector_->GetUserState());
+}
+
+TEST_F(SafeBrowsingMetricsCollectorTest, GetLatestEventTimestamp) {
+  EXPECT_EQ(absl::nullopt, metrics_collector_->GetLatestEventTimestamp(
+                               EventType::DATABASE_INTERSTITIAL_BYPASS));
+  // Timestamps are rounded to second when stored in prefs.
+  base::Time rounded_time =
+      base::Time::FromDeltaSinceWindowsEpoch(base::TimeDelta::FromSeconds(
+          base::Time::Now().ToDeltaSinceWindowsEpoch().InSeconds()));
+  FastForwardAndAddEvent(base::TimeDelta::FromHours(1),
+                         EventType::DATABASE_INTERSTITIAL_BYPASS);
+  EXPECT_EQ(rounded_time + base::TimeDelta::FromHours(1),
+            metrics_collector_->GetLatestEventTimestamp(
+                EventType::DATABASE_INTERSTITIAL_BYPASS));
+  task_environment_.FastForwardBy(base::TimeDelta::FromDays(1));
+  EXPECT_EQ(rounded_time + base::TimeDelta::FromHours(1),
+            metrics_collector_->GetLatestEventTimestamp(
+                EventType::DATABASE_INTERSTITIAL_BYPASS));
 }
 
 }  // namespace safe_browsing

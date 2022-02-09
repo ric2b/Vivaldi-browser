@@ -12,6 +12,7 @@ import androidx.coordinatorlayout.widget.CoordinatorLayout;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.components.messages.MessageContainer;
 
@@ -37,6 +38,11 @@ public class MessageContainerCoordinator implements BrowserControlsStateProvider
     }
 
     private void updateMargins() {
+        if (mContainer.getVisibility() != View.VISIBLE
+                && ChromeFeatureList.isEnabled(
+                        ChromeFeatureList.MESSAGES_FOR_ANDROID_REDUCE_LAYOUT_CHANGES)) {
+            return;
+        }
         CoordinatorLayout.LayoutParams params =
                 (CoordinatorLayout.LayoutParams) mContainer.getLayoutParams();
         params.topMargin = getContainerTopOffset();
@@ -77,12 +83,6 @@ public class MessageContainerCoordinator implements BrowserControlsStateProvider
     @Override
     public void onTopControlsHeightChanged(int topControlsHeight, int topControlsMinHeight) {
         updateMargins();
-    }
-
-    @Override
-    public void onAndroidVisibilityChanged(int visibility) {
-        // TODO(crbug/1223069): Remove this workaround for default method desugaring in D8 causing
-        // AbstractMethodErrors in some cases once fixed upstream.
     }
 
     /** @return Offset of the message container from the top of the screen. */
